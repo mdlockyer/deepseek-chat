@@ -1,0 +1,22 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Permissions for the main window: core APIs, HTTP requests to the DeepSeek API only, and opening http(s)/mailto/tel links in the default browser.",
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "core:default",
+    {
+      "identifier": "http:default",
+      "allow": [
+        {
+          "url": "https://api.deepseek.com/*"
+        }
+      ],
+      "deny": []
+    },
+    "opener:allow-default-urls",
+    "opener:allow-open-url"
+  ]
+}

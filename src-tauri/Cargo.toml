@@ -1,0 +1,30 @@
+[package]
+name = "deepseek-chat"
+version = "0.1.0"
+description = "DeepSeek Chat desktop app"
+authors = ["mlockyer"]
+license = "MIT"
+repository = ""
+edition = "2024"
+rust-version = "1.90"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+name = "deepseek_chat_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.7.4", features = [] }
+
+[dependencies]
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+log = "0.4"
+tauri = { version = "2.12.5", features = [] }
+tauri-plugin-log = "2"
+tauri-plugin-dialog = "2"
+keyring = "4"
+percent-encoding = "2"
+tauri-plugin-http = "2"
+tauri-plugin-opener = "2"
