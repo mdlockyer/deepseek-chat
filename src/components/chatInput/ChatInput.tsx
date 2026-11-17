@@ -35,6 +35,12 @@ import { useTranslate } from '../../i18n/index.js'
 import styles from './ChatInput.module.css'
 
 /** 输入框：自适应高度的文本框 + 文件 + 深度思考与智能搜索开关 + 语音输入 + 发送 / 停止 */
+/** 空状态的示例问题填入后，把焦点交给同一个输入框（框架无关的小桥接，避免把 ref 提到上层） */
+let focusComposer: (() => void) | null = null
+
+/** 聚焦新对话的输入框 */
+export const focusChatComposer = () => focusComposer?.()
+
 export const ChatInput = memo(function ChatInput({ sessionId }: { sessionId: string | null }) {
   // 切换目标时释放录音、转写和 DOM 状态；文字与附件由草稿服务保留。
   return <Input key={sessionId === null ? 'new' : `session:${sessionId}`} sessionId={sessionId} />
@@ -55,6 +61,12 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
   const search = useSettings((state) => state.search)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  useEffect(() => {
+    focusComposer = () => textareaRef.current?.focus({ preventScroll: true })
+    return () => {
+      focusComposer = null
+    }
+  }, [])
   const togglesRef = useRef<HTMLDivElement>(null)
 
   useLayoutEffect(() => {

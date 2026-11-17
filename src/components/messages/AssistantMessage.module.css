@@ -1,5 +1,6 @@
 .message {
   position: relative;
+  animation: message-in var(--ds-transition-duration) var(--ds-ease-panel) both;
 
   &:hover .actions,
   &:focus-within .actions {
@@ -8,6 +9,13 @@
 
   :global(.ds-assistant-message-main-content) {
     padding-bottom: 6px;
+  }
+}
+
+@keyframes message-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
   }
 }
 

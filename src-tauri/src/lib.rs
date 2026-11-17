@@ -4,8 +4,10 @@
 //! browser features that do not work, or are not safe enough, inside a desktop
 //! webview:
 //!
-//! - The DeepSeek API key lives in the OS credential store (the macOS
-//!   Keychain) instead of the webview's localStorage.
+//! - The DeepSeek API key is stored in the app's private data directory
+//!   (`api-key` with `0600` permissions on Unix) instead of the webview's
+//!   `localStorage`, with one-time migration from any readable legacy macOS
+//!   Keychain entry.
 //! - Files the Python tool offers for download are saved through a native save
 //!   dialog. WKWebView ignores `<a download>` links to `blob:` URLs
 //!   (WebKit bug 216918), so the browser path does nothing there. The page never
@@ -17,39 +19,117 @@
 //! - Links that would open a new browser window (`target="_blank"`) open in the
 //!   default browser through `tauri-plugin-opener`; the webview ignores them.
 
+use std::path::{Path, PathBuf};
+
 use percent_encoding::percent_decode_str;
 use tauri::ipc::{InvokeBody, Request};
+use tauri::{Emitter, Manager};
 use tauri_plugin_dialog::DialogExt;
 
-/// Keychain service and account under which the API key is stored.
+/// Keychain service and account under which legacy API keys may be stored.
 const KEYCHAIN_SERVICE: &str = "com.mlockyer.deepseekchat";
 const API_KEY_ACCOUNT: &str = "deepseek-api-key";
+const API_KEY_FILE_NAME: &str = "api-key";
+#[cfg(target_os = "macos")]
+const SETTINGS_MENU_ID: &str = "open-settings";
+#[cfg(target_os = "macos")]
+const OPEN_SETTINGS_EVENT: &str = "open-settings";
 
 fn api_key_entry() -> Result<keyring::Entry, String> {
     keyring::Entry::new(KEYCHAIN_SERVICE, API_KEY_ACCOUNT).map_err(|e| e.to_string())
 }
 
-/// Returns the stored API key, or `None` when none has been saved.
-#[tauri::command]
-fn get_api_key() -> Result<Option<String>, String> {
-    match api_key_entry()?.get_password() {
-        Ok(key) => Ok(Some(key)),
-        Err(keyring::Error::NoEntry) => Ok(None),
+fn api_key_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    app.path()
+        .app_data_dir()
+        .map(|dir| dir.join(API_KEY_FILE_NAME))
+        .map_err(|e| e.to_string())
+}
+
+fn read_key_file(path: &Path) -> Result<Option<String>, String> {
+    match std::fs::read_to_string(path) {
+        Ok(contents) => Ok(Some(contents.trim().to_string())),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
         Err(error) => Err(error.to_string()),
     }
 }
 
-/// Stores the API key; `None` or an empty string deletes it.
-#[tauri::command]
-fn set_api_key(key: Option<String>) -> Result<(), String> {
-    let entry = api_key_entry()?;
-    match key.filter(|key| !key.is_empty()) {
-        Some(key) => entry.set_password(&key).map_err(|e| e.to_string()),
-        None => match entry.delete_credential() {
-            Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
-            Err(error) => Err(error.to_string()),
-        },
+fn write_key_file(path: &Path, key: Option<&str>) -> Result<(), String> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
+    let value = key.map(str::trim).unwrap_or("");
+    #[cfg(unix)]
+    {
+        use std::io::Write;
+        use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+        let mut file = std::fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .mode(0o600)
+            .open(path)
+            .map_err(|e| e.to_string())?;
+        file.set_permissions(std::fs::Permissions::from_mode(0o600))
+            .map_err(|e| e.to_string())?;
+        file.write_all(value.as_bytes())
+            .map_err(|e| e.to_string())?;
+    }
+    #[cfg(not(unix))]
+    {
+        std::fs::write(path, value.as_bytes()).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+/// Returns the stored API key, or `None` when none has been saved.
+///
+/// Reads from the app's private data directory first so ad-hoc signed dev and
+/// release builds do not lose access across rebuilds due to macOS Keychain ACLs.
+/// If no local file exists yet, migrates any readable legacy Keychain entry.
+#[tauri::command]
+async fn get_api_key(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    let path = api_key_path(&app)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        if let Some(stored) = read_key_file(&path)? {
+            return Ok((!stored.is_empty()).then_some(stored));
+        }
+        let migrated = match api_key_entry()
+            .and_then(|entry| entry.get_password().map_err(|e| e.to_string()))
+        {
+            Ok(key) => {
+                let trimmed = key.trim().to_string();
+                (!trimmed.is_empty()).then_some(trimmed)
+            }
+            Err(error) => {
+                log::warn!("Skipping keychain API key lookup: {error}");
+                None
+            }
+        };
+        if let Some(ref key) = migrated
+            && let Err(error) = write_key_file(&path, Some(key))
+        {
+            log::warn!("Failed to cache migrated API key: {error}");
+        }
+        Ok(migrated)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Stores the API key; `None` or an empty string clears it.
+#[tauri::command]
+async fn set_api_key(app: tauri::AppHandle, key: Option<String>) -> Result<(), String> {
+    let path = api_key_path(&app)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let cleaned = key
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty());
+        write_key_file(&path, cleaned)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 /// Shows a save dialog and writes the request body to the chosen path.
@@ -89,9 +169,28 @@ async fn save_file(app: tauri::AppHandle, request: Request<'_>) -> Result<bool, 
     .map_err(|e| e.to_string())?
 }
 
+#[cfg(target_os = "macos")]
+fn build_macos_menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
+    use tauri::menu::{Menu, MenuItem, MenuItemKind, PredefinedMenuItem};
+
+    let menu = Menu::default(app)?;
+    if let Some(MenuItemKind::Submenu(app_submenu)) = menu.items()?.into_iter().next() {
+        let settings_item = MenuItem::with_id(
+            app,
+            SETTINGS_MENU_ID,
+            "Settings...",
+            true,
+            Some("CmdOrCtrl+,"),
+        )?;
+        let separator = PredefinedMenuItem::separator(app)?;
+        app_submenu.insert_items(&[&settings_item, &separator], 2)?;
+    }
+    Ok(menu)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_opener::init())
@@ -99,7 +198,16 @@ pub fn run() {
             get_api_key,
             set_api_key,
             save_file
-        ])
+        ]);
+
+    #[cfg(target_os = "macos")]
+    let builder = builder.menu(build_macos_menu).on_menu_event(|app, event| {
+        if event.id() == SETTINGS_MENU_ID {
+            let _ = app.emit(OPEN_SETTINGS_EVENT, ());
+        }
+    });
+
+    builder
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -118,21 +226,30 @@ pub fn run() {
 mod tests {
     use super::*;
 
-    /// Round-trips a dummy key through the real OS credential store, then deletes it.
-    /// Ignored by default because it touches the user's Keychain entry; run with
-    /// `cargo test -- --ignored keychain` only when no real key is stored.
     #[test]
-    #[ignore]
-    fn keychain_round_trip() {
+    fn key_file_round_trip() {
+        let dir = std::env::temp_dir().join(format!("deepseek-chat-test-{}", std::process::id()));
+        let path = dir.join(API_KEY_FILE_NAME);
+        let _ = std::fs::remove_dir_all(&dir);
+
+        assert_eq!(read_key_file(&path).unwrap(), None);
+
+        write_key_file(&path, Some("  sk-test-123  ")).unwrap();
         assert_eq!(
-            get_api_key().unwrap(),
-            None,
-            "a real key is stored; not overwriting it"
+            read_key_file(&path).unwrap().as_deref(),
+            Some("sk-test-123")
         );
-        set_api_key(Some("sk-test-roundtrip".into())).unwrap();
-        assert_eq!(get_api_key().unwrap().as_deref(), Some("sk-test-roundtrip"));
-        set_api_key(Some(String::new())).unwrap();
-        assert_eq!(get_api_key().unwrap(), None);
-        set_api_key(None).unwrap();
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+            assert_eq!(mode, 0o600);
+        }
+
+        write_key_file(&path, None).unwrap();
+        assert_eq!(read_key_file(&path).unwrap().as_deref(), Some(""));
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

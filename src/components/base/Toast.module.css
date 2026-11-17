@@ -59,3 +59,19 @@
     transform: translateY(-8px);
   }
 }
+
+.exiting {
+  animation: exit 160ms var(--ds-ease-in-out) both;
+}
+
+@keyframes exit {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+
+  to {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+}

@@ -132,6 +132,7 @@ async def __run_cell(code):
 const quiet = { messageCallback: () => {}, errorCallback: () => {} }
 let out: string[] = []
 let ready: Promise<Pyodide> | null = null
+let executionQueue: Promise<void> = Promise.resolve()
 
 const start = (indexURL: string): Promise<Pyodide> =>
   (async () => {
@@ -150,12 +151,7 @@ const start = (indexURL: string): Promise<Pyodide> =>
 
 const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error))
 
-scope.onmessage = async ({ data }: MessageEvent) => {
-  if (data.type === 'init') {
-    ready ??= start(data.indexURL as string)
-    return
-  }
-  const { id, code } = data as { id: number; code: string }
+const runCell = async (id: number, code: string) => {
   let py: Pyodide
   try {
     if (!ready) {
@@ -204,4 +200,17 @@ scope.onmessage = async ({ data }: MessageEvent) => {
       images: [],
     })
   }
+}
+
+scope.onmessage = ({ data }: MessageEvent) => {
+  if (data.type === 'init') {
+    ready ??= start(data.indexURL as string)
+    return
+  }
+  const { id, code } = data as { id: number; code: string }
+  // 串行执行每个 cell，避免多个 async onmessage 交错污染 out 与 Python 全局状态。
+  executionQueue = executionQueue.then(
+    () => runCell(id, code),
+    () => runCell(id, code)
+  )
 }

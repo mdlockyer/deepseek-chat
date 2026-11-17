@@ -8,4 +8,12 @@
   border: 1px solid var(--dsw-alias-border-inverted);
   background: var(--dsw-specific-menu);
   box-shadow: var(--dsw-shadow-lv3);
+  animation: hover-in 140ms var(--ds-ease-panel) both;
+}
+
+@keyframes hover-in {
+  from {
+    opacity: 0;
+    transform: scale(0.98);
+  }
 }

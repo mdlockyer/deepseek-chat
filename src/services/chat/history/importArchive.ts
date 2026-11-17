@@ -41,7 +41,12 @@ const imageType = (bytes: Uint8Array): string => {
   return ''
 }
 
+const MAX_JSON_ENTRY_BYTES = 64 * 1024 * 1024
+
 const readJson = async (entry: ArchiveEntry): Promise<unknown> => {
+  if (entry.size > MAX_JSON_ENTRY_BYTES) {
+    fail('backupIncomplete')
+  }
   const text = await (await readEntry(entry)).text()
   try {
     return JSON.parse(text)

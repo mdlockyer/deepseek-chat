@@ -116,10 +116,31 @@ const toolFragment = (tool: ServerToolUseBlock, result: ReplyBlock | undefined):
   ]
 }
 
+/** 用不与内容冲突的围栏包裹代码或输出，导出为标准 v3 Markdown 片段 */
+const fence = (lang: string, body: string) => {
+  const longest = Math.max(2, ...(body.match(/`+/g) ?? []).map((run) => run.length))
+  const marks = '`'.repeat(longest + 1)
+  return `${marks}${lang}\n${body}\n${marks}`
+}
+
+const joinMarkdown = (existing: string, addition: string) => {
+  if (!existing) {
+    return addition
+  }
+  const gap =
+    existing.endsWith('\n\n') || addition.startsWith('\n\n')
+      ? ''
+      : existing.endsWith('\n') || addition.startsWith('\n')
+        ? '\n'
+        : '\n\n'
+  return `${existing}${gap}${addition}`
+}
+
 /**
  * 内容块按顺序转换为片段：相邻同类正文合并，服务端模板保留 TEMPLATE_RESPONSE；
  * 引用改由正文外的来源表示，不写入标记；
- * 本轮调用过联网能力时，剥除模型原样输出的 [citation:N]。
+ * 本轮调用过联网能力时，剥除模型原样输出的 [citation:N]；
+ * 客户端 Python 工具调用与结果转为围栏 Markdown 保存在 RESPONSE 中，兼容 v3 归档格式。
  */
 const assistantFragments = (message: AssistantMessage): Fragment[] => {
   const { blocks } = message
@@ -132,14 +153,45 @@ const assistantFragments = (message: AssistantMessage): Fragment[] => {
   const usedWeb = blocks.some((block) => block.type === 'server_tool_use')
   const fragments: Fragment[] = []
   let response: { type: 'RESPONSE' | 'TEMPLATE_RESPONSE'; content: string } | undefined
+  let separateNextText = false
+  const appendResponse = (chunk: string, separate: boolean) => {
+    if (!response || response.type !== 'RESPONSE') {
+      response = { type: 'RESPONSE', content: '' }
+      fragments.push(response)
+    }
+    response.content = separate
+      ? joinMarkdown(response.content, chunk)
+      : `${response.content}${chunk}`
+  }
   for (const block of blocks) {
     if (block.type === 'text') {
-      const type = block.isTemplate ? 'TEMPLATE_RESPONSE' : 'RESPONSE'
-      if (!response || response.type !== type) {
-        response = { type, content: '' }
-        fragments.push(response)
+      const text = usedWeb ? block.text.replace(/\[citation:\d+\]/g, '') : block.text
+      if (block.isTemplate) {
+        if (!response || response.type !== 'TEMPLATE_RESPONSE') {
+          response = { type: 'TEMPLATE_RESPONSE', content: '' }
+          fragments.push(response)
+        }
+        response.content += text
+      } else {
+        appendResponse(text, separateNextText)
       }
-      response.content += usedWeb ? block.text.replace(/\[citation:\d+\]/g, '') : block.text
+      separateNextText = false
+      continue
+    }
+    if (block.type === 'tool_use') {
+      const input = block.input as { code?: unknown } | null
+      const code = typeof input?.code === 'string' ? input.code : (block.inputJson ?? '')
+      if (code.trim()) {
+        appendResponse(fence(block.name === 'python' ? 'python' : '', code), true)
+        separateNextText = true
+      }
+      continue
+    }
+    if (block.type === 'tool_result') {
+      if (block.status !== 'running' && block.content.trim()) {
+        appendResponse(fence('text', block.content), true)
+        separateNextText = true
+      }
       continue
     }
     const converted: Fragment[] =
@@ -163,6 +215,7 @@ const assistantFragments = (message: AssistantMessage): Fragment[] => {
     if (converted.length > 0) {
       fragments.push(...converted)
       response = undefined
+      separateNextText = false
     }
   }
   // 错误、拒绝提示作为模板保存，导入后仍不进上下文。

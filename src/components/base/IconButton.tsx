@@ -13,6 +13,7 @@ export const IconButton = ({
   tone = 'tertiary',
   tooltip,
   tooltipPlacement,
+  tooltipDisabled = false,
   className,
   ...props
 }: {
@@ -21,6 +22,7 @@ export const IconButton = ({
   tone?: 'tertiary' | 'primary'
   tooltip?: string
   tooltipPlacement?: TooltipPlacement
+  tooltipDisabled?: boolean
 } & Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'title'>) => {
   const button = (
     <button
@@ -33,7 +35,7 @@ export const IconButton = ({
     </button>
   )
   return tooltip ? (
-    <Tooltip content={tooltip} placement={tooltipPlacement}>
+    <Tooltip content={tooltip} placement={tooltipPlacement} disabled={tooltipDisabled}>
       {button}
     </Tooltip>
   ) : (

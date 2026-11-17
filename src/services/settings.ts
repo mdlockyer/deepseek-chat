@@ -11,6 +11,7 @@ export type ThemePreference = 'light' | 'dark' | 'system'
 /** 本机设置，存 localStorage：API Key、语言、主题、位置、朗读音色、深度思考与智能搜索开关、侧边栏收起状态 */
 type Settings = {
   apiKey: string | null
+  desktopSettingsReady: boolean
   locale: Locale
   themePreference: ThemePreference
   location: UserLocation | null
@@ -89,8 +90,9 @@ const initialThemePreference = (): ThemePreference => {
 const initialTtsVoice = (): TtsVoice => (read(KEYS.ttsVoice) === 'tide' ? 'tide' : 'stella')
 
 export const useSettings = create<Settings>(() => ({
-  // 桌面版的 API Key 在系统钥匙串里，启动时由 loadDesktopSettings 读入。
+  // 桌面版的 API Key 在原生端读取，启动时由 loadDesktopSettings 读入。
   apiKey: isDesktopApp ? null : read(KEYS.apiKey),
+  desktopSettingsReady: !isDesktopApp,
   locale: initialLocale(),
   location: initialLocation(),
   themePreference: initialThemePreference(),
@@ -128,19 +130,19 @@ export const setApiKey = async (apiKey: string | null): Promise<void> => {
   } else {
     write(KEYS.apiKey, apiKey)
   }
-  useSettings.setState({ apiKey })
+  useSettings.setState({ apiKey, desktopSettingsReady: true })
 }
 
 /**
- * 桌面版启动时从钥匙串读取 API Key，须在首次渲染前完成。
- * 旧版本存在 localStorage 里的 Key 迁移到钥匙串后从 localStorage 删除。
+ * 桌面版启动时从原生存储读取 API Key，须在首次渲染前完成。
+ * 旧版本存在 localStorage 里的 Key 迁移到原生存储后从 localStorage 删除。
  */
 export const loadDesktopSettings = async (): Promise<void> => {
   if (!isDesktopApp) {
     return
   }
   try {
-    let apiKey = await loadKeychainApiKey()
+    let apiKey = await loadKeychainApiKey().catch(() => null)
     const legacy = read(KEYS.apiKey)
     if (!apiKey && legacy) {
       await saveKeychainApiKey(legacy)
@@ -151,7 +153,9 @@ export const loadDesktopSettings = async (): Promise<void> => {
     }
     useSettings.setState({ apiKey })
   } catch {
-    // 钥匙串不可用时按未设置处理，用户可在设置中重新输入。
+    // 存储不可用时按未设置处理，用户可在设置中重新输入。
+  } finally {
+    useSettings.setState({ desktopSettingsReady: true })
   }
 }
 

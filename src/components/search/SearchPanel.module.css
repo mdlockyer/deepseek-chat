@@ -9,6 +9,33 @@
   border-left: 1px solid var(--dsw-alias-border-l2);
   color: var(--dsw-alias-label-primary);
   background: var(--dsw-alias-bg-base);
+  overflow: hidden;
+  animation: panel-open var(--ds-transition-duration-panel) var(--ds-ease-panel) both;
+}
+
+/* 内容保持展开宽度：开合时被裁切而不是压挤 */
+.panel > * {
+  min-width: min(calc(50vw - 4rem), 390px);
+}
+
+.panelExiting {
+  animation: panel-close var(--ds-transition-duration-panel) var(--ds-ease-panel) both;
+  pointer-events: none;
+}
+
+@keyframes panel-open {
+  from {
+    width: 0;
+    border-left-width: 0;
+  }
+}
+
+@keyframes panel-close {
+  to {
+    width: 0;
+    border-left-width: 0;
+    visibility: hidden;
+  }
 }
 
 .header {
@@ -62,5 +89,27 @@
     width: auto;
     max-width: none;
     border-left: none;
+    animation: panel-slide-in var(--ds-transition-duration-panel) var(--ds-ease-panel) both;
+  }
+
+  .panel > * {
+    min-width: 0;
+  }
+
+  .panelExiting {
+    animation: panel-slide-out var(--ds-transition-duration-panel) var(--ds-ease-panel) both;
+  }
+}
+
+@keyframes panel-slide-in {
+  from {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes panel-slide-out {
+  to {
+    transform: translateX(100%);
+    visibility: hidden;
   }
 }

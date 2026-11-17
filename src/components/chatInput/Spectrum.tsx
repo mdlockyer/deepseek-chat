@@ -24,6 +24,16 @@ const TILT_DB_PER_OCTAVE = 4
 export const Spectrum = ({ getAnalyser }: { getAnalyser: () => AnalyserNode | null }) => {
   const rootRef = useRef<HTMLDivElement>(null)
   const [count, setCount] = useState(0)
+  const [reduced, setReduced] = useState(
+    () => window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  )
+
+  useEffect(() => {
+    const query = window.matchMedia('(prefers-reduced-motion: reduce)')
+    const onChange = () => setReduced(query.matches)
+    query.addEventListener('change', onChange)
+    return () => query.removeEventListener('change', onChange)
+  }, [])
 
   // 按容器宽度决定柱数
   useEffect(() => {
@@ -45,6 +55,13 @@ export const Spectrum = ({ getAnalyser }: { getAnalyser: () => AnalyserNode | nu
       return
     }
     const bars = Array.from(root.children) as HTMLElement[]
+    // 减弱动态效果：静态频谱，只表示录音进行中
+    if (reduced) {
+      for (const bar of bars) {
+        bar.style.transform = `scaleY(${(BAR_MIN + 6) / BAR_MIN})`
+      }
+      return
+    }
     const levels = new Float32Array(count)
     const targets = new Float32Array(count)
     const tilts = new Float32Array(count)
@@ -104,7 +121,7 @@ export const Spectrum = ({ getAnalyser }: { getAnalyser: () => AnalyserNode | nu
 
     frame = requestAnimationFrame(draw)
     return () => cancelAnimationFrame(frame)
-  }, [count, getAnalyser])
+  }, [count, getAnalyser, reduced])
 
   return (
     <div ref={rootRef} className={styles.spectrum} aria-hidden>

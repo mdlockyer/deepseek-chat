@@ -1,7 +1,8 @@
 .dialog {
   --modal-header-gap: 7px;
   width: 760px;
-  height: 500px;
+  /* 高度随分组内容变化：三个分组的内容长度差别很大，固定高度会留下大片空白 */
+  height: auto;
   max-height: calc(100vh - 32px);
   padding: 19px 24px 22px;
 }
@@ -49,9 +50,19 @@
     flex-shrink: 0;
   }
 
-  &:hover,
-  &.navItemActive {
+  &:hover {
     background-color: var(--dsw-alias-interactive-bg-hover);
+  }
+
+  /* 选中项与悬停项必须可区分：选中用品牌色文字与浅品牌底 */
+  &.navItemActive {
+    background-color: var(--dsw-alias-button-ghost-active-fill);
+    color: var(--dsw-alias-label-primary);
+    font-weight: 500;
+
+    svg {
+      color: var(--dsw-alias-brand-primary);
+    }
   }
 
   &:focus-visible {
@@ -61,7 +72,7 @@
 
 .content {
   display: flex;
-  flex: 1 0 0;
+  flex: 1 1 auto;
   flex-direction: column;
   min-width: 0;
   min-height: 0;
@@ -182,9 +193,14 @@
   outline: none;
   transition: background-color var(--ds-transition-duration) var(--ds-ease-in-out);
 
-  &:hover,
-  &.themeOptionSelected {
+  &:hover {
     background-color: var(--dsw-specific-selector);
+  }
+
+  /* 选中项用品牌色边框与浅品牌底，与悬停区分 */
+  &.themeOptionSelected {
+    border-color: var(--dsw-alias-brand-primary);
+    background-color: var(--dsw-alias-button-ghost-active-fill);
   }
 
   &:focus-visible {
@@ -207,8 +223,43 @@
 .apiKey {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   padding-bottom: 4px;
+}
+
+.apiKeyHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.apiKeyStatus {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 100px;
+  background-color: var(--dsw-static-green-100);
+  color: var(--dsw-static-green-900);
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: 500;
+
+  svg {
+    width: 12px;
+    height: 12px;
+    color: var(--dsw-static-green-500);
+  }
+
+  [data-ds-dark-theme] & {
+    background-color: var(--dsw-static-green-900);
+    color: var(--dsw-static-green-100);
+
+    svg {
+      color: var(--dsw-static-green-400);
+    }
+  }
 }
 
 .apiKeySaved,
@@ -217,30 +268,41 @@
   align-items: center;
   box-sizing: border-box;
   height: var(--ds-control-height-xl);
+  border-radius: 12px;
+  border: 1px solid var(--dsw-alias-border-l2);
   font-size: 14px;
-  line-height: 24px;
+  line-height: 22px;
 }
 
 .apiKeySaved {
-  justify-content: space-between;
-  padding: 0 10px 0 16px;
-  border-radius: 28px;
+  gap: 10px;
+  padding: 0 14px;
   background-color: var(--dsw-specific-login-input);
 }
 
+.apiKeySavedIcon {
+  display: inline-flex;
+  flex-shrink: 0;
+  color: var(--dsw-alias-label-tertiary);
+}
+
 .apiKeyMask {
+  flex: 1;
   min-width: 0;
   overflow: hidden;
   white-space: nowrap;
-  color: var(--dsw-alias-label-caption);
+  text-overflow: ellipsis;
+  font-family: var(--ds-font-family-code);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--dsw-alias-label-primary);
   user-select: none;
 }
 
 .apiKeyInput {
-  gap: 12px;
-  padding: 0 14px;
-  border-radius: 22px;
-  border: 1px solid var(--dsw-alias-border-l2);
+  gap: 8px;
+  padding: 0 6px 0 14px;
+  background-color: var(--dsw-alias-bg-base);
   transition: border-color var(--ds-transition-duration) var(--ds-ease-in-out);
 
   &:focus-within {
@@ -260,32 +322,81 @@
     caret-color: var(--dsw-alias-brand-text);
 
     &::placeholder {
-      color: var(--dsw-alias-label-caption);
+      color: var(--dsw-alias-label-placeholder);
     }
   }
 }
 
-.divider {
-  flex-shrink: 0;
-  width: 1px;
-  height: 20px;
-  background-color: var(--dsw-alias-border-l2);
+.apiKeyInputError {
+  border-color: var(--dsw-alias-state-error-primary);
+
+  &:focus-within {
+    border-color: var(--dsw-alias-state-error-primary);
+  }
 }
 
-.confirm {
-  flex-shrink: 0;
-  padding: 0;
-  border: none;
-  background: none;
-  color: var(--dsw-alias-brand-text);
-  font: inherit;
-  line-height: 22px;
-  cursor: pointer;
+.errorRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-state-error-primary);
 
-  &:disabled {
-    color: var(--dsw-alias-label-caption);
-    cursor: default;
+  svg {
+    flex-shrink: 0;
+    width: 14px;
+    height: 14px;
   }
+}
+
+.apiKeyActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding-top: 2px;
+}
+
+.linkButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  height: var(--ds-control-height-m);
+  min-width: 72px;
+  padding: 0 14px;
+  border-radius: 4096px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  background-color: transparent;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 14px;
+  line-height: 22px;
+  font-weight: 400;
+  text-decoration: none;
+  white-space: nowrap;
+  outline: none;
+  transition: background-color var(--ds-transition-duration) var(--ds-ease-in-out);
+
+  &:hover {
+    background-color: var(--dsw-alias-interactive-bg-hover);
+  }
+
+  &:focus-visible {
+    box-shadow: 0 0 0 2px var(--dsw-alias-button-primary-fill);
+  }
+}
+
+.inlineConfirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 @media not all and (min-width: 768px) {
@@ -368,42 +479,19 @@
   .apiKeySaved,
   .apiKeyInput {
     height: 52px;
-    padding: 0 12px 0 16px;
-    border: none;
-    border-radius: 40px;
-    background-color: var(--dsw-specific-login-input);
     font-size: 16px;
   }
 
-  .apiKeySaved svg {
-    width: 20px;
-    height: 20px;
+  .apiKeyActions > button {
+    min-height: 44px;
+  }
+
+  .linkButton {
+    min-height: 44px;
   }
 
   .cellButton svg {
     display: none;
-  }
-}
-
-.mobileConfirm {
-  display: block;
-  flex-shrink: 0;
-  width: calc(100% - 16px);
-  height: 52px;
-  margin: 16px 8px 0;
-  border: none;
-  border-radius: 100px;
-  background-color: var(--dsw-alias-button-primary-fill);
-  color: var(--dsw-static-neutral-bluish-00);
-  font: inherit;
-  font-size: 17px;
-  line-height: 24px;
-  font-weight: 500;
-  cursor: pointer;
-
-  &:disabled {
-    opacity: 0.45;
-    cursor: default;
   }
 }
 

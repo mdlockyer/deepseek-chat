@@ -1,7 +1,14 @@
 import { create } from 'zustand'
 import { createId } from '../../utils/id.js'
 import { ApiError, streamMessage, uploadFile } from '../api/client.js'
-import { PYTHON_TOOL, PYTHON_TOOL_NAME, runPython, type PythonRunResult } from '../python/kernel.js'
+import {
+  PYTHON_TOOL,
+  PYTHON_TOOL_NAME,
+  getPythonKernelSessionId,
+  resetPythonKernel,
+  runPython,
+  type PythonRunResult,
+} from '../python/kernel.js'
 import type { ChatModel, CreateMessageRequest } from '../api/types.js'
 import { extractFileIds, getFileErrorCode, isRetryableApiError } from '../api/errors.js'
 import { cancelUpload, describeUploadError, uploadAttachment, useUploads } from '../attachments.js'
@@ -445,6 +452,7 @@ export const replaceHistory = async (write: () => Promise<void>): Promise<number
     initTask = undefined
     sessionLoads.clear()
     await waitForIdle()
+    resetPythonKernel(false)
     await db.clearStaging()
     let summaries: SessionSummary[]
     try {
@@ -538,6 +546,9 @@ const removeSessionData = async (id: string): Promise<boolean> => {
     getStreamController(id)?.abort()
     // 等本会话的流收尾，避免删除之后又被收尾保存写回来。
     await waitForIdle(id)
+    if (getPythonKernelSessionId() === id) {
+      resetPythonKernel(false)
+    }
     if (epoch !== historyEpoch) {
       return false
     }
@@ -1100,17 +1111,22 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
                 files: [],
                 durationMs: 0,
               }
-            : await runPython(code, controller.signal, (phase) => {
-                reply = {
-                  ...reply,
-                  blocks: reply.blocks.map((block) =>
-                    block.type === 'tool_result' && block.tool_use_id === call.id
-                      ? { ...block, phase }
-                      : block
-                  ),
-                }
-                flush()
-              })
+            : await runPython(
+                code,
+                controller.signal,
+                (phase) => {
+                  reply = {
+                    ...reply,
+                    blocks: reply.blocks.map((block) =>
+                      block.type === 'tool_result' && block.tool_use_id === call.id
+                        ? { ...block, phase }
+                        : block
+                    ),
+                  }
+                  flush()
+                },
+                sessionId
+              )
       // 下载文件先落盘到 IndexedDB，回复里只保存引用；保存失败时告诉模型。
       let presented: PresentedFileRef[] = []
       if (outcome.files.length > 0) {

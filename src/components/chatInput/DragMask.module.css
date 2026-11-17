@@ -10,6 +10,7 @@
   background-color: rgba(255, 255, 255, 0.7);
   -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
+  animation: mask-in 150ms var(--ds-ease-in-out) both;
 
   [data-ds-dark-theme] & {
     background-color: rgba(39, 39, 48, 0.7);
@@ -26,6 +27,20 @@
   padding: 0 40px;
   color: var(--dsw-alias-label-primary);
   text-align: center;
+  animation: mask-content-in var(--ds-transition-duration) var(--ds-ease-panel) 60ms both;
+}
+
+@keyframes mask-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes mask-content-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
 }
 
 .title {

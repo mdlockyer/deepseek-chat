@@ -9,9 +9,18 @@
   font-size: 16px;
   line-height: var(--line-height);
   border-radius: 24px;
-  border: 1px solid var(--dsw-alias-border-l2-darkmode-thin);
+  border: 1px solid var(--dsw-alias-border-l3);
   background: var(--dsw-specific-input-major);
   overflow: hidden;
+  /* 边框颜色滑动；焦点环保持即时，满足焦点可见 */
+  transition: border-color var(--ds-transition-duration) var(--ds-ease-in-out);
+
+  /* 输入框没有可见标签，焦点必须由容器给出 */
+  &:focus-within {
+    border-color: var(--dsw-alias-brand-primary);
+    outline: 2px solid var(--dsw-alias-button-primary-fill);
+    outline-offset: 0;
+  }
 }
 
 .session {
@@ -50,6 +59,7 @@
   border: 1px solid var(--dsw-alias-border-l2);
   overflow: hidden;
   background-color: var(--dsw-alias-bg-skeleton);
+  animation: chip-in var(--ds-transition-duration) var(--ds-ease-panel) both;
 
   img {
     display: block;
@@ -196,7 +206,7 @@
   caret-color: var(--dsw-alias-brand-text);
 
   &::placeholder {
-    color: var(--dsw-alias-label-caption);
+    color: var(--dsw-alias-label-placeholder);
     user-select: none;
   }
 }
@@ -274,8 +284,12 @@
   white-space: nowrap;
   cursor: pointer;
   user-select: none;
-  transition-property: border, background;
+  transition-property: border, background, color, transform;
   transition-duration: 0.2s;
+
+  &:active:not(:disabled) {
+    transform: scale(0.97);
+  }
 
   &:hover:not(:disabled) {
     background-color: var(--dsw-alias-interactive-bg-hover);
@@ -319,7 +333,14 @@
   background: var(--dsw-alias-button-primary-fill);
   color: var(--dsw-static-neutral-bluish-00);
   cursor: pointer;
-  transition: background 0.2s ease;
+  transition:
+    background 0.2s ease,
+    transform var(--ds-transition-duration) var(--ds-ease-in-out),
+    opacity var(--ds-transition-duration) var(--ds-ease-in-out);
+
+  &:active:not(.disabled) {
+    transform: scale(0.94);
+  }
 
   &:not(.disabled):hover {
     background: var(--dsw-alias-button-primary-hover);

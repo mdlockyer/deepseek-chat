@@ -2,6 +2,8 @@ import clsx from 'clsx'
 import { useIsMobile } from '../../app/viewport.js'
 import { useTranslate } from '../../i18n/index.js'
 import type { Session } from '../../services/chat/types.js'
+import { useSettings } from '../../services/settings.js'
+import { sessionTitle } from '../../utils/format.js'
 import { ChatInput } from '../chatInput/ChatInput.js'
 import { MessageList } from '../messages/MessageList.js'
 import { MobileHeader } from './MobileHeader.js'
@@ -19,14 +21,18 @@ export const SessionView = ({
 }) => {
   const t = useTranslate()
   const isMobile = useIsMobile()
-  const title = session.title || t('untitledChat')
+  const locale = useSettings((state) => state.locale)
+  const title = sessionTitle(session, t('untitledChat'), locale)
   return (
     <div className={styles.view}>
       {isMobile ? (
         <MobileHeader title={title} />
       ) : (
-        <div className={styles.header}>
-          <div className={clsx(styles.title, siderCollapsed && styles.withCollapsedSider)}>
+        <div className={styles.header} data-tauri-drag-region>
+          <div
+            className={clsx(styles.title, siderCollapsed && styles.withCollapsedSider)}
+            data-tauri-drag-region
+          >
             {title}
           </div>
         </div>

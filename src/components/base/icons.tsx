@@ -523,3 +523,51 @@ export const IconToastError16 = () => (
     />
   </svg>
 )
+
+/** 密钥：API 密钥分组 */
+export const IconKeyOutline16 = () => (
+  <svg width={16} height={16} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path
+      d="M4.9 4.6a3.3 3.3 0 1 0 0 6.6 3.3 3.3 0 0 0 0-6.6Zm0 1.7a1.6 1.6 0 1 1 0 3.2 1.6 1.6 0 0 1 0-3.2Z"
+      fill="currentColor"
+      fillRule="evenodd"
+      clipRule="evenodd"
+    />
+    <rect x="8.1" y="7.2" width="6.4" height="1.6" rx="0.8" fill="currentColor" />
+    <rect x="10.2" y="8.8" width="0.9" height="2.2" rx="0.45" fill="currentColor" />
+    <rect x="12.2" y="8.8" width="0.9" height="1.6" rx="0.45" fill="currentColor" />
+  </svg>
+)
+
+/** 显示密码 */
+export const IconEyeOutline16 = () => (
+  <svg width={16} height={16} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path
+      d="M8 3.2C4.5 3.2 1.73 5.45 0.9 8C1.73 10.55 4.5 12.8 8 12.8C11.5 12.8 14.27 10.55 15.1 8C14.27 5.45 11.5 3.2 8 3.2Z"
+      stroke="currentColor"
+      strokeWidth="1.35"
+      strokeLinejoin="round"
+    />
+    <circle cx="8" cy="8" r="2.1" stroke="currentColor" strokeWidth="1.35" />
+  </svg>
+)
+
+/** 隐藏密码 */
+export const IconEyeOffOutline16 = () => (
+  <svg width={16} height={16} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path
+      d="M6.4 3.45C6.92 3.29 7.45 3.2 8 3.2C11.5 3.2 14.27 5.45 15.1 8C14.66 9.35 13.78 10.58 12.56 11.46M9.95 12.48C9.33 12.69 8.68 12.8 8 12.8C4.5 12.8 1.73 10.55 0.9 8C1.41 6.44 2.52 5.03 4.02 4.18"
+      stroke="currentColor"
+      strokeWidth="1.35"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <path
+      d="M6.55 6.55C6.18 6.92 5.95 7.43 5.95 8C5.95 9.13 6.87 10.05 8 10.05C8.57 10.05 9.08 9.82 9.45 9.45"
+      stroke="currentColor"
+      strokeWidth="1.35"
+      strokeLinecap="round"
+    />
+    <path d="M2.2 2.2L13.8 13.8" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" />
+  </svg>
+)

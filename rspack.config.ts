@@ -44,7 +44,17 @@ export const createConfig = ({
     cssFilename: 'static/css/[name].[contenthash:8].css',
     cssChunkFilename: 'static/css/async/[name].[contenthash:8].css',
     assetModuleFilename: 'static/media/[name].[contenthash:8][ext]',
+    // ModuleWorker runs workers with `{ type: 'module' }`, where `importScripts` throws.
+    workerChunkLoading: 'import',
     clean: true,
+  },
+  optimization: {
+    // Keep dev-server / HMR modules inline inside the worker instead of splitting a JSONP vendor
+    // chunk shared with `main`, while keeping normal async chunk splitting for `main`.
+    splitChunks: {
+      chunks: (chunk) =>
+        !chunk.canBeInitial() && [...chunk.runtime].every((name) => name === 'main'),
+    },
   },
   devtool: dev ? 'cheap-module-source-map' : false,
   // 开发模式预编译异步模块，保持首次加载代码高亮和公式时的页面状态

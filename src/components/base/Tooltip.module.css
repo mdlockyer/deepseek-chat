@@ -23,3 +23,26 @@
       0 9px 28px 8px rgba(0, 0, 0, 0.05);
   }
 }
+
+/* 从触发元素一侧微微落入；消失保持即时，避免悬停移开后残留 */
+.top {
+  animation: tooltip-in-top 120ms var(--ds-ease-panel) both;
+}
+
+.bottom {
+  animation: tooltip-in-bottom 120ms var(--ds-ease-panel) both;
+}
+
+@keyframes tooltip-in-top {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+@keyframes tooltip-in-bottom {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}

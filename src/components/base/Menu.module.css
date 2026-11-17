@@ -10,6 +10,8 @@
   padding: 4px;
   border-radius: 12px;
   background-color: var(--dsw-specific-menu);
+  transform-origin: top left;
+  animation: menu-in 140ms var(--ds-ease-panel) both;
   box-shadow:
     0 0 1px rgba(0, 0, 0, 0.2),
     0 0 4px rgba(0, 0, 0, 0.02),
@@ -43,5 +45,29 @@
 
   &:hover {
     background-color: var(--dsw-alias-interactive-bg-hover-danger);
+  }
+}
+
+.exiting {
+  animation: menu-out 140ms var(--ds-ease-in-out) both;
+  pointer-events: none;
+}
+
+@keyframes menu-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(-4px);
+  }
+}
+
+@keyframes menu-out {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+
+  to {
+    opacity: 0;
+    transform: scale(0.98);
   }
 }

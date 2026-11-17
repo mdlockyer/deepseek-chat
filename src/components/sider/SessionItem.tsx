@@ -1,9 +1,11 @@
 import clsx from 'clsx'
 import { memo, useState } from 'react'
 import { useTranslate } from '../../i18n/index.js'
+import { useSettings } from '../../services/settings.js'
 import { IconEditOutline16, IconEllipsisOutline16, IconTrashOutline16 } from '../base/icons.js'
 import { renameSession, selectSession } from '../../services/chat/store.js'
 import type { SessionSummary } from '../../services/chat/types.js'
+import { sessionTitle } from '../../utils/format.js'
 import { IconButton } from '../base/IconButton.js'
 import { Menu } from '../base/Menu.js'
 import { closeMobileSider } from './mobileSiderState.js'
@@ -12,15 +14,18 @@ import styles from './SessionItem.module.css'
 export const SessionItem = memo(function SessionItem({
   session,
   active,
+  enterDelay = 0,
   onDelete,
 }: {
   session: SessionSummary
   active: boolean
+  enterDelay?: number
   onDelete: () => void
 }) {
   const t = useTranslate()
+  const locale = useSettings((state) => state.locale)
   const [editing, setEditing] = useState(false)
-  const displayTitle = session.title || t('untitledChat')
+  const displayTitle = sessionTitle(session, t('untitledChat'), locale)
 
   if (editing) {
     const finish = (title: string) => {
@@ -30,32 +35,42 @@ export const SessionItem = memo(function SessionItem({
       }
     }
     return (
-      <input
-        className={styles.renameInput}
-        defaultValue={displayTitle}
-        autoFocus
-        onFocus={(event) => event.target.select()}
-        onBlur={(event) => finish(event.target.value)}
-        onKeyDown={(event) => {
-          if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
-            finish(event.currentTarget.value)
-          } else if (event.key === 'Escape') {
-            setEditing(false)
-          }
-        }}
-      />
+      <li className={styles.item}>
+        <input
+          className={styles.renameInput}
+          aria-label={t('sessionItemMenuRenameOption')}
+          defaultValue={displayTitle}
+          autoFocus
+          onFocus={(event) => event.target.select()}
+          onBlur={(event) => finish(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
+              finish(event.currentTarget.value)
+            } else if (event.key === 'Escape') {
+              setEditing(false)
+            }
+          }}
+        />
+      </li>
     )
   }
 
   return (
-    <div
+    <li
       className={clsx(styles.item, active && styles.active)}
-      onClick={() => {
-        selectSession(session.id)
-        closeMobileSider()
-      }}
+      style={enterDelay ? { animationDelay: `${enterDelay}ms` } : undefined}
     >
-      <div className={styles.title}>{displayTitle}</div>
+      <button
+        type="button"
+        className={styles.row}
+        aria-current={active ? 'true' : undefined}
+        onClick={() => {
+          selectSession(session.id)
+          closeMobileSider()
+        }}
+      >
+        <span className={styles.title}>{displayTitle}</span>
+      </button>
       <div className={styles.action} onClick={(event) => event.stopPropagation()}>
         <Menu
           options={[
@@ -79,6 +94,6 @@ export const SessionItem = memo(function SessionItem({
           )}
         </Menu>
       </div>
-    </div>
+    </li>
   )
 })

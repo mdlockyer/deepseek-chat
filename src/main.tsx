@@ -13,7 +13,11 @@ if (isDesktopApp) {
   openExternalLinksInBrowser()
 }
 
-// 桌面版先从钥匙串读入 API Key，避免首屏误判为未设置；网页版立即返回。
-void loadDesktopSettings().then(() => {
-  createRoot(document.getElementById('root') as HTMLElement).render(<App />)
-})
+const render = () => createRoot(document.getElementById('root') as HTMLElement).render(<App />)
+
+// 桌面版先从原生私有存储读入 API Key，避免首屏误判为未设置；网页版立即返回。
+// 原生读取无响应或失败时最多等 2 秒，之后按未设置进入界面，避免白屏。
+void Promise.race([
+  loadDesktopSettings().catch(() => undefined),
+  new Promise((resolve) => setTimeout(resolve, 2000)),
+]).then(render)

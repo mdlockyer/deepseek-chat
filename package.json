@@ -11,6 +11,8 @@
     "type": "tsc -p tsconfig.json",
     "lint": "oxlint src rspack.config.ts",
     "format": "oxfmt --write .",
+    "format:check": "oxfmt --check .",
+    "test": "node --import ./scripts/test-loader.mjs --test \"src/**/*.test.ts\"",
     "desktop:dev": "tauri dev",
     "desktop:build": "tauri build",
     "tauri": "tauri",

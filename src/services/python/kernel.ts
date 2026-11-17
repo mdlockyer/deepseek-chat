@@ -57,8 +57,12 @@ type WorkerReply =
 
 let worker: Worker | null = null
 let nextId = 1
+/** 当前独占内核状态（变量、文件）的会话 ID */
+let ownerSessionId: string | null = null
 /** 上一次调用被终止导致内核重启，下次结果前附加提示 */
 let restartNotice = false
+/** 主线程串行队列，避免多会话并发调用时状态互相覆盖 */
+let runQueue: Promise<void> = Promise.resolve()
 
 const getWorker = () => {
   if (!worker) {
@@ -68,13 +72,18 @@ const getWorker = () => {
   return worker
 }
 
-/** 终止内核，丢弃全部变量；下一次调用重新启动 */
-export const resetPythonKernel = () => {
+export const getPythonKernelSessionId = () => ownerSessionId
+
+/** 终止内核，丢弃全部变量；notify=false 用于切换或清理会话时静默重置 */
+export const resetPythonKernel = (notify = true) => {
   if (worker) {
     worker.terminate()
     worker = null
-    restartNotice = true
+    restartNotice = notify
+  } else if (!notify) {
+    restartNotice = false
   }
+  ownerSessionId = null
 }
 
 export const formatBytes = (bytes: number) =>
@@ -96,12 +105,9 @@ const RESTART_NOTICE =
 export const runPython = (
   code: string,
   signal: AbortSignal,
-  onPhase?: (phase: PythonPhase) => void
+  onPhase?: (phase: PythonPhase) => void,
+  sessionId?: string
 ): Promise<PythonRunResult> => {
-  const startedAt = Date.now()
-  const notice = restartNotice
-  restartNotice = false
-  const prefix = (text: string) => (notice ? `${RESTART_NOTICE}\n\n${text}` : text)
   if (signal.aborted) {
     return Promise.resolve({
       status: 'aborted',
@@ -111,6 +117,67 @@ export const runPython = (
       durationMs: 0,
     })
   }
+  return new Promise((resolve) => {
+    let started = false
+    const onQueuedAbort = () => {
+      if (!started) {
+        resolve({
+          status: 'aborted',
+          text: 'Interrupted by the user.',
+          images: [],
+          files: [],
+          durationMs: 0,
+        })
+      }
+    }
+    signal.addEventListener('abort', onQueuedAbort, { once: true })
+    const task = runQueue.then(() => {
+      signal.removeEventListener('abort', onQueuedAbort)
+      if (signal.aborted) {
+        return {
+          status: 'aborted' as const,
+          text: 'Interrupted by the user.',
+          images: [],
+          files: [],
+          durationMs: 0,
+        }
+      }
+      started = true
+      return executePython(code, signal, onPhase, sessionId)
+    })
+    runQueue = task.then(
+      () => {},
+      () => {}
+    )
+    void task.then(resolve)
+  })
+}
+
+const executePython = (
+  code: string,
+  signal: AbortSignal,
+  onPhase?: (phase: PythonPhase) => void,
+  sessionId?: string
+): Promise<PythonRunResult> => {
+  if (signal.aborted) {
+    return Promise.resolve({
+      status: 'aborted',
+      text: 'Interrupted.',
+      images: [],
+      files: [],
+      durationMs: 0,
+    })
+  }
+  if (sessionId !== undefined && ownerSessionId !== null && ownerSessionId !== sessionId) {
+    resetPythonKernel(false)
+  }
+  if (sessionId !== undefined) {
+    ownerSessionId = sessionId
+  }
+  const startedAt = Date.now()
+  const notice = restartNotice
+  restartNotice = false
+  const prefix = (text: string) => (notice ? `${RESTART_NOTICE}\n\n${text}` : text)
   const id = nextId++
   const target = getWorker()
   return new Promise((resolve) => {

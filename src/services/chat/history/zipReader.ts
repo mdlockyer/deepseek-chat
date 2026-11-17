@@ -4,6 +4,14 @@ const READ_CHUNK_BYTES = 256 * 1024
 // 控制每轮同步解压的工作量；输出交给调用方保存后才继续读取。
 const INFLATE_CHUNK_BYTES = 8 * 1024
 
+export const DEFAULT_MAX_ENTRY_BYTES = 128 * 1024 * 1024
+export const DEFAULT_MAX_ARCHIVE_BYTES = 1024 * 1024 * 1024
+
+export type ReadArchiveOptions = {
+  maxEntryBytes?: number
+  maxTotalBytes?: number
+}
+
 /** ZIP 结构损坏或使用了不支持的特性 */
 export class ArchiveError extends Error {
   constructor() {
@@ -85,7 +93,13 @@ type Entry = {
   offset: number
 }
 
-const readDirectory = async (file: File): Promise<{ entries: Entry[]; offset: number }> => {
+const readDirectory = async (
+  file: File,
+  {
+    maxEntryBytes = DEFAULT_MAX_ENTRY_BYTES,
+    maxTotalBytes = DEFAULT_MAX_ARCHIVE_BYTES,
+  }: ReadArchiveOptions = {}
+): Promise<{ entries: Entry[]; offset: number }> => {
   if (file.size < 22) {
     invalid()
   }
@@ -119,6 +133,7 @@ const readDirectory = async (file: File): Promise<{ entries: Entry[]; offset: nu
   }
   const entries: Entry[] = []
   const paths = new Set<string>()
+  let totalSize = 0
   let cursor = 0
   for (let index = 0; index < count; index++) {
     if (cursor + 46 > size) {
@@ -142,6 +157,8 @@ const readDirectory = async (file: File): Promise<{ entries: Entry[]; offset: nu
       (method !== 0 && method !== 8) ||
       compressedSize === 0xffffffff ||
       entrySize === 0xffffffff ||
+      entrySize > maxEntryBytes ||
+      totalSize + entrySize > maxTotalBytes ||
       (method === 0 && compressedSize !== entrySize) ||
       entryOffset >= offset ||
       view.getUint16(34, true) !== 0 ||
@@ -150,6 +167,7 @@ const readDirectory = async (file: File): Promise<{ entries: Entry[]; offset: nu
     ) {
       invalid()
     }
+    totalSize += entrySize
     const name = await readBytes(file, offset + cursor + 46, nameLength)
     const path = decodePath(name, flags)
     // 目录和同名文件也不能互相覆盖。
@@ -238,8 +256,14 @@ export type ArchiveEntry = {
  * 按条目在文件中的物理顺序逐条、逐块解压，跳过目录条目。
  * 调用方必须消费完当前条目的数据，再请求下一个条目。
  */
-export async function* readArchive(file: File): AsyncGenerator<ArchiveEntry> {
-  const directory = await readDirectory(file)
+export async function* readArchive(
+  file: File,
+  options: ReadArchiveOptions = {}
+): AsyncGenerator<ArchiveEntry> {
+  const maxEntryBytes = options.maxEntryBytes ?? DEFAULT_MAX_ENTRY_BYTES
+  const maxTotalBytes = options.maxTotalBytes ?? DEFAULT_MAX_ARCHIVE_BYTES
+  const directory = await readDirectory(file, { maxEntryBytes, maxTotalBytes })
+  let totalWritten = 0
   for (const [index, entry] of directory.entries.entries()) {
     const boundary = directory.entries[index + 1]?.offset ?? directory.offset
     const start = await readEntryOffset(file, entry, boundary)
@@ -253,7 +277,8 @@ export async function* readArchive(file: File): AsyncGenerator<ArchiveEntry> {
       const pending: Uint8Array[] = []
       const append = (chunk: Uint8Array) => {
         written += chunk.length
-        if (written > entry.size) {
+        totalWritten += chunk.length
+        if (written > entry.size || written > maxEntryBytes || totalWritten > maxTotalBytes) {
           invalid()
         }
         for (const byte of chunk) {

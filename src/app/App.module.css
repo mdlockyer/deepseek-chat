@@ -1,9 +1,16 @@
 .frame {
+  --titlebar-inset: 0px;
   position: absolute;
   inset: 0;
   display: flex;
   overflow: hidden;
   background-color: var(--dsw-alias-bg-base);
+}
+
+/* 桌面版把标题栏做成透明的覆盖层：内容从窗口顶部开始，交通灯浮在侧边栏上方。
+   --titlebar-inset：交通灯占的高度，用于折叠后的按钮组与窄屏顶栏 */
+.frame.desktop {
+  --titlebar-inset: 36px;
 }
 
 .main {
@@ -37,6 +44,13 @@
   inset: 0;
   display: flex;
   flex-direction: column;
+  animation: loading-in var(--ds-transition-duration) var(--ds-ease-in-out) both;
+}
+
+@keyframes loading-in {
+  from {
+    opacity: 0;
+  }
 }
 
 .loadingState {

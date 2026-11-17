@@ -1,4 +1,5 @@
 import { useEffect, type ReactNode } from 'react'
+import clsx from 'clsx'
 import { createPortal } from 'react-dom'
 import { useIsMobile } from '../../app/viewport.js'
 import { useAnchoredPosition, useDelayedOpen } from './anchored.js'
@@ -15,20 +16,29 @@ const ENTER_DELAY = 100
 export const Tooltip = ({
   content,
   placement = 'top',
+  disabled = false,
   children,
 }: {
   content: ReactNode
   placement?: TooltipPlacement
+  disabled?: boolean
   children: ReactNode
 }) => {
   const isMobile = useIsMobile()
   const { open, setOpen, schedule, cancel } = useDelayedOpen()
   const { anchorRef, floatingRef, position } = useAnchoredPosition<HTMLSpanElement, HTMLDivElement>(
-    open,
+    open && !disabled,
     { side: placement, align: 'center', measureFirstChild: true, measureKey: content }
   )
 
   useEffect(() => () => cancel(), [cancel])
+
+  useEffect(() => {
+    if (disabled) {
+      cancel()
+      setOpen(false)
+    }
+  }, [cancel, disabled, setOpen])
 
   // 滚动时收起提示。
   useEffect(() => {
@@ -40,14 +50,18 @@ export const Tooltip = ({
     return () => window.removeEventListener('scroll', onScroll, true)
   }, [open, setOpen])
 
-  const visible = open && !isMobile && Boolean(content)
+  const visible = open && !disabled && !isMobile && Boolean(content)
 
   return (
     <>
       <span
         ref={anchorRef}
         className={styles.trigger}
-        onMouseEnter={() => schedule(true, ENTER_DELAY)}
+        onMouseEnter={() => {
+          if (!disabled) {
+            schedule(true, ENTER_DELAY)
+          }
+        }}
         onMouseLeave={() => schedule(false, 0)}
       >
         {children}
@@ -57,7 +71,7 @@ export const Tooltip = ({
             <div
               ref={floatingRef}
               role="tooltip"
-              className={styles.tooltip}
+              className={clsx(styles.tooltip, placement === 'top' ? styles.top : styles.bottom)}
               style={position ?? { top: 0, left: 0, visibility: 'hidden' }}
             >
               {content}

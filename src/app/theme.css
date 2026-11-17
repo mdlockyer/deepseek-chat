@@ -15,6 +15,8 @@ body {
   --ds-font-size-m: 14px;
 
   --ds-ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  /* 面板级运动（侧边栏开合、抽屉）：强 ease-out，起步快、落点稳 */
+  --ds-ease-panel: cubic-bezier(0.32, 0.72, 0, 1);
 
   --ds-font-family-code:
     Menlo, Monaco, Consolas, 'Cascadia Mono', 'Ubuntu Mono', 'DejaVu Sans Mono', 'Liberation Mono',
@@ -23,6 +25,20 @@ body {
 
   --ds-transition-duration: 0.2s;
   --ds-transition-duration-slow: 0.3s;
+  --ds-transition-duration-panel: 0.28s;
+}
+
+/* 动敏：系统「减弱动态效果」时统一关闭动画与过渡（含 visibility 延迟） */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0s !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 body {
@@ -66,6 +82,7 @@ body {
   --dsw-static-neutral-100: rgb(245, 245, 245);
   --dsw-static-neutral-300: rgb(212, 212, 212);
   --dsw-static-neutral-550: rgb(101, 103, 107);
+  --dsw-static-red-300: rgb(255, 138, 138);
   --dsw-static-red-400: rgb(242, 90, 90);
   --dsw-static-red-600: rgb(236, 19, 19);
 }
@@ -140,18 +157,21 @@ body {
   --dsw-alias-interactive-bg-hover: rgba(38, 49, 72, 0.06);
   --dsw-alias-interactive-bg-hover-accent: rgba(38, 49, 72, 0.14);
   --dsw-alias-label-caption: var(--dsw-static-neutral-bluish-400);
+  --dsw-alias-label-danger: var(--dsw-static-red-600);
   --dsw-alias-label-dimmed: var(--dsw-static-neutral-bluish-200);
+  --dsw-alias-label-placeholder: var(--dsw-static-neutral-550);
   --dsw-alias-label-primary-foreground: var(--dsw-static-neutral-bluish-00);
   --dsw-alias-label-primary-inverted: var(--dsw-static-neutral-bluish-00);
   --dsw-alias-label-primary: var(--dsw-static-neutral-bluish-1000);
   --dsw-alias-label-secondary: var(--dsw-static-neutral-bluish-700);
-  --dsw-alias-label-tertiary: var(--dsw-static-neutral-bluish-600);
+  --dsw-alias-label-tertiary: var(--dsw-static-neutral-550);
   --dsw-alias-markdown-citation: var(--dsw-static-neutral-bluish-100);
   --dsw-alias-markdown-code-block-banner: var(--dsw-static-neutral-bluish-50);
   --dsw-alias-markdown-code-block: var(--dsw-static-neutral-bluish-50);
   --dsw-alias-markdown-inline-code: var(--dsw-static-neutral-bluish-100);
   --dsw-alias-markdown-placeholder: var(--dsw-static-neutral-bluish-60);
   --dsw-alias-markdown-tag: var(--dsw-static-neutral-bluish-75);
+  --dsw-alias-mask-fill: rgba(0, 0, 0, 0.24);
   --dsw-alias-state-error-primary: var(--dsw-static-red-600);
   --dsw-alias-state-error-secondary: var(--dsw-static-red-400);
   --dsw-alias-toast-bg: var(--dsw-static-neutral-bluish-800);
@@ -191,7 +211,9 @@ body[data-ds-dark-theme] {
   --dsw-alias-interactive-bg-hover: rgba(255, 255, 255, 0.08);
   --dsw-alias-interactive-bg-hover-accent: rgba(255, 255, 255, 0.24);
   --dsw-alias-label-caption: var(--dsw-static-neutral-bluish-600);
+  --dsw-alias-label-danger: var(--dsw-static-red-300);
   --dsw-alias-label-dimmed: var(--dsw-static-neutral-bluish-750);
+  --dsw-alias-label-placeholder: var(--dsw-static-neutral-bluish-400);
   --dsw-alias-label-primary-foreground: var(--dsw-static-neutral-bluish-00);
   --dsw-alias-label-primary-inverted: var(--dsw-static-neutral-bluish-800);
   --dsw-alias-label-primary: var(--dsw-static-neutral-bluish-50);
@@ -203,6 +225,7 @@ body[data-ds-dark-theme] {
   --dsw-alias-markdown-inline-code: var(--dsw-static-neutral-bluish-850);
   --dsw-alias-markdown-placeholder: var(--dsw-static-neutral-bluish-850);
   --dsw-alias-markdown-tag: var(--dsw-static-neutral-bluish-850);
+  --dsw-alias-mask-fill: rgba(0, 0, 0, 0.48);
   --dsw-alias-state-error-primary: var(--dsw-static-red-400);
   --dsw-alias-state-error-secondary: var(--dsw-static-red-400);
   --dsw-alias-toast-bg: var(--dsw-static-neutral-bluish-750);

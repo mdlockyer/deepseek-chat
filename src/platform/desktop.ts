@@ -17,10 +17,10 @@ const invoke = async <T>(...args: Parameters<typeof import('@tauri-apps/api/core
 export const desktopFetch = async (url: string, init: RequestInit): Promise<Response> =>
   (await import('@tauri-apps/plugin-http')).fetch(url, init)
 
-/** 从系统钥匙串读取 API Key；没有保存过时为 null */
+/** 从桌面端私有存储读取 API Key（含旧版钥匙串一次性迁移）；没有保存过时为 null */
 export const loadKeychainApiKey = (): Promise<string | null> => invoke<string | null>('get_api_key')
 
-/** 写入系统钥匙串；null 表示删除 */
+/** 写入桌面端私有存储；null 表示删除 */
 export const saveKeychainApiKey = (key: string | null): Promise<void> =>
   invoke<null>('set_api_key', { key }).then(() => undefined)
 
@@ -32,6 +32,28 @@ export const saveFileWithDialog = async (name: string, blob: Blob): Promise<bool
   invoke<boolean>('save_file', new Uint8Array(await blob.arrayBuffer()), {
     headers: { 'x-file-name': encodeURIComponent(name) },
   })
+
+/** 订阅桌面端菜单栏触发的打开设置事件，返回取消订阅函数 */
+export const onOpenSettings = (handler: () => void): (() => void) => {
+  if (!isDesktopApp) {
+    return () => {}
+  }
+  let cancelled = false
+  let unlisten: (() => void) | undefined
+  void import('@tauri-apps/api/event').then(({ listen }) => {
+    void listen('open-settings', handler).then((dispose) => {
+      if (cancelled) {
+        dispose()
+      } else {
+        unlisten = dispose
+      }
+    })
+  })
+  return () => {
+    cancelled = true
+    unlisten?.()
+  }
+}
 
 /**
  * 桌面 webview 不会为 target="_blank" 打开新窗口：回复里的链接、来源和充值链接都会失效。

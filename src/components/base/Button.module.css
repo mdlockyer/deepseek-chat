@@ -82,7 +82,7 @@
 }
 
 .dangerOutlined {
-  color: var(--dsw-alias-state-error-primary);
+  color: var(--dsw-alias-label-danger);
   background-color: transparent;
   border-color: var(--dsw-alias-state-error-primary);
   font-weight: 400;

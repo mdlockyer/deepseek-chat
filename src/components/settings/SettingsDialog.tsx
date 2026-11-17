@@ -5,6 +5,7 @@ import {
   IconDataOutline16,
   IconDownloadOutline16,
   IconFollowsystemOutline16,
+  IconKeyOutline16,
   IconLightOutline16,
   IconSettingsOutline16,
   IconUploadOutline14,
@@ -15,7 +16,6 @@ import {
   exportHistory,
   importHistory,
 } from '../../services/chat/backup.js'
-import { useIsMobile } from '../../app/viewport.js'
 import { useChatStore } from '../../services/chat/store.js'
 import { regionCodes, getRegionName, provinces } from '../../services/location.js'
 import {
@@ -32,17 +32,19 @@ import { Button } from '../base/Button.js'
 import { Modal } from '../base/Modal.js'
 import { Select } from '../base/Select.js'
 import { showToast } from '../base/toastState.js'
-import { ApiKeyConfirm, ApiKeyField, useApiKeyEditor } from './ApiKeyField.js'
+import { ApiKeyField, useApiKeyEditor } from './ApiKeyField.js'
 import { closeSettings, useSettingsDialog, type SettingsSection } from './settingsDialogState.js'
+import { usePresence } from '../../utils/usePresence.js'
 import styles from './Settings.module.css'
 
 /**
- * 设置弹窗：分「通用设置」（主题、语言、朗读音色、位置）与「数据管理」（API Key、导入、导出、删除）。
+ * 设置弹窗：分「通用设置」（主题、语言、朗读音色、位置）、「API 密钥」与「数据管理」（导入、导出、删除）。
  * 桌面端为居中弹窗、左侧导航；移动端为底部弹层、导航横排在内容上方
  */
 export const SettingsDialog = () => {
   const open = useSettingsDialog((state) => state.open)
-  return open ? <SettingsContent /> : null
+  const { mounted, exiting } = usePresence(open, 160)
+  return mounted ? <SettingsContent exiting={exiting} /> : null
 }
 
 const sections: { value: SettingsSection; label: TranslationKey; icon: ReactNode }[] = [
@@ -51,12 +53,16 @@ const sections: { value: SettingsSection; label: TranslationKey; icon: ReactNode
     label: 'settingDialogAsideGeneralOptionLabel',
     icon: <IconSettingsOutline16 />,
   },
+  {
+    value: 'apiKey',
+    label: 'settingDialogAsideApiKeyOptionLabel',
+    icon: <IconKeyOutline16 />,
+  },
   { value: 'data', label: 'settingDialogAsideDataOptionLabel', icon: <IconDataOutline16 /> },
 ]
 
-const SettingsContent = () => {
+const SettingsContent = ({ exiting = false }: { exiting?: boolean }) => {
   const t = useTranslate()
-  const isMobile = useIsMobile()
   // 打开时按调用方指定的分组选中，之后在弹窗内切换
   const [section, setSection] = useState(() => useSettingsDialog.getState().section)
   // 切换分组不丢失正在输入的 API Key 与导入状态
@@ -65,6 +71,8 @@ const SettingsContent = () => {
   const historyDelete = useHistoryDelete()
   const replacingHistory = useChatStore((state) => state.importingHistory)
   const historyBusy = historyImport.busy || historyDelete.busy || replacingHistory
+  const importConfirm = usePresence(historyImport.file !== null, 160)
+  const deleteConfirm = usePresence(historyDelete.opened, 160)
   return (
     <>
       <Modal
@@ -72,6 +80,7 @@ const SettingsContent = () => {
         closable
         className={styles.dialog}
         mainClassName={styles.dialogMain}
+        exiting={exiting}
         onClose={() => {
           if (!historyDelete.busy) {
             closeSettings()
@@ -101,9 +110,10 @@ const SettingsContent = () => {
               <TtsVoiceSetting />
               <LocationSetting />
             </>
+          ) : section === 'apiKey' ? (
+            <ApiKeyField editor={apiKeyEditor} />
           ) : (
             <>
-              <ApiKeyField editor={apiKeyEditor} />
               <ImportHistory historyImport={historyImport} disabled={historyBusy} />
               <ExportHistory disabled={historyBusy} />
               <SettingCell
@@ -121,13 +131,16 @@ const SettingsContent = () => {
                   </Button>
                 }
               />
-              {isMobile ? <ApiKeyConfirm editor={apiKeyEditor} /> : null}
             </>
           )}
         </div>
       </Modal>
-      {historyImport.file ? <ImportConfirm historyImport={historyImport} /> : null}
-      {historyDelete.opened ? <DeleteAllConfirm historyDelete={historyDelete} /> : null}
+      {importConfirm.mounted ? (
+        <ImportConfirm historyImport={historyImport} exiting={importConfirm.exiting} />
+      ) : null}
+      {deleteConfirm.mounted ? (
+        <DeleteAllConfirm historyDelete={historyDelete} exiting={deleteConfirm.exiting} />
+      ) : null}
     </>
   )
 }
@@ -135,8 +148,10 @@ const SettingsContent = () => {
 /** 删除确认保留在设置之上；失败可重试，成功只关闭确认弹窗。 */
 const DeleteAllConfirm = ({
   historyDelete,
+  exiting = false,
 }: {
   historyDelete: ReturnType<typeof useHistoryDelete>
+  exiting?: boolean
 }) => {
   const t = useTranslate()
   return (
@@ -144,6 +159,7 @@ const DeleteAllConfirm = ({
       title={t('deleteAllSessionsModalTitle')}
       className={styles.deleteConfirm}
       onClose={historyDelete.cancel}
+      exiting={exiting}
       footer={
         <div className={styles.deleteActions} aria-busy={historyDelete.busy}>
           <Button
@@ -317,8 +333,10 @@ const TtsVoiceSetting = () => {
 /** 覆盖导入的二次确认，叠在设置弹窗上 */
 const ImportConfirm = ({
   historyImport,
+  exiting = false,
 }: {
   historyImport: ReturnType<typeof useHistoryImport>
+  exiting?: boolean
 }) => {
   const t = useTranslate()
   return (
@@ -326,6 +344,7 @@ const ImportConfirm = ({
       title={t('historyImportConfirmTitle')}
       className={styles.importConfirm}
       onClose={historyImport.cancel}
+      exiting={exiting}
       footer={
         <>
           <Button variant="outlined" size="m" autoFocus onClick={historyImport.cancel}>

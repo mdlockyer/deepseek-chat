@@ -9,24 +9,28 @@
   display: flex;
   align-items: center;
   flex-shrink: 0;
-  height: 60px;
-  padding: 12px 18px 0;
+  /* 52px 让标题中心落在 26px，与新对话时的品牌行、交通灯同一水平线 */
+  height: 52px;
+  padding: 0 18px;
   box-sizing: border-box;
   background: var(--dsw-alias-bg-base);
 }
 
 .title {
   max-width: 480px;
-  padding: 8px 12px;
+  padding: 0 12px;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
   font: var(--dsw-font-s-strong-14);
   color: var(--dsw-alias-label-primary);
+  /* 侧边栏开合时标题与面板同步滑动，而不是跳位 */
+  transition: margin-left var(--ds-transition-duration-panel) var(--ds-ease-panel);
 }
 
+/* 收起后让开左上角按钮组（96–174px）：18 + 162 + 12 = 192px 起 */
 .withCollapsedSider {
-  margin-left: 113px;
+  margin-left: 162px;
 }
 
 .inputContainer {
@@ -37,7 +41,7 @@
   flex-direction: column;
   align-items: center;
   box-sizing: border-box;
-  width: calc(var(--message-list-max-width) - 64px);
+  width: calc(var(--message-list-max-width) - var(--message-list-padding-horizontal) * 2);
   max-width: calc(100% - 32px);
   margin: auto auto 0;
   background: linear-gradient(

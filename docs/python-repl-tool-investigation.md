@@ -17,25 +17,30 @@ The DeepSeek API supports what the loop needs. Client tools are declared without
 Unharnessed gives the model one tool, `ipython`, with this schema and description (`crates/uh-core/src/tools/ipython.rs`):
 
 ```json
-{ "name": "ipython",
+{
+  "name": "ipython",
   "description": "Run Python code in the persistent REPL.",
-  "input_schema": { "type": "object", "required": ["code"],
-                    "properties": { "code": { "type": "string", "description": "Python code to run." } } } }
+  "input_schema": {
+    "type": "object",
+    "required": ["code"],
+    "properties": { "code": { "type": "string", "description": "Python code to run." } }
+  }
+}
 ```
 
 The Rust host runs calls one at a time (`ExecutionMode::Sequential`) against a CPython 3.11+ child process. The child speaks newline-delimited JSON (`unharnessed-runtime/src/rlm/repl.md`, protocol version 3). The parts that matter for a port:
 
-| Unharnessed behaviour | Where | Portable to the browser? |
-|---|---|---|
-| One persistent `__main__` namespace, one asyncio loop, top-level `await` (`PyCF_ALLOW_TOP_LEVEL_AWAIT`) | `rlm/repl.py` | Yes. Pyodide `runPythonAsync` with a kept `globals` dict does this. |
-| Result text = stdout, then stderr, then `repr` of the trailing expression, then the traceback on error | `format_execute_text` | Yes, port directly. |
-| `repr` and traceback entries capped at 1,048,576 characters with a truncation marker | `repl.md` | Yes. A much lower cap suits a chat context; see below. |
-| `emit({mime: payload})` display events; image MIME types become image blocks in the tool result | `image_blocks_from_attachments` | Yes. The DeepSeek `tool_result` accepts text and image blocks. |
-| Real interrupts: `KeyboardInterrupt` lands in the running cell | `repl.md` "Interrupt" | Only with `SharedArrayBuffer`, which needs cross-origin isolation. Otherwise the only stop is killing the worker. |
-| Kernel restart notice (`<ipython_kernel_reset>`) prepended when the kernel was killed | `kernel_restart_notice` | Yes, and it will fire more often here because killing the worker is the fallback interrupt. |
-| `bash()` returning a `BashHandle`, MCP inside the kernel, `uv pip install` | `rlm/bash.py`, `rlm/mcp.py` | No. There is no shell in a browser. `micropip` replaces package installs for pure-Python wheels and Pyodide's prebuilt packages. |
-| Snapshot/restore of the namespace with `dill` across sessions and compaction | `repl.md` "Snapshot / restore" | Possible later (pickle to bytes, store in IndexedDB), not needed for a first version. |
-| No sandbox: model code runs with the user's permissions | README warning | Inverted. The browser is the sandbox, which is the main safety gain of this design. |
+| Unharnessed behaviour                                                                                   | Where                           | Portable to the browser?                                                                                                         |
+| ------------------------------------------------------------------------------------------------------- | ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| One persistent `__main__` namespace, one asyncio loop, top-level `await` (`PyCF_ALLOW_TOP_LEVEL_AWAIT`) | `rlm/repl.py`                   | Yes. Pyodide `runPythonAsync` with a kept `globals` dict does this.                                                              |
+| Result text = stdout, then stderr, then `repr` of the trailing expression, then the traceback on error  | `format_execute_text`           | Yes, port directly.                                                                                                              |
+| `repr` and traceback entries capped at 1,048,576 characters with a truncation marker                    | `repl.md`                       | Yes. A much lower cap suits a chat context; see below.                                                                           |
+| `emit({mime: payload})` display events; image MIME types become image blocks in the tool result         | `image_blocks_from_attachments` | Yes. The DeepSeek `tool_result` accepts text and image blocks.                                                                   |
+| Real interrupts: `KeyboardInterrupt` lands in the running cell                                          | `repl.md` "Interrupt"           | Only with `SharedArrayBuffer`, which needs cross-origin isolation. Otherwise the only stop is killing the worker.                |
+| Kernel restart notice (`<ipython_kernel_reset>`) prepended when the kernel was killed                   | `kernel_restart_notice`         | Yes, and it will fire more often here because killing the worker is the fallback interrupt.                                      |
+| `bash()` returning a `BashHandle`, MCP inside the kernel, `uv pip install`                              | `rlm/bash.py`, `rlm/mcp.py`     | No. There is no shell in a browser. `micropip` replaces package installs for pure-Python wheels and Pyodide's prebuilt packages. |
+| Snapshot/restore of the namespace with `dill` across sessions and compaction                            | `repl.md` "Snapshot / restore"  | Possible later (pickle to bytes, store in IndexedDB), not needed for a first version.                                            |
+| No sandbox: model code runs with the user's permissions                                                 | README warning                  | Inverted. The browser is the sandbox, which is the main safety gain of this design.                                              |
 
 Unharnessed's static system prompt is short and mostly about `bash()`. The rules worth keeping for chat-demo are: batch steps that do not need an unseen result into one call, store results in variables instead of recomputing, and stop calling the tool when done and give the final answer.
 

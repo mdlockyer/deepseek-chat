@@ -32,15 +32,15 @@ export type ApiErrorKind =
   | 'protocol'
 
 export class ApiError extends Error {
+  readonly kind: ApiErrorKind
+  readonly status?: number
   readonly localMessage?: TranslationMessage
 
-  constructor(
-    readonly kind: ApiErrorKind,
-    message: string | TranslationMessage,
-    readonly status?: number
-  ) {
+  constructor(kind: ApiErrorKind, message: string | TranslationMessage, status?: number) {
     super(typeof message === 'string' ? message : translate(message.key, message.params))
     this.name = 'ApiError'
+    this.kind = kind
+    this.status = status
     this.localMessage = typeof message === 'string' ? undefined : message
   }
 }

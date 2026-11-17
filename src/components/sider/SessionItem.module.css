@@ -4,12 +4,16 @@
   align-items: center;
   box-sizing: border-box;
   height: 40px;
-  padding: 9px 6px 9px 10px;
+  padding-right: 6px;
   border-radius: 12px;
   font-size: 14px;
   line-height: 22px;
   color: var(--dsw-alias-label-primary);
-  cursor: pointer;
+  list-style: none;
+  transition:
+    background-color var(--ds-transition-duration) var(--ds-ease-in-out),
+    color var(--ds-transition-duration) var(--ds-ease-in-out);
+  animation: item-in var(--ds-transition-duration) var(--ds-ease-panel) both;
 
   &.active {
     background-color: var(--dsw-specific-sidebar-nav-item-active-accent);
@@ -24,9 +28,40 @@
     &:hover,
     &.active {
       .action {
-        display: flex;
+        opacity: 1;
+        visibility: visible;
+        transition: opacity var(--ds-transition-duration) var(--ds-ease-in-out);
       }
     }
+  }
+
+  /* 键盘进入这一行时也显示菜单按钮 */
+  &:focus-within .action {
+    opacity: 1;
+    visibility: visible;
+    transition: opacity var(--ds-transition-duration) var(--ds-ease-in-out);
+  }
+}
+
+/* 整行的点击目标：真正的按钮，可聚焦、可键盘激活 */
+.row {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 9px 4px 9px 10px;
+  border: 0;
+  border-radius: 12px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  outline: none;
+
+  &:focus-visible {
+    box-shadow: inset 0 0 0 2px var(--dsw-alias-button-primary-fill);
   }
 }
 
@@ -39,10 +74,16 @@
   line-height: 18px;
 }
 
+/* 常驻占位、淡入淡出：悬停时标题宽度不跳 */
 .action {
-  display: none;
+  display: flex;
   flex-shrink: 0;
   margin-left: 4px;
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity var(--ds-transition-duration) var(--ds-ease-in-out),
+    visibility 0s linear var(--ds-transition-duration);
 }
 
 .renameInput {
@@ -61,16 +102,32 @@
 
 @media (hover: none) {
   .action {
-    display: flex;
+    opacity: 1;
+    visibility: visible;
+  }
+}
+
+@keyframes item-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
   }
 }
 
 @media not all and (min-width: 768px) {
   .item {
     height: 44px;
-    padding: 11px 6px 11px 12px;
     border-radius: 16px;
     font-size: 16px;
+  }
+
+  .row {
+    padding: 11px 4px 11px 12px;
   }
 
   .title {

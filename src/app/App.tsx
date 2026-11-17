@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
-import { useTranslate } from '../i18n/index.js'
+import clsx from 'clsx'
+import { translate, useTranslate } from '../i18n/index.js'
 import { useSettings } from '../services/settings.js'
 import { useIsMobile, useMobileViewport, usePreventPageScroll } from './viewport.js'
 import {
@@ -14,13 +15,18 @@ import { closeSearchPanel } from '../components/search/searchPanelState.js'
 import { SessionView } from '../components/session/SessionView.js'
 import { MobileHeader } from '../components/session/MobileHeader.js'
 import { Welcome } from '../components/session/Welcome.js'
-import { ensureApiKey } from '../components/settings/settingsDialogState.js'
+import {
+  ensureApiKey,
+  openSettingsFromShortcut,
+} from '../components/settings/settingsDialogState.js'
 import { SettingsDialog } from '../components/settings/SettingsDialog.js'
 import { Toast } from '../components/base/Toast.js'
 import { showToast } from '../components/base/toastState.js'
 import { onUploadNotice } from '../services/attachments.js'
 import { Button } from '../components/base/Button.js'
 import { stopReadAloud } from '../services/speech/readAloud.js'
+import { isDesktopApp, onOpenSettings } from '../platform/desktop.js'
+import { usePresence, PANEL_DURATION_MS } from '../utils/usePresence.js'
 import { CollapsedSider } from '../components/sider/CollapsedSider.js'
 import { closeMobileSider } from '../components/sider/mobileSiderState.js'
 import { MobileSider, Sider } from '../components/sider/Sider.js'
@@ -30,6 +36,7 @@ export const App = () => {
   const t = useTranslate()
   const isMobile = useIsMobile()
   const locale = useSettings((state) => state.locale)
+  const desktopSettingsReady = useSettings((state) => state.desktopSettingsReady)
   // 移动端侧边栏以独立抽屉管理开合状态
   const siderCollapsed = useSettings((state) => state.siderCollapsed) && !isMobile
   const ready = useChatStore((state) => state.ready)
@@ -49,11 +56,17 @@ export const App = () => {
     state.activeId === null ? false : Object.hasOwn(state.streaming, state.activeId)
   )
   const activeId = useChatStore((state) => state.activeId)
+  // 收起后的按钮组退场淡出期间保持挂载
+  const { mounted: showCollapsedSider, exiting: collapsedSiderExiting } = usePresence(
+    siderCollapsed,
+    PANEL_DURATION_MS
+  )
 
   usePreventPageScroll(isMobile)
 
   useEffect(() => {
     document.documentElement.lang = locale
+    document.title = translate('appName')
   }, [locale])
 
   // 文件数、存储空间达到上限时，附件上只显示「上传失败」，原因用 toast 说明
@@ -69,14 +82,52 @@ export const App = () => {
 
   useEffect(() => {
     void initChat()
-    // 首次打开先在设置里输入 API Key
-    ensureApiKey()
+  }, [])
+
+  // 桌面版须等原生配置加载完成后再检查 API Key，避免超时先渲染时误弹设置窗口
+  useEffect(() => {
+    if (desktopSettingsReady) {
+      ensureApiKey()
+    }
+  }, [desktopSettingsReady])
+
+  // macOS Cmd+, 打开设置（菜单栏触发 + webview 键盘兜底）
+  useEffect(() => {
+    const unlisten = onOpenSettings(openSettingsFromShortcut)
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (
+        event.metaKey &&
+        !event.ctrlKey &&
+        !event.altKey &&
+        !event.shiftKey &&
+        event.key === ','
+      ) {
+        event.preventDefault()
+        openSettingsFromShortcut()
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => {
+      unlisten()
+      window.removeEventListener('keydown', onKeyDown)
+    }
   }, [])
 
   return (
     <>
-      <div ref={frameRef} className={styles.frame}>
-        {isMobile ? <MobileSider /> : siderCollapsed ? null : <Sider />}
+      <div ref={frameRef} className={clsx(styles.frame, isDesktopApp && styles.desktop)}>
+        {isMobile ? (
+          <MobileSider />
+        ) : (
+          <>
+            <Sider
+              collapsed={siderCollapsed}
+              controlsHidden={siderCollapsed}
+              controlsLanding={collapsedSiderExiting}
+            />
+            {showCollapsedSider ? <CollapsedSider exiting={collapsedSiderExiting} /> : null}
+          </>
+        )}
         <main className={styles.main}>
           {saveError ? (
             <div className={styles.saveError} role="alert">
@@ -92,7 +143,6 @@ export const App = () => {
             </div>
           ) : null}
           <div className={styles.content}>
-            {siderCollapsed ? <CollapsedSider /> : null}
             {!ready || (activeId !== null && !session) ? (
               <div className={styles.loadingView}>
                 {isMobile ? <MobileHeader /> : null}
@@ -126,7 +176,7 @@ export const App = () => {
                 siderCollapsed={siderCollapsed}
               />
             ) : (
-              <Welcome />
+              <Welcome siderCollapsed={siderCollapsed} />
             )}
           </div>
         </main>
