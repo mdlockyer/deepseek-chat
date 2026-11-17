@@ -1,75 +1,59 @@
-# chat-demo
+# deepseek-chat
+
+基于 [deepseek-ai/chat-demo](https://github.com/deepseek-ai/chat-demo) 构建的 DeepSeek API 桌面端与网页客户端，使用 [Tauri 2](https://v2.tauri.app/) 打包，并为模型提供浏览器内运行的 Python REPL 工具。
 
 [English](README.md) | 简体中文
 
-基于 DeepSeek API 的静态聊天示例。无需应用后端，浏览器直接请求配置的 API 服务。
+使用前需在 [platform.deepseek.com](https://platform.deepseek.com/api_keys) 申请自己的 API Key。对话与附件保存在本地 IndexedDB，请求直接发送至 `api.deepseek.com`。
 
-点击 [在线体验](https://deepseek-ai.github.io/chat-demo/) 即可使用，也可以前往 [Releases](https://github.com/deepseek-ai/deepseek-chat-demo/releases) 下载压缩包，解压后双击 `index.html` 在本地使用，无需安装或构建。首次使用时，请在设置中填写 API Key。
+## 本地运行
 
-## 运行
-
-准备 Node.js 22.12+ 和 pnpm：
+需要 Node.js 22.12+ 与 pnpm；构建桌面版还需 Rust 1.90+。
 
 ```sh
-git clone https://github.com/deepseek-ai/chat-demo.git
-cd chat-demo
+git clone https://github.com/mdlockyer/deepseek-chat.git
+cd deepseek-chat
 pnpm install
+```
+
+以开发模式运行桌面应用：
+
+```sh
+pnpm desktop:dev
+```
+
+或仅在浏览器中运行（`http://localhost:8090`）：
+
+```sh
 pnpm dev
 ```
 
-打开 http://localhost:8090 。
-
-生成静态产物：
+生成桌面发布包（输出位于 `src-tauri/target/release/bundle/`）：
 
 ```sh
-pnpm build
+pnpm desktop:build
 ```
 
-产物位于 `dist/`，可部署到静态服务器，也可直接打开 `dist/index.html`。直接打开时，浏览器和 API 服务需允许 `file://` 页面的存储与跨域请求。
+## 说明
 
-## 功能
+开启深度思考后，模型可使用运行在 Web Worker 中的持久化 Python 3 环境（基于 Pyodide）。桌面版内置 `numpy`、`pandas`、`matplotlib`、`Pillow` 与 `micropip`，其他纯 Python 包会在联网时从 jsDelivr 加载；`matplotlib` 图像会内联展示并回传给模型，通过 `present_file()` 导出的文件会触发系统保存对话框。
 
-- 多会话、自动标题、重命名与删除；编辑提问、重新生成和切换消息分支。
-- 流式回答、深度思考、智能搜索、链接阅读与来源引用；支持停止和符合条件的继续生成。
-- 附件上传、粘贴与拖拽，语音输入和回复朗读；移动端录音时输入框首行显示实时频谱。
-- Markdown、代码高亮、KaTeX 公式和 Mermaid 图表。
-- 简体中文与英文、浅色与深色主题、移动端布局、位置设置、历史导入导出。
+在桌面版中，API 请求通过 `tauri-plugin-http` 发出以绕过 webview 的 CORS 限制，外部链接在系统默认浏览器中打开，macOS 下可通过 `Cmd+,` 打开设置，API Key 保存在 `~/Library/Application Support/com.mlockyer.deepseekchat/api-key`（`0600` 权限）而非 `localStorage`。
 
-## 数据
+其余功能与上游一致：多分支对话、联网搜索、网页阅读、附件上传、语音输入、朗读、KaTeX、Mermaid 图表、浅色/深色主题、中英文界面以及 ZIP 历史导出导入。
 
-API Key 和设置保存在浏览器 localStorage，会话及附件原件保存在 IndexedDB，本地数据按浏览器用户配置和站点源（origin）隔离。发送对话、上传附件和使用语音功能时，相应内容会提交给配置的 API 服务。
+## 常用命令
 
-设置中的历史导入导出使用 ZIP 格式。导入会在确认并校验成功后替换全部本地会话和附件；导出包含会话与本地可用的图片原件，不包含 API Key、设置或非图片附件原件。格式与保留范围见[历史导入导出](src/services/chat/history/README.md)。
-
-设置 → 数据管理 → 删除所有对话，会在确认后清空全部本地会话、附件原件和未发送的草稿，停止正在生成的回复并回到新对话。API Key 和其他设置保留，已上传到 API 服务的文件不受影响。
-
-## 开发
-
-| 命令          | 用途                |
-| ------------- | ------------------- |
-| `pnpm dev`    | 启动开发服务器      |
-| `pnpm build`  | 构建到 `dist/`      |
-| `pnpm type`   | TypeScript 类型检查 |
-| `pnpm lint`   | oxlint 检查         |
-| `pnpm format` | oxfmt 格式化        |
-
-[rspack.config.ts](rspack.config.ts) 默认连接 `https://api.deepseek.com`。`createConfig({ apiOrigin, devServer })` 支持自定义 API 地址和开发服务器代理。
-
-聊天默认使用 `deepseek-flash`，通过 Anthropic 兼容的 Messages / Files API 通信；语音使用 ASR / TTS 接口。请求使用搜索、链接阅读、标题和 `latest_reminder` 等扩展，接入服务需支持相应能力。附件实际支持的格式以服务端校验为准。
-
-```text
-src/
-  app/                 应用布局、主题与全局样式
-  components/          聊天、设置、Markdown 等界面组件
-  i18n/                中英文文案
-  services/
-    api/               API 请求、SSE 与协议类型
-    chat/              会话、消息分支、本地存储与历史导入导出
-    markdown/          Markdown 解析、代码高亮与图表
-    speech/            录音与朗读
-  utils/               通用工具
+```sh
+pnpm test          # 运行单元测试
+pnpm type          # TypeScript 类型检查
+pnpm lint          # oxlint 检查
+pnpm format        # oxfmt 格式化
+pnpm build         # 构建静态网页到 dist/
 ```
+
+如需接入其他 API 服务，可在 [rspack.config.ts](rspack.config.ts) 中向 `createConfig()` 传入 `apiOrigin`。
 
 ## 许可证
 
-[MIT](LICENSE)。构建会将许可证复制到 `dist/LICENSE`，分发时请一并保留；第三方依赖遵循各自的许可证。
+[MIT](LICENSE)

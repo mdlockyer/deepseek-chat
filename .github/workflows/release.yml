@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Optional tag name (e.g. v0.1.1) to create a GitHub Release; leave empty for artifact-only build'
+        description: 'Optional tag name (e.g. v0.2.0-rc.1) to create a GitHub Release; leave empty for artifact-only build'
         required: false
         type: string
 
@@ -56,6 +56,7 @@ jobs:
           pnpm type
           pnpm lint
           pnpm test
+          cargo fmt --manifest-path src-tauri/Cargo.toml --check
           cargo test --manifest-path src-tauri/Cargo.toml
 
       - name: Prepare Apple signing and notarization credentials
@@ -66,16 +67,19 @@ jobs:
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+          IS_RELEASE: ${{ startsWith(github.ref, 'refs/tags/v') || inputs.tag != '' }}
         run: |
           can_notarize=false
-          if [ -n "$APPLE_API_KEY_P8" ] && [ -n "$APPLE_API_KEY" ] && [ -n "$APPLE_API_ISSUER" ]; then
+          if [ -n "$APPLE_CERTIFICATE" ] && [ -n "$APPLE_CERTIFICATE_PASSWORD" ] && \
+             [ -n "$APPLE_API_KEY_P8" ] && [ -n "$APPLE_API_KEY" ] && [ -n "$APPLE_API_ISSUER" ]; then
             key_path="$RUNNER_TEMP/AuthKey.p8"
             printf '%s\n' "$APPLE_API_KEY_P8" > "$key_path"
             chmod 600 "$key_path"
             echo "APPLE_API_KEY_PATH=$key_path" >> "$GITHUB_ENV"
-            if [ -n "$APPLE_CERTIFICATE" ] && [ -n "$APPLE_CERTIFICATE_PASSWORD" ]; then
-              can_notarize=true
-            fi
+            can_notarize=true
+          elif [ "$IS_RELEASE" = "true" ]; then
+            echo "::error::Missing Apple signing or notarization secrets required for a release build."
+            exit 1
           fi
           echo "can_notarize=$can_notarize" >> "$GITHUB_OUTPUT"
 
@@ -87,6 +91,7 @@ jobs:
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
         run: |
+          rm -rf src-tauri/target/universal-apple-darwin/release/bundle
           pnpm desktop:build --target universal-apple-darwin
 
       - name: Notarize, staple, and verify DMG
@@ -95,8 +100,14 @@ jobs:
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
         run: |
+          shopt -s nullglob
+          dmg_files=(src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg)
+          if [ "${#dmg_files[@]}" -ne 1 ]; then
+            echo "::error::Expected exactly 1 DMG in bundle/dmg, found ${#dmg_files[@]}"
+            exit 1
+          fi
           app_path="src-tauri/target/universal-apple-darwin/release/bundle/macos/DeepSeek Chat.app"
-          dmg_path=$(echo src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg)
+          dmg_path="${dmg_files[0]}"
 
           xcrun notarytool submit "$dmg_path" \
             --key "$APPLE_API_KEY_PATH" \
@@ -120,16 +131,38 @@ jobs:
           path: src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
 
       - name: Publish GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v') || inputs.tag != ''
+        if: (startsWith(github.ref, 'refs/tags/v') || inputs.tag != '') && steps.apple-creds.outputs.can_notarize == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ inputs.tag != '' && inputs.tag || github.ref_name }}
+          IS_TAG_PUSH: ${{ startsWith(github.ref, 'refs/tags/v') }}
         run: |
-          dmg_path=$(echo src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg)
+          shopt -s nullglob
+          dmg_files=(src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg)
+          if [ "${#dmg_files[@]}" -ne 1 ]; then
+            echo "::error::Expected exactly 1 DMG in bundle/dmg, found ${#dmg_files[@]}"
+            exit 1
+          fi
+          dmg_path="${dmg_files[0]}"
+          prerelease_flag=()
+          if [[ "$RELEASE_TAG" == *-* ]]; then
+            prerelease_flag=(--prerelease)
+          fi
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             gh release upload "$RELEASE_TAG" "$dmg_path" --clobber
+          elif [ "$IS_TAG_PUSH" = "true" ]; then
+            gh release create "$RELEASE_TAG" "$dmg_path" \
+              "${prerelease_flag[@]}" \
+              --title "DeepSeek Chat $RELEASE_TAG" \
+              --generate-notes
           else
             gh release create "$RELEASE_TAG" "$dmg_path" \
+              "${prerelease_flag[@]}" \
+              --target "${{ github.sha }}" \
               --title "DeepSeek Chat $RELEASE_TAG" \
               --generate-notes
           fi
+
+      - name: Clean up temporary signing key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/AuthKey.p8"
