@@ -277,6 +277,34 @@ describe('toRequestMessages', () => {
       false
     )
   })
+
+  it('filters historical client tool calls not present in the declared tool set', () => {
+    const history = [
+      user('u1', 'search this'),
+      assistant('a1', [
+        { type: 'thinking', thinking: 'will search', signature: 'sig-s' },
+        { type: 'tool_use', id: 'ws1', name: 'web_search', input: { query: 'hello' } },
+        { type: 'tool_result', tool_use_id: 'ws1', content: 'result', status: 'ok' },
+        { type: 'text', text: 'Here is the answer.' },
+      ]),
+    ]
+
+    const messages = toRequestMessages(
+      history,
+      user('u2', 'run python'),
+      undefined,
+      true,
+      undefined,
+      undefined,
+      new Set(['python'])
+    )
+
+    assert.deepEqual(messages, [
+      { role: 'user', content: 'search this' },
+      { role: 'assistant', content: [{ type: 'text', text: 'Here is the answer.' }] },
+      { role: 'user', content: 'run python' },
+    ])
+  })
 })
 
 describe('pickImageResults', () => {

@@ -46,7 +46,9 @@ When DeepThink is enabled, the model gets a persistent Python 3 runner powered b
 
 On desktop, API requests go through `tauri-plugin-http` instead of the webview's `fetch` to avoid CORS limits, links open in your default browser, `Cmd+,` opens Settings on macOS, and your API key is saved in `~/Library/Application Support/com.mlockyer.deepseekchat/api-key` (`0600`) rather than `localStorage`.
 
-The rest of the upstream chat UI is intact: branching conversations, web search, link reading, attachments, voice input, read-aloud, KaTeX, Mermaid diagrams, light/dark themes, English/Chinese localization, and ZIP history export/import.
+Web search and link reading are powered by [Firecrawl](https://www.firecrawl.dev/) (`web_search` and `web_scrape`). It works out of the box via Firecrawl's keyless free daily tier, and you can optionally add a Firecrawl API key in Settings for higher limits (stored alongside your DeepSeek key in `~/Library/Application Support/com.mlockyer.deepseekchat/` on desktop).
+
+The rest of the upstream chat UI is intact: branching conversations, attachments, voice input, read-aloud, KaTeX, Mermaid diagrams, light/dark themes, English/Chinese localization, and ZIP history export/import.
 
 ## Commands
 

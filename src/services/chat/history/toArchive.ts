@@ -1,7 +1,16 @@
+import { FIRECRAWL_SCRAPE_TOOL_NAME, FIRECRAWL_SEARCH_TOOL_NAME } from '../../api/firecrawl.js'
 import type { ServerToolUseBlock } from '../../api/types.js'
 import { getVisibleMessages, normalizeSession } from '../branches.js'
 import { describeReply } from '../describe.js'
-import type { AssistantMessage, Message, ReplyBlock, Session, UserMessage } from '../types.js'
+import type {
+  AssistantMessage,
+  Message,
+  ReplyBlock,
+  Session,
+  ToolCallPart,
+  ToolResultPart,
+  UserMessage,
+} from '../types.js'
 import { fail } from './errors.js'
 import type {
   ChatMessage,
@@ -116,6 +125,48 @@ const toolFragment = (tool: ServerToolUseBlock, result: ReplyBlock | undefined):
   ]
 }
 
+const clientWebFragment = (tool: ToolCallPart, result: ToolResultPart | undefined): Fragment[] => {
+  const status =
+    !result || result.status === 'running' ? 'WIP' : result.status === 'ok' ? 'FINISHED' : 'FAILED'
+  if (tool.name === FIRECRAWL_SEARCH_TOOL_NAME) {
+    const query =
+      tool.input && typeof (tool.input as { query?: unknown }).query === 'string'
+        ? (tool.input as { query: string }).query
+        : ''
+    return [
+      {
+        type: 'TOOL_SEARCH',
+        queries: query ? [query] : [],
+        status,
+        results: (result?.searchResults ?? []).map((item) => ({
+          url: item.url,
+          title: item.title,
+          snippet: item.snippet,
+          published_at: isoOrNull(item.publishedAt),
+          site_name: item.siteName,
+          site_icon: null,
+        })),
+      },
+    ]
+  }
+  const url =
+    result?.scrapedPage?.url ??
+    (tool.input && typeof (tool.input as { url?: unknown }).url === 'string'
+      ? (tool.input as { url: string }).url
+      : null)
+  return [
+    {
+      type: 'TOOL_OPEN',
+      status,
+      url,
+      title: result?.scrapedPage?.title ?? null,
+      snippet: status === 'FINISHED' ? '' : null,
+      site_name: null,
+      published_at: null,
+    },
+  ]
+}
+
 /** 用不与内容冲突的围栏包裹代码或输出，导出为标准 v3 Markdown 片段 */
 const fence = (lang: string, body: string) => {
   const longest = Math.max(2, ...(body.match(/`+/g) ?? []).map((run) => run.length))
@@ -145,12 +196,21 @@ const joinMarkdown = (existing: string, addition: string) => {
 const assistantFragments = (message: AssistantMessage): Fragment[] => {
   const { blocks } = message
   const results = new Map<string, ReplyBlock>()
+  const clientResults = new Map<string, ToolResultPart>()
+  const webToolIds = new Set<string>()
   for (const block of blocks) {
     if (block.type === 'web_search_tool_result' || block.type === 'web_fetch_tool_result') {
       results.set(block.tool_use_id, block)
+    } else if (block.type === 'tool_result') {
+      clientResults.set(block.tool_use_id, block)
+    } else if (
+      block.type === 'tool_use' &&
+      (block.name === FIRECRAWL_SEARCH_TOOL_NAME || block.name === FIRECRAWL_SCRAPE_TOOL_NAME)
+    ) {
+      webToolIds.add(block.id)
     }
   }
-  const usedWeb = blocks.some((block) => block.type === 'server_tool_use')
+  const usedWeb = blocks.some((block) => block.type === 'server_tool_use') || webToolIds.size > 0
   const fragments: Fragment[] = []
   let response: { type: 'RESPONSE' | 'TEMPLATE_RESPONSE'; content: string } | undefined
   let separateNextText = false
@@ -179,6 +239,12 @@ const assistantFragments = (message: AssistantMessage): Fragment[] => {
       continue
     }
     if (block.type === 'tool_use') {
+      if (block.name === FIRECRAWL_SEARCH_TOOL_NAME || block.name === FIRECRAWL_SCRAPE_TOOL_NAME) {
+        fragments.push(...clientWebFragment(block, clientResults.get(block.id)))
+        response = undefined
+        separateNextText = false
+        continue
+      }
       const input = block.input as { code?: unknown } | null
       const code = typeof input?.code === 'string' ? input.code : (block.inputJson ?? '')
       if (code.trim()) {
@@ -188,6 +254,9 @@ const assistantFragments = (message: AssistantMessage): Fragment[] => {
       continue
     }
     if (block.type === 'tool_result') {
+      if (webToolIds.has(block.tool_use_id)) {
+        continue
+      }
       if (block.status !== 'running' && block.content.trim()) {
         appendResponse(fence('text', block.content), true)
         separateNextText = true

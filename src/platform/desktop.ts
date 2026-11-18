@@ -24,6 +24,14 @@ export const loadKeychainApiKey = (): Promise<string | null> => invoke<string | 
 export const saveKeychainApiKey = (key: string | null): Promise<void> =>
   invoke<null>('set_api_key', { key }).then(() => undefined)
 
+/** 从桌面端私有存储读取 Firecrawl API Key；没有保存过时为 null */
+export const loadFirecrawlApiKey = (): Promise<string | null> =>
+  invoke<string | null>('get_firecrawl_api_key')
+
+/** 写入桌面端私有存储中的 Firecrawl API Key；null 表示删除 */
+export const saveFirecrawlApiKey = (key: string | null): Promise<void> =>
+  invoke<null>('set_firecrawl_api_key', { key }).then(() => undefined)
+
 /**
  * 弹出系统保存对话框并写入文件。WKWebView 不支持 blob: 链接的 download 属性，
  * 桌面版只能由原生端保存。返回 false 表示用户取消。

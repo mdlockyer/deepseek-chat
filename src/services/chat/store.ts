@@ -2,6 +2,14 @@ import { create } from 'zustand'
 import { createId } from '../../utils/id.js'
 import { ApiError, streamMessage, uploadFile } from '../api/client.js'
 import {
+  FIRECRAWL_SCRAPE_TOOL,
+  FIRECRAWL_SCRAPE_TOOL_NAME,
+  FIRECRAWL_SEARCH_TOOL,
+  FIRECRAWL_SEARCH_TOOL_NAME,
+  scrapeWithFirecrawl,
+  searchWithFirecrawl,
+} from '../api/firecrawl.js'
+import {
   PYTHON_TOOL,
   PYTHON_TOOL_NAME,
   getPythonKernelSessionId,
@@ -49,6 +57,8 @@ import {
 const MODEL: ChatModel = 'deepseek-flash'
 /** 所有生成请求统一携带的助手身份说明 */
 const SYSTEM_PROMPT = '该助手为DeepSeek，由深度求索公司创造。'
+const WEB_TOOL_INSTRUCTIONS =
+  '\n\nYou have live web tools (`web_search` and `web_scrape`) powered by Firecrawl. Use `web_search` when current information or verification is needed, and `web_scrape` to read full pages or user-provided URLs. When citing `web_search` results in your final answer, cite them inline using `[citation:1]`, `[citation:2]`, etc. matching the 1-based result numbers returned by `web_search`.'
 /** 保留最近打开的详情；当前会话、生成中及尚未成功保存的会话不淘汰。 */
 const SESSION_CACHE_LIMIT = 5
 /** 安全审核固定开启，所有请求都走扩展模式 */
@@ -58,17 +68,24 @@ const FILE_RETRY_LIMIT = 2
 /** 退避基数，第 n 次重试等待 2^n 倍；连续失败达到上限就放弃，把原始报错展示出来 */
 const FILE_RETRY_BASE_DELAY = 1000
 
+const hasHttpUrl = (text: string) => /https?:\/\/\S+/i.test(text)
+
 /**
- * 阅读链接始终开启，智能搜索开关控制是否另行声明搜索工具（含边想边搜）。
- * Python 工具只在深度思考开启时声明：请求总带 safety_check 与 deepseek_read_url，
- * 服务端此时只允许在思考模式下使用客户端工具，非思考模式会返回错误。
+ * 联网搜索与网页读取改为客户端 Firecrawl 工具（支持无密钥免费额度与用户自备密钥）：
+ * - 开启智能搜索时声明 web_search 与 web_scrape；
+ * - 未开启搜索但本轮提问包含网页链接时声明 web_scrape；
+ * - 开启深度思考时声明 python 工具。
  */
-const serverTools = (search: boolean, thinking: boolean): CreateMessageRequest['tools'] => {
-  const tools: CreateMessageRequest['tools'] = [
-    { type: 'deepseek_read_url', name: 'deepseek_read_url' },
-  ]
+const declaredTools = (
+  search: boolean,
+  thinking: boolean,
+  questionText: string
+): CreateMessageRequest['tools'] => {
+  const tools: CreateMessageRequest['tools'] = []
   if (search) {
-    tools.push({ type: 'deepseek_web_search', name: 'deepseek_web_search' })
+    tools.push(FIRECRAWL_SEARCH_TOOL, FIRECRAWL_SCRAPE_TOOL)
+  } else if (hasHttpUrl(questionText)) {
+    tools.push(FIRECRAWL_SCRAPE_TOOL)
   }
   if (thinking) {
     tools.push(PYTHON_TOOL)
@@ -1075,10 +1092,7 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
   /** 依次在浏览器内执行工具调用，把结果追加到回复；中止时停在当前调用 */
   const runToolCalls = async (calls: ToolCallPart[]) => {
     for (const call of calls) {
-      const code =
-        call.input && typeof (call.input as { code?: unknown }).code === 'string'
-          ? (call.input as { code: string }).code
-          : null
+      const startedAt = Date.now()
       reply = {
         ...reply,
         blocks: [
@@ -1088,12 +1102,147 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
             tool_use_id: call.id,
             content: '',
             status: 'running',
-            phase: 'starting',
-            startedAt: Date.now(),
+            ...(call.name === PYTHON_TOOL_NAME ? { phase: 'starting' as const } : {}),
+            startedAt,
           },
         ],
       }
       flush()
+
+      if (call.name === FIRECRAWL_SEARCH_TOOL_NAME) {
+        const rawInput =
+          call.input && typeof call.input === 'object'
+            ? (call.input as { query?: unknown; limit?: unknown })
+            : null
+        const query = typeof rawInput?.query === 'string' ? rawInput.query : ''
+        const limit = typeof rawInput?.limit === 'number' ? rawInput.limit : undefined
+        const firecrawlApiKey = useSettings.getState().firecrawlApiKey
+        let content = ''
+        let status: 'ok' | 'error' | 'aborted' = 'ok'
+        let searchResults:
+          | {
+              url: string
+              title: string
+              snippet: string
+              siteName: string | null
+              publishedAt: string | null
+            }[]
+          | undefined
+        if (!query.trim()) {
+          status = 'error'
+          content = `Invalid input: expected {"query": string}, got ${call.inputJson ?? JSON.stringify(call.input)}`
+        } else {
+          try {
+            const existingSourceIndexes = new Map<string, number>()
+            for (const block of reply.blocks) {
+              if (block.type !== 'tool_result') {
+                continue
+              }
+              for (const item of block.searchResults ?? []) {
+                if (!existingSourceIndexes.has(item.url)) {
+                  existingSourceIndexes.set(item.url, existingSourceIndexes.size + 1)
+                }
+              }
+              if (block.scrapedPage && !existingSourceIndexes.has(block.scrapedPage.url)) {
+                existingSourceIndexes.set(block.scrapedPage.url, existingSourceIndexes.size + 1)
+              }
+            }
+            const outcome = await searchWithFirecrawl(query, {
+              apiKey: firecrawlApiKey,
+              limit,
+              signal: controller.signal,
+              existingSourceIndexes,
+            })
+            content = outcome.text
+            searchResults = outcome.sources
+          } catch (error) {
+            if (controller.signal.aborted) {
+              status = 'aborted'
+              content = 'Aborted by user.'
+            } else {
+              status = 'error'
+              content = error instanceof Error ? error.message : String(error)
+            }
+          }
+        }
+        const durationMs = Date.now() - startedAt
+        reply = {
+          ...reply,
+          blocks: reply.blocks.map((block) =>
+            block.type === 'tool_result' && block.tool_use_id === call.id
+              ? {
+                  ...block,
+                  content,
+                  status,
+                  durationMs,
+                  ...(searchResults ? { searchResults } : {}),
+                }
+              : block
+          ),
+        }
+        flush()
+        if (controller.signal.aborted) {
+          return
+        }
+        continue
+      }
+
+      if (call.name === FIRECRAWL_SCRAPE_TOOL_NAME) {
+        const url =
+          call.input && typeof (call.input as { url?: unknown }).url === 'string'
+            ? (call.input as { url: string }).url
+            : null
+        const firecrawlApiKey = useSettings.getState().firecrawlApiKey
+        let content = ''
+        let status: 'ok' | 'error' | 'aborted' = 'ok'
+        let scrapedPage: { url: string; title: string | null } | undefined
+        if (url === null || !url.trim()) {
+          status = 'error'
+          content = `Invalid input: expected {"url": string}, got ${call.inputJson ?? JSON.stringify(call.input)}`
+        } else {
+          try {
+            const outcome = await scrapeWithFirecrawl(url, {
+              apiKey: firecrawlApiKey,
+              signal: controller.signal,
+            })
+            content = outcome.text
+            scrapedPage = { url: outcome.url, title: outcome.title }
+          } catch (error) {
+            if (controller.signal.aborted) {
+              status = 'aborted'
+              content = 'Aborted by user.'
+            } else {
+              status = 'error'
+              content = error instanceof Error ? error.message : String(error)
+            }
+          }
+        }
+        const durationMs = Date.now() - startedAt
+        reply = {
+          ...reply,
+          blocks: reply.blocks.map((block) =>
+            block.type === 'tool_result' && block.tool_use_id === call.id
+              ? {
+                  ...block,
+                  content,
+                  status,
+                  durationMs,
+                  ...(scrapedPage ? { scrapedPage } : {}),
+                }
+              : block
+          ),
+        }
+        flush()
+        if (controller.signal.aborted) {
+          return
+        }
+        continue
+      }
+
+      const code =
+        call.input && typeof (call.input as { code?: unknown }).code === 'string'
+          ? (call.input as { code: string }).code
+          : null
       const outcome: PythonRunResult =
         call.name !== PYTHON_TOOL_NAME
           ? {
@@ -1208,6 +1357,17 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
         if (toolRound > 0) {
           await uploadToolImages()
         }
+        const tools = declaredTools(
+          initial.search ?? false,
+          initial.thinking ?? false,
+          prepared.question.content
+        )
+        const declaredClientNames = new Set(
+          tools.flatMap((tool) => ('type' in tool ? [] : [tool.name]))
+        )
+        const hasWebTool =
+          declaredClientNames.has(FIRECRAWL_SEARCH_TOOL_NAME) ||
+          declaredClientNames.has(FIRECRAWL_SCRAPE_TOOL_NAME)
         // 工具往返中的后续请求不再带续写前缀，本轮内容整体接在提问之后。
         const messages = toRequestMessages(
           prepared.history,
@@ -1216,18 +1376,17 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
           initial.thinking ?? false,
           latestReminder,
           toolRound > 0 ? reply : undefined,
-          // 与 serverTools 一致：只有思考模式声明 Python 工具
-          initial.thinking ?? false
+          declaredClientNames
         )
         const events = streamMessage(
           useSettings.getState().apiKey ?? '',
           {
             model: initial.model ?? MODEL,
-            system: SYSTEM_PROMPT,
+            system: hasWebTool ? `${SYSTEM_PROMPT}${WEB_TOOL_INSTRUCTIONS}` : SYSTEM_PROMPT,
             messages,
             thinking: { type: initial.thinking ? 'enabled' : 'disabled' },
-            safety_check: SAFETY_CHECK,
-            tools: serverTools(initial.search ?? false, initial.thinking ?? false),
+            ...(initial.thinking || tools.length === 0 ? { safety_check: SAFETY_CHECK } : {}),
+            tools,
             ...(titleRequests.has(controller) ? { title: { enabled: true } } : {}),
           },
           controller.signal

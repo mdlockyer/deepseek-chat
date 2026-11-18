@@ -62,8 +62,7 @@ export type TextPart = {
   isTemplate?: boolean
 }
 
-/**
- * 客户端工具调用（目前只有 python）。input 在流式过程中由 input_json_delta 拼接到 inputJson，
+/** 客户端工具调用（python、web_search、web_scrape）。input 在流式过程中由 input_json_delta 拼接到 inputJson，
  * content_block_stop 时解析为 input。
  */
 export type ToolCallPart = {
@@ -75,6 +74,14 @@ export type ToolCallPart = {
 }
 
 export type PresentedFileRef = { id: string; name: string; size: number; mimeType: string }
+
+export type WebSearchSourceMeta = {
+  url: string
+  title: string
+  snippet: string
+  siteName: string | null
+  publishedAt: string | null
+}
 
 /** 浏览器本地执行客户端工具后的结果；content 原样作为 tool_result 回传给模型 */
 export type ToolResultPart = {
@@ -93,6 +100,10 @@ export type ToolResultPart = {
   files?: PresentedFileRef[]
   /** 与 images 一一对应的 Files API file_id；undefined 为尚未上传，null 为上传失败 */
   imageFileIds?: (string | null)[]
+  /** Firecrawl 搜索返回的来源列表，用于界面卡片与引用角标展示 */
+  searchResults?: WebSearchSourceMeta[]
+  /** Firecrawl 抓取页面返回的元信息，用于界面展示 */
+  scrapedPage?: { url: string; title: string | null }
   durationMs?: number
 }
 
@@ -113,7 +124,7 @@ export type AssistantMessage = MessageBranch & {
   model: ChatModel | null
   /** 请求时是否开启深度思考 */
   thinking?: boolean
-  /** 请求时是否声明 deepseek_web_search；关闭时仍声明 deepseek_read_url */
+  /** 请求时是否开启联网搜索 */
   search?: boolean
   /** 本轮请求的系统信息快照；各回答版本独立保存，续写沿用。历史消息中缺省的快照保持为空。 */
   latestReminder?: string

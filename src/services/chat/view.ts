@@ -1,4 +1,5 @@
 import { translate } from '../../i18n/index.js'
+import { FIRECRAWL_SCRAPE_TOOL_NAME, FIRECRAWL_SEARCH_TOOL_NAME } from '../api/firecrawl.js'
 import type {
   ServerToolKind,
   TextCitation,
@@ -116,6 +117,40 @@ const getStatus = (
   return result.content.type === 'web_fetch_result' ? 'done' : 'failed'
 }
 
+const getClientToolStatus = (
+  result: ToolResultPart | undefined,
+  streaming: boolean
+): ToolStatus => {
+  if (!result || result.status === 'running') {
+    return streaming ? 'wip' : 'failed'
+  }
+  return result.status === 'ok' ? 'done' : 'failed'
+}
+
+const getStringField = (input: unknown, key: string): string => {
+  if (input && typeof input === 'object' && key in input) {
+    const value = (input as Record<string, unknown>)[key]
+    if (typeof value === 'string') {
+      return value
+    }
+  }
+  return ''
+}
+
+const getPartialStringField = (input: unknown, inputJson: string | undefined, key: string) => {
+  const direct = getStringField(input, key)
+  if (direct) {
+    return direct
+  }
+  if (!inputJson) {
+    return ''
+  }
+  try {
+    return getStringField(JSON.parse(inputJson) as unknown, key)
+  } catch {
+    return ''
+  }
+}
 const mergeStatus = (statuses: ToolStatus[]): ToolStatus =>
   statuses.includes('wip') ? 'wip' : statuses.every((s) => s === 'failed') ? 'failed' : 'done'
 
@@ -208,6 +243,24 @@ export const buildReplyView = (reply: AssistantMessage, streaming: boolean): Rep
 
   // 来源编号按搜索结果、打开的网页在回复中出现的顺序，与正文引用无关
   for (const block of reply.blocks) {
+    if (block.type === 'tool_use') {
+      const result = toolResults.get(block.id)
+      if (block.name === FIRECRAWL_SEARCH_TOOL_NAME && result?.searchResults) {
+        for (const item of result.searchResults) {
+          const source = registry.add(item.url, item.title, item.publishedAt, {
+            snippet: item.snippet,
+            site_name: item.siteName,
+            site_icon: null,
+          })
+          if (!searchResults.includes(source)) {
+            searchResults.push(source)
+          }
+        }
+      } else if (block.name === FIRECRAWL_SCRAPE_TOOL_NAME && result?.scrapedPage) {
+        registry.add(result.scrapedPage.url, result.scrapedPage.title, null)
+      }
+      continue
+    }
     if (block.type !== 'server_tool_use') {
       continue
     }
@@ -266,12 +319,66 @@ export const buildReplyView = (reply: AssistantMessage, streaming: boolean): Rep
     }
     if (block.type === 'tool_use') {
       flushPreamble()
+      const toolResult = toolResults.get(block.id)
+      if (block.name === FIRECRAWL_SEARCH_TOOL_NAME) {
+        const query = getPartialStringField(block.input, block.inputJson, 'query')
+        const kind: ServerToolKind = reply.thinking ? 'deep_search' : 'search'
+        const status = getClientToolStatus(toolResult, streaming)
+        const found = (toolResult?.searchResults ?? []).map((item) =>
+          registry.add(item.url, item.title, item.publishedAt, {
+            snippet: item.snippet,
+            site_name: item.siteName,
+            site_icon: null,
+          })
+        )
+        const last = steps.at(-1)
+        const target = isDeepSearchKind(kind)
+          ? last?.type === 'search' && last.kind === kind
+            ? last
+            : null
+          : mergedSearch.get(kind)
+        if (target) {
+          if (query) {
+            target.queries.push(query)
+          }
+          target.results.push(...found.filter((source) => !target.results.includes(source)))
+          target.status = mergeStatus([target.status, status])
+        } else {
+          const step: SearchStep = {
+            type: 'search',
+            key: block.id,
+            kind,
+            queries: query ? [query] : [],
+            results: found,
+            status,
+          }
+          steps.push(step)
+          if (!isDeepSearchKind(kind)) {
+            mergedSearch.set(kind, step)
+          }
+        }
+        return
+      }
+      if (block.name === FIRECRAWL_SCRAPE_TOOL_NAME) {
+        const url =
+          toolResult?.scrapedPage?.url || getPartialStringField(block.input, block.inputJson, 'url')
+        const title = toolResult?.scrapedPage?.title || url
+        const status = getClientToolStatus(toolResult, streaming)
+        const page: PageItem = { id: block.id, url, title, status }
+        const last = steps.at(-1)
+        if (last?.type === 'open') {
+          last.pages.push(page)
+        } else {
+          steps.push({ type: 'open', pages: [page] })
+        }
+        return
+      }
       const input = block.input as { code?: unknown } | null
       steps.push({
         type: 'python',
         key: block.id,
         code: typeof input?.code === 'string' ? input.code : (block.inputJson ?? ''),
-        result: toolResults.get(block.id) ?? null,
+        result: toolResult ?? null,
       })
       return
     }

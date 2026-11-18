@@ -49,6 +49,23 @@ export class ApiError extends Error {
   }
 }
 
+const extractErrorMessage = (value: unknown): string | null => {
+  if (typeof value !== 'object' || value === null || !('error' in value)) {
+    return null
+  }
+  const { error } = value as { error?: unknown }
+  if (typeof error === 'string') {
+    return error
+  }
+  if (typeof error === 'object' && error !== null && 'message' in error) {
+    const { message } = error as { message?: unknown }
+    if (typeof message === 'string') {
+      return message
+    }
+  }
+  return null
+}
+
 const isErrorBody = (value: unknown): value is ApiErrorBody =>
   typeof value === 'object' &&
   value !== null &&
@@ -64,8 +81,9 @@ const readErrorResponse = async (
   let message = text || fallback
   try {
     const body: unknown = JSON.parse(text)
-    if (isErrorBody(body)) {
-      message = body.error.message
+    const extracted = extractErrorMessage(body)
+    if (extracted) {
+      message = extracted
     }
   } catch {
     // 非 JSON 响应体直接展示原文

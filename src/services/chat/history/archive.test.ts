@@ -141,3 +141,75 @@ describe('zipReader bounds and validation', () => {
     }, ArchiveError)
   })
 })
+
+describe('archive export Firecrawl preservation', () => {
+  it('exports Firecrawl web_search and web_scrape blocks as TOOL_SEARCH and TOOL_OPEN fragments', () => {
+    const session: Session = {
+      id: 's-web',
+      title: 'Web test',
+      createdAt: 1_000,
+      updatedAt: 2_000,
+      rootMessageId: 'u1',
+      messages: [
+        {
+          id: 'u1',
+          role: 'user',
+          content: 'find news',
+          files: [],
+          createdAt: 1_000,
+          parentId: null,
+          selectedChildId: 'a1',
+        },
+        {
+          id: 'a1',
+          role: 'assistant',
+          createdAt: 2_000,
+          model: 'deepseek-flash',
+          thinking: false,
+          search: true,
+          prefix: false,
+          status: 'done',
+          parentId: 'u1',
+          blocks: [
+            { type: 'tool_use', id: 'ws1', name: 'web_search', input: { query: 'firecrawl' } },
+            {
+              type: 'tool_result',
+              tool_use_id: 'ws1',
+              content: '[1] Firecrawl',
+              status: 'ok',
+              searchResults: [
+                {
+                  url: 'https://firecrawl.dev',
+                  title: 'Firecrawl',
+                  snippet: 'Web data API',
+                  siteName: 'firecrawl.dev',
+                  publishedAt: null,
+                },
+              ],
+            },
+            {
+              type: 'tool_use',
+              id: 'sc1',
+              name: 'web_scrape',
+              input: { url: 'https://firecrawl.dev' },
+            },
+            {
+              type: 'tool_result',
+              tool_use_id: 'sc1',
+              content: 'Title: Firecrawl',
+              status: 'ok',
+              scrapedPage: { url: 'https://firecrawl.dev', title: 'Firecrawl' },
+            },
+            { type: 'text', text: 'Found it[citation:1].' },
+          ],
+        },
+      ],
+    }
+
+    const exported = toSessionFile(session, () => null)
+    const fragments = exported.messages[1].fragments
+    assert.equal(fragments[0]?.type, 'TOOL_SEARCH')
+    assert.equal(fragments[1]?.type, 'TOOL_OPEN')
+    assert.deepEqual(fragments[2], { type: 'RESPONSE', content: 'Found it.' })
+  })
+})

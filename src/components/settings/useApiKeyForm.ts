@@ -4,8 +4,21 @@ import { classifyApiError } from '../../services/api/errors.js'
 import { setApiKey } from '../../services/settings.js'
 import { useTranslate } from '../../i18n/index.js'
 
-/** 输入 API Key 后先用 GET /models 校验，通过才保存 */
-export const useApiKeyForm = (onSaved?: () => void) => {
+type ApiKeyFormOptions = {
+  verify?: (apiKey: string) => Promise<void>
+  save?: (apiKey: string | null) => Promise<void>
+  invalidKey?: 'apiKeyInvalid' | 'firecrawlKeyInvalid'
+  emptyKey?: 'apiKeyPlaceholder' | 'firecrawlKeyPlaceholder'
+}
+
+/** 输入 API Key 后先校验，通过才保存 */
+export const useApiKeyForm = (onSaved?: () => void, options: ApiKeyFormOptions = {}) => {
+  const {
+    verify = verifyApiKey,
+    save = setApiKey,
+    invalidKey = 'apiKeyInvalid',
+    emptyKey = 'apiKeyPlaceholder',
+  } = options
   const t = useTranslate()
   const [value, setValue] = useState('')
   const [verifying, setVerifying] = useState(false)
@@ -17,7 +30,7 @@ export const useApiKeyForm = (onSaved?: () => void) => {
 
   const formatCause = (cause: unknown) =>
     classifyApiError(cause) === 'unauthorized'
-      ? t('apiKeyInvalid')
+      ? t(invalidKey)
       : classifyApiError(cause) === 'network'
         ? t('commonNetworkErrorToast')
         : t('apiKeyVerificationFailed', {
@@ -29,11 +42,7 @@ export const useApiKeyForm = (onSaved?: () => void) => {
                   : String(cause),
           })
 
-  const error = emptySubmitted
-    ? t('apiKeyPlaceholder')
-    : failure === null
-      ? null
-      : formatCause(failure.cause)
+  const error = emptySubmitted ? t(emptyKey) : failure === null ? null : formatCause(failure.cause)
 
   const updateValue = (next: string) => {
     setValue(next)
@@ -64,8 +73,8 @@ export const useApiKeyForm = (onSaved?: () => void) => {
     setFailure(null)
     setEmptySubmitted(false)
     try {
-      await verifyApiKey(apiKey)
-      await setApiKey(apiKey)
+      await verify(apiKey)
+      await save(apiKey)
       setValue('')
       setVerified(true)
       onSaved?.()
@@ -84,7 +93,7 @@ export const useApiKeyForm = (onSaved?: () => void) => {
     setVerified(false)
     setFailure(null)
     try {
-      await verifyApiKey(apiKey)
+      await verify(apiKey)
       setVerified(true)
     } catch (e) {
       setFailure({ cause: e })
@@ -101,7 +110,7 @@ export const useApiKeyForm = (onSaved?: () => void) => {
     setFailure(null)
     setVerified(false)
     try {
-      await setApiKey(null)
+      await save(null)
       resetForm()
     } catch (e) {
       setFailure({ cause: e })

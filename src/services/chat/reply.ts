@@ -355,14 +355,25 @@ const toAssistantMessages = (
   thinking = false,
   /** 是否附带工具结果中的图片：只有正在进行的回复附带，历史回复只回传文字 */
   includeImages = false,
-  /** 本次请求是否声明了客户端工具；未声明时历史里的调用与结果都不回传，只保留文字 */
-  clientTools = true
+  /** 本次请求声明的客户端工具；未声明的工具调用与结果不回传，只保留文字 */
+  clientTools: boolean | ReadonlySet<string> = true
 ): MessageParam[] => {
   const imageResults = new Set(includeImages ? pickImageResults(blocks) : [])
-  const hasClientTools = clientTools && blocks.some((block) => block.type === 'tool_use')
+  const isDeclaredTool = (name: string) =>
+    typeof clientTools === 'boolean' ? clientTools : clientTools.has(name)
+  const declaredToolIds = new Set(
+    blocks.flatMap((block) =>
+      block.type === 'tool_use' && isDeclaredTool(block.name) ? [block.id] : []
+    )
+  )
+  const hasClientTools = declaredToolIds.size > 0
   const answered = new Set(
     blocks.flatMap((block) =>
-      block.type === 'tool_result' && block.status !== 'running' ? [block.tool_use_id] : []
+      block.type === 'tool_result' &&
+      block.status !== 'running' &&
+      declaredToolIds.has(block.tool_use_id)
+        ? [block.tool_use_id]
+        : []
     )
   )
   // 成功阅读的网页靠签名恢复正文；缺少有效签名时，调用与结果都不回传。
@@ -396,10 +407,13 @@ const toAssistantMessages = (
     content = []
   }
   for (const block of blocks) {
-    if (!clientTools && (block.type === 'tool_use' || block.type === 'tool_result')) {
+    if (block.type === 'tool_use' && !isDeclaredTool(block.name)) {
       continue
     }
     if (block.type === 'tool_result') {
+      if (!declaredToolIds.has(block.tool_use_id)) {
+        continue
+      }
       text = null
       if (answered.has(block.tool_use_id)) {
         const attached = imageResults.has(block) ? toImageBlocks(block) : []
@@ -491,8 +505,8 @@ export const toRequestMessages = (
   latestReminder?: string,
   /** 工具往返中的本轮回复：其调用与结果接在本轮提问之后，请求以 tool_result 结尾 */
   inProgress?: AssistantMessage,
-  /** 本次请求是否声明了客户端工具（Python），见 store.ts 的 serverTools */
-  clientTools = true
+  /** 本次请求声明的客户端工具，见 store.ts 的 declaredTools */
+  clientTools: boolean | ReadonlySet<string> = true
 ): MessageParam[] => {
   const messages: MessageParam[] = []
   /** 被中止的工具往返以 user(tool_result) 结尾时，与下一条 user 合并，避免连续两条 user */

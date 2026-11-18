@@ -30,6 +30,7 @@ use tauri_plugin_dialog::DialogExt;
 const KEYCHAIN_SERVICE: &str = "com.mlockyer.deepseekchat";
 const API_KEY_ACCOUNT: &str = "deepseek-api-key";
 const API_KEY_FILE_NAME: &str = "api-key";
+const FIRECRAWL_API_KEY_FILE_NAME: &str = "firecrawl-api-key";
 #[cfg(target_os = "macos")]
 const SETTINGS_MENU_ID: &str = "open-settings";
 #[cfg(target_os = "macos")]
@@ -39,11 +40,15 @@ fn api_key_entry() -> Result<keyring::Entry, String> {
     keyring::Entry::new(KEYCHAIN_SERVICE, API_KEY_ACCOUNT).map_err(|e| e.to_string())
 }
 
-fn api_key_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+fn key_file_path(app: &tauri::AppHandle, name: &str) -> Result<PathBuf, String> {
     app.path()
         .app_data_dir()
-        .map(|dir| dir.join(API_KEY_FILE_NAME))
+        .map(|dir| dir.join(name))
         .map_err(|e| e.to_string())
+}
+
+fn api_key_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    key_file_path(app, API_KEY_FILE_NAME)
 }
 
 fn read_key_file(path: &Path) -> Result<Option<String>, String> {
@@ -132,6 +137,32 @@ async fn set_api_key(app: tauri::AppHandle, key: Option<String>) -> Result<(), S
     .map_err(|e| e.to_string())?
 }
 
+/// Returns the stored Firecrawl API key, or `None` when none has been saved.
+#[tauri::command]
+async fn get_firecrawl_api_key(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    let path = key_file_path(&app, FIRECRAWL_API_KEY_FILE_NAME)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        Ok(read_key_file(&path)?.filter(|stored| !stored.is_empty()))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Stores the Firecrawl API key; `None` or an empty string clears it.
+#[tauri::command]
+async fn set_firecrawl_api_key(app: tauri::AppHandle, key: Option<String>) -> Result<(), String> {
+    let path = key_file_path(&app, FIRECRAWL_API_KEY_FILE_NAME)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let cleaned = key
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty());
+        write_key_file(&path, cleaned)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 /// Shows a save dialog and writes the request body to the chosen path.
 ///
 /// The body is the raw file bytes. The suggested file name arrives in the
@@ -197,6 +228,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_api_key,
             set_api_key,
+            get_firecrawl_api_key,
+            set_firecrawl_api_key,
             save_file
         ]);
 
