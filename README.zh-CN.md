@@ -6,6 +6,12 @@
 
 使用前需在 [platform.deepseek.com](https://platform.deepseek.com/api_keys) 申请自己的 API Key。对话与附件保存在本地 IndexedDB，请求直接发送至 `api.deepseek.com`。
 
+## 下载安装
+
+签名并公证的 macOS 通用版（Apple Silicon 与 Intel，`DeepSeek.app`）`.dmg` 安装包发布在 [GitHub Releases](https://github.com/mdlockyer/deepseek-chat/releases)。
+
+暂未提供 Windows 与 Linux 的预构建安装包，需要从源码构建。
+
 ## 本地运行
 
 需要 Node.js 22.12+ 与 pnpm；构建桌面版还需 Rust 1.90+。

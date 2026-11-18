@@ -3,6 +3,6 @@
 <plist version="1.0">
 <dict>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>DeepSeek Chat uses the microphone to transcribe voice input into text.</string>
+	<string>DeepSeek uses the microphone to transcribe voice input into text.</string>
 </dict>
 </plist>

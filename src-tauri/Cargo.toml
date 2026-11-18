@@ -1,7 +1,7 @@
 [package]
 name = "deepseek-chat"
-version = "0.2.0-rc.1"
-description = "DeepSeek Chat desktop app"
+version = "0.2.0"
+description = "DeepSeek desktop app"
 authors = ["mlockyer"]
 license = "MIT"
 repository = "https://github.com/mdlockyer/deepseek-chat"

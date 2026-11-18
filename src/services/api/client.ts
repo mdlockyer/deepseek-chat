@@ -18,6 +18,10 @@ const ANTHROPIC_BASE_URL = `${API_ORIGIN}/anthropic/v1`
 const FILES_BETA = 'files-api-2025-04-14'
 /** 请求体上限（字节）：超过约 3–4 MB 时接口网关直接断开，浏览器只能看到网络错误 */
 const MAX_REQUEST_BYTES = 3_000_000
+/** 普通 REST 接口默认超时（毫秒）；流式对话不设总时长上限 */
+export const DEFAULT_REST_TIMEOUT_MS = 15_000
+/** 文件上传与解析接口默认超时（毫秒） */
+export const UPLOAD_TIMEOUT_MS = 60_000
 
 export type ApiErrorKind =
   /** 非 2xx 响应 */
@@ -69,15 +73,55 @@ const readErrorResponse = async (
   return new ApiError(kind, message, response.status)
 }
 
-export const request = async (url: string, init: RequestInit): Promise<Response> => {
+export const request = async (
+  url: string,
+  init: RequestInit,
+  timeoutMs?: number
+): Promise<Response> => {
+  let controller: AbortController | undefined
+  let timedOut = false
+  let timer: ReturnType<typeof setTimeout> | undefined
+  let onExternalAbort: (() => void) | undefined
+
+  if (timeoutMs !== undefined && timeoutMs > 0) {
+    controller = new AbortController()
+    const external = init.signal
+    if (external) {
+      if (external.aborted) {
+        controller.abort(external.reason)
+      } else {
+        onExternalAbort = () => controller?.abort(external.reason)
+        external.addEventListener('abort', onExternalAbort, { once: true })
+      }
+    }
+    if (!controller.signal.aborted) {
+      timer = setTimeout(() => {
+        timedOut = true
+        controller?.abort()
+      }, timeoutMs)
+    }
+  }
+
+  const requestInit: RequestInit = controller ? { ...init, signal: controller.signal } : init
+
   let response: Response
   try {
-    response = await (isDesktopApp ? desktopFetch(url, init) : fetch(url, init))
+    response = await (isDesktopApp ? desktopFetch(url, requestInit) : fetch(url, requestInit))
   } catch (error) {
+    if (timedOut) {
+      throw new ApiError('network', { key: 'requestTimedOut' })
+    }
     if (init.signal?.aborted) {
       throw error
     }
     throw new ApiError('network', error instanceof Error ? error.message : String(error))
+  } finally {
+    if (timer !== undefined) {
+      clearTimeout(timer)
+    }
+    if (onExternalAbort && init.signal) {
+      init.signal.removeEventListener('abort', onExternalAbort)
+    }
   }
   if (!response.ok) {
     throw await readErrorResponse(response)
@@ -94,11 +138,15 @@ const anthropicHeaders = (apiKey: string, beta: boolean): Record<string, string>
 
 /** 用 GET /models 校验 API Key（不产生费用） */
 export const verifyApiKey = async (apiKey: string, signal?: AbortSignal): Promise<void> => {
-  await request(`${API_ORIGIN}/models`, {
-    method: 'GET',
-    headers: { Authorization: `Bearer ${apiKey}` },
-    signal,
-  })
+  await request(
+    `${API_ORIGIN}/models`,
+    {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${apiKey}` },
+      signal,
+    },
+    DEFAULT_REST_TIMEOUT_MS
+  )
 }
 
 /**
@@ -116,21 +164,29 @@ export const uploadFile = async (
     form.append('purpose', purpose)
   }
   form.append('file', file)
-  const response = await request(`${ANTHROPIC_BASE_URL}/files`, {
-    method: 'POST',
-    headers: anthropicHeaders(apiKey, true),
-    body: form,
-    signal,
-  })
+  const response = await request(
+    `${ANTHROPIC_BASE_URL}/files`,
+    {
+      method: 'POST',
+      headers: anthropicHeaders(apiKey, true),
+      body: form,
+      signal,
+    },
+    UPLOAD_TIMEOUT_MS
+  )
   return (await response.json()) as FileObject
 }
 
 /** DELETE /anthropic/v1/files/{file_id} */
 export const deleteFile = async (apiKey: string, fileId: string): Promise<void> => {
-  await request(`${ANTHROPIC_BASE_URL}/files/${encodeURIComponent(fileId)}`, {
-    method: 'DELETE',
-    headers: anthropicHeaders(apiKey, true),
-  })
+  await request(
+    `${ANTHROPIC_BASE_URL}/files/${encodeURIComponent(fileId)}`,
+    {
+      method: 'DELETE',
+      headers: anthropicHeaders(apiKey, true),
+    },
+    DEFAULT_REST_TIMEOUT_MS
+  )
 }
 
 const hasFile = (body: CreateMessageRequest) =>

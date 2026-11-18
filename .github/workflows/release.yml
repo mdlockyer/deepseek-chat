@@ -106,7 +106,7 @@ jobs:
             echo "::error::Expected exactly 1 DMG in bundle/dmg, found ${#dmg_files[@]}"
             exit 1
           fi
-          app_path="src-tauri/target/universal-apple-darwin/release/bundle/macos/DeepSeek Chat.app"
+          app_path="src-tauri/target/universal-apple-darwin/release/bundle/macos/DeepSeek.app"
           dmg_path="${dmg_files[0]}"
 
           xcrun notarytool submit "$dmg_path" \
@@ -153,13 +153,13 @@ jobs:
           elif [ "$IS_TAG_PUSH" = "true" ]; then
             gh release create "$RELEASE_TAG" "$dmg_path" \
               "${prerelease_flag[@]}" \
-              --title "DeepSeek Chat $RELEASE_TAG" \
+              --title "DeepSeek $RELEASE_TAG" \
               --generate-notes
           else
             gh release create "$RELEASE_TAG" "$dmg_path" \
               "${prerelease_flag[@]}" \
               --target "${{ github.sha }}" \
-              --title "DeepSeek Chat $RELEASE_TAG" \
+              --title "DeepSeek $RELEASE_TAG" \
               --generate-notes
           fi
 

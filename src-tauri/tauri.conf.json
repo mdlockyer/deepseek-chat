@@ -1,6 +1,6 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "DeepSeek Chat",
+  "productName": "DeepSeek",
   "version": "../package.json",
   "identifier": "com.mlockyer.deepseekchat",
   "build": {
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "DeepSeek Chat",
+        "title": "DeepSeek",
         "width": 1200,
         "height": 820,
         "minWidth": 420,
@@ -36,7 +36,7 @@
     "active": true,
     "targets": "all",
     "macOS": {
-      "bundleVersion": "1",
+      "bundleVersion": "2",
       "entitlements": "Entitlements.plist",
       "hardenedRuntime": true,
       "infoPlist": "Info.plist"

@@ -6,6 +6,12 @@ English | [简体中文](README.zh-CN.md)
 
 You'll need your own API key from [platform.deepseek.com](https://platform.deepseek.com/api_keys). Chats and attachments stay local in IndexedDB, and requests go straight to `api.deepseek.com`.
 
+## Download
+
+Signed and notarized universal macOS (`DeepSeek.app` for Apple Silicon and Intel) `.dmg` installers are published on [GitHub Releases](https://github.com/mdlockyer/deepseek-chat/releases).
+
+Windows and Linux builds are not pre-packaged in CI yet and require building from source.
+
 ## Running locally
 
 Requires Node.js 22.12+ and pnpm. For the desktop app, you also need Rust 1.90+.

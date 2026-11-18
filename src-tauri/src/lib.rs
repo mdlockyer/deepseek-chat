@@ -1,4 +1,4 @@
-//! Native side of the DeepSeek Chat desktop app.
+//! Native side of the DeepSeek desktop app.
 //!
 //! The web UI stays the same as the browser build; this crate replaces the few
 //! browser features that do not work, or are not safe enough, inside a desktop
@@ -219,7 +219,7 @@ pub fn run() {
             Ok(())
         })
         .run(tauri::generate_context!())
-        .expect("error while running the DeepSeek Chat app");
+        .expect("error while running the DeepSeek app");
 }
 
 #[cfg(test)]

@@ -66,6 +66,44 @@
   text-align: center;
 }
 
+.errorBoundary {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  height: 100%;
+  padding: 24px;
+  color: var(--dsw-alias-label-secondary);
+  background-color: var(--dsw-alias-bg-base);
+  font-size: 14px;
+  text-align: center;
+}
+
+.errorBoundaryFull {
+  position: fixed;
+  inset: 0;
+}
+
+.errorTitle {
+  margin: 0;
+  color: var(--dsw-alias-label-primary);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.errorDescription {
+  margin: 0;
+  max-width: 420px;
+}
+
+.errorActions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
 @media not all and (min-width: 768px) {
   .frame {
     position: fixed;

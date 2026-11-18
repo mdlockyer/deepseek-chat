@@ -30,6 +30,7 @@ import { usePresence, PANEL_DURATION_MS } from '../utils/usePresence.js'
 import { CollapsedSider } from '../components/sider/CollapsedSider.js'
 import { closeMobileSider } from '../components/sider/mobileSiderState.js'
 import { MobileSider, Sider } from '../components/sider/Sider.js'
+import { AppErrorBoundary } from './AppErrorBoundary.js'
 import styles from './App.module.css'
 
 export const App = () => {
@@ -143,41 +144,43 @@ export const App = () => {
             </div>
           ) : null}
           <div className={styles.content}>
-            {!ready || (activeId !== null && !session) ? (
-              <div className={styles.loadingView}>
-                {isMobile ? <MobileHeader /> : null}
-                <div className={styles.loadingState} role="status" aria-live="polite">
-                  <span>
-                    {(!ready ? initError : sessionLoadError)
-                      ? t(!ready ? 'sessionListLoadFailed' : 'sessionLoadFailed')
-                      : t('sessionLoading')}
-                  </span>
-                  {(!ready ? initError : sessionLoadError) ? (
-                    <Button
-                      variant="outlined"
-                      size="m"
-                      onClick={() => {
-                        if (!ready) {
-                          void initChat()
-                        } else if (activeId !== null) {
-                          selectSession(activeId)
-                        }
-                      }}
-                    >
-                      {t('retry')}
-                    </Button>
-                  ) : null}
+            <AppErrorBoundary resetKey={activeId}>
+              {!ready || (activeId !== null && !session) ? (
+                <div className={styles.loadingView}>
+                  {isMobile ? <MobileHeader /> : null}
+                  <div className={styles.loadingState} role="status" aria-live="polite">
+                    <span>
+                      {(!ready ? initError : sessionLoadError)
+                        ? t(!ready ? 'sessionListLoadFailed' : 'sessionLoadFailed')
+                        : t('sessionLoading')}
+                    </span>
+                    {(!ready ? initError : sessionLoadError) ? (
+                      <Button
+                        variant="outlined"
+                        size="m"
+                        onClick={() => {
+                          if (!ready) {
+                            void initChat()
+                          } else if (activeId !== null) {
+                            selectSession(activeId)
+                          }
+                        }}
+                      >
+                        {t('retry')}
+                      </Button>
+                    ) : null}
+                  </div>
                 </div>
-              </div>
-            ) : session ? (
-              <SessionView
-                session={session}
-                streaming={streaming}
-                siderCollapsed={siderCollapsed}
-              />
-            ) : (
-              <Welcome siderCollapsed={siderCollapsed} />
-            )}
+              ) : session ? (
+                <SessionView
+                  session={session}
+                  streaming={streaming}
+                  siderCollapsed={siderCollapsed}
+                />
+              ) : (
+                <Welcome siderCollapsed={siderCollapsed} />
+              )}
+            </AppErrorBoundary>
           </div>
         </main>
         <SearchPanel />
