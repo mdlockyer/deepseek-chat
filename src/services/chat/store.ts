@@ -3,14 +3,6 @@ import { isDesktopApp } from '../../platform/desktop.js'
 import { createId } from '../../utils/id.js'
 import { ApiError, streamMessage, uploadFile } from '../api/client.js'
 import {
-  FIRECRAWL_SCRAPE_TOOL,
-  FIRECRAWL_SCRAPE_TOOL_NAME,
-  FIRECRAWL_SEARCH_TOOL,
-  FIRECRAWL_SEARCH_TOOL_NAME,
-  scrapeWithFirecrawl,
-  searchWithFirecrawl,
-} from '../api/firecrawl.js'
-import {
   clearAllSessionBrowsers,
   disposeSessionBrowser,
   setActiveBrowserSession,
@@ -35,7 +27,7 @@ import {
 } from '../browser/tools.js'
 import type { PythonRunResult } from '@deepseek-chat/slice-python'
 import type { SessionDeleted, SessionHistoryReplaced } from '@deepseek-chat/spine/facts/session'
-import { python as pythonSlice, spine } from '../../app/composition.js'
+import { python as pythonSlice, spine, webResearch } from '../../app/composition.js'
 import type { ChatModel, CreateMessageRequest } from '../api/types.js'
 import { extractFileIds, getFileErrorCode, isRetryableApiError } from '../api/errors.js'
 import { cancelUpload, describeUploadError, uploadAttachment, useUploads } from '../attachments.js'
@@ -76,8 +68,6 @@ import {
 const MODEL: ChatModel = 'deepseek-flash'
 /** 所有生成请求统一携带的助手身份说明 */
 const SYSTEM_PROMPT = '该助手为DeepSeek，由深度求索公司创造。'
-const WEB_TOOL_INSTRUCTIONS =
-  'You have live web tools (`web_search` and `web_scrape`) powered by Firecrawl. Use `web_search` when current information or verification is needed, and `web_scrape` to read full pages or user-provided URLs. When citing `web_search` results in your final answer, cite them inline using `[citation:1]`, `[citation:2]`, etc. matching the 1-based result numbers returned by `web_search`.'
 /** 保留最近打开的详情；当前会话、生成中及尚未成功保存的会话不淘汰。 */
 const SESSION_CACHE_LIMIT = 5
 /** 安全审核固定开启，所有请求都走扩展模式 */
@@ -87,12 +77,9 @@ const FILE_RETRY_LIMIT = 2
 /** 退避基数，第 n 次重试等待 2^n 倍；连续失败达到上限就放弃，把原始报错展示出来 */
 const FILE_RETRY_BASE_DELAY = 1000
 
-const hasHttpUrl = (text: string) => /https?:\/\/\S+/i.test(text)
-
 /**
  * 联网搜索、网页读取、Python 与内置浏览器工具均由客户端工具声明：
- * - 开启智能搜索时声明 web_search 与 web_scrape；
- * - 未开启搜索但本轮提问包含网页链接时声明 web_scrape；
+ * - 联网工具由 web-research slice 按搜索开关与提问内容决定（见其 SPEC.md）；
  * - 开启运行代码开关时声明 python 工具；
  * - 桌面端开启浏览器开关时声明 browser_* 工具。
  */
@@ -103,11 +90,7 @@ const declaredTools = (
   questionText: string
 ): CreateMessageRequest['tools'] => {
   const tools: CreateMessageRequest['tools'] = [...PREVIEW_TOOLS]
-  if (search) {
-    tools.push(FIRECRAWL_SEARCH_TOOL, FIRECRAWL_SCRAPE_TOOL)
-  } else if (hasHttpUrl(questionText)) {
-    tools.push(FIRECRAWL_SCRAPE_TOOL)
-  }
+  tools.push(...webResearch.declareTools({ searchEnabled: search, questionText }))
   if (python) {
     tools.push(pythonSlice.tool)
   }
@@ -1142,62 +1125,27 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
       }
       flush()
 
-      if (call.name === FIRECRAWL_SEARCH_TOOL_NAME) {
-        const rawInput =
-          call.input && typeof call.input === 'object'
-            ? (call.input as { query?: unknown; limit?: unknown })
-            : null
-        const query = typeof rawInput?.query === 'string' ? rawInput.query : ''
-        const limit = typeof rawInput?.limit === 'number' ? rawInput.limit : undefined
-        const firecrawlApiKey = useSettings.getState().firecrawlApiKey
-        let content = ''
-        let status: 'ok' | 'error' | 'aborted' = 'ok'
-        let searchResults:
-          | {
-              url: string
-              title: string
-              snippet: string
-              siteName: string | null
-              publishedAt: string | null
-            }[]
-          | undefined
-        if (!query.trim()) {
-          status = 'error'
-          content = `Invalid input: expected {"query": string}, got ${call.inputJson ?? JSON.stringify(call.input)}`
-        } else {
-          try {
-            const existingSourceIndexes = new Map<string, number>()
-            for (const block of reply.blocks) {
-              if (block.type !== 'tool_result') {
-                continue
-              }
-              for (const item of block.searchResults ?? []) {
-                if (!existingSourceIndexes.has(item.url)) {
-                  existingSourceIndexes.set(item.url, existingSourceIndexes.size + 1)
-                }
-              }
-              if (block.scrapedPage && !existingSourceIndexes.has(block.scrapedPage.url)) {
-                existingSourceIndexes.set(block.scrapedPage.url, existingSourceIndexes.size + 1)
-              }
-            }
-            const outcome = await searchWithFirecrawl(query, {
-              apiKey: firecrawlApiKey,
-              limit,
-              signal: controller.signal,
-              existingSourceIndexes,
-            })
-            content = outcome.text
-            searchResults = outcome.sources
-          } catch (error) {
-            if (controller.signal.aborted) {
-              status = 'aborted'
-              content = 'Aborted by user.'
-            } else {
-              status = 'error'
-              content = error instanceof Error ? error.message : String(error)
+      if (webResearch.handles(call.name)) {
+        // 同一回复内已编号的来源 URL → 编号，保证多次搜索时 [citation:N] 与前端编号一致
+        const citedUrls = new Map<string, number>()
+        for (const block of reply.blocks) {
+          if (block.type !== 'tool_result') {
+            continue
+          }
+          for (const item of block.searchResults ?? []) {
+            if (!citedUrls.has(item.url)) {
+              citedUrls.set(item.url, citedUrls.size + 1)
             }
           }
+          if (block.scrapedPage && !citedUrls.has(block.scrapedPage.url)) {
+            citedUrls.set(block.scrapedPage.url, citedUrls.size + 1)
+          }
         }
+        const outcome = await webResearch.run(call.name, call.input, {
+          signal: controller.signal,
+          inputJson: call.inputJson,
+          citedUrls,
+        })
         const durationMs = Date.now() - startedAt
         reply = {
           ...reply,
@@ -1205,62 +1153,11 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
             block.type === 'tool_result' && block.tool_use_id === call.id
               ? {
                   ...block,
-                  content,
-                  status,
+                  content: outcome.content,
+                  status: outcome.status,
                   durationMs,
-                  ...(searchResults ? { searchResults } : {}),
-                }
-              : block
-          ),
-        }
-        flush()
-        if (controller.signal.aborted) {
-          return
-        }
-        continue
-      }
-
-      if (call.name === FIRECRAWL_SCRAPE_TOOL_NAME) {
-        const url =
-          call.input && typeof (call.input as { url?: unknown }).url === 'string'
-            ? (call.input as { url: string }).url
-            : null
-        const firecrawlApiKey = useSettings.getState().firecrawlApiKey
-        let content = ''
-        let status: 'ok' | 'error' | 'aborted' = 'ok'
-        let scrapedPage: { url: string; title: string | null } | undefined
-        if (url === null || !url.trim()) {
-          status = 'error'
-          content = `Invalid input: expected {"url": string}, got ${call.inputJson ?? JSON.stringify(call.input)}`
-        } else {
-          try {
-            const outcome = await scrapeWithFirecrawl(url, {
-              apiKey: firecrawlApiKey,
-              signal: controller.signal,
-            })
-            content = outcome.text
-            scrapedPage = { url: outcome.url, title: outcome.title }
-          } catch (error) {
-            if (controller.signal.aborted) {
-              status = 'aborted'
-              content = 'Aborted by user.'
-            } else {
-              status = 'error'
-              content = error instanceof Error ? error.message : String(error)
-            }
-          }
-        }
-        const durationMs = Date.now() - startedAt
-        reply = {
-          ...reply,
-          blocks: reply.blocks.map((block) =>
-            block.type === 'tool_result' && block.tool_use_id === call.id
-              ? {
-                  ...block,
-                  content,
-                  status,
-                  durationMs,
-                  ...(scrapedPage ? { scrapedPage } : {}),
+                  ...(outcome.searchResults ? { searchResults: outcome.searchResults } : {}),
+                  ...(outcome.scrapedPage ? { scrapedPage: outcome.scrapedPage } : {}),
                 }
               : block
           ),
@@ -1505,9 +1402,7 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
         const declaredClientNames = new Set(
           tools.flatMap((tool) => ('type' in tool ? [] : [tool.name]))
         )
-        const hasWebTool =
-          declaredClientNames.has(FIRECRAWL_SEARCH_TOOL_NAME) ||
-          declaredClientNames.has(FIRECRAWL_SCRAPE_TOOL_NAME)
+        const hasWebTool = [...declaredClientNames].some(webResearch.handles)
         const hasBrowserTool = BROWSER_TOOLS.some((tool) => declaredClientNames.has(tool.name))
         const hasPreviewTool = PREVIEW_TOOLS.some((tool) => declaredClientNames.has(tool.name))
         const systemParts = [SYSTEM_PROMPT]
@@ -1515,7 +1410,7 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
           systemParts.push(PREVIEW_TOOL_INSTRUCTIONS)
         }
         if (hasWebTool) {
-          systemParts.push(WEB_TOOL_INSTRUCTIONS)
+          systemParts.push(webResearch.instructions)
         }
         if (hasBrowserTool) {
           systemParts.push(BROWSER_TOOL_INSTRUCTIONS)

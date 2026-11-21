@@ -1,4 +1,4 @@
-import { FIRECRAWL_SCRAPE_TOOL_NAME, FIRECRAWL_SEARCH_TOOL_NAME } from '../../api/firecrawl.js'
+import { WEB_SCRAPE_TOOL_NAME, WEB_SEARCH_TOOL_NAME } from '@deepseek-chat/slice-web-research'
 import type { ServerToolUseBlock } from '../../api/types.js'
 import { BROWSER_TOOL_NAMES } from '../../browser/tools.js'
 import { getCodeLanguage } from '../../preview/fileKinds.js'
@@ -136,7 +136,7 @@ const toolFragment = (tool: ServerToolUseBlock, result: ReplyBlock | undefined):
 const clientWebFragment = (tool: ToolCallPart, result: ToolResultPart | undefined): Fragment[] => {
   const status =
     !result || result.status === 'running' ? 'WIP' : result.status === 'ok' ? 'FINISHED' : 'FAILED'
-  if (tool.name === FIRECRAWL_SEARCH_TOOL_NAME) {
+  if (tool.name === WEB_SEARCH_TOOL_NAME) {
     const query =
       tool.input && typeof (tool.input as { query?: unknown }).query === 'string'
         ? (tool.input as { query: string }).query
@@ -215,7 +215,7 @@ const assistantFragments = (message: AssistantMessage): Fragment[] => {
       clientResults.set(block.tool_use_id, block)
     } else if (
       block.type === 'tool_use' &&
-      (block.name === FIRECRAWL_SEARCH_TOOL_NAME || block.name === FIRECRAWL_SCRAPE_TOOL_NAME)
+      (block.name === WEB_SEARCH_TOOL_NAME || block.name === WEB_SCRAPE_TOOL_NAME)
     ) {
       webToolIds.add(block.id)
     } else if (block.type === 'tool_use' && BROWSER_TOOL_NAMES.has(block.name)) {
@@ -253,7 +253,7 @@ const assistantFragments = (message: AssistantMessage): Fragment[] => {
       continue
     }
     if (block.type === 'tool_use') {
-      if (block.name === FIRECRAWL_SEARCH_TOOL_NAME || block.name === FIRECRAWL_SCRAPE_TOOL_NAME) {
+      if (block.name === WEB_SEARCH_TOOL_NAME || block.name === WEB_SCRAPE_TOOL_NAME) {
         fragments.push(...clientWebFragment(block, clientResults.get(block.id)))
         response = undefined
         separateNextText = false

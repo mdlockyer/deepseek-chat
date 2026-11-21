@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     "./runtime": "./runtime/index.ts",
+    "./ports": "./ports/index.ts",
     "./facts/session": "./facts/session_facts.ts"
   }
 }

@@ -1,5 +1,5 @@
 import { translate } from '../../i18n/index.js'
-import { FIRECRAWL_SCRAPE_TOOL_NAME, FIRECRAWL_SEARCH_TOOL_NAME } from '../api/firecrawl.js'
+import { WEB_SCRAPE_TOOL_NAME, WEB_SEARCH_TOOL_NAME } from '@deepseek-chat/slice-web-research'
 import { BROWSER_TOOL_NAMES } from '../browser/tools.js'
 import { EDIT_FILE_TOOL_NAME, PREVIEW_TOOL_NAMES, READ_FILE_TOOL_NAME } from '../preview/tools.js'
 import type {
@@ -299,7 +299,7 @@ export const buildReplyView = (reply: AssistantMessage, streaming: boolean): Rep
   for (const block of reply.blocks) {
     if (block.type === 'tool_use') {
       const result = toolResults.get(block.id)
-      if (block.name === FIRECRAWL_SEARCH_TOOL_NAME && result?.searchResults) {
+      if (block.name === WEB_SEARCH_TOOL_NAME && result?.searchResults) {
         for (const item of result.searchResults) {
           const source = registry.add(item.url, item.title, item.publishedAt, {
             snippet: item.snippet,
@@ -310,7 +310,7 @@ export const buildReplyView = (reply: AssistantMessage, streaming: boolean): Rep
             searchResults.push(source)
           }
         }
-      } else if (block.name === FIRECRAWL_SCRAPE_TOOL_NAME && result?.scrapedPage) {
+      } else if (block.name === WEB_SCRAPE_TOOL_NAME && result?.scrapedPage) {
         registry.add(result.scrapedPage.url, result.scrapedPage.title, null)
       }
       continue
@@ -374,7 +374,7 @@ export const buildReplyView = (reply: AssistantMessage, streaming: boolean): Rep
     if (block.type === 'tool_use') {
       flushPreamble()
       const toolResult = toolResults.get(block.id)
-      if (block.name === FIRECRAWL_SEARCH_TOOL_NAME) {
+      if (block.name === WEB_SEARCH_TOOL_NAME) {
         const query = getPartialStringField(block.input, block.inputJson, 'query')
         const kind: ServerToolKind = reply.thinking ? 'deep_search' : 'search'
         const status = getClientToolStatus(toolResult, streaming)
@@ -413,7 +413,7 @@ export const buildReplyView = (reply: AssistantMessage, streaming: boolean): Rep
         }
         return
       }
-      if (block.name === FIRECRAWL_SCRAPE_TOOL_NAME) {
+      if (block.name === WEB_SCRAPE_TOOL_NAME) {
         const url =
           toolResult?.scrapedPage?.url || getPartialStringField(block.input, block.inputJson, 'url')
         const title = toolResult?.scrapedPage?.title || url

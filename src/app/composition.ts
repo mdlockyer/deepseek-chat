@@ -3,8 +3,10 @@
  * No domain logic belongs here — only wiring.
  */
 import { createPythonSlice } from '@deepseek-chat/slice-python'
+import { createWebResearchSlice } from '@deepseek-chat/slice-web-research'
 import { EventLog } from '@deepseek-chat/spine/runtime'
 import {
+  desktopFetch,
   isDesktopApp,
   onPythonPhase,
   pythonInterrupt,
@@ -14,6 +16,7 @@ import {
   pythonRuntimeStatus,
   pythonStageUpload,
 } from '../platform/desktop.js'
+import { useSettings } from '../services/settings.js'
 
 /** 须与 package.json 中 pyodide 开发依赖的版本一致（scripts/fetch-pyodide.mjs 从中复制运行时） */
 const PYODIDE_VERSION = '314.0.8'
@@ -40,4 +43,11 @@ export const python = createPythonSlice({
       }
     : null,
   pyodideIndexURL: pyodideIndexURL(),
+})
+
+export const webResearch = createWebResearchSlice({
+  // 桌面版走原生 HTTP（不受 CORS 限制），网页版走 WebView fetch
+  fetch: isDesktopApp ? desktopFetch : (url, init) => fetch(url, init),
+  // Firecrawl Key 仍由设置保存，待设置按 slice 拆分后归 web-research 所有
+  apiKey: () => useSettings.getState().firecrawlApiKey,
 })

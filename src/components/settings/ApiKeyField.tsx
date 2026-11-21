@@ -9,7 +9,8 @@ import {
   IconToastError16,
 } from '../base/icons.js'
 import { setFirecrawlApiKey, useSettings } from '../../services/settings.js'
-import { verifyFirecrawlApiKey } from '../../services/api/firecrawl.js'
+import { ApiError } from '../../services/api/client.js'
+import { webResearch } from '../../app/composition.js'
 import { isDesktopApp } from '../../platform/desktop.js'
 import { useIsMobile } from '../../app/viewport.js'
 import { Button } from '../base/Button.js'
@@ -28,6 +29,23 @@ const maskApiKey = (apiKey: string) => {
   const prefix =
     apiKey.startsWith('sk-') || apiKey.startsWith('fc-') ? apiKey.slice(0, 3) : apiKey.slice(0, 2)
   return `${prefix}${'•'.repeat(10)}${apiKey.slice(-4)}`
+}
+
+/**
+ * Adapts the web-research slice's verification outcome to the errors useApiKeyForm classifies
+ * (invalid key / network / other). Goes away when the key form moves into the slice.
+ */
+const verifyFirecrawlApiKey = async (apiKey: string): Promise<void> => {
+  const result = await webResearch.verifyKey(apiKey)
+  if (result.kind === 'invalid') {
+    throw new ApiError('http', 'Firecrawl API key is invalid.', 401)
+  }
+  if (result.kind === 'unreachable') {
+    throw new ApiError('network', 'Firecrawl is unreachable.')
+  }
+  if (result.kind === 'failed') {
+    throw new Error(result.message)
+  }
 }
 
 /** API Key 的编辑状态 */
