@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useTranslate } from '../../i18n/index.js'
+import { stageHost } from '../../app/rightPanel/stageHost.js'
 import {
   isDesktopApp,
   previewOpenDevtools,
@@ -29,8 +30,8 @@ import {
   makeUploadPreviewKey,
   type FileVersionEntry,
 } from '../../services/preview/workspace.js'
-import { useSidePanelStore } from '../../services/sidePanel/state.js'
-import { fitViewportToStage } from '../../services/sidePanel/viewport.js'
+import { useSidePanelStore } from '../../app/rightPanel/state.js'
+import { fitViewportToStage } from '@deepseek-chat/spine/design'
 import { copyText } from '../../utils/clipboard.js'
 import { IconButton } from '@deepseek-chat/spine/design'
 import { showToast } from '../base/toastState.js'
@@ -43,8 +44,8 @@ import {
   IconDownloadOutline16,
   IconRefreshOutline16,
 } from '@deepseek-chat/spine/design'
-import { ViewportMenu } from '../sidePanel/ViewportMenu.js'
-import panelStyles from '../sidePanel/SidePanel.module.css'
+import { ViewportMenu } from '@deepseek-chat/spine/design'
+import { panelStyles } from '@deepseek-chat/spine/design'
 import { FileSwitcherMenu, type PreviewFileItem } from './FileSwitcherMenu.js'
 import styles from './PreviewPanel.module.css'
 import { VersionMenu } from './VersionMenu.js'
@@ -425,6 +426,7 @@ export const PreviewPanel = ({ topActions }: { topActions?: ReactNode } = {}) =>
           {activeItem && activeKind === 'html' && effectiveMode === 'preview' ? (
             <>
               <ViewportMenu
+                host={stageHost}
                 viewport={activeViewport}
                 zoom={viewportZoom}
                 onSelect={(next) =>

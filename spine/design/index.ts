@@ -39,3 +39,9 @@ export {
   type SecretKeyForm,
   type SecretKeyFormOptions,
 } from './secretKey.js'
+export { StageFrame } from './stage/StageFrame.js'
+export { ViewportMenu } from './stage/ViewportMenu.js'
+export * from './stage/viewport.js'
+export type { StageHost, StageSize } from './stage/host.js'
+/** Shared side-panel chrome (empty states, error banner, top actions, mode chip) and stage styles. */
+export { default as panelStyles } from './stage/stage.module.css'

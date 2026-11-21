@@ -1,9 +1,9 @@
 import clsx from 'clsx'
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { useTranslate } from '../../i18n/index.js'
-import { acquireOverlay } from '@deepseek-chat/spine/design'
-import { useSidePanelStore } from '../../services/sidePanel/state.js'
+import { stageMessages } from './messages.js'
+import { acquireOverlay } from '../overlay.js'
+import type { StageHost } from './host.js'
 import {
   BROWSER_VIEWPORT_PRESETS,
   MAX_VIEWPORT_HEIGHT,
@@ -14,17 +14,17 @@ import {
   parseCustomViewportInput,
   type BrowserViewportPreset,
   type BrowserViewportSpec,
-} from '../../services/sidePanel/viewport.js'
-import { usePresence } from '@deepseek-chat/spine/design'
-import { useAnchoredPosition, useDismiss } from '@deepseek-chat/spine/design'
+} from './viewport.js'
+import { useAnchoredPosition, useDismiss } from '../anchored.js'
+import { usePresence } from '../usePresence.js'
 import {
   IconCheckedOutline14,
   IconSwapOutline14,
   IconToastError16,
   IconViewportOutline14,
-} from '@deepseek-chat/spine/design'
-import { Tooltip } from '@deepseek-chat/spine/design'
-import styles from './SidePanel.module.css'
+} from '../icons.js'
+import { Tooltip } from '../Tooltip.js'
+import styles from './stage.module.css'
 
 const PRESET_ORDER: Exclude<BrowserViewportPreset, 'auto'>[] = [
   'desktop',
@@ -35,15 +35,12 @@ const PRESET_ORDER: Exclude<BrowserViewportPreset, 'auto'>[] = [
 
 const PRESET_LABEL_KEYS: Record<
   Exclude<BrowserViewportPreset, 'auto'>,
-  | 'browserViewportDesktop'
-  | 'browserViewportWidescreen'
-  | 'browserViewportTablet'
-  | 'browserViewportMobile'
+  'viewportDesktop' | 'viewportWidescreen' | 'viewportTablet' | 'viewportMobile'
 > = {
-  desktop: 'browserViewportDesktop',
-  widescreen: 'browserViewportWidescreen',
-  tablet: 'browserViewportTablet',
-  mobile: 'browserViewportMobile',
+  desktop: 'viewportDesktop',
+  widescreen: 'viewportWidescreen',
+  tablet: 'viewportTablet',
+  mobile: 'viewportMobile',
 }
 
 const matchesPreset = (
@@ -62,18 +59,20 @@ const matchesPreset = (
 
 /** 共享工具栏视口尺寸/比例选择器：用于内置浏览器和 HTML 文件预览 */
 export const ViewportMenu = ({
+  host,
   viewport,
   zoom,
   disabled = false,
   onSelect,
 }: {
+  host: StageHost
   viewport: BrowserViewportSpec | null
   zoom: number
   disabled?: boolean
   onSelect: (next: BrowserViewportSpec | null) => void
 }) => {
-  const t = useTranslate()
-  const stageSize = useSidePanelStore((state) => state.stageSize)
+  const t = stageMessages.useTranslate()
+  const stageSize = host.useStageSize()
   const [open, setOpen] = useState(false)
   const { mounted, exiting } = usePresence(open, 140)
 
@@ -131,8 +130,8 @@ export const ViewportMenu = ({
   const pct = Math.round(zoom * 100)
   const sizeSummary = viewport
     ? `${viewport.width}×${viewport.height}${pct < 100 ? ` · ${pct}%` : ''}`
-    : t('browserViewportAuto')
-  const tooltipText = t('browserViewportTooltip', { size: sizeSummary })
+    : t('viewportAuto')
+  const tooltipText = t('viewportTooltip', { size: sizeSummary })
 
   const submitCustom = (restoreFocus: boolean) => {
     const parsed = parseCustomViewportInput(widthDraft, heightDraft)
@@ -141,7 +140,7 @@ export const ViewportMenu = ({
       setHeightError(parsed.heightInvalid)
       if (parsed.widthInvalid && parsed.heightInvalid) {
         setErrorMsg(
-          t('browserViewportInvalidBoth', {
+          t('viewportInvalidBoth', {
             minW: MIN_VIEWPORT_WIDTH,
             maxW: MAX_VIEWPORT_WIDTH,
             minH: MIN_VIEWPORT_HEIGHT,
@@ -150,14 +149,14 @@ export const ViewportMenu = ({
         )
       } else if (parsed.widthInvalid) {
         setErrorMsg(
-          t('browserViewportInvalidWidth', {
+          t('viewportInvalidWidth', {
             min: MIN_VIEWPORT_WIDTH,
             max: MAX_VIEWPORT_WIDTH,
           })
         )
       } else {
         setErrorMsg(
-          t('browserViewportInvalidHeight', {
+          t('viewportInvalidHeight', {
             min: MIN_VIEWPORT_HEIGHT,
             max: MAX_VIEWPORT_HEIGHT,
           })
@@ -305,8 +304,8 @@ export const ViewportMenu = ({
                   <span className={styles.viewportOptionCheck} aria-hidden>
                     {viewport === null ? <IconCheckedOutline14 /> : null}
                   </span>
-                  <span className={styles.viewportOptionLabel}>{t('browserViewportAuto')}</span>
-                  <span className={styles.viewportOptionMeta}>{t('browserViewportAutoShort')}</span>
+                  <span className={styles.viewportOptionLabel}>{t('viewportAuto')}</span>
+                  <span className={styles.viewportOptionMeta}>{t('viewportAutoShort')}</span>
                 </button>
                 <div className={styles.viewportDivider} role="separator" />
                 {PRESET_ORDER.map((preset) => {
@@ -358,7 +357,7 @@ export const ViewportMenu = ({
                 <div className={styles.viewportCustomFields}>
                   <div className={styles.viewportField}>
                     <label className={styles.viewportFieldLabel} htmlFor={widthId}>
-                      {t('browserViewportWidth')}
+                      {t('viewportWidth')}
                     </label>
                     <div
                       className={clsx(
@@ -395,11 +394,11 @@ export const ViewportMenu = ({
                       </span>
                     </div>
                   </div>
-                  <Tooltip content={t('browserViewportSwap')} disabled={!open}>
+                  <Tooltip content={t('viewportSwap')} disabled={!open}>
                     <button
                       type="button"
                       className={styles.viewportSwapBtn}
-                      aria-label={t('browserViewportSwap')}
+                      aria-label={t('viewportSwap')}
                       onClick={handleSwap}
                     >
                       <IconSwapOutline14 />
@@ -407,7 +406,7 @@ export const ViewportMenu = ({
                   </Tooltip>
                   <div className={styles.viewportField}>
                     <label className={styles.viewportFieldLabel} htmlFor={heightId}>
-                      {t('browserViewportHeight')}
+                      {t('viewportHeight')}
                     </label>
                     <div
                       className={clsx(
@@ -451,10 +450,10 @@ export const ViewportMenu = ({
                     <span>{errorMsg}</span>
                   </div>
                 ) : (
-                  <div className={styles.viewportCustomHint}>{t('browserViewportCustomHint')}</div>
+                  <div className={styles.viewportCustomHint}>{t('viewportCustomHint')}</div>
                 )}
                 <button type="submit" className={styles.viewportApplyBtn}>
-                  {t('browserViewportApply')}
+                  {t('viewportApply')}
                 </button>
               </form>
             </div>,

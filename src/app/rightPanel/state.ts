@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { localStore } from '../storage.js'
 
 export type RightPanelKind = 'preview' | 'browser' | 'search'
 
@@ -9,9 +10,24 @@ type SidePanelState = {
   panelResizing: boolean
   overlayLocks: number
   stageSize: { width: number; height: number } | null
+  /** 面板宽度（px），跨会话共享并存 localStorage */
+  width: number
 }
 
 export const DEFAULT_SIDE_PANEL_WIDTH = 540
+
+/** 沿用原有键名（原属内置浏览器设置），已保存的宽度不丢失 */
+const WIDTH_KEY = 'chat-demo:browser-panel-width'
+
+const clampStoredWidth = (value: number) =>
+  Number.isFinite(value)
+    ? Math.min(Math.max(Math.round(value), 360), 1100)
+    : DEFAULT_SIDE_PANEL_WIDTH
+
+const initialWidth = (): number => {
+  const parsed = Number(localStore.get(WIDTH_KEY))
+  return parsed > 0 ? clampStoredWidth(parsed) : DEFAULT_SIDE_PANEL_WIDTH
+}
 
 export const clampSidePanelResizeWidth = (proposedWidth: number, windowWidth: number): number => {
   const maxWidth = Math.max(360, Math.min(windowWidth - 360, Math.floor(windowWidth * 0.72)))
@@ -25,6 +41,7 @@ export const useSidePanelStore = create<SidePanelState>(() => ({
   panelResizing: false,
   overlayLocks: 0,
   stageSize: null,
+  width: initialWidth(),
 }))
 
 const { getState: get, setState: set } = useSidePanelStore
@@ -162,4 +179,10 @@ export const clearAllSidePanelSessions = () => {
     panelAnimating: false,
     panelResizing: false,
   })
+}
+
+export const setSidePanelWidth = (width: number) => {
+  const clamped = clampStoredWidth(width)
+  localStore.set(WIDTH_KEY, String(clamped))
+  set({ width: clamped })
 }

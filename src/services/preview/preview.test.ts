@@ -9,7 +9,7 @@ import {
   registerOverlayLockListener,
   setActiveSidePanelSession,
   useSidePanelStore,
-} from '../sidePanel/state.js'
+} from '../../app/rightPanel/state.js'
 import {
   classifyPreviewKind,
   getCodeLanguage,

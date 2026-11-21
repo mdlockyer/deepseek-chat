@@ -11,7 +11,7 @@ import {
   selectSession,
   useChatStore,
 } from '../services/chat/store.js'
-import { RightPanel } from '../components/sidePanel/RightPanel.js'
+import { RightPanel } from './rightPanel/RightPanel.js'
 import { closeSearchPanel } from '../components/search/searchPanelState.js'
 import { bindBrowserEvents, setActiveBrowserSession } from '../services/browser/state.js'
 import { SessionView } from '../components/session/SessionView.js'

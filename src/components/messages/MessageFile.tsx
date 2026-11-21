@@ -10,7 +10,7 @@ import {
   usePreviewStore,
 } from '../../services/preview/state.js'
 import { makeUploadPreviewKey } from '../../services/preview/workspace.js'
-import { getActiveRightPanel, useSidePanelStore } from '../../services/sidePanel/state.js'
+import { getActiveRightPanel, useSidePanelStore } from '../../app/rightPanel/state.js'
 import { IconPhotoErrorFill20, IconRefreshOutline16 } from '@deepseek-chat/spine/design'
 import { Tooltip } from '@deepseek-chat/spine/design'
 import { FileCard } from '../files/FileCard.js'

@@ -1,0 +1,142 @@
+.header {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  min-width: 360px;
+  container-type: inline-size;
+  background: var(--dsw-alias-bg-base);
+  border-bottom: 1px solid var(--dsw-alias-border-l2);
+}
+
+.topRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  box-sizing: border-box;
+  height: 52px;
+  padding: 0 10px;
+}
+
+.tabsScroll {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+.tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  max-width: 184px;
+  min-width: 72px;
+  height: 30px;
+  padding: 0 8px 0 10px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: 500;
+  cursor: pointer;
+  user-select: none;
+  transition:
+    background-color var(--ds-transition-duration) var(--ds-ease-in-out),
+    color var(--ds-transition-duration) var(--ds-ease-in-out),
+    border-color var(--ds-transition-duration) var(--ds-ease-in-out);
+
+  &:hover {
+    background: var(--dsw-alias-interactive-bg-hover);
+    color: var(--dsw-alias-label-primary);
+  }
+
+  &.tabActive {
+    background: var(--dsw-alias-bg-layer-2);
+    border-color: var(--dsw-alias-border-l2);
+    color: var(--dsw-alias-label-primary);
+  }
+}
+
+.tabIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.tabActive .tabIcon {
+  color: var(--dsw-alias-brand-text);
+}
+
+.tabTitle {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+}
+
+.tabClose {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity var(--ds-transition-duration) var(--ds-ease-in-out),
+    background-color var(--ds-transition-duration) var(--ds-ease-in-out),
+    color var(--ds-transition-duration) var(--ds-ease-in-out);
+
+  svg {
+    width: 10px;
+    height: 10px;
+  }
+
+  .tab:hover &,
+  .tabActive & {
+    opacity: 1;
+  }
+
+  &:hover {
+    background: var(--dsw-alias-interactive-bg-active);
+    color: var(--dsw-alias-label-primary);
+  }
+}
+
+.toolbar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  box-sizing: border-box;
+  height: 40px;
+  padding: 0 10px 8px;
+}
+
+@media not all and (min-width: 768px) {
+  .header {
+    min-width: 0;
+  }
+}

@@ -13,7 +13,7 @@ import {
   usePreviewStore,
 } from '../../services/preview/state.js'
 import { collectWorkspaceArtifacts } from '../../services/preview/workspace.js'
-import { getActiveRightPanel, useSidePanelStore } from '../../services/sidePanel/state.js'
+import { getActiveRightPanel, useSidePanelStore } from '../../app/rightPanel/state.js'
 import { sessionTitle } from '../../utils/format.js'
 import { IconButton } from '@deepseek-chat/spine/design'
 import { IconBrowseOutline16, IconGlobeLanguageOutline16 } from '@deepseek-chat/spine/design'

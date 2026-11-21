@@ -32,7 +32,7 @@ import {
   makeArtifactKey,
   normalizeWorkspacePath,
 } from '../../services/preview/workspace.js'
-import { getActiveRightPanel, useSidePanelStore } from '../../services/sidePanel/state.js'
+import { getActiveRightPanel, useSidePanelStore } from '../../app/rightPanel/state.js'
 import {
   getAreaTitle,
   isDeepSearchKind,

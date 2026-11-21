@@ -1,8 +1,9 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { isDesktopApp } from '../../../platform/desktop.js'
-import type { BrowserViewportSpec } from '../../../services/sidePanel/viewport.js'
-import { StageFrame } from '../../sidePanel/StageFrame.js'
-import panelStyles from '../../sidePanel/SidePanel.module.css'
+import { stageHost } from '../../../app/rightPanel/stageHost.js'
+import type { BrowserViewportSpec } from '@deepseek-chat/spine/design'
+import { StageFrame } from '@deepseek-chat/spine/design'
+import { panelStyles } from '@deepseek-chat/spine/design'
 import styles from '../PreviewPanel.module.css'
 import { NativePreviewSurface } from './NativePreviewSurface.js'
 
@@ -82,6 +83,7 @@ export const HtmlPreview = ({
 
   return (
     <StageFrame
+      host={stageHost}
       viewport={viewport}
       onViewportCommit={onViewportCommit}
       banner={runtimeError ? <div className={panelStyles.errorBanner}>{runtimeError}</div> : null}

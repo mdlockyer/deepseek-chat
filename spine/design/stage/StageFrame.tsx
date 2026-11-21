@@ -1,11 +1,7 @@
 import clsx from 'clsx'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { useTranslate } from '../../i18n/index.js'
-import {
-  setRightPanelResizing,
-  setRightPanelStageSize,
-  useSidePanelStore,
-} from '../../services/sidePanel/state.js'
+import { stageMessages } from './messages.js'
+import type { StageHost } from './host.js'
 import {
   clampViewportHeight,
   clampViewportWidth,
@@ -15,11 +11,12 @@ import {
   type BrowserStageFit,
   type BrowserViewportSpec,
   type ViewportDragEdge,
-} from '../../services/sidePanel/viewport.js'
-import styles from './SidePanel.module.css'
+} from './viewport.js'
+import styles from './stage.module.css'
 
 /** 共享视口舞台区：跟踪可用宽高、自定义视口拖拽手柄与等比居中缩放 */
 export const StageFrame = ({
+  host,
   viewport,
   onStageSizeChange,
   onFitChange,
@@ -28,6 +25,8 @@ export const StageFrame = ({
   children,
   banner,
 }: {
+  /** The hosting panel: shared stage size and resizing flag. */
+  host: StageHost
   viewport: BrowserViewportSpec | null
   onStageSizeChange?: (size: { width: number; height: number }) => void
   onFitChange?: (fit: BrowserStageFit | null) => void
@@ -39,7 +38,7 @@ export const StageFrame = ({
   ) => ReactNode
   banner?: ReactNode
 }) => {
-  const t = useTranslate()
+  const t = stageMessages.useTranslate()
   const stageCanvasRef = useRef<HTMLDivElement>(null)
   const onStageSizeChangeRef = useRef(onStageSizeChange)
   onStageSizeChangeRef.current = onStageSizeChange
@@ -49,7 +48,7 @@ export const StageFrame = ({
   onViewportCommitRef.current = onViewportCommit
   const dragCleanupRef = useRef<(() => void) | null>(null)
 
-  const stageSize = useSidePanelStore((state) => state.stageSize)
+  const stageSize = host.useStageSize()
   const [dragViewport, setDragViewport] = useState<{ width: number; height: number } | null>(null)
   const [dragEdge, setDragEdge] = useState<ViewportDragEdge | null>(null)
 
@@ -103,7 +102,7 @@ export const StageFrame = ({
       const rect = stageEl.getBoundingClientRect()
       if (rect.width > 1 && rect.height > 1) {
         const size = { width: rect.width, height: rect.height }
-        setRightPanelStageSize(size)
+        host.setStageSize(size)
         onStageSizeChangeRef.current?.(size)
       }
     }
@@ -120,7 +119,7 @@ export const StageFrame = ({
       observer.disconnect()
       window.removeEventListener('resize', schedule)
     }
-  }, [hasCustomViewport, canDragResize])
+  }, [host, hasCustomViewport, canDragResize])
 
   useLayoutEffect(() => {
     onFitChangeRef.current?.(fit)
@@ -134,7 +133,7 @@ export const StageFrame = ({
     event.stopPropagation()
     dragCleanupRef.current?.()
     onViewportResizeHoverStart?.()
-    setRightPanelResizing(true)
+    host.setResizing(true)
 
     const target = event.currentTarget
     try {
@@ -189,7 +188,7 @@ export const StageFrame = ({
       cleanup()
       setDragViewport(null)
       setDragEdge(null)
-      setRightPanelResizing(false)
+      host.setResizing(false)
     }
 
     const onMove = (moveEvent: PointerEvent) => {
@@ -223,8 +222,8 @@ export const StageFrame = ({
       setDragEdge(null)
       const releaseResize = () => {
         requestAnimationFrame(() => {
-          if (dragCleanupRef.current === null && useSidePanelStore.getState().panelResizing) {
-            setRightPanelResizing(false)
+          if (dragCleanupRef.current === null && host.isResizing()) {
+            host.setResizing(false)
           }
         })
       }
@@ -299,7 +298,7 @@ export const StageFrame = ({
               <div
                 role="separator"
                 aria-orientation="vertical"
-                aria-label={t('browserViewportResizeWidth')}
+                aria-label={t('viewportResizeWidth')}
                 tabIndex={0}
                 className={clsx(
                   styles.stageHandleRight,
@@ -317,7 +316,7 @@ export const StageFrame = ({
               <div
                 role="separator"
                 aria-orientation="horizontal"
-                aria-label={t('browserViewportResizeHeight')}
+                aria-label={t('viewportResizeHeight')}
                 tabIndex={0}
                 className={clsx(
                   styles.stageHandleBottom,
@@ -334,7 +333,7 @@ export const StageFrame = ({
               />
               <div
                 role="button"
-                aria-label={t('browserViewportResizeBoth')}
+                aria-label={t('viewportResizeBoth')}
                 tabIndex={0}
                 className={clsx(
                   styles.stageHandleCorner,

@@ -4,7 +4,7 @@ import { IconCloseOutline16 } from '@deepseek-chat/spine/design'
 import { IconButton } from '@deepseek-chat/spine/design'
 import { closeSearchPanel, useSearchPanel } from './searchPanelState.js'
 import { SourceCard } from './SourceCard.js'
-import panelStyles from '../sidePanel/SidePanel.module.css'
+import { panelStyles } from '@deepseek-chat/spine/design'
 import styles from './SearchPanel.module.css'
 
 /** 右侧「搜索结果」面板内容（托管在共享 SidePanel 壳层内） */

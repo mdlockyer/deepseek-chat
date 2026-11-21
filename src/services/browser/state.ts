@@ -36,7 +36,7 @@ import {
   setRightPanelAnimating,
   setRightPanelResizing,
   useSidePanelStore,
-} from '../sidePanel/state.js'
+} from '../../app/rightPanel/state.js'
 import {
   BROWSER_VIEWPORT_PRESETS,
   MIN_VIEWPORT_HEIGHT,
@@ -52,7 +52,7 @@ import {
   type BrowserStageFit,
   type BrowserViewportPreset,
   type BrowserViewportSpec,
-} from '../sidePanel/viewport.js'
+} from '@deepseek-chat/spine/design'
 
 export {
   BROWSER_VIEWPORT_PRESETS,

@@ -5,7 +5,7 @@ import {
   getActiveRightPanel,
   openRightPanel,
   useSidePanelStore,
-} from '../../services/sidePanel/state.js'
+} from '../../app/rightPanel/state.js'
 
 /** 右侧「搜索结果」面板：同一入口再次点击收起，换入口时替换内容，与浏览器、文件预览共用右侧栏位 */
 type SearchPanelState = {

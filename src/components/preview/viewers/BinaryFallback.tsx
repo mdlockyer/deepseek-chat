@@ -2,7 +2,7 @@ import { useTranslate } from '../../../i18n/index.js'
 import { formatSize, getExtension } from '../../../services/attachments.js'
 import { Button } from '@deepseek-chat/spine/design'
 import { FileIcon } from '../../files/FileIcon.js'
-import panelStyles from '../../sidePanel/SidePanel.module.css'
+import { panelStyles } from '@deepseek-chat/spine/design'
 import styles from '../PreviewPanel.module.css'
 
 /** 不支持直接内嵌预览的二进制格式占位视图 */

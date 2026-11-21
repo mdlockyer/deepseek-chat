@@ -1,0 +1,125 @@
+.panel {
+  position: relative;
+  z-index: 20;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  width: var(--side-panel-width, 540px);
+  max-width: 72vw;
+  min-width: 360px;
+  height: 100%;
+  border-left: 1px solid var(--dsw-alias-border-l2);
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-bg-base);
+}
+
+.panelInner {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.panelOpening {
+  animation: side-panel-open var(--ds-transition-duration-panel) var(--ds-ease-panel) both;
+}
+
+.panelExiting {
+  animation: side-panel-close var(--ds-transition-duration-panel) var(--ds-ease-panel) both;
+  pointer-events: none;
+}
+
+.panelResizing {
+  transition: none;
+}
+
+.resizer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -7px;
+  z-index: 30;
+  width: 8px;
+  cursor: col-resize;
+  touch-action: none;
+  user-select: none;
+
+  &::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    right: 1px;
+    width: 2px;
+    background: transparent;
+    transition: background-color var(--ds-transition-duration) var(--ds-ease-in-out);
+  }
+
+  &:hover::after,
+  &.resizing::after {
+    background: var(--dsw-alias-brand-primary);
+  }
+}
+
+.panelOpening .resizer,
+.panelExiting .resizer {
+  pointer-events: none;
+}
+
+.panelExiting .resizer {
+  opacity: 0;
+}
+
+@keyframes side-panel-open {
+  from {
+    width: 0;
+    min-width: 0;
+    border-left-width: 0;
+  }
+}
+
+@keyframes side-panel-close {
+  to {
+    width: 0;
+    min-width: 0;
+    border-left-width: 0;
+    visibility: hidden;
+  }
+}
+
+@keyframes side-panel-slide-in {
+  from {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes side-panel-slide-out {
+  to {
+    transform: translateX(100%);
+    visibility: hidden;
+  }
+}
+
+@media not all and (min-width: 768px) {
+  .panel {
+    position: fixed;
+    inset: 0;
+    z-index: 700;
+    width: auto !important;
+    max-width: none;
+    min-width: 0;
+    border-left: none;
+  }
+
+  .panelOpening {
+    animation: side-panel-slide-in var(--ds-transition-duration-panel) var(--ds-ease-panel) both;
+  }
+
+  .panelExiting {
+    animation: side-panel-slide-out var(--ds-transition-duration-panel) var(--ds-ease-panel) both;
+  }
+
+  .resizer {
+    display: none;
+  }
+}

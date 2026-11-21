@@ -1,16 +1,16 @@
 import clsx from 'clsx'
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
-import { setSiderCollapsed, useLayout } from '../../app/layout.js'
-import { setBrowserPanelWidth, useBrowserPrefs } from '../../services/browser/prefs.js'
+import { setSiderCollapsed, useLayout } from '../layout.js'
 import {
   DEFAULT_SIDE_PANEL_WIDTH,
   clampSidePanelResizeWidth,
   setRightPanelAnimating,
   setRightPanelResizing,
+  setSidePanelWidth,
   useSidePanelStore,
-} from '../../services/sidePanel/state.js'
+} from './state.js'
 import { PANEL_DURATION_MS, usePresence } from '@deepseek-chat/spine/design'
-import styles from './SidePanel.module.css'
+import styles from './RightPanel.module.css'
 
 /** 共享右侧面板壳层：开合动画、左侧拖拽调宽、窄屏自动收起侧边栏、移动端全屏抽屉 */
 export const SidePanel = ({
@@ -22,7 +22,7 @@ export const SidePanel = ({
   onResizeHoverStart?: () => void
   children: ReactNode
 }) => {
-  const storedWidth = useBrowserPrefs((state) => state.panelWidth)
+  const storedWidth = useSidePanelStore((state) => state.width)
   const { mounted, exiting } = usePresence(open, PANEL_DURATION_MS)
   const panelRef = useRef<HTMLElement>(null)
   const dragCleanupRef = useRef<(() => void) | null>(null)
@@ -156,7 +156,7 @@ export const SidePanel = ({
 
     const onEnd = () => {
       cleanup()
-      setBrowserPanelWidth(latestWidth)
+      setSidePanelWidth(latestWidth)
       setResizingWidth(null)
       requestAnimationFrame(() => {
         if (dragCleanupRef.current === null && useSidePanelStore.getState().panelResizing) {
@@ -200,7 +200,7 @@ export const SidePanel = ({
         }}
         onMouseDown={(event) => event.preventDefault()}
         onPointerDown={startResize}
-        onDoubleClick={() => setBrowserPanelWidth(DEFAULT_SIDE_PANEL_WIDTH)}
+        onDoubleClick={() => setSidePanelWidth(DEFAULT_SIDE_PANEL_WIDTH)}
       />
       <div className={styles.panelInner}>{children}</div>
     </aside>

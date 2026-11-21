@@ -3,18 +3,14 @@ import { useTranslate } from '../../i18n/index.js'
 import { isDesktopApp } from '../../platform/desktop.js'
 import { refreshActiveTabSnapshot } from '../../services/browser/state.js'
 import { triggerNativePreviewSnapshot } from '../../services/preview/state.js'
-import {
-  getActiveRightPanel,
-  useSidePanelStore,
-  type RightPanelKind,
-} from '../../services/sidePanel/state.js'
+import { getActiveRightPanel, useSidePanelStore, type RightPanelKind } from './state.js'
 import { IconSearchOutline16 } from '@deepseek-chat/spine/design'
-import { BrowserPanel } from '../browser/BrowserPanel.js'
-import { PreviewPanel } from '../preview/PreviewPanel.js'
-import { SearchPanel } from '../search/SearchPanel.js'
-import { restoreLastSearchPanel, useSearchPanel } from '../search/searchPanelState.js'
+import { BrowserPanel } from '../../components/browser/BrowserPanel.js'
+import { PreviewPanel } from '../../components/preview/PreviewPanel.js'
+import { SearchPanel } from '../../components/search/SearchPanel.js'
+import { restoreLastSearchPanel, useSearchPanel } from '../../components/search/searchPanelState.js'
 import { SidePanel } from './SidePanel.js'
-import panelStyles from './SidePanel.module.css'
+import { panelStyles } from '@deepseek-chat/spine/design'
 
 /** 右侧面板统一宿主：在同一 SidePanel 壳层内切换文件预览、内置浏览器与搜索结果 */
 export const RightPanel = () => {

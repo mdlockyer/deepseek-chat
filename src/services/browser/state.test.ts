@@ -6,7 +6,7 @@ import {
   getDefaultCustomViewportSize,
   isCustomViewport,
   parseCustomViewportInput,
-} from '../sidePanel/viewport.js'
+} from '@deepseek-chat/spine/design'
 import {
   clampBrowserResizeWidth,
   clearAllSessionBrowsers,

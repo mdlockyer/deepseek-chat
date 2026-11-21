@@ -4,8 +4,8 @@ import {
   getActiveRightPanel,
   openRightPanel,
   useSidePanelStore,
-} from '../sidePanel/state.js'
-import type { BrowserViewportSpec } from '../sidePanel/viewport.js'
+} from '../../app/rightPanel/state.js'
+import type { BrowserViewportSpec } from '@deepseek-chat/spine/design'
 
 export type PreviewViewMode = 'preview' | 'code'
 

@@ -1,23 +1,20 @@
 import clsx from 'clsx'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { stageHost } from '../../../app/rightPanel/stageHost.js'
 import {
   previewSetBounds,
   previewSetContent,
   previewSetVisible,
   previewTakeSnapshot,
 } from '../../../platform/desktop.js'
-import { useBrowserPrefs } from '../../../services/browser/prefs.js'
 import {
   registerNativePreviewSnapshotTrigger,
   triggerNativePreviewSnapshot,
 } from '../../../services/preview/state.js'
-import {
-  registerOverlayLockListener,
-  useSidePanelStore,
-} from '../../../services/sidePanel/state.js'
-import type { BrowserStageFit, BrowserViewportSpec } from '../../../services/sidePanel/viewport.js'
-import { StageFrame } from '../../sidePanel/StageFrame.js'
-import panelStyles from '../../sidePanel/SidePanel.module.css'
+import { registerOverlayLockListener, useSidePanelStore } from '../../../app/rightPanel/state.js'
+import type { BrowserStageFit, BrowserViewportSpec } from '@deepseek-chat/spine/design'
+import { StageFrame } from '@deepseek-chat/spine/design'
+import { panelStyles } from '@deepseek-chat/spine/design'
 import styles from '../PreviewPanel.module.css'
 
 /** 桌面端原生隔离预览子 Webview 宿主：用于 HTML 与 PDF，复用浏览器面板的坐标/缩放/覆盖层快照机制 */
@@ -40,7 +37,7 @@ export const NativePreviewSurface = ({
   const panelAnimating = useSidePanelStore((state) => state.panelAnimating)
   const panelResizing = useSidePanelStore((state) => state.panelResizing)
   const overlayLocks = useSidePanelStore((state) => state.overlayLocks)
-  const storedWidth = useBrowserPrefs((state) => state.panelWidth)
+  const storedWidth = useSidePanelStore((state) => state.width)
   const [stageFit, setStageFit] = useState<BrowserStageFit | null>(null)
   const [snapshot, setSnapshot] = useState<{
     dataUrl: string
@@ -148,6 +145,7 @@ export const NativePreviewSurface = ({
 
   return (
     <StageFrame
+      host={stageHost}
       viewport={viewport}
       onFitChange={setStageFit}
       onViewportResizeHoverStart={triggerNativePreviewSnapshot}

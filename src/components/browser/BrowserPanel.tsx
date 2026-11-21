@@ -1,5 +1,6 @@
 import clsx from 'clsx'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { stageHost } from '../../app/rightPanel/stageHost.js'
 import { useTranslate } from '../../i18n/index.js'
 import { isDesktopApp, openExternalUrl } from '../../platform/desktop.js'
 import {
@@ -20,9 +21,8 @@ import {
   useBrowserStore,
 } from '../../services/browser/state.js'
 import { stopReply } from '../../services/chat/store.js'
-import { useBrowserPrefs } from '../../services/browser/prefs.js'
-import { useSidePanelStore } from '../../services/sidePanel/state.js'
-import type { BrowserStageFit } from '../../services/sidePanel/viewport.js'
+import { useSidePanelStore } from '../../app/rightPanel/state.js'
+import type { BrowserStageFit } from '@deepseek-chat/spine/design'
 import { IconButton } from '@deepseek-chat/spine/design'
 import { Menu } from '@deepseek-chat/spine/design'
 import {
@@ -40,9 +40,10 @@ import {
   IconTrashOutline16,
 } from '@deepseek-chat/spine/design'
 import { restoreLastSearchPanel, useSearchPanel } from '../search/searchPanelState.js'
-import { StageFrame } from '../sidePanel/StageFrame.js'
-import { ViewportMenu } from '../sidePanel/ViewportMenu.js'
-import panelStyles from '../sidePanel/SidePanel.module.css'
+import { StageFrame } from '@deepseek-chat/spine/design'
+import { ViewportMenu } from '@deepseek-chat/spine/design'
+import { panelStyles } from '@deepseek-chat/spine/design'
+import chrome from './BrowserChrome.module.css'
 import styles from './BrowserPanel.module.css'
 
 const displayTabTitle = (url: string, title: string, fallback: string) => {
@@ -75,7 +76,7 @@ export const BrowserPanel = ({ topActions }: { topActions?: ReactNode } = {}) =>
   const controlling = useBrowserStore((state) => state.controlling)
   const controllingAction = useBrowserStore((state) => state.controllingAction)
   const controllingSessionId = useBrowserStore((state) => state.controllingSessionId)
-  const storedWidth = useBrowserPrefs((state) => state.panelWidth)
+  const storedWidth = useSidePanelStore((state) => state.width)
   const hasLastSearch = useSearchPanel(
     (state) => state.lastEntry !== null && state.lastSources.length > 0
   )
@@ -167,9 +168,9 @@ export const BrowserPanel = ({ topActions }: { topActions?: ReactNode } = {}) =>
 
   return (
     <>
-      <div className={panelStyles.header}>
-        <div className={panelStyles.topRow} data-tauri-drag-region>
-          <div className={panelStyles.tabsScroll} role="tablist" data-tauri-drag-region>
+      <div className={chrome.header}>
+        <div className={chrome.topRow} data-tauri-drag-region>
+          <div className={chrome.tabsScroll} role="tablist" data-tauri-drag-region>
             {tabs.map((tab) => {
               const active = tab.id === activeTab?.id
               const title = displayTabTitle(tab.url, tab.title, t('browserNewTab'))
@@ -179,7 +180,7 @@ export const BrowserPanel = ({ topActions }: { topActions?: ReactNode } = {}) =>
                   role="tab"
                   aria-selected={active}
                   tabIndex={0}
-                  className={clsx(panelStyles.tab, active && panelStyles.tabActive)}
+                  className={clsx(chrome.tab, active && chrome.tabActive)}
                   onClick={() => void switchBrowserTab(tab.id)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
@@ -188,17 +189,17 @@ export const BrowserPanel = ({ topActions }: { topActions?: ReactNode } = {}) =>
                     }
                   }}
                 >
-                  <span className={panelStyles.tabIcon}>
+                  <span className={chrome.tabIcon}>
                     {tab.isLoading ? (
                       <span className={styles.tabSpinner} />
                     ) : (
                       <IconGlobeLanguageOutline14 />
                     )}
                   </span>
-                  <span className={panelStyles.tabTitle}>{title}</span>
+                  <span className={chrome.tabTitle}>{title}</span>
                   <button
                     type="button"
-                    className={panelStyles.tabClose}
+                    className={chrome.tabClose}
                     aria-label={t('browserCloseTab')}
                     onClick={(e) => {
                       e.stopPropagation()
@@ -247,7 +248,7 @@ export const BrowserPanel = ({ topActions }: { topActions?: ReactNode } = {}) =>
             />
           </div>
         </div>
-        <div className={panelStyles.toolbar}>
+        <div className={chrome.toolbar}>
           <div className={styles.navGroup}>
             <IconButton
               size="xs"
@@ -334,6 +335,7 @@ export const BrowserPanel = ({ topActions }: { topActions?: ReactNode } = {}) =>
             </button>
           ) : null}
           <ViewportMenu
+            host={stageHost}
             viewport={activeViewport}
             zoom={stageFit?.zoom ?? activeTab?.zoom ?? 1}
             disabled={!activeTab}
@@ -385,6 +387,7 @@ export const BrowserPanel = ({ topActions }: { topActions?: ReactNode } = {}) =>
       </div>
 
       <StageFrame
+        host={stageHost}
         viewport={activeViewport}
         onStageSizeChange={handleStageSizeChange}
         onFitChange={setStageFit}
