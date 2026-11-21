@@ -213,3 +213,119 @@ describe('archive export Firecrawl preservation', () => {
     assert.deepEqual(fragments[2], { type: 'RESPONSE', content: 'Found it.' })
   })
 })
+
+describe('archive export browser tool preservation', () => {
+  it('exports browser_navigate as TOOL_OPEN and subsequent browser actions cleanly', () => {
+    const session = makeSession([
+      {
+        type: 'tool_use',
+        id: 'b1',
+        name: 'browser_navigate',
+        input: { action: 'goto', url: 'https://example.com' },
+      },
+      {
+        type: 'tool_result',
+        tool_use_id: 'b1',
+        content: 'Navigated',
+        status: 'ok',
+        browserAction: {
+          tool: 'browser_navigate',
+          summary: 'Opening example.com',
+          url: 'https://example.com',
+          title: 'Example Domain',
+        },
+      },
+      {
+        type: 'tool_use',
+        id: 'b2',
+        name: 'browser_click',
+        input: { ref: 'e1' },
+      },
+      {
+        type: 'tool_result',
+        tool_use_id: 'b2',
+        content: 'Clicked',
+        status: 'ok',
+        browserAction: {
+          tool: 'browser_click',
+          summary: 'Clicking [e1]',
+          url: 'https://example.com',
+          title: 'Example Domain',
+        },
+      },
+      { type: 'text', text: 'Finished inspecting.' },
+    ])
+
+    const exported = toSessionFile(session, () => null)
+    const validated = readSessionFile(exported)
+    assert.equal(validated.messages[1]?.fragments[0]?.type, 'TOOL_OPEN')
+    const responseFrag = validated.messages[1]?.fragments[1]
+    assert.equal(responseFrag?.type, 'RESPONSE')
+    if (responseFrag?.type === 'RESPONSE') {
+      assert.match(responseFrag.content, /\[Clicking \[e1\]\]/)
+      assert.match(responseFrag.content, /Finished inspecting\./)
+    }
+  })
+})
+
+describe('archive export file presentation preservation', () => {
+  it('exports present_file, edit_file, and read_file blocks as valid v3 RESPONSE Markdown', () => {
+    const session = makeSession([
+      {
+        type: 'tool_use',
+        id: 'p1',
+        name: 'present_file',
+        input: { path: 'app.html', title: 'Mini App', content: '<h1>Hello</h1>' },
+      },
+      {
+        type: 'tool_result',
+        tool_use_id: 'p1',
+        content: 'Presented app.html',
+        status: 'ok',
+        fileAction: { tool: 'present_file', path: 'app.html', title: 'Mini App', version: 1 },
+      },
+      {
+        type: 'tool_use',
+        id: 'r1',
+        name: 'read_file',
+        input: { path: 'app.html' },
+      },
+      {
+        type: 'tool_result',
+        tool_use_id: 'r1',
+        content: 'File: app.html...',
+        status: 'ok',
+        fileAction: { tool: 'read_file', path: 'app.html', version: 1 },
+      },
+      {
+        type: 'tool_use',
+        id: 'e1',
+        name: 'edit_file',
+        input: { path: 'app.html', edits: [{ old_text: 'Hello', new_text: 'World' }] },
+      },
+      {
+        type: 'tool_result',
+        tool_use_id: 'e1',
+        content: 'Updated app.html',
+        status: 'ok',
+        fileAction: { tool: 'edit_file', path: 'app.html', version: 2 },
+      },
+      { type: 'text', text: 'Updated the greeting.' },
+    ])
+
+    const exported = toSessionFile(session, () => null)
+    const validated = readSessionFile(exported)
+    const reimported = toLocalSession(validated)
+    const reply = reimported.session.messages[1]
+    assert.equal(reply.role, 'assistant')
+    const combined = reply.blocks
+      .filter((b) => b.type === 'text')
+      .map((b) => b.text)
+      .join('\n')
+
+    assert.match(combined, /\*\*Mini App\*\*/)
+    assert.match(combined, /```html\n<h1>Hello<\/h1>\n```/)
+    assert.match(combined, /\[Updated app\.html \(v2\)\]/)
+    assert.match(combined, /Updated the greeting\./)
+  })
+})

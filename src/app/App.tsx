@@ -10,8 +10,9 @@ import {
   selectSession,
   useChatStore,
 } from '../services/chat/store.js'
-import { SearchPanel } from '../components/search/SearchPanel.js'
+import { RightPanel } from '../components/sidePanel/RightPanel.js'
 import { closeSearchPanel } from '../components/search/searchPanelState.js'
+import { bindBrowserEvents, setActiveBrowserSession } from '../services/browser/state.js'
 import { SessionView } from '../components/session/SessionView.js'
 import { MobileHeader } from '../components/session/MobileHeader.js'
 import { Welcome } from '../components/session/Welcome.js'
@@ -73,9 +74,14 @@ export const App = () => {
   // 文件数、存储空间达到上限时，附件上只显示「上传失败」，原因用 toast 说明
   useEffect(() => onUploadNotice(showToast), [])
   useEffect(bindChatPersistence, [])
+  useEffect(bindBrowserEvents, [])
 
   // 搜索结果面板只属于当前会话
   useEffect(closeSearchPanel, [activeId])
+  // 浏览器面板标签页绑定到当前会话
+  useEffect(() => {
+    setActiveBrowserSession(activeId)
+  }, [activeId])
   // 切换会话时停止朗读
   useEffect(stopReadAloud, [activeId])
   // 移动端选中会话、切换布局后收起抽屉
@@ -183,7 +189,7 @@ export const App = () => {
             </AppErrorBoundary>
           </div>
         </main>
-        <SearchPanel />
+        <RightPanel />
       </div>
       <SettingsDialog />
       <Toast />

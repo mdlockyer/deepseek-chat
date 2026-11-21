@@ -73,7 +73,20 @@ export type ToolCallPart = {
   inputJson?: string
 }
 
-export type PresentedFileRef = { id: string; name: string; size: number; mimeType: string }
+export type PresentedFileRef = {
+  id: string
+  name: string
+  size: number
+  mimeType: string
+  /** 逻辑路径，用于跨轮次编辑按同一文件聚合版本 */
+  path?: string
+  /** 可选展示标题 */
+  title?: string
+  /** 所属分支内的版本号（从 1 开始） */
+  version?: number
+  /** 来源：模型工具或 Python present_file() */
+  source?: 'model' | 'python'
+}
 
 export type WebSearchSourceMeta = {
   url: string
@@ -90,8 +103,8 @@ export type ToolResultPart = {
   /** 回传给模型的文本 */
   content: string
   status: 'running' | 'ok' | 'error' | 'aborted'
-  /** 运行中的阶段：starting 为启动内核或加载包，running 为执行代码 */
-  phase?: 'starting' | 'running'
+  /** 运行中的阶段：installing 为首次配置环境，starting 为启动内核或加载包，running 为执行代码 */
+  phase?: 'installing' | 'starting' | 'running'
   /** 开始执行的时间，用于运行中显示用时 */
   startedAt?: number
   /** 代码生成的图片（data URL），展示给用户，并经 Files API 上传后附给模型 */
@@ -104,6 +117,15 @@ export type ToolResultPart = {
   searchResults?: WebSearchSourceMeta[]
   /** Firecrawl 抓取页面返回的元信息，用于界面展示 */
   scrapedPage?: { url: string; title: string | null }
+  /** 内置浏览器执行动作的元信息，用于时间线展示 */
+  browserAction?: { tool: string; summary: string; url?: string; title?: string | null }
+  /** 文件展示/编辑动作的元信息，用于时间线展示 */
+  fileAction?: {
+    tool: 'present_file' | 'edit_file' | 'read_file'
+    path: string
+    title?: string
+    version?: number
+  }
   durationMs?: number
 }
 
@@ -126,6 +148,10 @@ export type AssistantMessage = MessageBranch & {
   thinking?: boolean
   /** 请求时是否开启联网搜索 */
   search?: boolean
+  /** 请求时是否允许运行 Python 代码 */
+  python?: boolean
+  /** 请求时是否允许控制内置浏览器 */
+  browser?: boolean
   /** 本轮请求的系统信息快照；各回答版本独立保存，续写沿用。历史消息中缺省的快照保持为空。 */
   latestReminder?: string
   /** 是否允许作为续写前缀；仍需满足回复状态与内容限制。 */

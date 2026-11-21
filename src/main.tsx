@@ -3,15 +3,19 @@ import { App } from './app/App.js'
 import { AppErrorBoundary } from './app/AppErrorBoundary.js'
 import { setupTheme } from './app/theme.js'
 import { isDesktopApp, openExternalLinksInBrowser } from './platform/desktop.js'
+import { openUrlInBrowserPanel } from './services/browser/state.js'
 import { loadDesktopSettings } from './services/settings.js'
 import { ensureKatex } from './services/markdown/katex.js'
+import '@fontsource-variable/google-sans-flex'
 import './app/theme.css'
 import './app/global.css'
 
 ensureKatex()
 setupTheme()
 if (isDesktopApp) {
-  openExternalLinksInBrowser()
+  openExternalLinksInBrowser((url) => {
+    void openUrlInBrowserPanel(url, { initiator: 'user' })
+  })
 }
 
 const render = () =>

@@ -1,13 +1,21 @@
 import clsx from 'clsx'
-import { memo, useCallback, useEffect, useLayoutEffect, useRef } from 'react'
+import { memo, useCallback, useEffect, useRef } from 'react'
 import {
+  IconBrowserOutline14,
+  IconCodeOutline14,
   IconGlobeLanguageOutline14,
-  IconPaperclipOutline16,
   IconSendOutline16,
   IconStopFill16,
-  IconThinkOutline14,
+  IconThinkOutline16,
 } from '../base/icons.js'
-import { setSearch, setThinking, useSettings } from '../../services/settings.js'
+import { isDesktopApp } from '../../platform/desktop.js'
+import {
+  setBrowser,
+  setPython,
+  setSearch,
+  setThinking,
+  useSettings,
+} from '../../services/settings.js'
 import { useIsMobile } from '../../app/viewport.js'
 import { sendMessage, stopReply, useChatStore } from '../../services/chat/store.js'
 import {
@@ -21,9 +29,8 @@ import {
   useDrafts,
 } from '../../services/chat/drafts.js'
 import { stopReadAloud } from '../../services/speech/readAloud.js'
-import { IconButton } from '../base/IconButton.js'
-import { Tooltip } from '../base/Tooltip.js'
 import { ensureApiKey } from '../settings/settingsDialogState.js'
+import { ComposerMenu, isUploadShortcut, type ComposerToolSwitch } from './ComposerMenu.js'
 import { DragMask, useFileDrop } from './DragMask.js'
 import { showToast } from '../base/toastState.js'
 import { ACCEPT, useUploads } from '../../services/attachments.js'
@@ -35,12 +42,6 @@ import { useTranslate } from '../../i18n/index.js'
 import styles from './ChatInput.module.css'
 
 /** 输入框：自适应高度的文本框 + 文件 + 深度思考与智能搜索开关 + 语音输入 + 发送 / 停止 */
-/** 空状态的示例问题填入后，把焦点交给同一个输入框（框架无关的小桥接，避免把 ref 提到上层） */
-let focusComposer: (() => void) | null = null
-
-/** 聚焦新对话的输入框 */
-export const focusChatComposer = () => focusComposer?.()
-
 export const ChatInput = memo(function ChatInput({ sessionId }: { sessionId: string | null }) {
   // 切换目标时释放录音、转写和 DOM 状态；文字与附件由草稿服务保留。
   return <Input key={sessionId === null ? 'new' : `session:${sessionId}`} sessionId={sessionId} />
@@ -59,32 +60,16 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
   const importingHistory = useChatStore((state) => state.importingHistory)
   const isMobile = useIsMobile()
   const search = useSettings((state) => state.search)
+  const python = useSettings((state) => state.python)
+  const browser = useSettings((state) => state.browser)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-  useEffect(() => {
-    focusComposer = () => textareaRef.current?.focus({ preventScroll: true })
-    return () => {
-      focusComposer = null
+
+  const openFilePicker = useCallback(() => {
+    if (!useChatStore.getState().importingHistory && ensureApiKey()) {
+      fileInputRef.current?.click()
     }
   }, [])
-  const togglesRef = useRef<HTMLDivElement>(null)
-
-  useLayoutEffect(() => {
-    const toggles = togglesRef.current
-    if (!toggles) {
-      return
-    }
-
-    const updateLabels = () => {
-      toggles.classList.remove(styles.collapsedToggles)
-      toggles.classList.toggle(styles.collapsedToggles, toggles.scrollWidth > toggles.clientWidth)
-    }
-
-    updateLabels()
-    const observer = new ResizeObserver(updateLabels)
-    observer.observe(toggles)
-    return () => observer.disconnect()
-  }, [t])
 
   const acceptFiles = (files: File[]) => {
     if (files.length === 0 || useChatStore.getState().importingHistory || !ensureApiKey()) {
@@ -164,12 +149,53 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
     }
   }
 
+  const composerTools: ComposerToolSwitch[] = [
+    {
+      key: 'thinking',
+      label: t('thinkingSwitch'),
+      icon: <IconThinkOutline16 />,
+      checked: thinking,
+      onToggle: () => setThinking(!thinking),
+    },
+    {
+      key: 'search',
+      label: t('search'),
+      icon: <IconGlobeLanguageOutline14 />,
+      checked: search,
+      onToggle: () => setSearch(!search),
+    },
+    {
+      key: 'python',
+      label: t('runCode'),
+      icon: <IconCodeOutline14 />,
+      checked: python,
+      onToggle: () => setPython(!python),
+    },
+    ...(isDesktopApp
+      ? [
+          {
+            key: 'browser',
+            label: t('browserSwitch'),
+            icon: <IconBrowserOutline14 />,
+            checked: browser,
+            onToggle: () => setBrowser(!browser),
+          },
+        ]
+      : []),
+  ]
+
   return (
     <div
       className={clsx(styles.wrapper, sessionId === null ? styles.home : styles.session)}
       onClick={(event) => {
         if (event.target === event.currentTarget) {
           textareaRef.current?.focus({ preventScroll: true })
+        }
+      }}
+      onKeyDown={(event) => {
+        if (isUploadShortcut(event.nativeEvent)) {
+          event.preventDefault()
+          openFilePicker()
         }
       }}
     >
@@ -212,33 +238,22 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
         </div>
       </div>
       <div className={styles.functionRow}>
-        {/* 深度思考 / 智能搜索开关，tooltip 在按钮上方 */}
-        <div ref={togglesRef} className={styles.toggles}>
-          <Tooltip content={t('deactivatedThinkTooltip')}>
-            <button
-              type="button"
-              className={clsx(styles.toggle, thinking && styles.selected)}
-              aria-label={t('thinkingSwitch')}
-              aria-pressed={thinking}
-              onClick={() => setThinking(!thinking)}
-            >
-              <IconThinkOutline14 />
-              <span className={styles.toggleLabel}>{t('thinkingSwitch')}</span>
-            </button>
-          </Tooltip>
-          <Tooltip content={t('deactivatedSearchTooltip')}>
-            <button
-              type="button"
-              className={clsx(styles.toggle, search && styles.selected)}
-              aria-label={t('search')}
-              aria-pressed={search}
-              onClick={() => setSearch(!search)}
-            >
-              <IconGlobeLanguageOutline14 />
-              <span className={styles.toggleLabel}>{t('search')}</span>
-            </button>
-          </Tooltip>
-        </div>
+        <ComposerMenu
+          tools={composerTools}
+          disabled={importingHistory}
+          onUploadFiles={openFilePicker}
+        />
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          hidden
+          accept={ACCEPT}
+          onChange={(event) => {
+            acceptFiles(Array.from(event.target.files ?? []))
+            event.target.value = ''
+          }}
+        />
         <div className={styles.right}>
           <VoiceButton
             status={voice.status}
@@ -251,25 +266,6 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
               ) {
                 void voice.toggle()
               }
-            }}
-          />
-          <IconButton
-            size="m"
-            tone="primary"
-            icon={<IconPaperclipOutline16 />}
-            tooltip={t('uploadFile')}
-            disabled={importingHistory}
-            onClick={() => ensureApiKey() && fileInputRef.current?.click()}
-          />
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            hidden
-            accept={ACCEPT}
-            onChange={(event) => {
-              acceptFiles(Array.from(event.target.files ?? []))
-              event.target.value = ''
             }}
           />
           {streaming && sessionId ? (

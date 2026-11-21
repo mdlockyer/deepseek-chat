@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { isDesktopApp } from '../../platform/desktop.js'
 import { createId } from '../../utils/id.js'
 import { ApiError, streamMessage, uploadFile } from '../api/client.js'
 import {
@@ -9,6 +10,29 @@ import {
   scrapeWithFirecrawl,
   searchWithFirecrawl,
 } from '../api/firecrawl.js'
+import {
+  clearAllSessionBrowsers,
+  disposeSessionBrowser,
+  setActiveBrowserSession,
+} from '../browser/state.js'
+import {
+  clearAllSessionPreviews,
+  disposeSessionPreview,
+  revealPresentedFile,
+} from '../preview/state.js'
+import {
+  PREVIEW_TOOLS,
+  PREVIEW_TOOL_INSTRUCTIONS,
+  PREVIEW_TOOL_NAMES,
+  runPreviewTool,
+} from '../preview/tools.js'
+import { makeArtifactKey, normalizeWorkspacePath } from '../preview/workspace.js'
+import {
+  BROWSER_TOOLS,
+  BROWSER_TOOL_INSTRUCTIONS,
+  BROWSER_TOOL_NAMES,
+  runBrowserTool,
+} from '../browser/tools.js'
 import {
   PYTHON_TOOL,
   PYTHON_TOOL_NAME,
@@ -58,7 +82,7 @@ const MODEL: ChatModel = 'deepseek-flash'
 /** 所有生成请求统一携带的助手身份说明 */
 const SYSTEM_PROMPT = '该助手为DeepSeek，由深度求索公司创造。'
 const WEB_TOOL_INSTRUCTIONS =
-  '\n\nYou have live web tools (`web_search` and `web_scrape`) powered by Firecrawl. Use `web_search` when current information or verification is needed, and `web_scrape` to read full pages or user-provided URLs. When citing `web_search` results in your final answer, cite them inline using `[citation:1]`, `[citation:2]`, etc. matching the 1-based result numbers returned by `web_search`.'
+  'You have live web tools (`web_search` and `web_scrape`) powered by Firecrawl. Use `web_search` when current information or verification is needed, and `web_scrape` to read full pages or user-provided URLs. When citing `web_search` results in your final answer, cite them inline using `[citation:1]`, `[citation:2]`, etc. matching the 1-based result numbers returned by `web_search`.'
 /** 保留最近打开的详情；当前会话、生成中及尚未成功保存的会话不淘汰。 */
 const SESSION_CACHE_LIMIT = 5
 /** 安全审核固定开启，所有请求都走扩展模式 */
@@ -71,24 +95,29 @@ const FILE_RETRY_BASE_DELAY = 1000
 const hasHttpUrl = (text: string) => /https?:\/\/\S+/i.test(text)
 
 /**
- * 联网搜索与网页读取改为客户端 Firecrawl 工具（支持无密钥免费额度与用户自备密钥）：
+ * 联网搜索、网页读取、Python 与内置浏览器工具均由客户端工具声明：
  * - 开启智能搜索时声明 web_search 与 web_scrape；
  * - 未开启搜索但本轮提问包含网页链接时声明 web_scrape；
- * - 开启深度思考时声明 python 工具。
+ * - 开启运行代码开关时声明 python 工具；
+ * - 桌面端开启浏览器开关时声明 browser_* 工具。
  */
 const declaredTools = (
   search: boolean,
-  thinking: boolean,
+  python: boolean,
+  browser: boolean,
   questionText: string
 ): CreateMessageRequest['tools'] => {
-  const tools: CreateMessageRequest['tools'] = []
+  const tools: CreateMessageRequest['tools'] = [...PREVIEW_TOOLS]
   if (search) {
     tools.push(FIRECRAWL_SEARCH_TOOL, FIRECRAWL_SCRAPE_TOOL)
   } else if (hasHttpUrl(questionText)) {
     tools.push(FIRECRAWL_SCRAPE_TOOL)
   }
-  if (thinking) {
+  if (python) {
     tools.push(PYTHON_TOOL)
+  }
+  if (browser && isDesktopApp) {
+    tools.push(...BROWSER_TOOLS)
   }
   return tools
 }
@@ -109,7 +138,7 @@ const dataUrlToFile = (dataUrl: string, name: string): File => {
 const NETWORK_RETRY_LIMIT = 2
 
 /** 一条回复内最多的工具往返次数，防止模型无限调用 */
-const TOOL_ROUND_LIMIT = 25
+const TOOL_ROUND_LIMIT = 50
 
 /** 本轮回复里还没有结果的客户端工具调用 */
 const pendingToolCalls = (reply: AssistantMessage) => {
@@ -318,9 +347,9 @@ export const bindChatPersistence = () => {
   }
 }
 
-/** 按当前开关创建回复：深度思考对应 thinking，智能搜索控制 deepseek_web_search。 */
+/** 按当前开关创建回复：深度思考、联网搜索、运行代码与内置浏览器各自独立记录。 */
 const createReply = (): AssistantMessage => {
-  const { thinking, search } = useSettings.getState()
+  const { thinking, search, python, browser } = useSettings.getState()
   return {
     id: createId(),
     role: 'assistant',
@@ -328,6 +357,8 @@ const createReply = (): AssistantMessage => {
     model: MODEL,
     thinking,
     search,
+    python,
+    browser: isDesktopApp && browser,
     prefix: true,
     status: 'pending',
     blocks: [],
@@ -470,6 +501,8 @@ export const replaceHistory = async (write: () => Promise<void>): Promise<number
     sessionLoads.clear()
     await waitForIdle()
     resetPythonKernel(false)
+    void clearAllSessionBrowsers()
+    clearAllSessionPreviews()
     await db.clearStaging()
     let summaries: SessionSummary[]
     try {
@@ -509,6 +542,7 @@ export const replaceHistory = async (write: () => Promise<void>): Promise<number
 export const newChat = () => {
   if (!get().importingHistory) {
     set({ activeId: null })
+    setActiveBrowserSession(null)
     trimSessionCache()
   }
 }
@@ -517,6 +551,7 @@ export const selectSession = (id: string) => {
   if (!get().importingHistory && get().sessions.some((session) => session.id === id)) {
     touchSession(id)
     set({ activeId: id })
+    setActiveBrowserSession(id)
     void ensureSessionLoaded(id)
     trimSessionCache()
   }
@@ -570,6 +605,8 @@ const removeSessionData = async (id: string): Promise<boolean> => {
       return false
     }
     await db.deleteSession(id)
+    void disposeSessionBrowser(id)
+    disposeSessionPreview(id)
     if (epoch !== historyEpoch) {
       return true
     }
@@ -647,6 +684,7 @@ export const sendMessage = (targetSessionId: string | null) => {
       sessionCache: { ...state.sessionCache, [session.id]: session },
       activeId: session.id,
     }))
+    setActiveBrowserSession(session.id)
   }
   const current = getSession(sessionId)
   if (!current) {
@@ -774,7 +812,7 @@ export const continueReply = (sessionId: string, messageId: string) => {
   ) {
     return
   }
-  const { thinking, search } = useSettings.getState()
+  const { thinking, search, python, browser } = useSettings.getState()
   // 工具往返中断的回复：去掉结果之后的半截内容，从最后一个工具结果接着请求，不作为续写前缀。
   const resume = canResumeToolLoop(previous)
   const base = resume ? trimAfterLastToolResult(previous) : previous
@@ -784,6 +822,8 @@ export const continueReply = (sessionId: string, messageId: string) => {
     model: previous.model ?? MODEL,
     thinking: previous.thinking ?? thinking,
     search: previous.search ?? search,
+    python: previous.python ?? previous.thinking ?? python,
+    browser: previous.browser ?? (isDesktopApp && browser),
     status: 'pending',
     stopReason: undefined,
     stopDetails: undefined,
@@ -1239,6 +1279,74 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
         continue
       }
 
+      if (BROWSER_TOOL_NAMES.has(call.name)) {
+        const outcome = await runBrowserTool(call.name, call.input, controller.signal, sessionId)
+        reply = {
+          ...reply,
+          blocks: reply.blocks.map((block) =>
+            block.type === 'tool_result' && block.tool_use_id === call.id
+              ? {
+                  ...block,
+                  content: outcome.text,
+                  status: outcome.status,
+                  ...(outcome.images.length > 0 ? { images: outcome.images } : {}),
+                  durationMs: outcome.durationMs,
+                  browserAction: outcome.meta,
+                }
+              : block
+          ),
+        }
+        flush()
+        if (controller.signal.aborted) {
+          return
+        }
+        continue
+      }
+
+      if (PREVIEW_TOOL_NAMES.has(call.name)) {
+        const currentSession = getSession(sessionId)
+        const visibleMessages = currentSession
+          ? getVisibleMessages(currentSession).map((msg) => (msg.id === reply.id ? reply : msg))
+          : [...request.history, request.question, reply]
+        const outcome = await runPreviewTool(call.name, call.input, {
+          messages: visibleMessages,
+          loadFile: db.loadFile,
+        })
+        let presented: PresentedFileRef[] = []
+        if (outcome.file) {
+          try {
+            await db.saveFiles([{ id: outcome.file.ref.id, blob: outcome.file.blob }])
+            presented = [outcome.file.ref]
+            revealPresentedFile(sessionId, outcome.file.artifactKey, {
+              openPanel: get().activeId === sessionId,
+            })
+          } catch {
+            outcome.text +=
+              '\n[Saving the file in the browser failed, so the user cannot preview or download it.]'
+          }
+        }
+        reply = {
+          ...reply,
+          blocks: reply.blocks.map((block) =>
+            block.type === 'tool_result' && block.tool_use_id === call.id
+              ? {
+                  ...block,
+                  content: outcome.text,
+                  status: outcome.status,
+                  durationMs: outcome.durationMs,
+                  fileAction: outcome.fileAction,
+                  ...(presented.length ? { files: presented } : {}),
+                }
+              : block
+          ),
+        }
+        flush()
+        if (controller.signal.aborted) {
+          return
+        }
+        continue
+      }
+
       const code =
         call.input && typeof (call.input as { code?: unknown }).code === 'string'
           ? (call.input as { code: string }).code
@@ -1274,7 +1382,36 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
                   }
                   flush()
                 },
-                sessionId
+                sessionId,
+                (() => {
+                  const currentSession = getSession(sessionId)
+                  const visibleMessages = currentSession
+                    ? getVisibleMessages(currentSession)
+                    : [...request.history, request.question]
+                  const seen = new Set<string>()
+                  const list: {
+                    id: string
+                    name: string
+                    loadBlob: () => Promise<Blob | undefined>
+                  }[] = []
+                  for (const msg of visibleMessages) {
+                    if (msg.role !== 'user') {
+                      continue
+                    }
+                    for (const file of msg.files) {
+                      if (seen.has(file.id)) {
+                        continue
+                      }
+                      seen.add(file.id)
+                      list.push({
+                        id: file.id,
+                        name: file.name,
+                        loadBlob: () => db.loadFile(file.id),
+                      })
+                    }
+                  }
+                  return list
+                })()
               )
       // 下载文件先落盘到 IndexedDB，回复里只保存引用；保存失败时告诉模型。
       let presented: PresentedFileRef[] = []
@@ -1289,9 +1426,17 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
           presented = stored.map(({ id, file }) => ({
             id,
             name: file.name,
+            path: normalizeWorkspacePath(file.name) || file.name,
             size: file.data.byteLength,
             mimeType: file.mimeType,
+            source: 'python',
           }))
+          const lastFile = presented.at(-1)
+          if (lastFile) {
+            revealPresentedFile(sessionId, makeArtifactKey(lastFile.path ?? lastFile.name), {
+              openPanel: get().activeId === sessionId,
+            })
+          }
         } catch {
           outcome.text +=
             '\n[Saving the files in the browser failed, so the user cannot download them.]'
@@ -1331,7 +1476,7 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
           if (toolRound >= TOOL_ROUND_LIMIT) {
             reply = settleReply(reply, 'error', Date.now(), {
               kind: 'protocol',
-              message: `Stopped after ${TOOL_ROUND_LIMIT} rounds of Python calls in one reply.`,
+              message: `Stopped after ${TOOL_ROUND_LIMIT} rounds of tool calls in one reply.`,
             })
             break
           }
@@ -1357,9 +1502,12 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
         if (toolRound > 0) {
           await uploadToolImages()
         }
+        const pythonEnabled = initial.python ?? initial.thinking ?? false
+        const browserEnabled = initial.browser ?? false
         const tools = declaredTools(
           initial.search ?? false,
-          initial.thinking ?? false,
+          pythonEnabled,
+          browserEnabled,
           prepared.question.content
         )
         const declaredClientNames = new Set(
@@ -1368,6 +1516,18 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
         const hasWebTool =
           declaredClientNames.has(FIRECRAWL_SEARCH_TOOL_NAME) ||
           declaredClientNames.has(FIRECRAWL_SCRAPE_TOOL_NAME)
+        const hasBrowserTool = BROWSER_TOOLS.some((tool) => declaredClientNames.has(tool.name))
+        const hasPreviewTool = PREVIEW_TOOLS.some((tool) => declaredClientNames.has(tool.name))
+        const systemParts = [SYSTEM_PROMPT]
+        if (hasPreviewTool) {
+          systemParts.push(PREVIEW_TOOL_INSTRUCTIONS)
+        }
+        if (hasWebTool) {
+          systemParts.push(WEB_TOOL_INSTRUCTIONS)
+        }
+        if (hasBrowserTool) {
+          systemParts.push(BROWSER_TOOL_INSTRUCTIONS)
+        }
         // 工具往返中的后续请求不再带续写前缀，本轮内容整体接在提问之后。
         const messages = toRequestMessages(
           prepared.history,
@@ -1382,7 +1542,7 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
           useSettings.getState().apiKey ?? '',
           {
             model: initial.model ?? MODEL,
-            system: hasWebTool ? `${SYSTEM_PROMPT}${WEB_TOOL_INSTRUCTIONS}` : SYSTEM_PROMPT,
+            system: systemParts.join('\n\n'),
             messages,
             thinking: { type: initial.thinking ? 'enabled' : 'disabled' },
             ...(initial.thinking || tools.length === 0 ? { safety_check: SAFETY_CHECK } : {}),

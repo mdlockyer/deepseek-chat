@@ -17,10 +17,11 @@
     "desktop:build": "tauri build",
     "tauri": "tauri",
     "pyodide:fetch": "node scripts/fetch-pyodide.mjs",
-    "dev:desktop": "pnpm pyodide:fetch && PYODIDE_LOCAL=1 pnpm dev",
-    "build:desktop": "pnpm pyodide:fetch && PYODIDE_LOCAL=1 pnpm build"
+    "dev:desktop": "pnpm dev",
+    "build:desktop": "pnpm build"
   },
   "dependencies": {
+    "@fontsource-variable/google-sans-flex": "^5.3.2",
     "@tauri-apps/api": "^2.12.4",
     "@tauri-apps/plugin-http": "^2.9.0",
     "@tauri-apps/plugin-opener": "^2.7.3",

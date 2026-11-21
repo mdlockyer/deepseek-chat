@@ -2,6 +2,7 @@ import clsx from 'clsx'
 import { useEffect, useId, useRef, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslate } from '../../i18n/index.js'
+import { acquireBrowserOverlayLock } from '../../services/browser/state.js'
 import { IconCloseOutline16 } from './icons.js'
 import { IconButton } from './IconButton.js'
 import styles from './Modal.module.css'
@@ -39,6 +40,7 @@ export const Modal = ({
   useEffect(() => {
     const token = {}
     openModals.push(token)
+    const releaseBrowserLock = acquireBrowserOverlayLock()
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape' && openModals.at(-1) === token) {
         onCloseRef.current()
@@ -46,6 +48,7 @@ export const Modal = ({
     }
     document.addEventListener('keydown', onKeyDown)
     return () => {
+      releaseBrowserLock()
       openModals.splice(openModals.indexOf(token), 1)
       document.removeEventListener('keydown', onKeyDown)
     }

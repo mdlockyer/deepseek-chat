@@ -330,7 +330,7 @@ const toToolResultText = (block: ToolResult, attached: number): string => {
     return block.content
   }
   if (attached === 0) {
-    return `${block.content}\n[The ${count} ${plural(count, 'image is', 'images are')} no longer attached; call show() again to see ${plural(count, 'it', 'them')}.]`
+    return `${block.content}\n[The ${count} ${plural(count, 'image is', 'images are')} no longer attached; re-run show() or browser_observe with screenshot=true to see ${plural(count, 'it', 'them')}.]`
   }
   const failed = count - attached
   return `${block.content}\n[${attached} ${plural(attached, 'image', 'images')} from this call ${plural(attached, 'follows', 'follow')} the tool results${failed ? `; ${failed} could not be uploaded` : ''}.]`

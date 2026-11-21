@@ -8,12 +8,27 @@
 .header {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   flex-shrink: 0;
   /* 52px 让标题中心落在 26px，与新对话时的品牌行、交通灯同一水平线 */
   height: 52px;
-  padding: 0 18px;
+  padding: 0 14px 0 18px;
   box-sizing: border-box;
   background: var(--dsw-alias-bg-base);
+}
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.browserButtonActive {
+  color: var(--dsw-alias-brand-text);
+  background: var(--dsw-alias-button-ghost-active-fill);
 }
 
 .title {

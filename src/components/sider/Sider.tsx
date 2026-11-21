@@ -1,6 +1,7 @@
 import clsx from 'clsx'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslate } from '../../i18n/index.js'
+import { acquireBrowserOverlayLock } from '../../services/browser/state.js'
 import { IconPanelLeftOutline16, IconSettingsOutline16, NewChatIcon } from '../base/icons.js'
 import { setSiderCollapsed } from '../../services/settings.js'
 import { groupSessions } from '../../services/chat/sessionGroups.js'
@@ -181,6 +182,7 @@ export const Sider = ({
 export const MobileSider = () => {
   const open = useMobileSider((state) => state.open)
   const { mounted, exiting } = usePresence(open, PANEL_DURATION_MS)
+  useEffect(() => (mounted ? acquireBrowserOverlayLock() : undefined), [mounted])
   if (!mounted) {
     return null
   }

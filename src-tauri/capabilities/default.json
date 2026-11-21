@@ -1,8 +1,8 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Permissions for the main window: core APIs, HTTP requests to the DeepSeek and Firecrawl APIs only, and opening http(s)/mailto/tel links in the default browser.",
-  "windows": ["main"],
+  "description": "Permissions for the main UI webview only (isolated from built-in browser child webviews): core APIs, HTTP requests to DeepSeek and Firecrawl APIs only, and opening external links in the default browser.",
+  "webviews": ["main"],
   "permissions": [
     "core:default",
     "core:window:allow-start-dragging",

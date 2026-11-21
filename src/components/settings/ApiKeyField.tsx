@@ -211,7 +211,13 @@ export const ApiKeyField = ({ editor }: { editor: ApiKeyEditor }) => {
           <div className={styles.label}>{t('apiKeyConsoleLabel')}</div>
           <div className={styles.description}>{t('apiKeyConsoleDescription')}</div>
         </div>
-        <a className={styles.linkButton} href={DEEPSEEK_KEYS_URL} target="_blank" rel="noreferrer">
+        <a
+          className={styles.linkButton}
+          href={DEEPSEEK_KEYS_URL}
+          target="_blank"
+          rel="noreferrer"
+          data-external-browser="true"
+        >
           <span>{t('apiKeyConsoleAction')}</span>
           <IconRightUpOutline14 />
         </a>
@@ -428,7 +434,13 @@ export const ApiKeyField = ({ editor }: { editor: ApiKeyEditor }) => {
           <div className={styles.label}>{t('firecrawlConsoleLabel')}</div>
           <div className={styles.description}>{t('firecrawlConsoleDescription')}</div>
         </div>
-        <a className={styles.linkButton} href={FIRECRAWL_KEYS_URL} target="_blank" rel="noreferrer">
+        <a
+          className={styles.linkButton}
+          href={FIRECRAWL_KEYS_URL}
+          target="_blank"
+          rel="noreferrer"
+          data-external-browser="true"
+        >
           <span>{t('apiKeyConsoleAction')}</span>
           <IconRightUpOutline14 />
         </a>

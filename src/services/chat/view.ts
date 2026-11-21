@@ -1,5 +1,7 @@
 import { translate } from '../../i18n/index.js'
 import { FIRECRAWL_SCRAPE_TOOL_NAME, FIRECRAWL_SEARCH_TOOL_NAME } from '../api/firecrawl.js'
+import { BROWSER_TOOL_NAMES } from '../browser/tools.js'
+import { EDIT_FILE_TOOL_NAME, PREVIEW_TOOL_NAMES, READ_FILE_TOOL_NAME } from '../preview/tools.js'
 import type {
   ServerToolKind,
   TextCitation,
@@ -7,7 +9,7 @@ import type {
   WebSearchResult,
   WebSearchToolResultBlock,
 } from '../api/types.js'
-import type { AssistantMessage, ThinkingPart, ToolResultPart } from './types.js'
+import type { AssistantMessage, PresentedFileRef, ThinkingPart, ToolResultPart } from './types.js'
 
 /**
  * 由回复的内容块推导界面需要的结构：思考与工具步骤的时间线、带引用角标的正文、可引用的来源列表。
@@ -75,6 +77,44 @@ export type PythonStep = {
   result: ToolResultPart | null
 }
 
+export type BrowserActionItem = {
+  id: string
+  tool: string
+  summary: string
+  url?: string
+  title?: string | null
+  images?: string[]
+  status: ToolStatus
+  durationMs?: number
+  output?: string
+}
+
+export type BrowserStep = {
+  type: 'browser'
+  key: string
+  actions: BrowserActionItem[]
+  status: ToolStatus
+}
+
+export type FileActionItem = {
+  id: string
+  tool: 'present_file' | 'edit_file' | 'read_file'
+  path: string
+  title?: string
+  version?: number
+  files?: PresentedFileRef[]
+  status: ToolStatus
+  durationMs?: number
+  error?: string
+}
+
+export type FileStep = {
+  type: 'file'
+  key: string
+  actions: FileActionItem[]
+  status: ToolStatus
+}
+
 export type Step =
   | SearchStep
   | OpenStep
@@ -83,6 +123,8 @@ export type Step =
   | ThinkingStep
   | PreambleStep
   | PythonStep
+  | BrowserStep
+  | FileStep
 
 export type ReplyView = {
   steps: Step[]
@@ -148,7 +190,19 @@ const getPartialStringField = (input: unknown, inputJson: string | undefined, ke
   try {
     return getStringField(JSON.parse(inputJson) as unknown, key)
   } catch {
-    return ''
+    const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const match = new RegExp(`(?:^|[{,])\\s*"${escaped}"\\s*:\\s*"((?:\\\\.|[^"\\\\])*)"`).exec(
+      inputJson
+    )
+    if (!match) {
+      return ''
+    }
+    try {
+      const decoded: unknown = JSON.parse(`"${match[1]}"`)
+      return typeof decoded === 'string' ? decoded : ''
+    } catch {
+      return ''
+    }
   }
 }
 const mergeStatus = (statuses: ToolStatus[]): ToolStatus =>
@@ -373,6 +427,93 @@ export const buildReplyView = (reply: AssistantMessage, streaming: boolean): Rep
         }
         return
       }
+      if (BROWSER_TOOL_NAMES.has(block.name)) {
+        const status = getClientToolStatus(toolResult, streaming)
+        const meta = toolResult?.browserAction
+        const url =
+          meta?.url ?? (getPartialStringField(block.input, block.inputJson, 'url') || undefined)
+        const fallbackSummary = (() => {
+          switch (block.name) {
+            case 'browser_navigate':
+              return url ? `Opening ${url}` : 'Navigating browser'
+            case 'browser_observe':
+              return 'Reading page'
+            case 'browser_click':
+              return 'Clicking element'
+            case 'browser_type':
+              return 'Typing text'
+            case 'browser_press_key':
+              return 'Pressing key'
+            case 'browser_scroll':
+              return 'Scrolling page'
+            case 'browser_select':
+              return 'Selecting option'
+            case 'browser_wait':
+              return 'Waiting for page'
+            case 'browser_eval':
+              return 'Running page script'
+            case 'browser_tabs':
+              return 'Managing tabs'
+            case 'browser_set_viewport':
+              return 'Setting viewport'
+            default:
+              return block.name
+          }
+        })()
+        const item: BrowserActionItem = {
+          id: block.id,
+          tool: block.name,
+          summary: meta?.summary ?? fallbackSummary,
+          url,
+          title: meta?.title,
+          images: toolResult?.images,
+          status,
+          durationMs: toolResult?.durationMs,
+          output: toolResult?.status === 'error' ? toolResult.content : undefined,
+        }
+        const last = steps.at(-1)
+        if (last?.type === 'browser') {
+          last.actions.push(item)
+          last.status = mergeStatus([last.status, status])
+        } else {
+          steps.push({ type: 'browser', key: block.id, actions: [item], status })
+        }
+        return
+      }
+      if (PREVIEW_TOOL_NAMES.has(block.name)) {
+        const status = getClientToolStatus(toolResult, streaming)
+        const meta = toolResult?.fileAction
+        const toolKind =
+          meta?.tool ??
+          (block.name === EDIT_FILE_TOOL_NAME
+            ? 'edit_file'
+            : block.name === READ_FILE_TOOL_NAME
+              ? 'read_file'
+              : 'present_file')
+        const path =
+          meta?.path || getPartialStringField(block.input, block.inputJson, 'path') || 'file'
+        const title =
+          meta?.title || getPartialStringField(block.input, block.inputJson, 'title') || undefined
+        const item: FileActionItem = {
+          id: block.id,
+          tool: toolKind,
+          path,
+          ...(title ? { title } : {}),
+          ...(meta?.version !== undefined ? { version: meta.version } : {}),
+          ...(toolResult?.files?.length ? { files: toolResult.files } : {}),
+          status,
+          durationMs: toolResult?.durationMs,
+          ...(toolResult?.status === 'error' ? { error: toolResult.content } : {}),
+        }
+        const last = steps.at(-1)
+        if (last?.type === 'file') {
+          last.actions.push(item)
+          last.status = mergeStatus([last.status, status])
+        } else {
+          steps.push({ type: 'file', key: block.id, actions: [item], status })
+        }
+        return
+      }
       const input = block.input as { code?: unknown } | null
       steps.push({
         type: 'python',
@@ -534,6 +675,20 @@ export const getAreaTitle = (
   }
   if (last?.type === 'python' && (!last.result || last.result.status === 'running')) {
     return translate('pythonRunning')
+  }
+  if (last?.type === 'browser' && last.status === 'wip') {
+    return translate('groupTitleToolOpen')
+  }
+  if (last?.type === 'file' && last.status === 'wip') {
+    const lastAction = last.actions.at(-1)
+    const name = lastAction?.title || lastAction?.path || ''
+    if (lastAction?.tool === 'edit_file') {
+      return translate('previewToolEditing', { name })
+    }
+    if (lastAction?.tool === 'read_file') {
+      return translate('previewToolReading', { name })
+    }
+    return translate('previewToolPresenting', { name })
   }
   return translate('messageThinking')
 }

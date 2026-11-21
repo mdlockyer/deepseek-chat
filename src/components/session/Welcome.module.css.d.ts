@@ -6,8 +6,6 @@ declare const styles: {
   readonly brandName: string
   readonly welcome: string
   readonly greeting: string
-  readonly starters: string
-  readonly starter: string
   readonly caveat: string
 }
 export = styles

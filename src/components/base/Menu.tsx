@@ -1,6 +1,7 @@
 import clsx from 'clsx'
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
+import { acquireBrowserOverlayLock } from '../../services/browser/state.js'
 import { useAnchoredPosition, useDismiss } from './anchored.js'
 import { usePresence } from '../../utils/usePresence.js'
 import styles from './Menu.module.css'
@@ -31,6 +32,7 @@ export const Menu = ({
     { align: 'start', alignOffset: -5, offset: 4 }
   )
   useDismiss(open, [anchorRef, floatingRef], close)
+  useEffect(() => (mounted ? acquireBrowserOverlayLock() : undefined), [mounted])
 
   return (
     <>

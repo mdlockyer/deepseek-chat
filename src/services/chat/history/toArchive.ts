@@ -1,5 +1,13 @@
 import { FIRECRAWL_SCRAPE_TOOL_NAME, FIRECRAWL_SEARCH_TOOL_NAME } from '../../api/firecrawl.js'
 import type { ServerToolUseBlock } from '../../api/types.js'
+import { BROWSER_TOOL_NAMES } from '../../browser/tools.js'
+import { getCodeLanguage } from '../../preview/fileKinds.js'
+import {
+  EDIT_FILE_TOOL_NAME,
+  PRESENT_FILE_TOOL_NAME,
+  PREVIEW_TOOL_NAMES,
+  READ_FILE_TOOL_NAME,
+} from '../../preview/tools.js'
 import { getVisibleMessages, normalizeSession } from '../branches.js'
 import { describeReply } from '../describe.js'
 import type {
@@ -198,6 +206,8 @@ const assistantFragments = (message: AssistantMessage): Fragment[] => {
   const results = new Map<string, ReplyBlock>()
   const clientResults = new Map<string, ToolResultPart>()
   const webToolIds = new Set<string>()
+  const browserToolIds = new Set<string>()
+  const previewToolIds = new Set<string>()
   for (const block of blocks) {
     if (block.type === 'web_search_tool_result' || block.type === 'web_fetch_tool_result') {
       results.set(block.tool_use_id, block)
@@ -208,6 +218,10 @@ const assistantFragments = (message: AssistantMessage): Fragment[] => {
       (block.name === FIRECRAWL_SEARCH_TOOL_NAME || block.name === FIRECRAWL_SCRAPE_TOOL_NAME)
     ) {
       webToolIds.add(block.id)
+    } else if (block.type === 'tool_use' && BROWSER_TOOL_NAMES.has(block.name)) {
+      browserToolIds.add(block.id)
+    } else if (block.type === 'tool_use' && PREVIEW_TOOL_NAMES.has(block.name)) {
+      previewToolIds.add(block.id)
     }
   }
   const usedWeb = blocks.some((block) => block.type === 'server_tool_use') || webToolIds.size > 0
@@ -245,6 +259,59 @@ const assistantFragments = (message: AssistantMessage): Fragment[] => {
         separateNextText = false
         continue
       }
+      if (BROWSER_TOOL_NAMES.has(block.name)) {
+        const toolResult = clientResults.get(block.id)
+        const summary = toolResult?.browserAction?.summary ?? block.name
+        const url = toolResult?.browserAction?.url
+        if (block.name === 'browser_navigate' && url && url.startsWith('http')) {
+          const status =
+            !toolResult || toolResult.status === 'running'
+              ? 'WIP'
+              : toolResult.status === 'ok'
+                ? 'FINISHED'
+                : 'FAILED'
+          fragments.push({
+            type: 'TOOL_OPEN',
+            status,
+            url,
+            title: toolResult?.browserAction?.title ?? null,
+            snippet: status === 'FINISHED' ? '' : null,
+            site_name: null,
+            published_at: null,
+          })
+          response = undefined
+          separateNextText = false
+        } else {
+          appendResponse(fence('text', `[${summary}]${url ? ` (${url})` : ''}`), true)
+          separateNextText = true
+        }
+        continue
+      }
+      if (PREVIEW_TOOL_NAMES.has(block.name)) {
+        const toolResult = clientResults.get(block.id)
+        const input =
+          block.input && typeof block.input === 'object'
+            ? (block.input as { path?: unknown; content?: unknown; title?: unknown })
+            : null
+        const path =
+          toolResult?.fileAction?.path ?? (typeof input?.path === 'string' ? input.path : 'file')
+        if (block.name === PRESENT_FILE_TOOL_NAME && typeof input?.content === 'string') {
+          const lang = getCodeLanguage(path, '')
+          const title =
+            typeof input.title === 'string' && input.title.trim() ? input.title.trim() : path
+          appendResponse(`**${title}**`, true)
+          appendResponse(fence(lang === 'text' ? '' : lang, input.content), true)
+          separateNextText = true
+        } else if (block.name === EDIT_FILE_TOOL_NAME) {
+          const version = toolResult?.fileAction?.version
+          appendResponse(fence('text', `[Updated ${path}${version ? ` (v${version})` : ''}]`), true)
+          separateNextText = true
+        } else if (block.name === READ_FILE_TOOL_NAME) {
+          appendResponse(fence('text', `[Read ${path}]`), true)
+          separateNextText = true
+        }
+        continue
+      }
       const input = block.input as { code?: unknown } | null
       const code = typeof input?.code === 'string' ? input.code : (block.inputJson ?? '')
       if (code.trim()) {
@@ -254,7 +321,11 @@ const assistantFragments = (message: AssistantMessage): Fragment[] => {
       continue
     }
     if (block.type === 'tool_result') {
-      if (webToolIds.has(block.tool_use_id)) {
+      if (
+        webToolIds.has(block.tool_use_id) ||
+        browserToolIds.has(block.tool_use_id) ||
+        previewToolIds.has(block.tool_use_id)
+      ) {
         continue
       }
       if (block.status !== 'running' && block.content.trim()) {

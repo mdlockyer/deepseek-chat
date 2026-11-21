@@ -1,0 +1,192 @@
+.tabSpinner {
+  width: 11px;
+  height: 11px;
+  box-sizing: border-box;
+  border-radius: 50%;
+  border: 1.5px solid var(--dsw-alias-border-l3);
+  border-top-color: var(--dsw-alias-brand-primary);
+  animation: browser-spin 0.75s linear infinite;
+}
+
+@keyframes browser-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.navGroup {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 2px;
+}
+
+.omniboxForm {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 72px;
+  height: 30px;
+  padding: 0 10px;
+  gap: 6px;
+  box-sizing: border-box;
+  border-radius: 10px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-specific-input-major);
+  transition: border-color var(--ds-transition-duration) var(--ds-ease-in-out);
+
+  &:focus-within {
+    border-color: var(--dsw-alias-brand-primary);
+  }
+}
+
+.omniboxIcon {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.omniboxInput {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 13px;
+  line-height: 20px;
+
+  &::placeholder {
+    color: var(--dsw-alias-label-placeholder);
+  }
+}
+
+.loadProgress {
+  position: absolute;
+  right: 8px;
+  bottom: -1px;
+  left: 8px;
+  height: 2px;
+  border-radius: 1px;
+  overflow: hidden;
+
+  &::after {
+    content: '';
+    display: block;
+    width: 42%;
+    height: 100%;
+    background: var(--dsw-alias-brand-primary);
+    animation: browser-progress 1.1s ease-in-out infinite;
+  }
+}
+
+@keyframes browser-progress {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(340%);
+  }
+}
+
+.agentPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  max-width: 210px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 10px;
+  border: 1px solid var(--dsw-alias-button-ghost-active-border);
+  background: var(--dsw-alias-button-ghost-active-fill);
+  color: var(--dsw-alias-brand-text);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color var(--ds-transition-duration) var(--ds-ease-in-out);
+
+  &:hover {
+    background: var(--dsw-alias-button-ghost-active-hover);
+  }
+}
+
+.agentDot {
+  width: 6px;
+  height: 6px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--dsw-alias-brand-primary);
+  animation: agent-pulse 1.3s ease-in-out infinite;
+}
+
+@keyframes agent-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.45;
+    transform: scale(0.8);
+  }
+}
+
+.agentLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.agentStop {
+  flex-shrink: 0;
+  padding-left: 4px;
+  border-left: 1px solid var(--dsw-alias-button-ghost-active-border);
+}
+
+@container (max-width: 459px) {
+  .agentPill {
+    max-width: 144px;
+  }
+}
+
+.viewport {
+  position: absolute;
+  inset: 0;
+}
+
+.snapshotFallback {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  object-fit: cover;
+  object-position: top left;
+  pointer-events: none;
+}
+
+.snapshotFallbackFit {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.emptyViewportTag {
+  margin-top: 2px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}

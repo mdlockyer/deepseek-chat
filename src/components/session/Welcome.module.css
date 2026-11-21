@@ -13,8 +13,9 @@
   display: flex;
   align-items: center;
   gap: 7px;
+  box-sizing: border-box;
   height: 52px;
-  padding: 0 0 0 30px;
+  padding: 0 14px 0 30px;
   /* 侧边栏开合时品牌与面板同步滑动，而不是跳位 */
   transition: padding-left var(--ds-transition-duration-panel) var(--ds-ease-panel);
 }
@@ -72,44 +73,6 @@
   color: var(--dsw-alias-label-primary);
 }
 
-/* 示例问题：告诉用户这个应用能做什么，点一下填入输入框 */
-.starters {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 8px;
-  margin-top: 16px;
-}
-
-.starter {
-  box-sizing: border-box;
-  height: 34px;
-  padding: 0 14px;
-  border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: 100px;
-  background: transparent;
-  color: var(--dsw-alias-label-secondary);
-  font: inherit;
-  font-size: 13px;
-  line-height: 20px;
-  white-space: nowrap;
-  cursor: pointer;
-  outline: none;
-  transition:
-    background-color var(--ds-transition-duration) var(--ds-ease-in-out),
-    border-color var(--ds-transition-duration) var(--ds-ease-in-out);
-
-  &:hover {
-    border-color: var(--dsw-alias-border-l3);
-    background-color: var(--dsw-alias-interactive-bg-hover);
-    color: var(--dsw-alias-label-primary);
-  }
-
-  &:focus-visible {
-    box-shadow: 0 0 0 2px var(--dsw-alias-button-primary-fill);
-  }
-}
-
 @media (max-width: 439px) {
   .greeting {
     font-size: 20px;
@@ -135,11 +98,6 @@
   .greeting {
     flex-shrink: 0;
     margin: auto 0;
-  }
-
-  .starters {
-    flex-shrink: 0;
-    margin-bottom: 12px;
   }
 
   .caveat {

@@ -4,6 +4,13 @@ import { useTranslate } from '../../i18n/index.js'
 import { useUploads } from '../../services/attachments.js'
 import { loadFile } from '../../services/chat/db.js'
 import type { FileAttachment } from '../../services/chat/types.js'
+import {
+  EMPTY_SESSION_PREVIEW_STATE,
+  openPreviewFile,
+  usePreviewStore,
+} from '../../services/preview/state.js'
+import { makeUploadPreviewKey } from '../../services/preview/workspace.js'
+import { getActiveRightPanel, useSidePanelStore } from '../../services/sidePanel/state.js'
 import { IconPhotoErrorFill20, IconRefreshOutline16 } from '../base/icons.js'
 import { Tooltip } from '../base/Tooltip.js'
 import { FileCard } from '../files/FileCard.js'
@@ -48,9 +55,11 @@ const useUploadState = (file: FileAttachment) =>
  * - 文件：显示文件卡片。
  */
 export const MessageFile = ({
+  sessionId,
   file,
   onRetry,
 }: {
+  sessionId: string
   file: FileAttachment
   /** 本条消息补传失败且可重试时提供 */
   onRetry: (() => void) | null
@@ -63,8 +72,18 @@ export const MessageFile = ({
   const failed = upload?.status === 'error'
   const retryable = failed && upload.retryable
   const errorText = failed ? t(upload.error.key, upload.error.params) : undefined
+  const previewKey = makeUploadPreviewKey(file.id)
+  const activePanel = useSidePanelStore((state) => getActiveRightPanel(sessionId, state))
+  const isPreviewOpen = usePreviewStore((state) => {
+    const sess = Object.hasOwn(state.sessions, sessionId)
+      ? state.sessions[sessionId]
+      : EMPTY_SESSION_PREVIEW_STATE
+    return activePanel === 'preview' && sess.activeKey === previewKey
+  })
 
   const retry = retryable ? onRetry : null
+  const openInPreview =
+    url && !upload ? () => openPreviewFile(sessionId, previewKey, file.id, true) : undefined
 
   if (file.isImage && url !== null) {
     const preview = url ? (
@@ -134,17 +153,17 @@ export const MessageFile = ({
       )
     }
 
-    // 正常态：链接到原件
+    // 正常态：点击在文件预览面板打开
     return url ? (
-      <a
+      <button
+        type="button"
         className={clsx(styles.image, styles.imageThumb)}
-        href={url}
-        target="_blank"
-        rel="noreferrer"
         title={file.name}
+        aria-label={`${t('previewActionView')}: ${file.name}`}
+        onClick={openInPreview}
       >
         {preview}
-      </a>
+      </button>
     ) : (
       // 原件还没加载出来（极短暂）
       <div className={styles.image} />
@@ -157,8 +176,9 @@ export const MessageFile = ({
       size={file.size}
       status={uploading ? 'uploading' : failed ? 'error' : 'done'}
       error={errorText}
+      active={isPreviewOpen}
       onRetry={retry ?? undefined}
-      onOpen={url && !upload ? () => window.open(url, '_blank', 'noreferrer') : undefined}
+      onOpen={openInPreview}
     />
   )
 }

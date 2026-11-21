@@ -19,6 +19,12 @@
 //! - Links that would open a new browser window (`target="_blank"`) open in the
 //!   default browser through `tauri-plugin-opener`; the webview ignores them.
 
+mod browser;
+mod preview;
+mod python;
+mod python_runtime;
+mod python_sandbox;
+
 use std::path::{Path, PathBuf};
 
 use percent_encoding::percent_decode_str;
@@ -93,7 +99,11 @@ fn write_key_file(path: &Path, key: Option<&str>) -> Result<(), String> {
 /// release builds do not lose access across rebuilds due to macOS Keychain ACLs.
 /// If no local file exists yet, migrates any readable legacy Keychain entry.
 #[tauri::command]
-async fn get_api_key(app: tauri::AppHandle) -> Result<Option<String>, String> {
+async fn get_api_key(
+    app: tauri::AppHandle,
+    webview: tauri::Webview,
+) -> Result<Option<String>, String> {
+    browser::ensure_main_webview(&webview)?;
     let path = api_key_path(&app)?;
     tauri::async_runtime::spawn_blocking(move || {
         if let Some(stored) = read_key_file(&path)? {
@@ -124,7 +134,12 @@ async fn get_api_key(app: tauri::AppHandle) -> Result<Option<String>, String> {
 
 /// Stores the API key; `None` or an empty string clears it.
 #[tauri::command]
-async fn set_api_key(app: tauri::AppHandle, key: Option<String>) -> Result<(), String> {
+async fn set_api_key(
+    app: tauri::AppHandle,
+    webview: tauri::Webview,
+    key: Option<String>,
+) -> Result<(), String> {
+    browser::ensure_main_webview(&webview)?;
     let path = api_key_path(&app)?;
     tauri::async_runtime::spawn_blocking(move || {
         let cleaned = key
@@ -139,7 +154,11 @@ async fn set_api_key(app: tauri::AppHandle, key: Option<String>) -> Result<(), S
 
 /// Returns the stored Firecrawl API key, or `None` when none has been saved.
 #[tauri::command]
-async fn get_firecrawl_api_key(app: tauri::AppHandle) -> Result<Option<String>, String> {
+async fn get_firecrawl_api_key(
+    app: tauri::AppHandle,
+    webview: tauri::Webview,
+) -> Result<Option<String>, String> {
+    browser::ensure_main_webview(&webview)?;
     let path = key_file_path(&app, FIRECRAWL_API_KEY_FILE_NAME)?;
     tauri::async_runtime::spawn_blocking(move || {
         Ok(read_key_file(&path)?.filter(|stored| !stored.is_empty()))
@@ -150,7 +169,12 @@ async fn get_firecrawl_api_key(app: tauri::AppHandle) -> Result<Option<String>, 
 
 /// Stores the Firecrawl API key; `None` or an empty string clears it.
 #[tauri::command]
-async fn set_firecrawl_api_key(app: tauri::AppHandle, key: Option<String>) -> Result<(), String> {
+async fn set_firecrawl_api_key(
+    app: tauri::AppHandle,
+    webview: tauri::Webview,
+    key: Option<String>,
+) -> Result<(), String> {
+    browser::ensure_main_webview(&webview)?;
     let path = key_file_path(&app, FIRECRAWL_API_KEY_FILE_NAME)?;
     tauri::async_runtime::spawn_blocking(move || {
         let cleaned = key
@@ -169,7 +193,12 @@ async fn set_firecrawl_api_key(app: tauri::AppHandle, key: Option<String>) -> Re
 /// `x-file-name` header, percent-encoded because header values must be ASCII.
 /// Returns `false` when the user cancels the dialog.
 #[tauri::command]
-async fn save_file(app: tauri::AppHandle, request: Request<'_>) -> Result<bool, String> {
+async fn save_file(
+    app: tauri::AppHandle,
+    webview: tauri::Webview,
+    request: Request<'_>,
+) -> Result<bool, String> {
+    browser::ensure_main_webview(&webview)?;
     let InvokeBody::Raw(bytes) = request.body() else {
         return Err("save_file expects the file bytes as a raw request body".into());
     };
@@ -222,6 +251,10 @@ fn build_macos_menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<t
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = tauri::Builder::default()
+        .manage(browser::BrowserState::default())
+        .manage(preview::PreviewState::default())
+        .manage(python::PythonState::default())
+        .register_uri_scheme_protocol("ds-preview", preview::handle_protocol)
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_opener::init())
@@ -230,7 +263,33 @@ pub fn run() {
             set_api_key,
             get_firecrawl_api_key,
             set_firecrawl_api_key,
-            save_file
+            save_file,
+            browser::browser_set_options,
+            browser::browser_create_tab,
+            browser::browser_close_tab,
+            browser::browser_set_active_tab,
+            browser::browser_set_bounds,
+            browser::browser_set_zoom,
+            browser::browser_set_visible,
+            browser::browser_navigate,
+            browser::browser_history,
+            browser::browser_get_state,
+            browser::browser_eval_js,
+            browser::browser_take_snapshot,
+            browser::browser_clear_data,
+            browser::browser_open_devtools,
+            preview::preview_set_content,
+            preview::preview_set_bounds,
+            preview::preview_set_visible,
+            preview::preview_reload,
+            preview::preview_take_snapshot,
+            preview::preview_open_devtools,
+            python::python_run,
+            python::python_interrupt,
+            python::python_reset,
+            python::python_stage_upload,
+            python::python_runtime_status,
+            python::python_runtime_reset
         ]);
 
     #[cfg(target_os = "macos")]

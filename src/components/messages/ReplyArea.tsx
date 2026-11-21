@@ -3,12 +3,12 @@ import clsx from 'clsx'
 import { memo, useEffect, useState, type ReactNode } from 'react'
 import {
   IconBrowseOutline16,
+  IconBrowserOutline14,
   IconBrowseWarningOutline16,
   IconChevronDownOutline14,
   IconChevronRightOutline14,
   IconCheckedOutline14,
   IconCloseFill14,
-  IconDownloadOutline16,
   IconLinkOutline16,
   IconRightUpOutline14,
   IconSearchOutline16,
@@ -16,13 +16,29 @@ import {
   IconThinkOutline16,
 } from '../base/icons.js'
 import { isDesktopApp, saveFileWithDialog } from '../../platform/desktop.js'
+import { openUrlInBrowserPanel } from '../../services/browser/state.js'
+import { formatSize, getExtension } from '../../services/attachments.js'
+import { getVisibleMessages } from '../../services/chat/branches.js'
 import { loadFile } from '../../services/chat/db.js'
+import { useChatStore } from '../../services/chat/store.js'
 import type { AssistantMessage, PresentedFileRef } from '../../services/chat/types.js'
-import { formatBytes } from '../../services/python/kernel.js'
+import {
+  EMPTY_SESSION_PREVIEW_STATE,
+  openPreviewFile,
+  usePreviewStore,
+} from '../../services/preview/state.js'
+import {
+  collectWorkspaceArtifacts,
+  makeArtifactKey,
+  normalizeWorkspacePath,
+} from '../../services/preview/workspace.js'
+import { getActiveRightPanel, useSidePanelStore } from '../../services/sidePanel/state.js'
 import {
   getAreaTitle,
   isDeepSearchKind,
   isImageSearchKind,
+  type BrowserStep,
+  type FileStep,
   type FindStep,
   type OpenStep,
   type PageItem,
@@ -34,6 +50,7 @@ import {
   type Step,
 } from '../../services/chat/view.js'
 import { Tooltip } from '../base/Tooltip.js'
+import { FileCard } from '../files/FileCard.js'
 import { Markdown } from '../markdown/Markdown.js'
 import { SiteThumbnails } from '../search/SiteLogo.js'
 import { toggleSearchPanel, useSearchPanel } from '../search/searchPanelState.js'
@@ -59,11 +76,13 @@ const useTicker = (active: boolean, interval: number) => {
  * 未开启时只有工具步骤（如普通搜索的「已阅读 N 个网页」）。
  */
 export const ReplyArea = memo(function ReplyArea({
+  sessionId,
   message,
   view,
   streaming,
   hasResponse,
 }: {
+  sessionId: string
   message: AssistantMessage
   view: ReplyView
   streaming: boolean
@@ -96,6 +115,7 @@ export const ReplyArea = memo(function ReplyArea({
           {view.steps.map((step, index) => (
             <StepItem
               key={stepKey(step, index)}
+              sessionId={sessionId}
               step={step}
               message={message}
               sources={view.sources}
@@ -113,17 +133,21 @@ const stepKey = (step: Step, index: number) =>
   step.type === 'thinking' ||
   step.type === 'text' ||
   step.type === 'search' ||
-  step.type === 'python'
+  step.type === 'python' ||
+  step.type === 'browser' ||
+  step.type === 'file'
     ? step.key
     : `${step.type}-${index}`
 
 const StepItem = ({
+  sessionId,
   step,
   message,
   sources,
   streaming,
   isLast,
 }: {
+  sessionId: string
   step: Step
   message: AssistantMessage
   sources: Source[]
@@ -167,7 +191,19 @@ const StepItem = ({
     case 'read_link':
       return <ReadLinkRow step={step} isLast={isLast} />
     case 'python':
-      return <PythonRow step={step} message={message} streaming={streaming} isLast={isLast} />
+      return (
+        <PythonRow
+          sessionId={sessionId}
+          step={step}
+          message={message}
+          streaming={streaming}
+          isLast={isLast}
+        />
+      )
+    case 'browser':
+      return <BrowserRow step={step} isLast={isLast} />
+    case 'file':
+      return <FileRow sessionId={sessionId} step={step} isLast={isLast} />
     default:
       return null
   }
@@ -407,13 +443,199 @@ const fence = (lang: string, body: string) => {
   return `${marks}${lang}\n${body}\n${marks}`
 }
 
+/** 内置浏览器操作时间线：折叠展示步数与状态，展开显示动作记录、页面链接与截图 */
+const BrowserRow = ({ step, isLast }: { step: BrowserStep; isLast: boolean }) => {
+  const t = useTranslate()
+  const [open, setOpen] = useState(false)
+  const running = step.status === 'wip'
+  const lastAction = step.actions.at(-1)
+  const totalMs = step.actions.reduce((acc, item) => acc + (item.durationMs ?? 0), 0)
+  const label = running
+    ? lastAction?.summary || t('browserStepRunning')
+    : step.actions.length === 1
+      ? t('browserStepOne')
+      : t('browserStepMany', { count: step.actions.length })
+  const seconds = !running && totalMs > 0 ? ` · ${(totalMs / 1000).toFixed(1)}s` : ''
+  const screenshots = step.actions.flatMap((action) => action.images ?? [])
+
+  return (
+    <ToolRow icon={<IconBrowserOutline14 />} isLast={isLast}>
+      <div style={{ width: '100%', minWidth: 0 }}>
+        <span
+          className={styles.intro}
+          style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+          onClick={() => setOpen((value) => !value)}
+        >
+          <span className={clsx(running && styles.shimmer)}>
+            {label}
+            {seconds}
+          </span>
+          {open ? <IconChevronDownOutline14 /> : <IconChevronRightOutline14 />}
+        </span>
+        {open ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6 }}>
+            {step.actions.map((action, index) => (
+              <div
+                key={action.id}
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 2,
+                  fontSize: 13,
+                  lineHeight: '18px',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                  <span style={{ opacity: 0.6 }}>{index + 1}.</span>
+                  <span>{action.summary}</span>
+                  {action.url && /^https?:\/\//i.test(action.url)
+                    ? (() => {
+                        const targetUrl = action.url
+                        return (
+                          <a
+                            href={targetUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            style={{
+                              color: 'var(--dsw-alias-brand-text)',
+                              textDecoration: 'underline',
+                              textDecorationStyle: 'dotted',
+                              maxWidth: '100%',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                            }}
+                            onClick={(event) => {
+                              if (isDesktopApp) {
+                                event.preventDefault()
+                                void openUrlInBrowserPanel(targetUrl, { initiator: 'user' })
+                              }
+                            }}
+                          >
+                            {action.title || targetUrl}
+                          </a>
+                        )
+                      })()
+                    : null}
+                </div>
+                {action.output ? (
+                  <div style={{ color: 'var(--dsw-alias-label-danger)', paddingLeft: 16 }}>
+                    {action.output}
+                  </div>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        ) : null}
+        {screenshots.map((src, index) => (
+          <img
+            key={index}
+            src={src}
+            alt=""
+            style={{
+              display: 'block',
+              maxWidth: '100%',
+              maxHeight: 280,
+              marginTop: 8,
+              borderRadius: 8,
+              border: '1px solid var(--dsw-alias-border-l2)',
+            }}
+          />
+        ))}
+      </div>
+    </ToolRow>
+  )
+}
+
+/** 文件呈现与编辑步骤：展示状态与可直接点击预览/保存的文件卡片 */
+const FileRow = ({
+  sessionId,
+  step,
+  isLast,
+}: {
+  sessionId: string
+  step: FileStep
+  isLast: boolean
+}) => {
+  const t = useTranslate()
+  const [open, setOpen] = useState(false)
+  const running = step.status === 'wip'
+  const lastAction = step.actions.at(-1)
+  const describeItem = (action: FileStep['actions'][number]) => {
+    const name = action.title || action.path
+    if (action.status === 'wip') {
+      return action.tool === 'edit_file'
+        ? t('previewToolEditing', { name })
+        : action.tool === 'read_file'
+          ? t('previewToolReading', { name })
+          : t('previewToolPresenting', { name })
+    }
+    if (action.tool === 'edit_file') {
+      return t('previewToolEdit', { name, version: action.version ?? 2 })
+    }
+    if (action.tool === 'read_file') {
+      return t('previewToolRead', { name })
+    }
+    return t('previewToolPresent', { name })
+  }
+  const files = step.actions.flatMap((action) => action.files ?? [])
+  const errors = step.actions.filter((action) => action.error)
+  const summaryLabel = lastAction ? describeItem(lastAction) : t('previewPanelTitle')
+
+  return (
+    <ToolRow icon={<IconBrowseOutline16 />} isLast={isLast}>
+      <div style={{ width: '100%', minWidth: 0 }}>
+        {step.actions.length > 1 ? (
+          <span
+            className={styles.intro}
+            style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+            onClick={() => setOpen((value) => !value)}
+          >
+            <span className={clsx(running && styles.shimmer)}>{summaryLabel}</span>
+            {open ? <IconChevronDownOutline14 /> : <IconChevronRightOutline14 />}
+          </span>
+        ) : (
+          <span className={clsx(styles.intro, running && styles.shimmer)}>{summaryLabel}</span>
+        )}
+        {open && step.actions.length > 1 ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4 }}>
+            {step.actions.map((action, index) => (
+              <div key={action.id} style={{ fontSize: 13, lineHeight: '18px' }}>
+                <span style={{ opacity: 0.6 }}>{index + 1}. </span>
+                <span>{describeItem(action)}</span>
+              </div>
+            ))}
+          </div>
+        ) : null}
+        {errors.map((action) => (
+          <div
+            key={action.id}
+            style={{ color: 'var(--dsw-alias-label-danger)', fontSize: 13, marginTop: 4 }}
+          >
+            {action.error}
+          </div>
+        ))}
+        {files.length > 0 ? (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
+            {files.map((file) => (
+              <PresentedFileCard key={file.id} sessionId={sessionId} file={file} />
+            ))}
+          </div>
+        ) : null}
+      </div>
+    </ToolRow>
+  )
+}
+
 /** 浏览器内 Python：标题行显示状态与用时，点击展开代码、输出与图像 */
 const PythonRow = ({
+  sessionId,
   step,
   message,
   streaming,
   isLast,
 }: {
+  sessionId: string
   step: PythonStep
   message: AssistantMessage
   streaming: boolean
@@ -426,9 +648,11 @@ const PythonRow = ({
   useTicker(running, 1000)
   const label =
     status === 'running'
-      ? step.result?.phase === 'starting'
-        ? t('pythonStarting')
-        : t('pythonRunning')
+      ? step.result?.phase === 'installing'
+        ? t('pythonInstalling')
+        : step.result?.phase === 'starting'
+          ? t('pythonStarting')
+          : t('pythonRunning')
       : status === 'error'
         ? t('pythonFailed')
         : status === 'aborted'
@@ -479,7 +703,7 @@ const PythonRow = ({
         {(step.result?.files ?? []).length > 0 ? (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
             {(step.result?.files ?? []).map((file) => (
-              <DownloadCard key={file.id} file={file} />
+              <PresentedFileCard key={file.id} sessionId={sessionId} file={file} />
             ))}
           </div>
         ) : null}
@@ -519,49 +743,58 @@ const downloadStoredFile = async (file: PresentedFileRef): Promise<boolean> => {
   return true
 }
 
-/** Python present_file() 交给用户的下载文件 */
-const DownloadCard = ({ file }: { file: PresentedFileRef }) => {
+/** 统一的可预览与下载文件卡片：点击在右侧文件面板预览，右侧按钮可直接保存 */
+const PresentedFileCard = ({ sessionId, file }: { sessionId: string; file: PresentedFileRef }) => {
   const t = useTranslate()
   const [missing, setMissing] = useState(false)
-  const label = missing ? t('pythonFileMissing') : t('pythonFileDownload')
+  const activePanel = useSidePanelStore((state) => getActiveRightPanel(sessionId, state))
+  const sessionPreview = usePreviewStore((state) =>
+    Object.hasOwn(state.sessions, sessionId)
+      ? state.sessions[sessionId]
+      : EMPTY_SESSION_PREVIEW_STATE
+  )
+  const session = useChatStore((state) =>
+    Object.hasOwn(state.sessionCache, sessionId) ? state.sessionCache[sessionId] : undefined
+  )
+  const path = normalizeWorkspacePath(file.path ?? file.name) || file.name
+  const key = makeArtifactKey(path)
+
+  const latestFileId = (() => {
+    if (!session) {
+      return file.id
+    }
+    const artifact = collectWorkspaceArtifacts(getVisibleMessages(session)).find(
+      (item) => item.key === key
+    )
+    return artifact?.latest.fileId ?? file.id
+  })()
+  const isLatest = latestFileId === file.id
+  const pinnedFileId = sessionPreview.selectedFileIdByKey[key]
+  const isOpen =
+    activePanel === 'preview' &&
+    sessionPreview.activeKey === key &&
+    (pinnedFileId ? pinnedFileId === file.id : isLatest)
+
+  const ext = getExtension(file.name)
+  const versionTag = file.version !== undefined && file.version > 1 ? `v${file.version}` : undefined
+  const subtitle = [ext, formatSize(file.size), versionTag].filter(Boolean).join(' · ')
+
   return (
-    <button
-      type="button"
-      disabled={missing}
-      title={label}
-      aria-label={`${label}: ${file.name}`}
-      onClick={() => {
+    <FileCard
+      name={file.name}
+      title={file.title}
+      size={file.size}
+      subtitle={missing ? t('pythonFileMissing') : subtitle}
+      status={missing ? 'error' : 'done'}
+      error={missing ? t('pythonFileMissing') : undefined}
+      active={isOpen}
+      onOpen={() => openPreviewFile(sessionId, key, file.id, isLatest)}
+      onDownload={() => {
         void downloadStoredFile(file).then(
           (ok) => setMissing(!ok),
           () => setMissing(true)
         )
       }}
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 8,
-        minHeight: 44,
-        maxWidth: '100%',
-        padding: '6px 12px',
-        border: '1px solid var(--dsw-alias-border-l3)',
-        borderRadius: 10,
-        background: 'transparent',
-        color: 'inherit',
-        font: 'inherit',
-        cursor: missing ? 'not-allowed' : 'pointer',
-        opacity: missing ? 0.6 : 1,
-        textAlign: 'left',
-      }}
-    >
-      <IconDownloadOutline16 />
-      <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {file.name}
-        </span>
-        <span style={{ fontSize: 12, opacity: 0.7 }}>
-          {missing ? t('pythonFileMissing') : formatBytes(file.size)}
-        </span>
-      </span>
-    </button>
+    />
   )
 }

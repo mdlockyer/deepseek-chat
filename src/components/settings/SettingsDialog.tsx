@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import {
   IconDarkOutline16,
   IconDataOutline16,
@@ -19,7 +19,15 @@ import {
 import { useChatStore } from '../../services/chat/store.js'
 import { regionCodes, getRegionName, provinces } from '../../services/location.js'
 import {
+  isDesktopApp,
+  pythonRuntimeReset,
+  pythonRuntimeStatus,
+  type ManagedPythonStatus,
+} from '../../platform/desktop.js'
+import { resetPythonKernel } from '../../services/python/kernel.js'
+import {
   isChineseBrowser,
+  setBrowserAllowLocalhost,
   setLocale,
   setLocation,
   setThemePreference,
@@ -109,6 +117,12 @@ const SettingsContent = ({ exiting = false }: { exiting?: boolean }) => {
               <LocaleSetting />
               <TtsVoiceSetting />
               <LocationSetting />
+              {isDesktopApp ? (
+                <>
+                  <BrowserLocalhostSetting />
+                  <PythonRuntimeSetting />
+                </>
+              ) : null}
             </>
           ) : section === 'apiKey' ? (
             <ApiKeyField editor={apiKeyEditor} />
@@ -301,6 +315,30 @@ const LocaleSetting = () => {
             { value: 'en-US', label: t('settingsLocaleEnUS'), lang: 'en' },
           ]}
           onChange={setLocale}
+        />
+      }
+    />
+  )
+}
+
+/** 内置浏览器是否允许模型访问 localhost / 内网地址 */
+const BrowserLocalhostSetting = () => {
+  const t = useTranslate()
+  const allow = useSettings((state) => state.browserAllowLocalhost)
+  return (
+    <SettingCell
+      label={t('browserAllowLocalhostLabel')}
+      description={t('browserAllowLocalhostDescription')}
+      status={null}
+      action={
+        <Select
+          ariaLabel={t('browserAllowLocalhostLabel')}
+          value={allow ? 'allow' : 'public'}
+          options={[
+            { value: 'public', label: t('browserAllowLocalhostOff') },
+            { value: 'allow', label: t('browserAllowLocalhostOn') },
+          ]}
+          onChange={(value) => setBrowserAllowLocalhost(value === 'allow')}
         />
       }
     />
@@ -571,6 +609,92 @@ const ExportHistory = ({ disabled }: { disabled: boolean }) => {
         >
           <IconDownloadOutline16 />
           {t('exportAllDownload')}
+        </Button>
+      }
+    />
+  )
+}
+
+/** 桌面端托管 Python 运行环境状态查看与重置 */
+const PythonRuntimeSetting = () => {
+  const t = useTranslate()
+  const [runtime, setRuntime] = useState<ManagedPythonStatus | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [resetting, setResetting] = useState(false)
+  const [status, setStatus] = useState<Status>(null)
+
+  useEffect(() => {
+    let active = true
+    void pythonRuntimeStatus()
+      .then((info) => {
+        if (active) {
+          setRuntime(info)
+        }
+      })
+      .catch((error: unknown) => {
+        if (active) {
+          setStatus({
+            key: 'settingsPythonRuntimeLoadFailed',
+            params: { message: error instanceof Error ? error.message : String(error) },
+            error: true,
+          })
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setLoading(false)
+        }
+      })
+    return () => {
+      active = false
+    }
+  }, [])
+
+  const onReset = async () => {
+    setResetting(true)
+    setStatus(null)
+    try {
+      await pythonRuntimeReset()
+      resetPythonKernel(false)
+      const next = await pythonRuntimeStatus()
+      setRuntime(next)
+      setStatus({ key: 'settingsPythonRuntimeResetDone' })
+    } catch (error) {
+      setStatus({
+        key: 'settingsPythonRuntimeResetFailed',
+        params: { message: error instanceof Error ? error.message : String(error) },
+        error: true,
+      })
+    } finally {
+      setResetting(false)
+    }
+  }
+
+  const description = loading
+    ? t('settingsPythonRuntimeChecking')
+    : runtime?.ready
+      ? t('settingsPythonRuntimeReady', {
+          version: runtime.version,
+          packages: runtime.packages.join(', '),
+        })
+      : runtime
+        ? t('settingsPythonRuntimeNotInstalled', { version: runtime.version })
+        : undefined
+
+  return (
+    <SettingCell
+      label={t('settingsPythonRuntime')}
+      description={description}
+      status={status}
+      action={
+        <Button
+          variant="outlined"
+          size="m"
+          className={styles.cellButton}
+          disabled={loading || resetting || !runtime?.ready}
+          onClick={() => void onReset()}
+        >
+          {t(resetting ? 'settingsPythonRuntimeResetting' : 'settingsPythonRuntimeReset')}
         </Button>
       }
     />

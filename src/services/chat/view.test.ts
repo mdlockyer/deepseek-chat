@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { buildReplyView } from './view.js'
+import { buildReplyView, getAreaTitle } from './view.js'
 import type { AssistantMessage } from './types.js'
 
 const replyWith = (blocks: AssistantMessage['blocks'], thinking = false): AssistantMessage => ({
@@ -112,5 +112,167 @@ describe('buildReplyView for Firecrawl client tools', () => {
     assert.equal(openStep.pages[0]?.title, 'Rate Limits | Firecrawl')
     assert.equal(openStep.pages[0]?.status, 'done')
     assert.match(view.answer?.markdown ?? '', /\[citation:1\]/)
+  })
+
+  it('groups consecutive browser_* tool calls into a BrowserStep with status and metadata', () => {
+    const view = buildReplyView(
+      replyWith([
+        {
+          type: 'tool_use',
+          id: 'b1',
+          name: 'browser_set_viewport',
+          input: { preset: 'desktop' },
+        },
+        {
+          type: 'tool_result',
+          tool_use_id: 'b1',
+          content: 'Viewport set to 1280x720',
+          status: 'ok',
+          durationMs: 90,
+          browserAction: {
+            tool: 'browser_set_viewport',
+            summary: 'Viewport 1280×720 (42%)',
+          },
+        },
+        {
+          type: 'tool_use',
+          id: 'b2',
+          name: 'browser_navigate',
+          input: { action: 'goto', url: 'https://example.com' },
+        },
+        {
+          type: 'tool_result',
+          tool_use_id: 'b2',
+          content: 'Navigated to https://example.com',
+          status: 'ok',
+          durationMs: 420,
+          browserAction: {
+            tool: 'browser_navigate',
+            summary: 'Opening example.com',
+            url: 'https://example.com',
+            title: 'Example Domain',
+          },
+        },
+        {
+          type: 'tool_use',
+          id: 'b3',
+          name: 'browser_click',
+          input: { ref: 'e1' },
+        },
+        {
+          type: 'tool_result',
+          tool_use_id: 'b3',
+          content: 'Clicked link',
+          status: 'ok',
+          durationMs: 280,
+          images: ['data:image/jpeg;base64,abc'],
+          browserAction: {
+            tool: 'browser_click',
+            summary: 'Clicking [e1]',
+            url: 'https://example.com/more',
+            title: 'More Info',
+          },
+        },
+        { type: 'text', text: 'Done browsing.' },
+      ]),
+      false
+    )
+
+    const browserSteps = view.steps.filter((step) => step.type === 'browser')
+    assert.equal(browserSteps.length, 1)
+    assert.equal(browserSteps[0].status, 'done')
+    assert.equal(browserSteps[0].actions.length, 3)
+    assert.equal(browserSteps[0].actions[0]?.summary, 'Viewport 1280×720 (42%)')
+    assert.equal(browserSteps[0].actions[1]?.summary, 'Opening example.com')
+    assert.equal(browserSteps[0].actions[2]?.images?.[0], 'data:image/jpeg;base64,abc')
+    assert.equal(view.answer?.text, 'Done browsing.')
+  })
+
+  it('groups consecutive present_file and edit_file calls into a FileStep and exposes live title', () => {
+    const streamingView = buildReplyView(
+      replyWith(
+        [
+          {
+            type: 'tool_use',
+            id: 'f1',
+            name: 'present_file',
+            input: {},
+            inputJson: '{"path":"chart.html","title":"Sales Chart"',
+          },
+        ],
+        true
+      ),
+      true
+    )
+
+    assert.equal(streamingView.steps.length, 1)
+    assert.equal(streamingView.steps[0]?.type, 'file')
+    assert.equal(streamingView.steps[0]?.status, 'wip')
+    assert.match(getAreaTitle(streamingView, true, 2_000, false), /Sales Chart/)
+
+    const doneView = buildReplyView(
+      replyWith([
+        {
+          type: 'tool_use',
+          id: 'f1',
+          name: 'present_file',
+          input: { path: 'chart.html', content: '<h1>1</h1>' },
+        },
+        {
+          type: 'tool_result',
+          tool_use_id: 'f1',
+          content: 'Presented chart.html',
+          status: 'ok',
+          durationMs: 12,
+          fileAction: { tool: 'present_file', path: 'chart.html', version: 1 },
+          files: [
+            {
+              id: 'blob-1',
+              name: 'chart.html',
+              path: 'chart.html',
+              size: 10,
+              mimeType: 'text/html',
+              version: 1,
+              source: 'model',
+            },
+          ],
+        },
+        {
+          type: 'tool_use',
+          id: 'f2',
+          name: 'edit_file',
+          input: { path: 'chart.html', edits: [] },
+        },
+        {
+          type: 'tool_result',
+          tool_use_id: 'f2',
+          content: 'Updated chart.html',
+          status: 'ok',
+          durationMs: 8,
+          fileAction: { tool: 'edit_file', path: 'chart.html', version: 2 },
+          files: [
+            {
+              id: 'blob-2',
+              name: 'chart.html',
+              path: 'chart.html',
+              size: 10,
+              mimeType: 'text/html',
+              version: 2,
+              source: 'model',
+            },
+          ],
+        },
+        { type: 'text', text: 'Chart is ready.' },
+      ]),
+      false
+    )
+
+    const fileSteps = doneView.steps.filter((s) => s.type === 'file')
+    assert.equal(fileSteps.length, 1)
+    assert.equal(fileSteps[0].status, 'done')
+    assert.equal(fileSteps[0].actions.length, 2)
+    assert.equal(fileSteps[0].actions[0]?.files?.[0]?.id, 'blob-1')
+    assert.equal(fileSteps[0].actions[1]?.version, 2)
+    assert.equal(doneView.answer?.text, 'Chart is ready.')
   })
 })

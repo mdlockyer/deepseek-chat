@@ -14,7 +14,7 @@ export type Locale = 'zh-CN' | 'en-US'
 /** 主题偏好；默认跟随系统 */
 export type ThemePreference = 'light' | 'dark' | 'system'
 
-/** 本机设置，存 localStorage：API Key、语言、主题、位置、朗读音色、深度思考与智能搜索开关、侧边栏收起状态 */
+/** 本机设置，存 localStorage：API Key、语言、主题、位置、朗读音色、深度思考、智能搜索、运行代码、内置浏览器与面板状态 */
 type Settings = {
   apiKey: string | null
   firecrawlApiKey: string | null
@@ -25,6 +25,10 @@ type Settings = {
   ttsVoice: TtsVoice
   thinking: boolean
   search: boolean
+  python: boolean
+  browser: boolean
+  browserPanelWidth: number
+  browserAllowLocalhost: boolean
   siderCollapsed: boolean
 }
 
@@ -37,6 +41,10 @@ const KEYS = {
   ttsVoice: 'chat-demo:tts-voice',
   thinking: 'chat-demo:thinking',
   search: 'chat-demo:search',
+  python: 'chat-demo:python',
+  browser: 'chat-demo:browser',
+  browserPanelWidth: 'chat-demo:browser-panel-width',
+  browserAllowLocalhost: 'chat-demo:browser-allow-localhost',
   siderCollapsed: 'chat-demo:sider-collapsed',
 } as const
 
@@ -97,6 +105,17 @@ const initialThemePreference = (): ThemePreference => {
 /** 未保存过时使用服务端默认音色 stella（海星） */
 const initialTtsVoice = (): TtsVoice => (read(KEYS.ttsVoice) === 'tide' ? 'tide' : 'stella')
 
+const DEFAULT_BROWSER_PANEL_WIDTH = 540
+const clampBrowserPanelWidth = (value: number) =>
+  Number.isFinite(value)
+    ? Math.min(Math.max(Math.round(value), 360), 1100)
+    : DEFAULT_BROWSER_PANEL_WIDTH
+
+const initialBrowserPanelWidth = (): number => {
+  const parsed = Number(read(KEYS.browserPanelWidth))
+  return parsed > 0 ? clampBrowserPanelWidth(parsed) : DEFAULT_BROWSER_PANEL_WIDTH
+}
+
 export const useSettings = create<Settings>(() => ({
   // 桌面版的 API Key 在原生端读取，启动时由 loadDesktopSettings 读入。
   apiKey: isDesktopApp ? null : read(KEYS.apiKey),
@@ -108,6 +127,10 @@ export const useSettings = create<Settings>(() => ({
   ttsVoice: initialTtsVoice(),
   thinking: read(KEYS.thinking) === 'true',
   search: read(KEYS.search) === 'true',
+  python: read(KEYS.python) === 'true',
+  browser: read(KEYS.browser) === 'true',
+  browserPanelWidth: initialBrowserPanelWidth(),
+  browserAllowLocalhost: read(KEYS.browserAllowLocalhost) === 'true',
   siderCollapsed: read(KEYS.siderCollapsed) === 'true',
 }))
 
@@ -198,6 +221,27 @@ export const setThinking = (thinking: boolean) => {
 export const setSearch = (search: boolean) => {
   write(KEYS.search, String(search))
   useSettings.setState({ search })
+}
+
+export const setPython = (python: boolean) => {
+  write(KEYS.python, String(python))
+  useSettings.setState({ python })
+}
+
+export const setBrowser = (browser: boolean) => {
+  write(KEYS.browser, String(browser))
+  useSettings.setState({ browser })
+}
+
+export const setBrowserPanelWidth = (width: number) => {
+  const clamped = clampBrowserPanelWidth(width)
+  write(KEYS.browserPanelWidth, String(clamped))
+  useSettings.setState({ browserPanelWidth: clamped })
+}
+
+export const setBrowserAllowLocalhost = (allow: boolean) => {
+  write(KEYS.browserAllowLocalhost, String(allow))
+  useSettings.setState({ browserAllowLocalhost: allow })
 }
 
 export const setSiderCollapsed = (siderCollapsed: boolean) => {
