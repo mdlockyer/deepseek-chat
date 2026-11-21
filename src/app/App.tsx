@@ -2,7 +2,7 @@ import { useLocale } from '@deepseek-chat/spine/i18n'
 import { useEffect } from 'react'
 import clsx from 'clsx'
 import { translate, useTranslate } from '../i18n/index.js'
-import { useSettings } from '../services/settings.js'
+import { useLayout } from './layout.js'
 import { useIsMobile, useMobileViewport, usePreventPageScroll } from './viewport.js'
 import {
   bindChatPersistence,
@@ -41,7 +41,7 @@ export const App = () => {
   const locale = useLocale()
   const desktopSettingsReady = account.useState().status === 'ready'
   // 移动端侧边栏以独立抽屉管理开合状态
-  const siderCollapsed = useSettings((state) => state.siderCollapsed) && !isMobile
+  const siderCollapsed = useLayout((state) => state.siderCollapsed) && !isMobile
   const ready = useChatStore((state) => state.ready)
   const initError = useChatStore((state) => state.initError)
   const saveError = useChatStore((state) => Object.values(state.sessionSaveErrors).some(Boolean))

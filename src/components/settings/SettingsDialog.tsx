@@ -1,11 +1,16 @@
 import clsx from 'clsx'
 import { useRef, useState, type ReactNode } from 'react'
 import {
+  Button,
   IconDataOutline16,
   IconDownloadOutline16,
   IconKeyOutline16,
   IconSettingsOutline16,
   IconUploadOutline14,
+  Modal,
+  Select,
+  settingStyles,
+  usePresence,
 } from '@deepseek-chat/spine/design'
 import {
   BackupError,
@@ -16,14 +21,10 @@ import {
 import { useChatStore } from '../../services/chat/store.js'
 import { account, preferences, python, voice, webResearch } from '../../app/composition.js'
 import { isDesktopApp } from '../../platform/desktop.js'
-import { setBrowserAllowLocalhost, useSettings } from '../../services/settings.js'
+import { setBrowserAllowLocalhost, useBrowserPrefs } from '../../services/browser/prefs.js'
 import { useTranslate, type TranslationKey, type TranslationMessage } from '../../i18n/index.js'
-import { Button } from '@deepseek-chat/spine/design'
-import { Modal } from '@deepseek-chat/spine/design'
-import { Select } from '@deepseek-chat/spine/design'
 import { showToast } from '../base/toastState.js'
 import { closeSettings, useSettingsDialog, type SettingsSection } from './settingsDialogState.js'
-import { usePresence } from '@deepseek-chat/spine/design'
 import styles from './Settings.module.css'
 
 /**
@@ -122,7 +123,7 @@ const SettingsContent = ({ exiting = false }: { exiting?: boolean }) => {
                   <Button
                     variant="dangerOutlined"
                     size="m"
-                    className={styles.cellButton}
+                    className={settingStyles.cellButton}
                     disabled={historyBusy}
                     onClick={historyDelete.open}
                   >
@@ -223,7 +224,7 @@ const useHistoryDelete = () => {
 /** 内置浏览器是否允许模型访问 localhost / 内网地址 */
 const BrowserLocalhostSetting = () => {
   const t = useTranslate()
-  const allow = useSettings((state) => state.browserAllowLocalhost)
+  const allow = useBrowserPrefs((state) => state.allowLocalhost)
   return (
     <SettingCell
       label={t('browserAllowLocalhostLabel')}
@@ -302,11 +303,11 @@ const SettingCell = ({
 }) => {
   const t = useTranslate()
   return (
-    <div className={clsx(styles.cell, styles.row, className)}>
-      <div className={styles.text}>
-        <div className={styles.label}>{label}</div>
+    <div className={clsx(settingStyles.cell, settingStyles.row, className)}>
+      <div className={settingStyles.text}>
+        <div className={settingStyles.label}>{label}</div>
         {status || description ? (
-          <div className={clsx(styles.description, status?.error && styles.error)}>
+          <div className={clsx(settingStyles.description, status?.error && settingStyles.error)}>
             {status
               ? t(status.key, status.reason ? { message: t(status.reason) } : status.params)
               : description}
@@ -368,7 +369,7 @@ const ImportHistory = ({
           <Button
             variant="outlined"
             size="m"
-            className={clsx(styles.cellButton, styles.uploadButton)}
+            className={clsx(settingStyles.cellButton, styles.uploadButton)}
             disabled={disabled}
             onClick={() => inputRef.current?.click()}
           >
@@ -428,7 +429,7 @@ const ExportHistory = ({ disabled }: { disabled: boolean }) => {
         <Button
           variant="outlined"
           size="m"
-          className={styles.cellButton}
+          className={settingStyles.cellButton}
           disabled={disabled || busy || empty}
           onClick={() => void onExport()}
         >

@@ -20,7 +20,7 @@ import {
   useBrowserStore,
 } from '../../services/browser/state.js'
 import { stopReply } from '../../services/chat/store.js'
-import { useSettings } from '../../services/settings.js'
+import { useBrowserPrefs } from '../../services/browser/prefs.js'
 import { useSidePanelStore } from '../../services/sidePanel/state.js'
 import type { BrowserStageFit } from '../../services/sidePanel/viewport.js'
 import { IconButton } from '@deepseek-chat/spine/design'
@@ -75,7 +75,7 @@ export const BrowserPanel = ({ topActions }: { topActions?: ReactNode } = {}) =>
   const controlling = useBrowserStore((state) => state.controlling)
   const controllingAction = useBrowserStore((state) => state.controllingAction)
   const controllingSessionId = useBrowserStore((state) => state.controllingSessionId)
-  const storedWidth = useSettings((state) => state.browserPanelWidth)
+  const storedWidth = useBrowserPrefs((state) => state.panelWidth)
   const hasLastSearch = useSearchPanel(
     (state) => state.lastEntry !== null && state.lastSources.length > 0
   )

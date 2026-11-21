@@ -14,8 +14,8 @@ import {
   setPython,
   setSearch,
   setThinking,
-  useSettings,
-} from '../../services/settings.js'
+  useComposerOptions,
+} from '../../services/chat/composerOptions.js'
 import { useIsMobile } from '../../app/viewport.js'
 import { sendMessage, stopReply, useChatStore } from '../../services/chat/store.js'
 import {
@@ -56,12 +56,12 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
   const streaming = useChatStore(
     (state) => sessionId !== null && Object.hasOwn(state.streaming, sessionId)
   )
-  const thinking = useSettings((state) => state.thinking)
+  const thinking = useComposerOptions((state) => state.thinking)
   const importingHistory = useChatStore((state) => state.importingHistory)
   const isMobile = useIsMobile()
-  const search = useSettings((state) => state.search)
-  const python = useSettings((state) => state.python)
-  const browser = useSettings((state) => state.browser)
+  const search = useComposerOptions((state) => state.search)
+  const python = useComposerOptions((state) => state.python)
+  const browser = useComposerOptions((state) => state.browser)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 

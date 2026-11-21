@@ -7,7 +7,7 @@ import {
   IconSettingsOutline16,
   NewChatIcon,
 } from '@deepseek-chat/spine/design'
-import { setSiderCollapsed } from '../../services/settings.js'
+import { setSiderCollapsed } from '../../app/layout.js'
 import { groupSessions } from '../../services/chat/sessionGroups.js'
 import { newChat, removeSession, useChatStore } from '../../services/chat/store.js'
 import type { SessionSummary } from '../../services/chat/types.js'

@@ -23,7 +23,7 @@ import {
 } from '../../platform/desktop.js'
 import { createId } from '../../utils/id.js'
 import { showToast } from '../../components/base/toastState.js'
-import { useSettings } from '../settings.js'
+import { useBrowserPrefs } from './prefs.js'
 import {
   acquireSidePanelOverlayLock,
   clampSidePanelResizeWidth,
@@ -300,10 +300,10 @@ export const bindBrowserEvents = () => {
     return () => {}
   }
   eventsBound = true
-  void browserSetOptions(useSettings.getState().browserAllowLocalhost).catch(() => {})
-  const unsubSettings = useSettings.subscribe((state, prev) => {
-    if (state.browserAllowLocalhost !== prev.browserAllowLocalhost) {
-      void browserSetOptions(state.browserAllowLocalhost).catch(() => {})
+  void browserSetOptions(useBrowserPrefs.getState().allowLocalhost).catch(() => {})
+  const unsubSettings = useBrowserPrefs.subscribe((state, prev) => {
+    if (state.allowLocalhost !== prev.allowLocalhost) {
+      void browserSetOptions(state.allowLocalhost).catch(() => {})
     }
   })
 

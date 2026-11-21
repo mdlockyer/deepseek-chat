@@ -6,7 +6,7 @@ import {
   previewSetVisible,
   previewTakeSnapshot,
 } from '../../../platform/desktop.js'
-import { useSettings } from '../../../services/settings.js'
+import { useBrowserPrefs } from '../../../services/browser/prefs.js'
 import {
   registerNativePreviewSnapshotTrigger,
   triggerNativePreviewSnapshot,
@@ -40,7 +40,7 @@ export const NativePreviewSurface = ({
   const panelAnimating = useSidePanelStore((state) => state.panelAnimating)
   const panelResizing = useSidePanelStore((state) => state.panelResizing)
   const overlayLocks = useSidePanelStore((state) => state.overlayLocks)
-  const storedWidth = useSettings((state) => state.browserPanelWidth)
+  const storedWidth = useBrowserPrefs((state) => state.panelWidth)
   const [stageFit, setStageFit] = useState<BrowserStageFit | null>(null)
   const [snapshot, setSnapshot] = useState<{
     dataUrl: string

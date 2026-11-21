@@ -38,7 +38,7 @@ import {
 import type { ChatModel, CreateMessageRequest } from '../api/types.js'
 import { extractFileIds, getFileErrorCode, isRetryableApiError } from '../api/errors.js'
 import { cancelUpload, describeUploadError, uploadAttachment, useUploads } from '../attachments.js'
-import { useSettings } from '../settings.js'
+import { useComposerOptions } from './composerOptions.js'
 import { appendBranch, getVisibleMessages, normalizeSession, selectVersion } from './branches.js'
 import * as db from './db.js'
 import {
@@ -334,7 +334,7 @@ export const bindChatPersistence = () => {
 
 /** 按当前开关创建回复：深度思考、联网搜索、运行代码与内置浏览器各自独立记录。 */
 const createReply = (): AssistantMessage => {
-  const { thinking, search, python, browser } = useSettings.getState()
+  const { thinking, search, python, browser } = useComposerOptions.getState()
   return {
     id: createId(),
     role: 'assistant',
@@ -795,7 +795,7 @@ export const continueReply = (sessionId: string, messageId: string) => {
   ) {
     return
   }
-  const { thinking, search, python, browser } = useSettings.getState()
+  const { thinking, search, python, browser } = useComposerOptions.getState()
   // 工具往返中断的回复：去掉结果之后的半截内容，从最后一个工具结果接着请求，不作为续写前缀。
   const resume = canResumeToolLoop(previous)
   const base = resume ? trimAfterLastToolResult(previous) : previous

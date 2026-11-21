@@ -1,6 +1,7 @@
 import clsx from 'clsx'
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
-import { setBrowserPanelWidth, setSiderCollapsed, useSettings } from '../../services/settings.js'
+import { setSiderCollapsed, useLayout } from '../../app/layout.js'
+import { setBrowserPanelWidth, useBrowserPrefs } from '../../services/browser/prefs.js'
 import {
   DEFAULT_SIDE_PANEL_WIDTH,
   clampSidePanelResizeWidth,
@@ -21,7 +22,7 @@ export const SidePanel = ({
   onResizeHoverStart?: () => void
   children: ReactNode
 }) => {
-  const storedWidth = useSettings((state) => state.browserPanelWidth)
+  const storedWidth = useBrowserPrefs((state) => state.panelWidth)
   const { mounted, exiting } = usePresence(open, PANEL_DURATION_MS)
   const panelRef = useRef<HTMLElement>(null)
   const dragCleanupRef = useRef<(() => void) | null>(null)
@@ -41,7 +42,7 @@ export const SidePanel = ({
     if (!open) {
       return
     }
-    const { siderCollapsed } = useSettings.getState()
+    const { siderCollapsed } = useLayout.getState()
     if (!siderCollapsed && window.innerWidth - storedWidth - 261 < 420) {
       setSiderCollapsed(true)
     }
