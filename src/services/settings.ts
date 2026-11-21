@@ -1,6 +1,5 @@
 import { create } from 'zustand'
 import { setLocale as setUiLocale, type Locale } from '@deepseek-chat/spine/i18n'
-import type { TtsVoice } from '@deepseek-chat/slice-voice'
 import { normalizeLocation, type UserLocation } from './location.js'
 
 export type { Locale }
@@ -8,11 +7,10 @@ export type { Locale }
 /** 主题偏好；默认跟随系统 */
 export type ThemePreference = 'light' | 'dark' | 'system'
 
-/** 本机设置，存 localStorage：语言、主题、位置、朗读音色、深度思考、智能搜索、运行代码、内置浏览器与面板状态 */
+/** 本机设置，存 localStorage：语言、主题、位置、深度思考、智能搜索、运行代码、内置浏览器与面板状态 */
 type Settings = {
   themePreference: ThemePreference
   location: UserLocation | null
-  ttsVoice: TtsVoice
   thinking: boolean
   search: boolean
   python: boolean
@@ -26,7 +24,6 @@ const KEYS = {
   locale: 'chat-demo:locale',
   location: 'chat-demo:location',
   themePreference: 'chat-demo:theme-preference',
-  ttsVoice: 'chat-demo:tts-voice',
   thinking: 'chat-demo:thinking',
   search: 'chat-demo:search',
   python: 'chat-demo:python',
@@ -90,9 +87,6 @@ const initialThemePreference = (): ThemePreference => {
   return saved === 'light' || saved === 'dark' ? saved : 'system'
 }
 
-/** 未保存过时使用服务端默认音色 stella（海星） */
-const initialTtsVoice = (): TtsVoice => (read(KEYS.ttsVoice) === 'tide' ? 'tide' : 'stella')
-
 const DEFAULT_BROWSER_PANEL_WIDTH = 540
 const clampBrowserPanelWidth = (value: number) =>
   Number.isFinite(value)
@@ -107,7 +101,6 @@ const initialBrowserPanelWidth = (): number => {
 export const useSettings = create<Settings>(() => ({
   location: initialLocation(),
   themePreference: initialThemePreference(),
-  ttsVoice: initialTtsVoice(),
   thinking: read(KEYS.thinking) === 'true',
   search: read(KEYS.search) === 'true',
   python: read(KEYS.python) === 'true',
@@ -134,11 +127,6 @@ export const setLocation = (value: UserLocation | null) => {
 export const setThemePreference = (themePreference: ThemePreference) => {
   write(KEYS.themePreference, themePreference)
   useSettings.setState({ themePreference })
-}
-
-export const setTtsVoice = (ttsVoice: TtsVoice) => {
-  write(KEYS.ttsVoice, ttsVoice)
-  useSettings.setState({ ttsVoice })
 }
 
 export const setThinking = (thinking: boolean) => {

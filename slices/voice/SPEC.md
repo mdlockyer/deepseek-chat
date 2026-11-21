@@ -10,7 +10,7 @@ Two speech features over the DeepSeek speech tools API:
 
 ## Public entrypoint
 
-`createVoiceSlice({ fetch, apiOrigin, apiKey, voice, audio? })` returns:
+`createVoiceSlice({ fetch, apiOrigin, apiKey, store, audio? })` returns:
 
 | Member                                       | Meaning                                                                                                    |
 | :------------------------------------------- | :--------------------------------------------------------------------------------------------------------- |
@@ -19,9 +19,11 @@ Two speech features over the DeepSeek speech tools API:
 | `readAloud.getState()` / `subscribe`         | `{ status: 'idle' }` or `{ status: 'loading' \| 'playing', messageId }`.                                   |
 | `createVoiceInput(onText)`                   | A voice-input controller: `toggle`, `cancel`, `dispose`, `getStatus`, `getAnalyser`, `available`.          |
 | `useVoiceInput(onText)`                      | React binding of the controller, plus elapsed `seconds` while recording.                                   |
+| `getTtsVoice()` / `setTtsVoice(voice)`       | The read-aloud voice, `stella` or `tide`.                                                                  |
+| `VoiceSetting`                               | Settings row for the read-aloud voice.                                                                     |
 | `ReadAloudButton`, `VoiceButton`, `Spectrum` | The slice's views.                                                                                         |
 
-`apiKey()` and `voice()` are read when each operation starts, so a settings change applies to the
+`apiKey()` and the voice are read when each operation starts, so a settings change applies to the
 next one.
 
 ## Behavioural invariants
@@ -58,6 +60,11 @@ next one.
 11. **Length limit.** Recording stops by itself at `maxSeconds` with "Maximum recording length
     reached", and is transcribed. The WAV never exceeds `maxSeconds` of audio.
 
+### Preferences
+
+12. **Voice preference.** Stored under `chat-demo:tts-voice`. Unset or any value other than `tide`
+    reads as `stella` (the service default). `setTtsVoice` saves it; the next read-aloud uses it.
+
 ## Facts
 
 None consumed or published. `readAloud.stop()` is called top-down by the app.
@@ -73,5 +80,4 @@ None consumed or published. `readAloud.stop()` is called top-down by the app.
 
 ## Ownership notes
 
-- The DeepSeek API key and the TTS voice preference are still stored by
-  `src/services/settings.ts`; the voice preference moves here when settings are split per slice.
+- The DeepSeek API key belongs to `slices/account`; the app passes `account.getApiKey` in.

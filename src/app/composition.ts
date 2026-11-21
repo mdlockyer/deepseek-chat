@@ -23,7 +23,6 @@ import {
   saveKeychainApiKey,
 } from '../platform/desktop.js'
 import { API_ORIGIN } from '../services/api/client.js'
-import { useSettings } from '../services/settings.js'
 import { localStore } from './storage.js'
 
 /** 须与 package.json 中 pyodide 开发依赖的版本一致（scripts/fetch-pyodide.mjs 从中复制运行时） */
@@ -74,6 +73,5 @@ export const voice = createVoiceSlice({
   fetch: httpFetch,
   apiOrigin: API_ORIGIN,
   apiKey: () => account.getApiKey(),
-  // 朗读音色仍由设置保存，稍后归 voice 所有
-  voice: () => useSettings.getState().ttsVoice,
+  store: localStore,
 })

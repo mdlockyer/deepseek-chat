@@ -1,5 +1,6 @@
 import type { SessionDeleted, SessionHistoryReplaced } from '@deepseek-chat/spine/facts/session'
 import type { EventLog } from '@deepseek-chat/spine/runtime'
+import type { ReactElement } from 'react'
 import {
   DEFAULT_PYTHON_PARAMS,
   createKernel,
@@ -11,6 +12,7 @@ import {
   type RunOptions,
   type WorkerLike,
 } from './kernel.js'
+import { createRuntimeSetting } from './RuntimeSetting.js'
 import { PYTHON_TOOL_NAME, buildPythonTool, type PythonToolDefinition } from './tool.js'
 
 export type {
@@ -50,6 +52,8 @@ export type PythonSlice = {
     /** Reinstalls the runtime, then silently resets the kernel. */
     reset(): Promise<void>
   } | null
+  /** Settings row for the desktop runtime; renders nothing on web. */
+  RuntimeSetting(): ReactElement | null
   dispose(): void
 }
 
@@ -74,19 +78,22 @@ export const createPythonSlice = (deps: PythonSliceDeps): PythonSlice => {
     }),
   ]
 
+  const runtime = native
+    ? {
+        status: () => native.runtimeStatus(),
+        reset: async () => {
+          await native.resetRuntime()
+          kernel.reset(false)
+        },
+      }
+    : null
+
   return {
     toolName: PYTHON_TOOL_NAME,
     tool: buildPythonTool(native ? 'native' : 'web'),
     run: kernel.run,
-    runtime: native
-      ? {
-          status: () => native.runtimeStatus(),
-          reset: async () => {
-            await native.resetRuntime()
-            kernel.reset(false)
-          },
-        }
-      : null,
+    runtime,
+    RuntimeSetting: createRuntimeSetting(runtime),
     dispose: () => {
       for (const unsubscribe of unsubscribers) {
         unsubscribe()

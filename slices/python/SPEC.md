@@ -19,6 +19,7 @@ conversation can hand back to the model. Two engines, chosen at init:
 | `toolName`, `tool`                                      | Model-visible tool definition; wording depends on the engine.                        |
 | `run(code, { signal, sessionId?, uploads?, onPhase? })` | Run code; always resolves to a `PythonRunResult`, never rejects.                     |
 | `runtime`                                               | Native only (`null` on web): `status()` and `reset()` of the managed Python install. |
+| `RuntimeSetting`                                        | Settings row: runtime status and reset (native); renders nothing on web.             |
 | `dispose()`                                             | Unsubscribe from the Spine.                                                          |
 
 ## Behavioural invariants

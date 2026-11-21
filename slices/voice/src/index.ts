@@ -1,4 +1,4 @@
-import type { HttpFetch } from '@deepseek-chat/spine/ports'
+import type { HttpFetch, KeyValueStore } from '@deepseek-chat/spine/ports'
 import { browserAudio, type VoiceAudio } from './audio.js'
 import { createReadAloud, type ReadAloudState } from './readAloud.js'
 import { createReadAloudButton } from './ReadAloudButton.js'
@@ -6,6 +6,8 @@ import { Spectrum } from './Spectrum.js'
 import { createSpeechApi, type TtsVoice } from './speechApi.js'
 import { VoiceButton } from './VoiceButton.js'
 import { createUseVoiceInput, createVoiceInput, type VoiceInput } from './voiceInput.js'
+import { createVoicePreference } from './voicePreference.js'
+import { createVoiceSetting } from './VoiceSetting.js'
 
 export type { AudioContextLike, VoiceAudio } from './audio.js'
 export type { ReadAloudState } from './readAloud.js'
@@ -18,8 +20,8 @@ export type VoiceSliceDeps = {
   readonly apiOrigin: string
   /** The user's DeepSeek API key. Read when each request starts. */
   readonly apiKey: () => string | null
-  /** The user's read-aloud voice. Read when each read-aloud starts. */
-  readonly voice: () => TtsVoice
+  /** Persists the user's read-aloud voice (`chat-demo:tts-voice`). */
+  readonly store: KeyValueStore
   /** Audio and microphone; defaults to the browser's. */
   readonly audio?: VoiceAudio
 }
@@ -27,7 +29,8 @@ export type VoiceSliceDeps = {
 export const createVoiceSlice = (deps: VoiceSliceDeps) => {
   const api = createSpeechApi({ fetch: deps.fetch, apiOrigin: deps.apiOrigin })
   const audio = deps.audio ?? browserAudio()
-  const readAloud = createReadAloud({ api, audio, apiKey: deps.apiKey, voice: deps.voice })
+  const preference = createVoicePreference(deps.store)
+  const readAloud = createReadAloud({ api, audio, apiKey: deps.apiKey, voice: preference.get })
   const inputDeps = { api, audio, apiKey: deps.apiKey }
 
   return {
@@ -44,6 +47,11 @@ export const createVoiceSlice = (deps: VoiceSliceDeps) => {
       createVoiceInput(inputDeps, onText),
     /** React binding of `createVoiceInput`, released on unmount. */
     useVoiceInput: createUseVoiceInput(inputDeps),
+    /** The read-aloud voice; a change applies from the next read-aloud. */
+    getTtsVoice: (): TtsVoice => preference.get(),
+    setTtsVoice: (voice: TtsVoice) => preference.set(voice),
+    /** Settings row for the read-aloud voice. */
+    VoiceSetting: createVoiceSetting(preference),
     ReadAloudButton: createReadAloudButton(readAloud),
     VoiceButton,
     Spectrum,

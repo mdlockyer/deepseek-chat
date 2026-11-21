@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { afterEach, beforeEach, describe, it } from 'node:test'
 import { getToast } from '@deepseek-chat/spine/design'
 import { setLocale } from '@deepseek-chat/spine/i18n'
+import { memoryStore } from '@deepseek-chat/spine/ports'
 import {
   createVoiceSlice,
   type AudioContextLike,
@@ -156,7 +157,7 @@ const setup = (
     },
     apiOrigin: 'https://api.test',
     apiKey: () => 'sk-test',
-    voice: () => 'tide',
+    store: memoryStore({ 'chat-demo:tts-voice': 'tide' }),
     audio: fake.audio,
     ...overrides,
   })
@@ -502,5 +503,43 @@ describe('voice: voice input', () => {
     assert.deepEqual(texts, ['long'])
     assert.equal(calls.length, 1)
     assert.equal((await readWav(calls[0])).dataBytes, 1_920_000 * 2)
+  })
+})
+
+// ---------- read-aloud voice preference ----------
+
+describe('voice: read-aloud voice preference', () => {
+  const voiceSent = async (voice: ReturnType<typeof setup>['voice'], calls: Call[]) => {
+    voice.readAloud.toggle(`m${calls.length}`, 'text', () => undefined)
+    await settle()
+    voice.readAloud.stop()
+    return JSON.parse(String(calls.at(-1)?.init.body)).voice_id
+  }
+
+  it('defaults to stella when nothing or an unknown voice is stored', () => {
+    // SPEC: unset or unknown → the service default, stella.
+    assert.equal(
+      setup(() => new Response(null), { store: memoryStore() }).voice.getTtsVoice(),
+      'stella'
+    )
+    const odd = memoryStore({ 'chat-demo:tts-voice': 'ocean' })
+    assert.equal(setup(() => new Response(null), { store: odd }).voice.getTtsVoice(), 'stella')
+  })
+
+  it('reads the saved voice from the original storage key', async () => {
+    const { voice, calls } = setup(() => new Response(controllableStream().stream))
+    assert.equal(voice.getTtsVoice(), 'tide')
+    assert.equal(await voiceSent(voice, calls), 'tide')
+  })
+
+  it('saves a new voice, which the next read-aloud uses', async () => {
+    const store = memoryStore()
+    const { voice, calls } = setup(() => new Response(controllableStream().stream), { store })
+
+    assert.equal(await voiceSent(voice, calls), 'stella')
+    voice.setTtsVoice('tide')
+
+    assert.equal(store.get('chat-demo:tts-voice'), 'tide')
+    assert.equal(await voiceSent(voice, calls), 'tide')
   })
 })

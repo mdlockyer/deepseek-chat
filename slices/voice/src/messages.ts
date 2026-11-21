@@ -19,6 +19,9 @@ export const voiceMessages = defineMessages({
     apiKeyInvalidRetry: 'API Key 无效，请更换后重试',
     insufficientBalance: '账户余额不足',
     rateLimited: '操作过于频繁，请稍后再试',
+    settingsTtsVoice: '朗读音色',
+    settingsTtsVoiceStella: '海星（女声）',
+    settingsTtsVoiceTide: '暗潮（男声）',
   },
   'en-US': {
     voiceInput: 'Voice input',
@@ -39,6 +42,9 @@ export const voiceMessages = defineMessages({
     apiKeyInvalidRetry: 'Invalid API Key. Please change it and try again.',
     insufficientBalance: 'Insufficient balance',
     rateLimited: 'Too many requests. Please try again later.',
+    settingsTtsVoice: 'Read-aloud voice',
+    settingsTtsVoiceStella: 'Stella (female)',
+    settingsTtsVoiceTide: 'Tide (male)',
   },
 })
 

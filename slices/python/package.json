@@ -8,5 +8,8 @@
   },
   "dependencies": {
     "@deepseek-chat/spine": "workspace:*"
+  },
+  "peerDependencies": {
+    "react": "18.3.1"
   }
 }
