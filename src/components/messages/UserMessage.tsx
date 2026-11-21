@@ -4,7 +4,7 @@ import { memo, useLayoutEffect, useRef, useState } from 'react'
 import { useIsMobile } from '../../app/viewport.js'
 import { IconEditOutline16 } from '@deepseek-chat/spine/design'
 import { editMessage, retryUpload } from '../../services/chat/store.js'
-import { stopReadAloud } from '../../services/speech/readAloud.js'
+import { voice } from '../../app/composition.js'
 import type { UserMessage as UserMessageType } from '../../services/chat/types.js'
 import { Button } from '@deepseek-chat/spine/design'
 import { IconButton } from '@deepseek-chat/spine/design'
@@ -55,7 +55,7 @@ export const UserMessage = memo(function UserMessage({
 
   const sendEdit = () => {
     if (canSend && ensureApiKey() && editMessage(sessionId, message.id, draft.trim())) {
-      stopReadAloud()
+      voice.readAloud.stop()
       setEditing(false)
     }
   }

@@ -45,7 +45,12 @@ describe('design overlay', () => {
 })
 
 describe('design toast', () => {
-  beforeEach(() => mock.timers.enable({ apis: ['setTimeout'] }))
+  // Node ≥ 20.4 takes { apis }; the repo's @types/node (20.9) still types the older array form.
+  beforeEach(() =>
+    mock.timers.enable({ apis: ['setTimeout'] } as unknown as Parameters<
+      typeof mock.timers.enable
+    >[0])
+  )
   afterEach(() => {
     mock.timers.reset()
     setLocale('en-US')

@@ -28,18 +28,18 @@ import {
   setDraftText,
   useDrafts,
 } from '../../services/chat/drafts.js'
-import { stopReadAloud } from '../../services/speech/readAloud.js'
+import { voice as voiceSlice } from '../../app/composition.js'
 import { ensureApiKey } from '../settings/settingsDialogState.js'
 import { ComposerMenu, isUploadShortcut, type ComposerToolSwitch } from './ComposerMenu.js'
 import { DragMask, useFileDrop } from './DragMask.js'
 import { showToast } from '../base/toastState.js'
 import { ACCEPT, useUploads } from '../../services/attachments.js'
 import { DraftAttachments } from './DraftAttachments.js'
-import { useVoiceInput } from './useVoiceInput.js'
-import { VoiceButton } from './VoiceButton.js'
-import { Spectrum } from './Spectrum.js'
 import { useTranslate } from '../../i18n/index.js'
 import styles from './ChatInput.module.css'
+
+const { useVoiceInput, VoiceButton, Spectrum } = voiceSlice
+const stopReadAloud = voiceSlice.readAloud.stop
 
 /** 输入框：自适应高度的文本框 + 文件 + 深度思考与智能搜索开关 + 语音输入 + 发送 / 停止 */
 export const ChatInput = memo(function ChatInput({ sessionId }: { sessionId: string | null }) {

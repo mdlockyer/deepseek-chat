@@ -11,6 +11,9 @@ importers:
       '@deepseek-chat/slice-python':
         specifier: workspace:*
         version: link:slices/python
+      '@deepseek-chat/slice-voice':
+        specifier: workspace:*
+        version: link:slices/voice
       '@deepseek-chat/slice-web-research':
         specifier: workspace:*
         version: link:slices/web-research
@@ -126,6 +129,18 @@ importers:
       '@deepseek-chat/spine':
         specifier: workspace:*
         version: link:../../spine
+
+  slices/voice:
+    dependencies:
+      '@deepseek-chat/spine':
+        specifier: workspace:*
+        version: link:../../spine
+      clsx:
+        specifier: 2.1.1
+        version: 2.1.1
+      react:
+        specifier: 18.3.1
+        version: 18.3.1
 
   slices/web-research:
     dependencies:

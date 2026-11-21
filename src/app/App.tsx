@@ -26,7 +26,7 @@ import { Toast } from '@deepseek-chat/spine/design'
 import { showToast } from '../components/base/toastState.js'
 import { onUploadNotice } from '../services/attachments.js'
 import { Button } from '@deepseek-chat/spine/design'
-import { stopReadAloud } from '../services/speech/readAloud.js'
+import { voice } from './composition.js'
 import { isDesktopApp, onOpenSettings } from '../platform/desktop.js'
 import { usePresence, PANEL_DURATION_MS } from '@deepseek-chat/spine/design'
 import { CollapsedSider } from '../components/sider/CollapsedSider.js'
@@ -84,7 +84,7 @@ export const App = () => {
     setActiveBrowserSession(activeId)
   }, [activeId])
   // 切换会话时停止朗读
-  useEffect(stopReadAloud, [activeId])
+  useEffect(() => voice.readAloud.stop(), [activeId])
   // 移动端选中会话、切换布局后收起抽屉
   useEffect(closeMobileSider, [activeId, isMobile])
 

@@ -1,8 +1,8 @@
 import clsx from 'clsx'
-import { useTranslate } from '../../i18n/index.js'
+import { voiceMessages } from './messages.js'
 import { IconMicFill16, IconMicOutline16 } from '@deepseek-chat/spine/design'
 import { Tooltip } from '@deepseek-chat/spine/design'
-import type { VoiceInputStatus } from './useVoiceInput.js'
+import type { VoiceInputStatus } from './voiceInput.js'
 import styles from './VoiceButton.module.css'
 
 /**
@@ -24,7 +24,7 @@ export const VoiceButton = ({
   seconds: number
   onClick: () => void
 }) => {
-  const t = useTranslate()
+  const t = voiceMessages.useTranslate()
   const recording = status === 'recording'
 
   const label = disabled

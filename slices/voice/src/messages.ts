@@ -1,0 +1,45 @@
+import { defineMessages } from '@deepseek-chat/spine/i18n'
+
+export const voiceMessages = defineMessages({
+  'zh-CN': {
+    voiceInput: '语音输入',
+    voiceInputStop: '结束录音并转写',
+    voiceInputCancel: '正在转写，点击取消',
+    voiceInputRequiresHttps: '非 HTTPS 页面无法使用语音输入',
+    voiceInputTimer: '录音中 {seconds}s',
+    voiceInputPermissionDenied: '无法使用麦克风，请在浏览器设置中允许访问',
+    voiceInputNoDevice: '未检测到麦克风',
+    voiceInputFailed: '语音识别失败，请稍后再试',
+    voiceInputEmpty: '未识别到语音内容',
+    voiceInputLimitReached: '已达到单次录音时长上限',
+    ttsPlay: '朗读',
+    ttsStop: '停止朗读',
+    ttsUnavailable: '这条回答暂时无法朗读',
+    ttsFailed: '朗读失败，请稍后再试',
+    apiKeyInvalidRetry: 'API Key 无效，请更换后重试',
+    insufficientBalance: '账户余额不足',
+    rateLimited: '操作过于频繁，请稍后再试',
+  },
+  'en-US': {
+    voiceInput: 'Voice input',
+    voiceInputStop: 'Stop recording and transcribe',
+    voiceInputCancel: 'Transcribing. Click to cancel',
+    voiceInputRequiresHttps: 'Voice input requires HTTPS',
+    voiceInputTimer: 'Recording {seconds}s',
+    voiceInputPermissionDenied:
+      'Microphone access is blocked. Please allow it in your browser settings.',
+    voiceInputNoDevice: 'No microphone detected',
+    voiceInputFailed: 'Speech recognition failed. Please try again later.',
+    voiceInputEmpty: 'No speech detected',
+    voiceInputLimitReached: 'Maximum recording length reached',
+    ttsPlay: 'Read aloud',
+    ttsStop: 'Stop reading',
+    ttsUnavailable: 'This answer cannot be read aloud right now',
+    ttsFailed: 'Failed to read aloud. Please try again later.',
+    apiKeyInvalidRetry: 'Invalid API Key. Please change it and try again.',
+    insufficientBalance: 'Insufficient balance',
+    rateLimited: 'Too many requests. Please try again later.',
+  },
+})
+
+export type VoiceMessageKey = Parameters<typeof voiceMessages.translate>[0]

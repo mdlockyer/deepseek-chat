@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { setLocale as setUiLocale, type Locale } from '@deepseek-chat/spine/i18n'
-import type { TtsVoice } from './api/speech.js'
+import type { TtsVoice } from '@deepseek-chat/slice-voice'
 import {
   isDesktopApp,
   loadFirecrawlApiKey,

@@ -3,6 +3,7 @@
  * No domain logic belongs here — only wiring.
  */
 import { createPythonSlice } from '@deepseek-chat/slice-python'
+import { createVoiceSlice } from '@deepseek-chat/slice-voice'
 import { createWebResearchSlice } from '@deepseek-chat/slice-web-research'
 import { EventLog } from '@deepseek-chat/spine/runtime'
 import {
@@ -16,6 +17,7 @@ import {
   pythonRuntimeStatus,
   pythonStageUpload,
 } from '../platform/desktop.js'
+import { API_ORIGIN } from '../services/api/client.js'
 import { useSettings } from '../services/settings.js'
 
 /** 须与 package.json 中 pyodide 开发依赖的版本一致（scripts/fetch-pyodide.mjs 从中复制运行时） */
@@ -50,4 +52,12 @@ export const webResearch = createWebResearchSlice({
   fetch: isDesktopApp ? desktopFetch : (url, init) => fetch(url, init),
   // Firecrawl Key 仍由设置保存，待设置按 slice 拆分后归 web-research 所有
   apiKey: () => useSettings.getState().firecrawlApiKey,
+})
+
+export const voice = createVoiceSlice({
+  fetch: isDesktopApp ? desktopFetch : (url, init) => fetch(url, init),
+  apiOrigin: API_ORIGIN,
+  // API Key 与朗读音色仍由设置保存，待设置按 slice 拆分后调整
+  apiKey: () => useSettings.getState().apiKey,
+  voice: () => useSettings.getState().ttsVoice,
 })
