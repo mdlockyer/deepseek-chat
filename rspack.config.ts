@@ -70,7 +70,7 @@ export const createConfig = ({
       'css/module': { namedExports: false },
       // `new ModuleWorker(new URL(...))` bundles a worker like `new Worker(...)`. rspack rewrites
       // `{ type: 'module' }` to `{ type: undefined }` for `new Worker`, but Pyodide refuses classic
-      // workers, so ModuleWorker (src/services/python/module-worker.ts) forces type 'module' itself.
+      // workers, so ModuleWorker (slices/python/src/module-worker.ts) forces type 'module' itself.
       // The specifier must match the import in kernel.ts exactly.
       javascript: { worker: ['ModuleWorker from ./module-worker.js', '...'] },
     },

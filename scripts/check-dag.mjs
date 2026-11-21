@@ -157,11 +157,15 @@ for (const [name, dir] of sliceDirs) {
     }
   }
 
+  const testsDir = path.join(dir, 'tests')
+  const srcDir = path.join(dir, 'src')
   for (const file of listSourceFiles(dir)) {
     for (const spec of extractImports(file)) {
       const target = sliceOfPackage(spec)
       if (target) {
-        fail('DAG', `slice "${name}" file ${rel(file)} imports slice "${spec}"`)
+        if (target.name !== name) {
+          fail('DAG', `slice "${name}" file ${rel(file)} imports slice "${spec}"`)
+        }
       } else if (
         spec.startsWith(SCOPE) &&
         spec !== SPINE_PKG &&
@@ -173,6 +177,11 @@ for (const [name, dir] of sliceDirs) {
         const resolved = path.resolve(path.dirname(file), spec)
         if (!isInside(dir, resolved)) {
           fail('DAG', `slice "${name}" file ${rel(file)} crosses its boundary via "${spec}"`)
+        } else if (isInside(testsDir, file) && isInside(srcDir, resolved)) {
+          fail(
+            'TESTS',
+            `slice "${name}" test ${rel(file)} reaches into src/ via "${spec}"; import ${SLICE_PKG_PREFIX}${name}`
+          )
         }
       }
     }

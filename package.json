@@ -9,11 +9,11 @@
     "dev": "rspack serve -c rspack.config.ts",
     "build": "rm -rf dist && NODE_ENV=production rspack build -c rspack.config.ts",
     "type": "tsc -p tsconfig.json",
-    "lint": "oxlint src spine scripts/check-dag.mjs rspack.config.ts",
+    "lint": "oxlint src spine slices scripts/check-dag.mjs rspack.config.ts",
     "format": "oxfmt --write .",
     "format:check": "oxfmt --check .",
-    "test": "node --import ./scripts/test-loader.mjs --test \"src/**/*.test.ts\" \"spine/tests/**/*.test.ts\"",
-    "test:spine": "node --import ./scripts/test-loader.mjs --test \"spine/tests/**/*.test.ts\"",
+    "test": "node --import ./scripts/test-loader.mjs --test \"src/**/*.test.ts\" \"spine/tests/**/*.test.ts\" \"slices/*/tests/**/*.test.ts\"",
+    "test:spine": "node --import ./scripts/test-loader.mjs --test \"spine/tests/**/*.test.ts\" \"slices/*/tests/**/*.test.ts\"",
     "check:dag": "node scripts/check-dag.mjs",
     "desktop:dev": "tauri dev",
     "desktop:build": "tauri build",
@@ -23,6 +23,7 @@
     "build:desktop": "pnpm build"
   },
   "dependencies": {
+    "@deepseek-chat/slice-python": "workspace:*",
     "@deepseek-chat/spine": "workspace:*",
     "@fontsource-variable/google-sans-flex": "^5.3.2",
     "@tauri-apps/api": "^2.12.4",

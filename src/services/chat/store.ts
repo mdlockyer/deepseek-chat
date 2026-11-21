@@ -33,14 +33,9 @@ import {
   BROWSER_TOOL_NAMES,
   runBrowserTool,
 } from '../browser/tools.js'
-import {
-  PYTHON_TOOL,
-  PYTHON_TOOL_NAME,
-  getPythonKernelSessionId,
-  resetPythonKernel,
-  runPython,
-  type PythonRunResult,
-} from '../python/kernel.js'
+import type { PythonRunResult } from '@deepseek-chat/slice-python'
+import type { SessionDeleted, SessionHistoryReplaced } from '@deepseek-chat/spine/facts/session'
+import { python as pythonSlice, spine } from '../../app/composition.js'
 import type { ChatModel, CreateMessageRequest } from '../api/types.js'
 import { extractFileIds, getFileErrorCode, isRetryableApiError } from '../api/errors.js'
 import { cancelUpload, describeUploadError, uploadAttachment, useUploads } from '../attachments.js'
@@ -114,7 +109,7 @@ const declaredTools = (
     tools.push(FIRECRAWL_SCRAPE_TOOL)
   }
   if (python) {
-    tools.push(PYTHON_TOOL)
+    tools.push(pythonSlice.tool)
   }
   if (browser && isDesktopApp) {
     tools.push(...BROWSER_TOOLS)
@@ -500,7 +495,6 @@ export const replaceHistory = async (write: () => Promise<void>): Promise<number
     initTask = undefined
     sessionLoads.clear()
     await waitForIdle()
-    resetPythonKernel(false)
     void clearAllSessionBrowsers()
     clearAllSessionPreviews()
     await db.clearStaging()
@@ -512,6 +506,7 @@ export const replaceHistory = async (write: () => Promise<void>): Promise<number
       await db.clearStaging().catch(db.reportStorageError('clear unfinished history replacement'))
       throw error
     }
+    spine.publish<SessionHistoryReplaced>({ type: 'SessionHistoryReplaced' })
     sessionAccess.clear()
     unsavedSessions.clear()
     pendingFiles.clear()
@@ -598,13 +593,11 @@ const removeSessionData = async (id: string): Promise<boolean> => {
     getStreamController(id)?.abort()
     // 等本会话的流收尾，避免删除之后又被收尾保存写回来。
     await waitForIdle(id)
-    if (getPythonKernelSessionId() === id) {
-      resetPythonKernel(false)
-    }
     if (epoch !== historyEpoch) {
       return false
     }
     await db.deleteSession(id)
+    spine.publish<SessionDeleted>({ type: 'SessionDeleted', sessionId: id })
     void disposeSessionBrowser(id)
     disposeSessionPreview(id)
     if (epoch !== historyEpoch) {
@@ -1142,7 +1135,7 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
             tool_use_id: call.id,
             content: '',
             status: 'running',
-            ...(call.name === PYTHON_TOOL_NAME ? { phase: 'starting' as const } : {}),
+            ...(call.name === pythonSlice.toolName ? { phase: 'starting' as const } : {}),
             startedAt,
           },
         ],
@@ -1352,7 +1345,7 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
           ? (call.input as { code: string }).code
           : null
       const outcome: PythonRunResult =
-        call.name !== PYTHON_TOOL_NAME
+        call.name !== pythonSlice.toolName
           ? {
               status: 'error' as const,
               text: `Unknown tool: ${call.name}`,
@@ -1368,10 +1361,9 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
                 files: [],
                 durationMs: 0,
               }
-            : await runPython(
-                code,
-                controller.signal,
-                (phase) => {
+            : await pythonSlice.run(code, {
+                signal: controller.signal,
+                onPhase: (phase) => {
                   reply = {
                     ...reply,
                     blocks: reply.blocks.map((block) =>
@@ -1383,7 +1375,7 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
                   flush()
                 },
                 sessionId,
-                (() => {
+                uploads: (() => {
                   const currentSession = getSession(sessionId)
                   const visibleMessages = currentSession
                     ? getVisibleMessages(currentSession)
@@ -1411,8 +1403,8 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
                     }
                   }
                   return list
-                })()
-              )
+                })(),
+              })
       // 下载文件先落盘到 IndexedDB，回复里只保存引用；保存失败时告诉模型。
       let presented: PresentedFileRef[] = []
       if (outcome.files.length > 0) {

@@ -18,13 +18,9 @@ import {
 } from '../../services/chat/backup.js'
 import { useChatStore } from '../../services/chat/store.js'
 import { regionCodes, getRegionName, provinces } from '../../services/location.js'
-import {
-  isDesktopApp,
-  pythonRuntimeReset,
-  pythonRuntimeStatus,
-  type ManagedPythonStatus,
-} from '../../platform/desktop.js'
-import { resetPythonKernel } from '../../services/python/kernel.js'
+import type { PythonSlice } from '@deepseek-chat/slice-python'
+import { python } from '../../app/composition.js'
+import { isDesktopApp } from '../../platform/desktop.js'
 import {
   isChineseBrowser,
   setBrowserAllowLocalhost,
@@ -120,7 +116,7 @@ const SettingsContent = ({ exiting = false }: { exiting?: boolean }) => {
               {isDesktopApp ? (
                 <>
                   <BrowserLocalhostSetting />
-                  <PythonRuntimeSetting />
+                  {python.runtime ? <PythonRuntimeSetting runtime={python.runtime} /> : null}
                 </>
               ) : null}
             </>
@@ -615,17 +611,20 @@ const ExportHistory = ({ disabled }: { disabled: boolean }) => {
   )
 }
 
+type ManagedRuntime = NonNullable<PythonSlice['runtime']>
+
 /** 桌面端托管 Python 运行环境状态查看与重置 */
-const PythonRuntimeSetting = () => {
+const PythonRuntimeSetting = ({ runtime: managed }: { runtime: ManagedRuntime }) => {
   const t = useTranslate()
-  const [runtime, setRuntime] = useState<ManagedPythonStatus | null>(null)
+  const [runtime, setRuntime] = useState<Awaited<ReturnType<ManagedRuntime['status']>> | null>(null)
   const [loading, setLoading] = useState(true)
   const [resetting, setResetting] = useState(false)
   const [status, setStatus] = useState<Status>(null)
 
   useEffect(() => {
     let active = true
-    void pythonRuntimeStatus()
+    void managed
+      .status()
       .then((info) => {
         if (active) {
           setRuntime(info)
@@ -648,15 +647,14 @@ const PythonRuntimeSetting = () => {
     return () => {
       active = false
     }
-  }, [])
+  }, [managed])
 
   const onReset = async () => {
     setResetting(true)
     setStatus(null)
     try {
-      await pythonRuntimeReset()
-      resetPythonKernel(false)
-      const next = await pythonRuntimeStatus()
+      await managed.reset()
+      const next = await managed.status()
       setRuntime(next)
       setStatus({ key: 'settingsPythonRuntimeResetDone' })
     } catch (error) {
