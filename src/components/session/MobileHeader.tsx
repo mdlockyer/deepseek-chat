@@ -1,7 +1,7 @@
-import { IconMenuOutline20, IconNewChatOutline20 } from '../base/icons.js'
+import { IconMenuOutline20, IconNewChatOutline20 } from '@deepseek-chat/spine/design'
 import { useTranslate } from '../../i18n/index.js'
 import { newChat } from '../../services/chat/store.js'
-import { IconButton } from '../base/IconButton.js'
+import { IconButton } from '@deepseek-chat/spine/design'
 import { openMobileSider } from '../sider/mobileSiderState.js'
 import styles from './MobileHeader.module.css'
 

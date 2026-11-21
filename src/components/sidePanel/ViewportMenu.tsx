@@ -2,7 +2,7 @@ import clsx from 'clsx'
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslate } from '../../i18n/index.js'
-import { acquireBrowserOverlayLock } from '../../services/browser/state.js'
+import { acquireOverlay } from '@deepseek-chat/spine/design'
 import { useSidePanelStore } from '../../services/sidePanel/state.js'
 import {
   BROWSER_VIEWPORT_PRESETS,
@@ -15,15 +15,15 @@ import {
   type BrowserViewportPreset,
   type BrowserViewportSpec,
 } from '../../services/sidePanel/viewport.js'
-import { usePresence } from '../../utils/usePresence.js'
-import { useAnchoredPosition, useDismiss } from '../base/anchored.js'
+import { usePresence } from '@deepseek-chat/spine/design'
+import { useAnchoredPosition, useDismiss } from '@deepseek-chat/spine/design'
 import {
   IconCheckedOutline14,
   IconSwapOutline14,
   IconToastError16,
   IconViewportOutline14,
-} from '../base/icons.js'
-import { Tooltip } from '../base/Tooltip.js'
+} from '@deepseek-chat/spine/design'
+import { Tooltip } from '@deepseek-chat/spine/design'
 import styles from './SidePanel.module.css'
 
 const PRESET_ORDER: Exclude<BrowserViewportPreset, 'auto'>[] = [
@@ -107,7 +107,7 @@ export const ViewportMenu = ({
   )
 
   useDismiss(open, [anchorRef, floatingRef], () => close(false))
-  useEffect(() => (mounted ? acquireBrowserOverlayLock() : undefined), [mounted])
+  useEffect(() => (mounted ? acquireOverlay() : undefined), [mounted])
 
   const seedCustomDraft = useCallback(() => {
     const defaults = getDefaultCustomViewportSize(viewport, stageSize)

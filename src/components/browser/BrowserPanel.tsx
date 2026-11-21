@@ -23,8 +23,8 @@ import { stopReply } from '../../services/chat/store.js'
 import { useSettings } from '../../services/settings.js'
 import { useSidePanelStore } from '../../services/sidePanel/state.js'
 import type { BrowserStageFit } from '../../services/sidePanel/viewport.js'
-import { IconButton } from '../base/IconButton.js'
-import { Menu } from '../base/Menu.js'
+import { IconButton } from '@deepseek-chat/spine/design'
+import { Menu } from '@deepseek-chat/spine/design'
 import {
   IconBrowserOutline14,
   IconChevronLeftOutline14,
@@ -38,7 +38,7 @@ import {
   IconRefreshOutline16,
   IconSearchOutline16,
   IconTrashOutline16,
-} from '../base/icons.js'
+} from '@deepseek-chat/spine/design'
 import { restoreLastSearchPanel, useSearchPanel } from '../search/searchPanelState.js'
 import { StageFrame } from '../sidePanel/StageFrame.js'
 import { ViewportMenu } from '../sidePanel/ViewportMenu.js'

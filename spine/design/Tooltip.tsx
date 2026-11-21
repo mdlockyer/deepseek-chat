@@ -1,7 +1,7 @@
 import { useEffect, type ReactNode } from 'react'
 import clsx from 'clsx'
 import { createPortal } from 'react-dom'
-import { useIsMobile } from '../../app/viewport.js'
+import { useIsMobile } from './viewport.js'
 import { useAnchoredPosition, useDelayedOpen } from './anchored.js'
 import styles from './Tooltip.module.css'
 

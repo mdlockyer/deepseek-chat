@@ -7,7 +7,7 @@ import {
   IconSendOutline16,
   IconStopFill16,
   IconThinkOutline16,
-} from '../base/icons.js'
+} from '@deepseek-chat/spine/design'
 import { isDesktopApp } from '../../platform/desktop.js'
 import {
   setBrowser,

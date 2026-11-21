@@ -1,7 +1,7 @@
 import clsx from 'clsx'
 import { useTranslate } from '../../i18n/index.js'
-import { IconMicFill16, IconMicOutline16 } from '../base/icons.js'
-import { Tooltip } from '../base/Tooltip.js'
+import { IconMicFill16, IconMicOutline16 } from '@deepseek-chat/spine/design'
+import { Tooltip } from '@deepseek-chat/spine/design'
 import type { VoiceInputStatus } from './useVoiceInput.js'
 import styles from './VoiceButton.module.css'
 

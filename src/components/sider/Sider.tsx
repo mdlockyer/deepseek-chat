@@ -1,19 +1,23 @@
 import clsx from 'clsx'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslate } from '../../i18n/index.js'
-import { acquireBrowserOverlayLock } from '../../services/browser/state.js'
-import { IconPanelLeftOutline16, IconSettingsOutline16, NewChatIcon } from '../base/icons.js'
+import { acquireOverlay } from '@deepseek-chat/spine/design'
+import {
+  IconPanelLeftOutline16,
+  IconSettingsOutline16,
+  NewChatIcon,
+} from '@deepseek-chat/spine/design'
 import { setSiderCollapsed } from '../../services/settings.js'
 import { groupSessions } from '../../services/chat/sessionGroups.js'
 import { newChat, removeSession, useChatStore } from '../../services/chat/store.js'
 import type { SessionSummary } from '../../services/chat/types.js'
-import { Button } from '../base/Button.js'
-import { IconButton } from '../base/IconButton.js'
-import { Modal } from '../base/Modal.js'
+import { Button } from '@deepseek-chat/spine/design'
+import { IconButton } from '@deepseek-chat/spine/design'
+import { Modal } from '@deepseek-chat/spine/design'
 import { showToast } from '../base/toastState.js'
 import { openSettings } from '../settings/settingsDialogState.js'
 import { closeMobileSider, useMobileSider } from './mobileSiderState.js'
-import { PANEL_DURATION_MS, usePresence } from '../../utils/usePresence.js'
+import { PANEL_DURATION_MS, usePresence } from '@deepseek-chat/spine/design'
 import { SessionItem } from './SessionItem.js'
 import styles from './Sider.module.css'
 
@@ -182,7 +186,7 @@ export const Sider = ({
 export const MobileSider = () => {
   const open = useMobileSider((state) => state.open)
   const { mounted, exiting } = usePresence(open, PANEL_DURATION_MS)
-  useEffect(() => (mounted ? acquireBrowserOverlayLock() : undefined), [mounted])
+  useEffect(() => (mounted ? acquireOverlay() : undefined), [mounted])
   if (!mounted) {
     return null
   }

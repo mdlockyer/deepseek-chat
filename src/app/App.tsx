@@ -1,3 +1,4 @@
+import { useLocale } from '@deepseek-chat/spine/i18n'
 import { useEffect } from 'react'
 import clsx from 'clsx'
 import { translate, useTranslate } from '../i18n/index.js'
@@ -21,13 +22,13 @@ import {
   openSettingsFromShortcut,
 } from '../components/settings/settingsDialogState.js'
 import { SettingsDialog } from '../components/settings/SettingsDialog.js'
-import { Toast } from '../components/base/Toast.js'
+import { Toast } from '@deepseek-chat/spine/design'
 import { showToast } from '../components/base/toastState.js'
 import { onUploadNotice } from '../services/attachments.js'
-import { Button } from '../components/base/Button.js'
+import { Button } from '@deepseek-chat/spine/design'
 import { stopReadAloud } from '../services/speech/readAloud.js'
 import { isDesktopApp, onOpenSettings } from '../platform/desktop.js'
-import { usePresence, PANEL_DURATION_MS } from '../utils/usePresence.js'
+import { usePresence, PANEL_DURATION_MS } from '@deepseek-chat/spine/design'
 import { CollapsedSider } from '../components/sider/CollapsedSider.js'
 import { closeMobileSider } from '../components/sider/mobileSiderState.js'
 import { MobileSider, Sider } from '../components/sider/Sider.js'
@@ -37,7 +38,7 @@ import styles from './App.module.css'
 export const App = () => {
   const t = useTranslate()
   const isMobile = useIsMobile()
-  const locale = useSettings((state) => state.locale)
+  const locale = useLocale()
   const desktopSettingsReady = useSettings((state) => state.desktopSettingsReady)
   // 移动端侧边栏以独立抽屉管理开合状态
   const siderCollapsed = useSettings((state) => state.siderCollapsed) && !isMobile

@@ -2,7 +2,11 @@ import clsx from 'clsx'
 import type { ReactNode } from 'react'
 import { useTranslate } from '../../i18n/index.js'
 import { formatSize, getExtension } from '../../services/attachments.js'
-import { IconCloseFill14, IconDownloadOutline16, IconRefreshOutline16 } from '../base/icons.js'
+import {
+  IconCloseFill14,
+  IconDownloadOutline16,
+  IconRefreshOutline16,
+} from '@deepseek-chat/spine/design'
 import { FileIcon } from './FileIcon.js'
 import styles from './FileCard.module.css'
 

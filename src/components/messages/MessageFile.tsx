@@ -11,8 +11,8 @@ import {
 } from '../../services/preview/state.js'
 import { makeUploadPreviewKey } from '../../services/preview/workspace.js'
 import { getActiveRightPanel, useSidePanelStore } from '../../services/sidePanel/state.js'
-import { IconPhotoErrorFill20, IconRefreshOutline16 } from '../base/icons.js'
-import { Tooltip } from '../base/Tooltip.js'
+import { IconPhotoErrorFill20, IconRefreshOutline16 } from '@deepseek-chat/spine/design'
+import { Tooltip } from '@deepseek-chat/spine/design'
 import { FileCard } from '../files/FileCard.js'
 import styles from './MessageFile.module.css'
 

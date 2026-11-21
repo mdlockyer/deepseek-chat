@@ -1,3 +1,4 @@
+import { useLocale } from '@deepseek-chat/spine/i18n'
 import clsx from 'clsx'
 import { useMemo } from 'react'
 import { useIsMobile } from '../../app/viewport.js'
@@ -12,11 +13,10 @@ import {
   usePreviewStore,
 } from '../../services/preview/state.js'
 import { collectWorkspaceArtifacts } from '../../services/preview/workspace.js'
-import { useSettings } from '../../services/settings.js'
 import { getActiveRightPanel, useSidePanelStore } from '../../services/sidePanel/state.js'
 import { sessionTitle } from '../../utils/format.js'
-import { IconButton } from '../base/IconButton.js'
-import { IconBrowseOutline16, IconGlobeLanguageOutline16 } from '../base/icons.js'
+import { IconButton } from '@deepseek-chat/spine/design'
+import { IconBrowseOutline16, IconGlobeLanguageOutline16 } from '@deepseek-chat/spine/design'
 import { ChatInput } from '../chatInput/ChatInput.js'
 import { MessageList } from '../messages/MessageList.js'
 import { MobileHeader } from './MobileHeader.js'
@@ -34,7 +34,7 @@ export const SessionView = ({
 }) => {
   const t = useTranslate()
   const isMobile = useIsMobile()
-  const locale = useSettings((state) => state.locale)
+  const locale = useLocale()
   const activePanel = useSidePanelStore((state) => getActiveRightPanel(session.id, state))
   const browserOpen = activePanel === 'browser'
   const previewOpen = activePanel === 'preview'

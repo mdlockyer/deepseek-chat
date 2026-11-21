@@ -32,7 +32,7 @@ import {
 import { useSidePanelStore } from '../../services/sidePanel/state.js'
 import { fitViewportToStage } from '../../services/sidePanel/viewport.js'
 import { copyText } from '../../utils/clipboard.js'
-import { IconButton } from '../base/IconButton.js'
+import { IconButton } from '@deepseek-chat/spine/design'
 import { showToast } from '../base/toastState.js'
 import {
   IconBrowseOutline16,
@@ -42,7 +42,7 @@ import {
   IconCopyOutline16,
   IconDownloadOutline16,
   IconRefreshOutline16,
-} from '../base/icons.js'
+} from '@deepseek-chat/spine/design'
 import { ViewportMenu } from '../sidePanel/ViewportMenu.js'
 import panelStyles from '../sidePanel/SidePanel.module.css'
 import { FileSwitcherMenu, type PreviewFileItem } from './FileSwitcherMenu.js'

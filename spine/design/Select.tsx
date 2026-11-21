@@ -2,7 +2,7 @@ import clsx from 'clsx'
 import { useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useAnchoredPosition, useDismiss } from './anchored.js'
-import { usePresence } from '../../utils/usePresence.js'
+import { usePresence } from './usePresence.js'
 import { IconCheckOutline16, IconChevronDownOutline14 } from './icons.js'
 import styles from './Select.module.css'
 

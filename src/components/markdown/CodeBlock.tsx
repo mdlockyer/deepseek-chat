@@ -6,7 +6,7 @@ import {
   isHighlightLoaded,
   loadHighlight,
 } from '../../services/markdown/highlight.js'
-import { IconCheckOutline16, IconCopyOutline16 } from '../base/icons.js'
+import { IconCheckOutline16, IconCopyOutline16 } from '@deepseek-chat/spine/design'
 import { showToast } from '../base/toastState.js'
 import { copyText } from '../../utils/clipboard.js'
 import { MermaidDiagram } from './MermaidDiagram.js'

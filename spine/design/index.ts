@@ -1,0 +1,27 @@
+/**
+ * Stateless, domain-blind UI primitives shared by every slice and the app shell.
+ * Visual tokens live in src/app/theme.css (global CSS variables).
+ */
+export { Button } from './Button.js'
+export { IconButton } from './IconButton.js'
+export { Menu, type MenuOption } from './Menu.js'
+export { Modal } from './Modal.js'
+export { Select, type SelectOption } from './Select.js'
+export { Toast } from './Toast.js'
+export { Tooltip, type TooltipPlacement } from './Tooltip.js'
+export { DeepSeekMark } from './logo.js'
+export * from './icons.js'
+export {
+  VIEWPORT_PADDING,
+  useAnchoredPosition,
+  useDelayedOpen,
+  useDismiss,
+  type Align,
+  type AnchoredOptions,
+  type AnchoredPosition,
+  type Side,
+} from './anchored.js'
+export { PANEL_DURATION_MS, usePresence } from './usePresence.js'
+export { useIsMobile } from './viewport.js'
+export { acquireOverlay, isOverlayOpen, onOverlayChange } from './overlay.js'
+export { getToast, showToast, useToast, type ToastContent, type ToastSnapshot } from './toastStore.js'

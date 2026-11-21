@@ -8,7 +8,7 @@ import {
   setRightPanelResizing,
   useSidePanelStore,
 } from '../../services/sidePanel/state.js'
-import { PANEL_DURATION_MS, usePresence } from '../../utils/usePresence.js'
+import { PANEL_DURATION_MS, usePresence } from '@deepseek-chat/spine/design'
 import styles from './SidePanel.module.css'
 
 /** 共享右侧面板壳层：开合动画、左侧拖拽调宽、窄屏自动收起侧边栏、移动端全屏抽屉 */

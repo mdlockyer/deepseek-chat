@@ -1,3 +1,4 @@
+import { getLocale } from '@deepseek-chat/spine/i18n'
 import { create } from 'zustand'
 import { isDesktopApp } from '../../platform/desktop.js'
 import { createId } from '../../utils/id.js'
@@ -1384,7 +1385,7 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
         // 附件就绪后获取本轮信息；续写沿用原回答快照，重新生成的快照独立保存。
         const latestReminder = prepared.prefix
           ? prepared.prefix.latestReminder
-          : createLatestReminder(useSettings.getState())
+          : createLatestReminder({ locale: getLocale(), location: useSettings.getState().location })
         reply = { ...reply, latestReminder }
         updateReply(sessionId, reply)
         persist(sessionId)

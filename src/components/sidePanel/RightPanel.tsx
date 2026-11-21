@@ -8,7 +8,7 @@ import {
   useSidePanelStore,
   type RightPanelKind,
 } from '../../services/sidePanel/state.js'
-import { IconSearchOutline16 } from '../base/icons.js'
+import { IconSearchOutline16 } from '@deepseek-chat/spine/design'
 import { BrowserPanel } from '../browser/BrowserPanel.js'
 import { PreviewPanel } from '../preview/PreviewPanel.js'
 import { SearchPanel } from '../search/SearchPanel.js'

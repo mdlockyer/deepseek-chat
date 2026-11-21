@@ -14,7 +14,7 @@ import {
   IconSearchOutline16,
   IconSearchWarningOutline16,
   IconThinkOutline16,
-} from '../base/icons.js'
+} from '@deepseek-chat/spine/design'
 import { isDesktopApp, saveFileWithDialog } from '../../platform/desktop.js'
 import { openUrlInBrowserPanel } from '../../services/browser/state.js'
 import { formatSize, getExtension } from '../../services/attachments.js'
@@ -49,7 +49,7 @@ import {
   type Source,
   type Step,
 } from '../../services/chat/view.js'
-import { Tooltip } from '../base/Tooltip.js'
+import { Tooltip } from '@deepseek-chat/spine/design'
 import { FileCard } from '../files/FileCard.js'
 import { Markdown } from '../markdown/Markdown.js'
 import { SiteThumbnails } from '../search/SiteLogo.js'

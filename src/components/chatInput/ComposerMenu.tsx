@@ -2,11 +2,11 @@ import clsx from 'clsx'
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslate } from '../../i18n/index.js'
-import { acquireBrowserOverlayLock } from '../../services/browser/state.js'
-import { usePresence } from '../../utils/usePresence.js'
-import { useAnchoredPosition, useDismiss } from '../base/anchored.js'
-import { IconPaperclipOutline16, IconPlusOutline14 } from '../base/icons.js'
-import { Tooltip } from '../base/Tooltip.js'
+import { acquireOverlay } from '@deepseek-chat/spine/design'
+import { usePresence } from '@deepseek-chat/spine/design'
+import { useAnchoredPosition, useDismiss } from '@deepseek-chat/spine/design'
+import { IconPaperclipOutline16, IconPlusOutline14 } from '@deepseek-chat/spine/design'
+import { Tooltip } from '@deepseek-chat/spine/design'
 import styles from './ComposerMenu.module.css'
 
 export type ComposerToolSwitch = {
@@ -58,7 +58,7 @@ export const ComposerMenu = ({
   )
 
   useDismiss(open, [anchorRef, floatingRef], () => close(false))
-  useEffect(() => (mounted ? acquireBrowserOverlayLock() : undefined), [mounted])
+  useEffect(() => (mounted ? acquireOverlay() : undefined), [mounted])
 
   // 打开时按键盘交互习惯聚焦浮层容器（或首项），支持上下键遍历选项
   useEffect(() => {

@@ -6,6 +6,15 @@
   "exports": {
     "./runtime": "./runtime/index.ts",
     "./ports": "./ports/index.ts",
+    "./i18n": "./design/i18n.ts",
+    "./design": "./design/index.ts",
     "./facts/session": "./facts/session_facts.ts"
+  },
+  "dependencies": {
+    "clsx": "2.1.1"
+  },
+  "peerDependencies": {
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
   }
 }

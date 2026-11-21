@@ -7,14 +7,14 @@ import {
   IconKeyOutline16,
   IconRightUpOutline14,
   IconToastError16,
-} from '../base/icons.js'
+} from '@deepseek-chat/spine/design'
 import { setFirecrawlApiKey, useSettings } from '../../services/settings.js'
 import { ApiError } from '../../services/api/client.js'
 import { webResearch } from '../../app/composition.js'
 import { isDesktopApp } from '../../platform/desktop.js'
 import { useIsMobile } from '../../app/viewport.js'
-import { Button } from '../base/Button.js'
-import { IconButton } from '../base/IconButton.js'
+import { Button } from '@deepseek-chat/spine/design'
+import { IconButton } from '@deepseek-chat/spine/design'
 import { useApiKeyForm } from './useApiKeyForm.js'
 import { useTranslate } from '../../i18n/index.js'
 import styles from './Settings.module.css'

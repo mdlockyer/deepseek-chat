@@ -1,6 +1,6 @@
 import { useTranslate } from '../../../i18n/index.js'
 import { formatSize, getExtension } from '../../../services/attachments.js'
-import { Button } from '../../base/Button.js'
+import { Button } from '@deepseek-chat/spine/design'
 import { FileIcon } from '../../files/FileIcon.js'
 import panelStyles from '../../sidePanel/SidePanel.module.css'
 import styles from '../PreviewPanel.module.css'

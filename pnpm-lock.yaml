@@ -133,7 +133,17 @@ importers:
         specifier: workspace:*
         version: link:../../spine
 
-  spine: {}
+  spine:
+    dependencies:
+      clsx:
+        specifier: 2.1.1
+        version: 2.1.1
+      react:
+        specifier: 18.3.1
+        version: 18.3.1
+      react-dom:
+        specifier: 18.3.1
+        version: 18.3.1(react@18.3.1)
 
 packages:
 

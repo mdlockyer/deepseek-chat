@@ -3,11 +3,11 @@ import { useCallback, useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslate } from '../../i18n/index.js'
 import { formatSize } from '../../services/attachments.js'
-import { acquireBrowserOverlayLock } from '../../services/browser/state.js'
+import { acquireOverlay } from '@deepseek-chat/spine/design'
 import type { FileVersionEntry } from '../../services/preview/workspace.js'
-import { usePresence } from '../../utils/usePresence.js'
-import { useAnchoredPosition, useDismiss } from '../base/anchored.js'
-import { IconCheckedOutline14, IconChevronDownOutline14 } from '../base/icons.js'
+import { usePresence } from '@deepseek-chat/spine/design'
+import { useAnchoredPosition, useDismiss } from '@deepseek-chat/spine/design'
+import { IconCheckedOutline14, IconChevronDownOutline14 } from '@deepseek-chat/spine/design'
 import styles from './PreviewPanel.module.css'
 
 /** 文件历史版本下拉选择器 */
@@ -41,7 +41,7 @@ export const VersionMenu = ({
   )
 
   useDismiss(open, [anchorRef, floatingRef], () => close(false))
-  useEffect(() => (mounted ? acquireBrowserOverlayLock() : undefined), [mounted])
+  useEffect(() => (mounted ? acquireOverlay() : undefined), [mounted])
 
   useEffect(() => {
     if (open) {

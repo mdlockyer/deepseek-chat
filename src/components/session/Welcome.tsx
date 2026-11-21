@@ -2,7 +2,7 @@ import clsx from 'clsx'
 import { useIsMobile } from '../../app/viewport.js'
 import { useTranslate } from '../../i18n/index.js'
 import { ChatInput } from '../chatInput/ChatInput.js'
-import { DeepSeekMark } from '../base/logo.js'
+import { DeepSeekMark } from '@deepseek-chat/spine/design'
 import { MobileHeader } from './MobileHeader.js'
 import styles from './Welcome.module.css'
 

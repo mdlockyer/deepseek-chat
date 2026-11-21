@@ -1,3 +1,4 @@
+import { useLocale } from '@deepseek-chat/spine/i18n'
 import clsx from 'clsx'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import {
@@ -9,7 +10,7 @@ import {
   IconLightOutline16,
   IconSettingsOutline16,
   IconUploadOutline14,
-} from '../base/icons.js'
+} from '@deepseek-chat/spine/design'
 import {
   BackupError,
   clearHistory,
@@ -32,13 +33,13 @@ import {
   type ThemePreference,
 } from '../../services/settings.js'
 import { useTranslate, type TranslationKey, type TranslationMessage } from '../../i18n/index.js'
-import { Button } from '../base/Button.js'
-import { Modal } from '../base/Modal.js'
-import { Select } from '../base/Select.js'
+import { Button } from '@deepseek-chat/spine/design'
+import { Modal } from '@deepseek-chat/spine/design'
+import { Select } from '@deepseek-chat/spine/design'
 import { showToast } from '../base/toastState.js'
 import { ApiKeyField, useApiKeyEditor } from './ApiKeyField.js'
 import { closeSettings, useSettingsDialog, type SettingsSection } from './settingsDialogState.js'
-import { usePresence } from '../../utils/usePresence.js'
+import { usePresence } from '@deepseek-chat/spine/design'
 import styles from './Settings.module.css'
 
 /**
@@ -233,7 +234,7 @@ const useHistoryDelete = () => {
 
 const LocationSetting = () => {
   const t = useTranslate()
-  const locale = useSettings((state) => state.locale)
+  const locale = useLocale()
   const location = useSettings((state) => state.location)
   const province =
     location?.region === 'CN'
@@ -297,7 +298,7 @@ const LocationSetting = () => {
 
 const LocaleSetting = () => {
   const t = useTranslate()
-  const locale = useSettings((state) => state.locale)
+  const locale = useLocale()
   return (
     <SettingCell
       label={t('settingsLocalePreference')}

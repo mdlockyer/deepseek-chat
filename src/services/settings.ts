@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { setLocale as setUiLocale, type Locale } from '@deepseek-chat/spine/i18n'
 import type { TtsVoice } from './api/speech.js'
 import {
   isDesktopApp,
@@ -9,7 +10,7 @@ import {
 } from '../platform/desktop.js'
 import { normalizeLocation, type UserLocation } from './location.js'
 
-export type Locale = 'zh-CN' | 'en-US'
+export type { Locale }
 
 /** 主题偏好；默认跟随系统 */
 export type ThemePreference = 'light' | 'dark' | 'system'
@@ -19,7 +20,6 @@ type Settings = {
   apiKey: string | null
   firecrawlApiKey: string | null
   desktopSettingsReady: boolean
-  locale: Locale
   themePreference: ThemePreference
   location: UserLocation | null
   ttsVoice: TtsVoice
@@ -121,7 +121,6 @@ export const useSettings = create<Settings>(() => ({
   apiKey: isDesktopApp ? null : read(KEYS.apiKey),
   firecrawlApiKey: isDesktopApp ? null : read(KEYS.firecrawlApiKey),
   desktopSettingsReady: !isDesktopApp,
-  locale: initialLocale(),
   location: initialLocation(),
   themePreference: initialThemePreference(),
   ttsVoice: initialTtsVoice(),
@@ -134,9 +133,12 @@ export const useSettings = create<Settings>(() => ({
   siderCollapsed: read(KEYS.siderCollapsed) === 'true',
 }))
 
+// 界面语言的运行时状态由 spine/i18n 持有；这里只负责持久化用户的选择。
+setUiLocale(initialLocale())
+
 export const setLocale = (locale: Locale) => {
   write(KEYS.locale, locale)
-  useSettings.setState({ locale })
+  setUiLocale(locale)
 }
 
 export const setLocation = (value: UserLocation | null) => {
