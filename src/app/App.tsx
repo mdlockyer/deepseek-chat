@@ -26,7 +26,7 @@ import { Toast } from '@deepseek-chat/spine/design'
 import { showToast } from '../components/base/toastState.js'
 import { onUploadNotice } from '../services/attachments.js'
 import { Button } from '@deepseek-chat/spine/design'
-import { voice } from './composition.js'
+import { account, voice } from './composition.js'
 import { isDesktopApp, onOpenSettings } from '../platform/desktop.js'
 import { usePresence, PANEL_DURATION_MS } from '@deepseek-chat/spine/design'
 import { CollapsedSider } from '../components/sider/CollapsedSider.js'
@@ -39,7 +39,7 @@ export const App = () => {
   const t = useTranslate()
   const isMobile = useIsMobile()
   const locale = useLocale()
-  const desktopSettingsReady = useSettings((state) => state.desktopSettingsReady)
+  const desktopSettingsReady = account.useState().status === 'ready'
   // 移动端侧边栏以独立抽屉管理开合状态
   const siderCollapsed = useSettings((state) => state.siderCollapsed) && !isMobile
   const ready = useChatStore((state) => state.ready)

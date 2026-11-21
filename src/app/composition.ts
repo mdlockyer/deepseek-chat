@@ -2,6 +2,7 @@
  * App Shell composition root: boots the Spine and instantiates slices with their host adapters.
  * No domain logic belongs here — only wiring.
  */
+import { createAccountSlice } from '@deepseek-chat/slice-account'
 import { createPythonSlice } from '@deepseek-chat/slice-python'
 import { createVoiceSlice } from '@deepseek-chat/slice-voice'
 import { createWebResearchSlice } from '@deepseek-chat/slice-web-research'
@@ -9,6 +10,8 @@ import { EventLog } from '@deepseek-chat/spine/runtime'
 import {
   desktopFetch,
   isDesktopApp,
+  loadFirecrawlApiKey,
+  loadKeychainApiKey,
   onPythonPhase,
   pythonInterrupt,
   pythonReset,
@@ -16,9 +19,12 @@ import {
   pythonRuntimeReset,
   pythonRuntimeStatus,
   pythonStageUpload,
+  saveFirecrawlApiKey,
+  saveKeychainApiKey,
 } from '../platform/desktop.js'
 import { API_ORIGIN } from '../services/api/client.js'
 import { useSettings } from '../services/settings.js'
+import { localStore } from './storage.js'
 
 /** 须与 package.json 中 pyodide 开发依赖的版本一致（scripts/fetch-pyodide.mjs 从中复制运行时） */
 const PYODIDE_VERSION = '314.0.8'
@@ -30,6 +36,17 @@ const pyodideIndexURL = () =>
     : `https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/full/`
 
 export const spine = new EventLog()
+
+/** 桌面版走原生 HTTP（不受 CORS 限制），网页版走 WebView fetch */
+const httpFetch = isDesktopApp ? desktopFetch : (url: string, init: RequestInit) => fetch(url, init)
+
+/** 桌面版密钥存在应用私有存储，网页版存在 localStorage */
+export const account = createAccountSlice({
+  store: localStore,
+  secret: isDesktopApp ? { load: loadKeychainApiKey, save: saveKeychainApiKey } : null,
+  fetch: httpFetch,
+  apiOrigin: API_ORIGIN,
+})
 
 export const python = createPythonSlice({
   log: spine,
@@ -48,16 +65,15 @@ export const python = createPythonSlice({
 })
 
 export const webResearch = createWebResearchSlice({
-  // 桌面版走原生 HTTP（不受 CORS 限制），网页版走 WebView fetch
-  fetch: isDesktopApp ? desktopFetch : (url, init) => fetch(url, init),
-  // Firecrawl Key 仍由设置保存，待设置按 slice 拆分后归 web-research 所有
-  apiKey: () => useSettings.getState().firecrawlApiKey,
+  fetch: httpFetch,
+  store: localStore,
+  secret: isDesktopApp ? { load: loadFirecrawlApiKey, save: saveFirecrawlApiKey } : null,
 })
 
 export const voice = createVoiceSlice({
-  fetch: isDesktopApp ? desktopFetch : (url, init) => fetch(url, init),
+  fetch: httpFetch,
   apiOrigin: API_ORIGIN,
-  // API Key 与朗读音色仍由设置保存，待设置按 slice 拆分后调整
-  apiKey: () => useSettings.getState().apiKey,
+  apiKey: () => account.getApiKey(),
+  // 朗读音色仍由设置保存，稍后归 voice 所有
   voice: () => useSettings.getState().ttsVoice,
 })

@@ -1,10 +1,16 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
+import { memoryStore, type SecretSlot } from '@deepseek-chat/spine/ports'
 import {
   createWebResearchSlice,
   type WebResearchDeps,
   type WebToolResult,
 } from '@deepseek-chat/slice-web-research'
+
+const KEY = 'chat-demo:firecrawl-api-key'
+
+/** Web storage holding the given Firecrawl key. */
+const keyed = (key: string) => ({ store: memoryStore({ [KEY]: key }) })
 
 type Call = { url: string; init: RequestInit }
 
@@ -33,7 +39,12 @@ const setup = (
   overrides: Partial<WebResearchDeps> = {}
 ) => {
   const fake = fakeFetch(respond)
-  const web = createWebResearchSlice({ fetch: fake.fetch, apiKey: () => null, ...overrides })
+  const web = createWebResearchSlice({
+    fetch: fake.fetch,
+    store: memoryStore(),
+    secret: null,
+    ...overrides,
+  })
   return { web, calls: fake.calls }
 }
 
@@ -113,13 +124,13 @@ describe('web-research: search', () => {
   })
 
   it('sends the trimmed key as a Bearer token, read on every call', async () => {
-    let key: string | null = '  fc-one  '
-    const { web, calls } = setup(() => json({ success: true, data: { web: [] } }), {
-      apiKey: () => key,
-    })
+    const { web, calls } = setup(
+      () => json({ success: true, data: { web: [] } }),
+      keyed('  fc-one  ')
+    )
 
     await web.run('web_search', { query: 'a' }, { signal: signal() })
-    key = 'fc-two'
+    await web.setApiKey('fc-two')
     await web.run('web_search', { query: 'b' }, { signal: signal() })
 
     assert.deepEqual(calls.map(authHeader), ['Bearer fc-one', 'Bearer fc-two'])
@@ -216,10 +227,10 @@ describe('web-research: failures', () => {
   it('distinguishes keyless 429 limit from keyed 429 limit', async () => {
     const respond = () => json({ success: false, error: 'Rate limit exceeded' }, 429)
     const keyless = setup(respond).web
-    const keyed = setup(respond, { apiKey: () => 'fc-test-123' }).web
+    const withKey = setup(respond, keyed('fc-test-123')).web
 
     const a = await keyless.run('web_search', { query: 'hello' }, { signal: signal() })
-    const b = await keyed.run('web_search', { query: 'hello' }, { signal: signal() })
+    const b = await withKey.run('web_search', { query: 'hello' }, { signal: signal() })
 
     assert.equal(a.status, 'error')
     assert.match(a.content, /keyless daily limit reached/)
@@ -228,7 +239,7 @@ describe('web-research: failures', () => {
   })
 
   it('says the key is invalid on 401', async () => {
-    const { web } = setup(() => json({ error: 'Unauthorized' }, 401), { apiKey: () => 'fc-bad' })
+    const { web } = setup(() => json({ error: 'Unauthorized' }, 401), keyed('fc-bad'))
 
     const result = await web.run('web_scrape', { url: 'https://a.example/' }, { signal: signal() })
 
@@ -247,7 +258,8 @@ describe('web-research: failures', () => {
   it('reports a timeout as an error the model can read', async () => {
     const web = createWebResearchSlice({
       fetch: hangingFetch,
-      apiKey: () => null,
+      store: memoryStore(),
+      secret: null,
       params: { searchTimeoutMs: 5 },
     })
 
@@ -260,7 +272,7 @@ describe('web-research: failures', () => {
   })
 
   it('reports a caller abort as aborted, not as an error', async () => {
-    const web = createWebResearchSlice({ fetch: hangingFetch, apiKey: () => null })
+    const web = createWebResearchSlice({ fetch: hangingFetch, store: memoryStore(), secret: null })
     const controller = new AbortController()
 
     const pending = web.run('web_search', { query: 'q' }, { signal: controller.signal })
@@ -357,11 +369,157 @@ describe('web-research: key verification', () => {
       fetch: async () => {
         throw new TypeError('Failed to fetch')
       },
-      apiKey: () => null,
+      store: memoryStore(),
+      secret: null,
     })
 
     assert.deepEqual(await invalid.verifyKey('k'), { kind: 'invalid' })
     assert.deepEqual(await failed.verifyKey('k'), { kind: 'failed', message: 'maintenance' })
     assert.deepEqual(await unreachable.verifyKey('k'), { kind: 'unreachable' })
+  })
+})
+
+/** Desktop secret slot double: holds one value, can be told to fail. */
+const fakeSecret = (initial: string | null = null) => {
+  let value = initial
+  let failSave = false
+  let gate: Promise<void> = Promise.resolve()
+  const slot: SecretSlot = {
+    load: async () => {
+      // Snapshot at call time, as a native read would; the gate only delays the answer.
+      const read = value
+      await gate
+      return read
+    },
+    save: async (next) => {
+      if (failSave) {
+        throw new Error('keychain locked')
+      }
+      value = next
+    },
+  }
+  return {
+    slot,
+    value: () => value,
+    failSaves: () => {
+      failSave = true
+    },
+    holdLoad: () => {
+      let release: () => void = () => undefined
+      gate = new Promise<void>((resolve) => {
+        release = resolve
+      })
+      return release
+    },
+  }
+}
+
+const slice = (store = memoryStore(), secret: SecretSlot | null = null) =>
+  createWebResearchSlice({ fetch: async () => json({}), store, secret })
+
+describe('web-research: key storage on the web', () => {
+  it('is ready at once with the stored key, trimmed; blank means keyless', () => {
+    assert.deepEqual(slice(memoryStore({ [KEY]: ' fc-web ' })).getKeyState(), {
+      status: 'ready',
+      apiKey: 'fc-web',
+    })
+    assert.equal(slice(memoryStore({ [KEY]: '  ' })).getApiKey(), null)
+  })
+
+  it('saves and removes the key under the original storage key', async () => {
+    const store = memoryStore()
+    const web = slice(store)
+
+    await web.setApiKey(' fc-new ')
+    assert.equal(store.get(KEY), 'fc-new')
+    await web.setApiKey(null)
+    assert.equal(store.get(KEY), null)
+    assert.equal(web.getApiKey(), null)
+  })
+})
+
+describe('web-research: key storage on desktop', () => {
+  it('has no key until hydrated, then the slot key', async () => {
+    const web = slice(memoryStore(), fakeSecret('fc-desk').slot)
+
+    assert.deepEqual(web.getKeyState(), { status: 'loading' })
+    assert.equal(web.getApiKey(), null)
+    await web.hydrate()
+    assert.equal(web.getApiKey(), 'fc-desk')
+  })
+
+  it('migrates a legacy web key into the empty slot and removes the web copy', async () => {
+    const store = memoryStore({ [KEY]: 'fc-legacy' })
+    const secret = fakeSecret(null)
+    const web = slice(store, secret.slot)
+
+    await web.hydrate()
+
+    assert.equal(secret.value(), 'fc-legacy')
+    assert.equal(store.get(KEY), null)
+    assert.equal(web.getApiKey(), 'fc-legacy')
+  })
+
+  it('keeps the slot key over a legacy one', async () => {
+    const store = memoryStore({ [KEY]: 'fc-legacy' })
+    const secret = fakeSecret('fc-slot')
+    const web = slice(store, secret.slot)
+
+    await web.hydrate()
+
+    assert.equal(web.getApiKey(), 'fc-slot')
+    assert.equal(secret.value(), 'fc-slot')
+    assert.equal(store.get(KEY), null)
+  })
+
+  it('becomes keyless-ready when migration fails, leaving the legacy key for next launch', async () => {
+    const store = memoryStore({ [KEY]: 'fc-legacy' })
+    const secret = fakeSecret(null)
+    secret.failSaves()
+    const web = slice(store, secret.slot)
+
+    await web.hydrate()
+
+    assert.deepEqual(web.getKeyState(), { status: 'ready', apiKey: null })
+    assert.equal(store.get(KEY), 'fc-legacy')
+  })
+
+  it('saves to the slot only, and rejects keeping the old key when the slot fails', async () => {
+    const store = memoryStore()
+    const secret = fakeSecret(null)
+    const web = slice(store, secret.slot)
+    await web.hydrate()
+
+    await web.setApiKey('fc-2')
+    assert.equal(secret.value(), 'fc-2')
+    assert.equal(store.get(KEY), null)
+
+    secret.failSaves()
+    await assert.rejects(() => web.setApiKey('fc-3'), /keychain locked/)
+    assert.equal(web.getApiKey(), 'fc-2')
+  })
+
+  it('lets a key saved during hydration win over the one being read', async () => {
+    const secret = fakeSecret('fc-read')
+    const release = secret.holdLoad()
+    const web = slice(memoryStore(), secret.slot)
+
+    const hydrating = web.hydrate()
+    await web.setApiKey('fc-typed')
+    release()
+    await hydrating
+
+    assert.equal(web.getApiKey(), 'fc-typed')
+  })
+
+  it('sends the hydrated slot key with tool calls', async () => {
+    const { web, calls } = setup(() => json({ success: true, data: [] }), {
+      secret: fakeSecret('fc-desk').slot,
+    })
+    await web.hydrate()
+
+    await web.run('web_search', { query: 'q' }, { signal: signal() })
+
+    assert.equal(authHeader(calls[0]), 'Bearer fc-desk')
   })
 })

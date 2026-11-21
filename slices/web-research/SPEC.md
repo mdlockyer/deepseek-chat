@@ -8,18 +8,23 @@ IP per day) or with the user's Firecrawl API key.
 
 ## Public entrypoint
 
-`createWebResearchSlice({ fetch, apiKey, params? })` returns:
+`createWebResearchSlice({ fetch, store, secret, params? })` returns:
 
-| Member                                                 | Meaning                                                                                               |
-| :----------------------------------------------------- | :---------------------------------------------------------------------------------------------------- |
-| `toolNames`                                            | `{ search: 'web_search', scrape: 'web_scrape' }`. Persisted in chat history; never rename.            |
-| `declareTools({ searchEnabled, questionText })`        | Tools to declare for a turn (see invariant 1).                                                        |
-| `instructions`                                         | System-prompt section to include whenever any web tool is declared.                                   |
-| `handles(name)`                                        | Whether a tool call belongs to this slice.                                                            |
-| `run(name, input, { signal, inputJson?, citedUrls? })` | Run one call. Always resolves to a `WebToolResult`.                                                   |
-| `verifyKey(key, signal?)`                              | `{ kind: 'valid' } \| { kind: 'invalid' } \| { kind: 'unreachable' } \| { kind: 'failed', message }`. |
+| Member                                                 | Meaning                                                                                                     |
+| :----------------------------------------------------- | :---------------------------------------------------------------------------------------------------------- |
+| `toolNames`                                            | `{ search: 'web_search', scrape: 'web_scrape' }`. Persisted in chat history; never rename.                  |
+| `declareTools({ searchEnabled, questionText })`        | Tools to declare for a turn (see invariant 1).                                                              |
+| `instructions`                                         | System-prompt section to include whenever any web tool is declared.                                         |
+| `handles(name)`                                        | Whether a tool call belongs to this slice.                                                                  |
+| `run(name, input, { signal, inputJson?, citedUrls? })` | Run one call. Always resolves to a `WebToolResult`.                                                         |
+| `verifyKey(key, signal?)`                              | `{ kind: 'valid' } \| { kind: 'invalid' } \| { kind: 'unreachable' } \| { kind: 'failed', message }`.       |
+| `getApiKey()`                                          | The saved key, or `null` (keyless, or still loading on desktop).                                            |
+| `getKeyState()` / `useKeyState()`                      | `{ status: 'loading' }` or `{ status: 'ready', apiKey: string \| null }`.                                   |
+| `hydrate()`                                            | Desktop: read the key from the secret slot (migrating a legacy web-storage key). Web: no-op. Never rejects. |
+| `setApiKey(key \| null)`                               | Save (trimmed) or remove. Rejects if the desktop secret cannot be written; state unchanged then.            |
+| `useKeyEditor()` + `KeySettings({ editor })`           | Settings view; the editor hook keeps typed input across section switches.                                   |
 
-`apiKey()` is read on every call, so a key change applies to the next call.
+The key is read on every call, so a key change applies to the next call.
 
 ## Behavioural invariants
 
@@ -50,6 +55,12 @@ IP per day) or with the user's Firecrawl API key.
    `[Truncated after N characters]` (N formatted `en-US`, e.g. `24,000`).
 10. **Key verification** uses an endpoint that spends no credits. 401 → `invalid`; no response
     (network, timeout) → `unreachable`; any other failure → `failed` with the server's message.
+11. **Key storage.** Web: under `chat-demo:firecrawl-api-key` in `KeyValueStore`, `ready` at once.
+    Desktop (`secret` given): `loading` (keyless) until `hydrate()` settles. If the slot is empty a
+    legacy web key is copied into it; any legacy web copy is then removed. If that fails the state
+    becomes `ready` with no key and the legacy copy stays for the next launch. A key saved during
+    hydration wins over the one being read. Saving writes storage first, then updates the state.
+12. **Settings view** verifies before saving and never saves an unverified key.
 
 ## Facts
 
@@ -67,5 +78,5 @@ None consumed or published.
 
 ## Ownership notes
 
-- The Firecrawl key's storage and settings UI still live in `src/services/settings.ts` and
-  `src/components/settings/ApiKeyField.tsx`; they move here when settings are split per slice.
+- Key storage deliberately duplicates `slices/account`'s rules rather than sharing them through
+  the spine.

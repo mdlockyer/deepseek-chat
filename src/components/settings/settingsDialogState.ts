@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { useSettings } from '../../services/settings.js'
+import { account } from '../../app/composition.js'
 
 /** 设置弹窗的分组：通用设置 / API 密钥 / 数据管理 */
 export type SettingsSection = 'general' | 'apiKey' | 'data'
@@ -24,7 +24,7 @@ export const closeSettings = () => useSettingsDialog.setState({ open: false })
 
 /** 没有 API Key 时打开设置并选中「API 密钥」，返回是否已有 Key */
 export const ensureApiKey = () => {
-  if (useSettings.getState().apiKey) {
+  if (account.getApiKey()) {
     return true
   }
   openSettings('apiKey')

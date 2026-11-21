@@ -23,6 +23,7 @@
     "build:desktop": "pnpm build"
   },
   "dependencies": {
+    "@deepseek-chat/slice-account": "workspace:*",
     "@deepseek-chat/slice-python": "workspace:*",
     "@deepseek-chat/slice-voice": "workspace:*",
     "@deepseek-chat/slice-web-research": "workspace:*",

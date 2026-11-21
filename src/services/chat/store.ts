@@ -28,7 +28,7 @@ import {
 } from '../browser/tools.js'
 import type { PythonRunResult } from '@deepseek-chat/slice-python'
 import type { SessionDeleted, SessionHistoryReplaced } from '@deepseek-chat/spine/facts/session'
-import { python as pythonSlice, spine, webResearch } from '../../app/composition.js'
+import { account, python as pythonSlice, spine, webResearch } from '../../app/composition.js'
 import type { ChatModel, CreateMessageRequest } from '../api/types.js'
 import { extractFileIds, getFileErrorCode, isRetryableApiError } from '../api/errors.js'
 import { cancelUpload, describeUploadError, uploadAttachment, useUploads } from '../attachments.js'
@@ -911,7 +911,7 @@ const prepareFiles = async (sessionId: string, request: Request, signal: AbortSi
   // 服务端判定 file_id 失效时会清掉会话里的 serverId，先用最新消息替换请求快照，
   // 否则快照里仍是旧 id，补传会直接复用它。
   request = refreshRequest(sessionId, request)
-  const apiKey = useSettings.getState().apiKey ?? ''
+  const apiKey = account.getApiKey() ?? ''
   const serverIds = new Map<string, string>()
   // 停止生成立即生效；上传本身不取消（输入框与其他消息可能共用同一任务），完成后照常写回 serverId
   const aborted = new Promise<never>((_, reject) => {
@@ -1075,7 +1075,7 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
    * 只上传本次请求会附带的图片；每张只上传一次，失败记为 null 不再重试。
    */
   const uploadToolImages = async () => {
-    const apiKey = useSettings.getState().apiKey ?? ''
+    const apiKey = account.getApiKey() ?? ''
     for (const block of pickImageResults(reply.blocks)) {
       const images = block.images ?? []
       const ids = [...(block.imageFileIds ?? [])]
@@ -1427,7 +1427,7 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
           declaredClientNames
         )
         const events = streamMessage(
-          useSettings.getState().apiKey ?? '',
+          account.getApiKey() ?? '',
           {
             model: initial.model ?? MODEL,
             system: systemParts.join('\n\n'),

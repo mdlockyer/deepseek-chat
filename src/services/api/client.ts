@@ -154,19 +154,6 @@ const anthropicHeaders = (apiKey: string, beta: boolean): Record<string, string>
   ...(beta ? { 'anthropic-beta': FILES_BETA } : {}),
 })
 
-/** 用 GET /models 校验 API Key（不产生费用） */
-export const verifyApiKey = async (apiKey: string, signal?: AbortSignal): Promise<void> => {
-  await request(
-    `${API_ORIGIN}/models`,
-    {
-      method: 'GET',
-      headers: { Authorization: `Bearer ${apiKey}` },
-      signal,
-    },
-    DEFAULT_REST_TIMEOUT_MS
-  )
-}
-
 /**
  * POST /anthropic/v1/files 上传附件（不设过期时间，会话里的历史附件一直可用）。
  * purpose 为 null 时不传该字段（图片）；purpose 必须排在 file 之前。

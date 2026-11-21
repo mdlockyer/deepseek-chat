@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@deepseek-chat/slice-account':
+        specifier: workspace:*
+        version: link:slices/account
       '@deepseek-chat/slice-python':
         specifier: workspace:*
         version: link:slices/python
@@ -123,6 +126,18 @@ importers:
       typescript:
         specifier: 7.0.2
         version: 7.0.2
+
+  slices/account:
+    dependencies:
+      '@deepseek-chat/spine':
+        specifier: workspace:*
+        version: link:../../spine
+      clsx:
+        specifier: 2.1.1
+        version: 2.1.1
+      react:
+        specifier: 18.3.1
+        version: 18.3.1
 
   slices/python:
     dependencies:

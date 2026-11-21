@@ -1,4 +1,5 @@
-import type { HttpFetch } from '@deepseek-chat/spine/ports'
+import type { HttpFetch, KeyValueStore, SecretSlot } from '@deepseek-chat/spine/ports'
+import { useSyncExternalStore } from 'react'
 import {
   DEFAULT_FIRECRAWL_PARAMS,
   createFirecrawlClient,
@@ -6,8 +7,12 @@ import {
   type KeyVerification,
   type WebSearchSource,
 } from './firecrawl.js'
+import { createKeyStore, type FirecrawlKeyState } from './key.js'
+import { KeySettings, createUseKeyEditor, type KeyEditor } from './KeySettings.js'
 
 export type { FirecrawlParams, KeyVerification, WebSearchSource } from './firecrawl.js'
+export type { FirecrawlKeyState } from './key.js'
+export type { KeyEditor } from './KeySettings.js'
 
 export const WEB_SEARCH_TOOL_NAME = 'web_search'
 export const WEB_SCRAPE_TOOL_NAME = 'web_scrape'
@@ -39,8 +44,10 @@ export type WebRunOptions = {
 
 export type WebResearchDeps = {
   readonly fetch: HttpFetch
-  /** The user's Firecrawl key, or null for the keyless tier. Read on every call. */
-  readonly apiKey: () => string | null
+  /** Web storage for the user's optional Firecrawl key. */
+  readonly store: KeyValueStore
+  /** Desktop private storage; `null` keeps the key in web storage. */
+  readonly secret: SecretSlot | null
   readonly params?: Partial<FirecrawlParams>
 }
 
@@ -51,6 +58,16 @@ export type WebResearchSlice = {
   handles(toolName: string): boolean
   run(toolName: string, input: unknown, options: WebRunOptions): Promise<WebToolResult>
   verifyKey(apiKey: string, signal?: AbortSignal): Promise<KeyVerification>
+  /** The user's Firecrawl key (null: keyless tier, or still loading on desktop). */
+  getApiKey(): string | null
+  getKeyState(): FirecrawlKeyState
+  useKeyState(): FirecrawlKeyState
+  /** Desktop: read the key (migrating a legacy web-storage copy). Never rejects. */
+  hydrate(): Promise<void>
+  /** Save (trimmed) or remove the key; rejects if desktop storage cannot be written. */
+  setApiKey(apiKey: string | null): Promise<void>
+  useKeyEditor(): KeyEditor
+  KeySettings: typeof KeySettings
 }
 
 const SEARCH_TOOL: WebToolDefinition = {
@@ -94,6 +111,7 @@ const ABORTED: WebToolResult = { status: 'aborted', content: 'Aborted by user.' 
 
 export const createWebResearchSlice = (deps: WebResearchDeps): WebResearchSlice => {
   const client = createFirecrawlClient(deps.fetch, { ...DEFAULT_FIRECRAWL_PARAMS, ...deps.params })
+  const keys = createKeyStore({ store: deps.store, secret: deps.secret })
 
   const invalidInput = (expected: string, input: unknown, inputJson?: string): WebToolResult => ({
     status: 'error',
@@ -114,7 +132,7 @@ export const createWebResearchSlice = (deps: WebResearchDeps): WebResearchSlice 
     }
     try {
       const outcome = await client.search(query, {
-        apiKey: deps.apiKey(),
+        apiKey: keys.getApiKey(),
         signal: options.signal,
         ...(typeof raw?.limit === 'number' ? { limit: raw.limit } : {}),
         ...(options.citedUrls ? { citedUrls: options.citedUrls } : {}),
@@ -134,7 +152,7 @@ export const createWebResearchSlice = (deps: WebResearchDeps): WebResearchSlice 
       return invalidInput('{"url": string}', input, options.inputJson)
     }
     try {
-      const outcome = await client.scrape(url, { apiKey: deps.apiKey(), signal: options.signal })
+      const outcome = await client.scrape(url, { apiKey: keys.getApiKey(), signal: options.signal })
       return {
         status: 'ok',
         content: outcome.text,
@@ -165,5 +183,12 @@ export const createWebResearchSlice = (deps: WebResearchDeps): WebResearchSlice 
       return Promise.resolve({ status: 'error', content: `Unknown tool: ${toolName}` })
     },
     verifyKey: client.verifyKey,
+    getApiKey: keys.getApiKey,
+    getKeyState: keys.getState,
+    useKeyState: () => useSyncExternalStore(keys.subscribe, keys.getState, keys.getState),
+    hydrate: keys.hydrate,
+    setApiKey: keys.setApiKey,
+    useKeyEditor: createUseKeyEditor(keys, client.verifyKey),
+    KeySettings,
   }
 }

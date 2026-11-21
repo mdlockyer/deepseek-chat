@@ -20,7 +20,7 @@ import {
 import { useChatStore } from '../../services/chat/store.js'
 import { regionCodes, getRegionName, provinces } from '../../services/location.js'
 import type { PythonSlice } from '@deepseek-chat/slice-python'
-import { python } from '../../app/composition.js'
+import { account, python, webResearch } from '../../app/composition.js'
 import { isDesktopApp } from '../../platform/desktop.js'
 import {
   isChineseBrowser,
@@ -37,7 +37,6 @@ import { Button } from '@deepseek-chat/spine/design'
 import { Modal } from '@deepseek-chat/spine/design'
 import { Select } from '@deepseek-chat/spine/design'
 import { showToast } from '../base/toastState.js'
-import { ApiKeyField, useApiKeyEditor } from './ApiKeyField.js'
 import { closeSettings, useSettingsDialog, type SettingsSection } from './settingsDialogState.js'
 import { usePresence } from '@deepseek-chat/spine/design'
 import styles from './Settings.module.css'
@@ -70,8 +69,9 @@ const SettingsContent = ({ exiting = false }: { exiting?: boolean }) => {
   const t = useTranslate()
   // 打开时按调用方指定的分组选中，之后在弹窗内切换
   const [section, setSection] = useState(() => useSettingsDialog.getState().section)
-  // 切换分组不丢失正在输入的 API Key 与导入状态
-  const apiKeyEditor = useApiKeyEditor()
+  // 切换分组不丢失正在输入的密钥与导入状态
+  const accountEditor = account.useKeyEditor()
+  const firecrawlEditor = webResearch.useKeyEditor()
   const historyImport = useHistoryImport()
   const historyDelete = useHistoryDelete()
   const replacingHistory = useChatStore((state) => state.importingHistory)
@@ -122,7 +122,10 @@ const SettingsContent = ({ exiting = false }: { exiting?: boolean }) => {
               ) : null}
             </>
           ) : section === 'apiKey' ? (
-            <ApiKeyField editor={apiKeyEditor} />
+            <>
+              <account.KeySettings editor={accountEditor} />
+              <webResearch.KeySettings editor={firecrawlEditor} />
+            </>
           ) : (
             <>
               <ImportHistory historyImport={historyImport} disabled={historyBusy} />

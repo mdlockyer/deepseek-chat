@@ -28,7 +28,7 @@ import {
   setDraftText,
   useDrafts,
 } from '../../services/chat/drafts.js'
-import { voice as voiceSlice } from '../../app/composition.js'
+import { account, voice as voiceSlice } from '../../app/composition.js'
 import { ensureApiKey } from '../settings/settingsDialogState.js'
 import { ComposerMenu, isUploadShortcut, type ComposerToolSwitch } from './ComposerMenu.js'
 import { DragMask, useFileDrop } from './DragMask.js'
@@ -75,7 +75,7 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
     if (files.length === 0 || useChatStore.getState().importingHistory || !ensureApiKey()) {
       return
     }
-    const error = addDraftFiles(sessionId, files, useSettings.getState().apiKey ?? '')
+    const error = addDraftFiles(sessionId, files, account.getApiKey() ?? '')
     if (error) {
       showToast(error)
     }
@@ -83,7 +83,7 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
   const retryFile = useCallback(
     (id: string) => {
       if (!useChatStore.getState().importingHistory && ensureApiKey()) {
-        retryDraftAttachment(sessionId, id, useSettings.getState().apiKey ?? '')
+        retryDraftAttachment(sessionId, id, account.getApiKey() ?? '')
       }
     },
     [sessionId]
