@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react'
-import { useSettings, type ThemePreference } from '../services/settings.js'
+import type { ThemePreference } from '@deepseek-chat/slice-preferences'
+import { preferences } from './composition.js'
 
 export type Theme = 'light' | 'dark'
 
@@ -17,7 +18,7 @@ const resolveTheme = (preference: ThemePreference, osTheme: Theme): Theme =>
 
 /** 当前实际生效的深浅色：手动选择优先，「跟随系统」时取系统设置 */
 export const useTheme = (): Theme => {
-  const preference = useSettings((state) => state.themePreference)
+  const preference = preferences.useThemePreference()
   const osTheme = useSyncExternalStore(subscribeOsTheme, getOsTheme)
   return resolveTheme(preference, osTheme)
 }
@@ -53,7 +54,7 @@ const applyTheme = (theme: Theme) => {
 let appliedTheme: Theme | null = null
 
 const syncTheme = () => {
-  const theme = resolveTheme(useSettings.getState().themePreference, getOsTheme())
+  const theme = resolveTheme(preferences.getThemePreference(), getOsTheme())
   if (theme !== appliedTheme) {
     appliedTheme = theme
     applyTheme(theme)
@@ -67,5 +68,5 @@ export const setupTheme = () => {
     window.addEventListener('load', syncPageBackground, { once: true })
   }
   query.addEventListener('change', syncTheme)
-  useSettings.subscribe(syncTheme)
+  preferences.subscribe(syncTheme)
 }

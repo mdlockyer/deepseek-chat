@@ -1,16 +1,7 @@
 import { create } from 'zustand'
-import { setLocale as setUiLocale, type Locale } from '@deepseek-chat/spine/i18n'
-import { normalizeLocation, type UserLocation } from './location.js'
 
-export type { Locale }
-
-/** 主题偏好；默认跟随系统 */
-export type ThemePreference = 'light' | 'dark' | 'system'
-
-/** 本机设置，存 localStorage：语言、主题、位置、深度思考、智能搜索、运行代码、内置浏览器与面板状态 */
+/** 本机设置，存 localStorage：深度思考、智能搜索、运行代码、内置浏览器与面板状态 */
 type Settings = {
-  themePreference: ThemePreference
-  location: UserLocation | null
   thinking: boolean
   search: boolean
   python: boolean
@@ -21,9 +12,6 @@ type Settings = {
 }
 
 const KEYS = {
-  locale: 'chat-demo:locale',
-  location: 'chat-demo:location',
-  themePreference: 'chat-demo:theme-preference',
   thinking: 'chat-demo:thinking',
   search: 'chat-demo:search',
   python: 'chat-demo:python',
@@ -53,40 +41,6 @@ const write = (key: string, value: string | null) => {
   }
 }
 
-/** 位置选择模式跟随浏览器语言，与应用内选择的界面语言无关。 */
-export const isChineseBrowser = (): boolean =>
-  (typeof navigator === 'undefined' ? 'zh' : navigator.language).toLowerCase().startsWith('zh')
-
-const initialLocale = (): Locale => {
-  const saved = read(KEYS.locale)
-  if (saved === 'zh-CN' || saved === 'en-US') {
-    return saved
-  }
-  return isChineseBrowser() ? 'zh-CN' : 'en-US'
-}
-
-const initialLocation = (): UserLocation | null => {
-  try {
-    const location = normalizeLocation(JSON.parse(read(KEYS.location) ?? 'null'))
-    if (!location) {
-      return null
-    }
-    return isChineseBrowser()
-      ? location.region === 'CN' && location.province
-        ? location
-        : null
-      : { region: location.region }
-  } catch {
-    return null
-  }
-}
-
-/** 未保存过时跟随系统 */
-const initialThemePreference = (): ThemePreference => {
-  const saved = read(KEYS.themePreference)
-  return saved === 'light' || saved === 'dark' ? saved : 'system'
-}
-
 const DEFAULT_BROWSER_PANEL_WIDTH = 540
 const clampBrowserPanelWidth = (value: number) =>
   Number.isFinite(value)
@@ -99,8 +53,6 @@ const initialBrowserPanelWidth = (): number => {
 }
 
 export const useSettings = create<Settings>(() => ({
-  location: initialLocation(),
-  themePreference: initialThemePreference(),
   thinking: read(KEYS.thinking) === 'true',
   search: read(KEYS.search) === 'true',
   python: read(KEYS.python) === 'true',
@@ -109,25 +61,6 @@ export const useSettings = create<Settings>(() => ({
   browserAllowLocalhost: read(KEYS.browserAllowLocalhost) === 'true',
   siderCollapsed: read(KEYS.siderCollapsed) === 'true',
 }))
-
-// 界面语言的运行时状态由 spine/i18n 持有；这里只负责持久化用户的选择。
-setUiLocale(initialLocale())
-
-export const setLocale = (locale: Locale) => {
-  write(KEYS.locale, locale)
-  setUiLocale(locale)
-}
-
-export const setLocation = (value: UserLocation | null) => {
-  const location = normalizeLocation(value)
-  write(KEYS.location, location ? JSON.stringify(location) : null)
-  useSettings.setState({ location })
-}
-
-export const setThemePreference = (themePreference: ThemePreference) => {
-  write(KEYS.themePreference, themePreference)
-  useSettings.setState({ themePreference })
-}
 
 export const setThinking = (thinking: boolean) => {
   write(KEYS.thinking, String(thinking))

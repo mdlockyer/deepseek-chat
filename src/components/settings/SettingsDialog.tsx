@@ -1,13 +1,9 @@
-import { useLocale } from '@deepseek-chat/spine/i18n'
 import clsx from 'clsx'
 import { useRef, useState, type ReactNode } from 'react'
 import {
-  IconDarkOutline16,
   IconDataOutline16,
   IconDownloadOutline16,
-  IconFollowsystemOutline16,
   IconKeyOutline16,
-  IconLightOutline16,
   IconSettingsOutline16,
   IconUploadOutline14,
 } from '@deepseek-chat/spine/design'
@@ -18,18 +14,9 @@ import {
   importHistory,
 } from '../../services/chat/backup.js'
 import { useChatStore } from '../../services/chat/store.js'
-import { regionCodes, getRegionName, provinces } from '../../services/location.js'
-import { account, python, voice, webResearch } from '../../app/composition.js'
+import { account, preferences, python, voice, webResearch } from '../../app/composition.js'
 import { isDesktopApp } from '../../platform/desktop.js'
-import {
-  isChineseBrowser,
-  setBrowserAllowLocalhost,
-  setLocale,
-  setLocation,
-  setThemePreference,
-  useSettings,
-  type ThemePreference,
-} from '../../services/settings.js'
+import { setBrowserAllowLocalhost, useSettings } from '../../services/settings.js'
 import { useTranslate, type TranslationKey, type TranslationMessage } from '../../i18n/index.js'
 import { Button } from '@deepseek-chat/spine/design'
 import { Modal } from '@deepseek-chat/spine/design'
@@ -108,10 +95,10 @@ const SettingsContent = ({ exiting = false }: { exiting?: boolean }) => {
         <div role="tabpanel" className={styles.content}>
           {section === 'general' ? (
             <>
-              <ThemeSetting />
-              <LocaleSetting />
+              <preferences.ThemeSetting />
+              <preferences.LocaleSetting />
               <voice.VoiceSetting />
-              <LocationSetting />
+              <preferences.LocationSetting />
               {isDesktopApp ? (
                 <>
                   <BrowserLocalhostSetting />
@@ -233,92 +220,6 @@ const useHistoryDelete = () => {
   }
 }
 
-const LocationSetting = () => {
-  const t = useTranslate()
-  const locale = useLocale()
-  const location = useSettings((state) => state.location)
-  const province =
-    location?.region === 'CN'
-      ? provinces.find((item) => item.code === location.province)
-      : undefined
-
-  return (
-    <SettingCell
-      label={t('settingsLocation')}
-      status={null}
-      className={styles.locationCell}
-      action={
-        <div className={styles.locationSelectors}>
-          {isChineseBrowser() ? (
-            <>
-              <Select
-                ariaLabel={t('settingsLocationProvince')}
-                className={styles.provinceSelect}
-                value={province?.code ?? ''}
-                placeholder={t('settingsLocationProvince')}
-                options={provinces.map((item) => ({ value: item.code, label: item.name }))}
-                onChange={(value) => {
-                  if (value !== province?.code) {
-                    setLocation({ region: 'CN', province: value })
-                  }
-                }}
-              />
-              <Select
-                ariaLabel={t('settingsLocationCity')}
-                className={styles.citySelect}
-                value={province ? (location?.city ?? '') : ''}
-                disabled={!province?.cities.length}
-                placeholder={t('settingsLocationCity')}
-                options={
-                  province?.cities.map((item) => ({ value: item.code, label: item.name })) ?? []
-                }
-                onChange={(value) => {
-                  if (province) {
-                    setLocation({ region: 'CN', province: province.code, city: value })
-                  }
-                }}
-              />
-            </>
-          ) : (
-            <Select
-              ariaLabel={t('settingsLocationRegion')}
-              className={styles.regionSelect}
-              value={location?.region ?? ''}
-              placeholder={t('settingsLocationRegion')}
-              options={regionCodes
-                .map((code) => ({ value: code, label: getRegionName(code, locale) }))
-                .sort((a, b) => a.label.localeCompare(b.label, locale))}
-              onChange={(value) => setLocation({ region: value })}
-            />
-          )}
-        </div>
-      }
-    />
-  )
-}
-
-const LocaleSetting = () => {
-  const t = useTranslate()
-  const locale = useLocale()
-  return (
-    <SettingCell
-      label={t('settingsLocalePreference')}
-      status={null}
-      action={
-        <Select
-          ariaLabel={t('settingsLocalePreference')}
-          value={locale}
-          options={[
-            { value: 'zh-CN', label: t('settingsLocaleZhCN'), lang: 'zh-CN' },
-            { value: 'en-US', label: t('settingsLocaleEnUS'), lang: 'en' },
-          ]}
-          onChange={setLocale}
-        />
-      }
-    />
-  )
-}
-
 /** 内置浏览器是否允许模型访问 localhost / 内网地址 */
 const BrowserLocalhostSetting = () => {
   const t = useTranslate()
@@ -371,57 +272,6 @@ const ImportConfirm = ({
     >
       <div className={styles.importConfirmText}>{t('historyImportConfirmDescription')}</div>
     </Modal>
-  )
-}
-
-const themeOptions: { value: ThemePreference; label: TranslationKey; icon: ReactNode }[] = [
-  {
-    value: 'light',
-    label: 'avatarMenuSettingsDialogThemeSelectLightOption',
-    icon: <IconLightOutline16 />,
-  },
-  {
-    value: 'dark',
-    label: 'avatarMenuSettingsDialogThemeSelectDarkOption',
-    icon: <IconDarkOutline16 />,
-  },
-  {
-    value: 'system',
-    label: 'avatarMenuSettingsDialogThemeSelectSystemOption',
-    icon: <IconFollowsystemOutline16 />,
-  },
-]
-
-/**
- * 主题项：标题下方浅色 / 深色 / 跟随系统三个选块。
- * 与下方语言选项连续排列。
- */
-const ThemeSetting = () => {
-  const t = useTranslate()
-  const themePreference = useSettings((state) => state.themePreference)
-  const label = t('avatarMenuSettingsDialogThemeItemLabel')
-  return (
-    <div className={styles.theme}>
-      {label}
-      <div role="radiogroup" aria-label={label} className={styles.themeOptions}>
-        {themeOptions.map((option) => (
-          <button
-            key={option.value}
-            type="button"
-            role="radio"
-            aria-checked={themePreference === option.value}
-            className={clsx(
-              styles.themeOption,
-              themePreference === option.value && styles.themeOptionSelected
-            )}
-            onClick={() => setThemePreference(option.value)}
-          >
-            {option.icon}
-            {t(option.label)}
-          </button>
-        ))}
-      </div>
-    </div>
   )
 }
 

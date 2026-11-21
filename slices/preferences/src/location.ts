@@ -52,3 +52,16 @@ export const normalizeLocation = (value: unknown): UserLocation | null => {
   const selectedCity = selectedProvince.cities.find((item) => item.code === city)
   return selectedCity ? { region, province: selectedProvince.code, city: selectedCity.code } : null
 }
+
+/** The location in words for the model: city or province names only in Chinese for CN. */
+export const locationLabel = (location: UserLocation | null, locale: 'zh-CN' | 'en-US'): string => {
+  if (!location) {
+    return ''
+  }
+  if (location.region === 'CN' && locale === 'zh-CN') {
+    const province = provinces.find((item) => item.code === location.province)
+    const city = province?.cities.find((item) => item.code === location.city)
+    return city?.name ?? province?.name ?? getRegionName('CN', locale)
+  }
+  return getRegionName(location.region, locale)
+}

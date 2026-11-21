@@ -3,6 +3,7 @@
  * No domain logic belongs here — only wiring.
  */
 import { createAccountSlice } from '@deepseek-chat/slice-account'
+import { createPreferencesSlice } from '@deepseek-chat/slice-preferences'
 import { createPythonSlice } from '@deepseek-chat/slice-python'
 import { createVoiceSlice } from '@deepseek-chat/slice-voice'
 import { createWebResearchSlice } from '@deepseek-chat/slice-web-research'
@@ -35,6 +36,12 @@ const pyodideIndexURL = () =>
     : `https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/full/`
 
 export const spine = new EventLog()
+
+/** 先于首屏创建：恢复界面语言、主题与位置 */
+export const preferences = createPreferencesSlice({
+  store: localStore,
+  browserLanguage: typeof navigator === 'undefined' ? 'zh' : navigator.language,
+})
 
 /** 桌面版走原生 HTTP（不受 CORS 限制），网页版走 WebView fetch */
 const httpFetch = isDesktopApp ? desktopFetch : (url: string, init: RequestInit) => fetch(url, init)

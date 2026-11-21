@@ -28,7 +28,13 @@ import {
 } from '../browser/tools.js'
 import type { PythonRunResult } from '@deepseek-chat/slice-python'
 import type { SessionDeleted, SessionHistoryReplaced } from '@deepseek-chat/spine/facts/session'
-import { account, python as pythonSlice, spine, webResearch } from '../../app/composition.js'
+import {
+  account,
+  preferences,
+  python as pythonSlice,
+  spine,
+  webResearch,
+} from '../../app/composition.js'
 import type { ChatModel, CreateMessageRequest } from '../api/types.js'
 import { extractFileIds, getFileErrorCode, isRetryableApiError } from '../api/errors.js'
 import { cancelUpload, describeUploadError, uploadAttachment, useUploads } from '../attachments.js'
@@ -1385,7 +1391,10 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
         // 附件就绪后获取本轮信息；续写沿用原回答快照，重新生成的快照独立保存。
         const latestReminder = prepared.prefix
           ? prepared.prefix.latestReminder
-          : createLatestReminder({ locale: getLocale(), location: useSettings.getState().location })
+          : createLatestReminder({
+              locale: getLocale(),
+              locationLabel: preferences.getLocationLabel(getLocale()),
+            })
         reply = { ...reply, latestReminder }
         updateReply(sessionId, reply)
         persist(sessionId)
