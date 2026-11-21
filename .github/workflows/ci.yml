@@ -44,6 +44,9 @@ jobs:
       - name: Lint
         run: pnpm lint
 
+      - name: Check SSA boundaries
+        run: pnpm check:dag
+
       - name: Run tests
         run: pnpm test
 
