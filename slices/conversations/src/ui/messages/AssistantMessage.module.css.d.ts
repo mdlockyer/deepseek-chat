@@ -3,6 +3,7 @@ declare const styles: {
   readonly actions: string
   readonly waiting: string
   readonly waitingDot: string
+  readonly files: string
   readonly working: string
   readonly fading: string
   readonly notice: string

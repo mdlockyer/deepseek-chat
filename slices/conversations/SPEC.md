@@ -116,6 +116,11 @@ it, and the header toggle (`visible`, `open`, `toggle`). `panels.browser`: the h
     instead), or while its last step already shows it is running (a tool without its result, a
     running Python call, thinking in progress). The server may hold a whole tool call back until
     its input (e.g. a file) is written, so this gap can last tens of seconds.
+17. **Files with the answer.** The files a reply produced (from any tool result: presented or
+    edited files, files from Python) show as cards with the answer, not inside the thinking and
+    tools timeline, so they stay visible when the timeline is collapsed. There is one card per file
+    (by path, or by name when there is no path), in the order the files first appeared, showing
+    the latest version. The timeline keeps each file step's line and errors.
 
 ## Parameters
 

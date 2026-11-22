@@ -132,6 +132,11 @@ export type ReplyView = {
   sources: Source[]
   /** 搜索到的网页（去重），用于底部汇总与搜索结果列表 */
   searchResults: Source[]
+  /**
+   * 本条回复产出的文件（文件工具与 Python），和正文一起展示：同一文件（按路径，没有路径时按名称）
+   * 只保留一张卡片，位置取首次出现，内容取最新版本。
+   */
+  files: PresentedFileRef[]
 }
 
 export const getSiteName = (url: string) => {
@@ -611,11 +616,21 @@ export const buildReplyView = (reply: AssistantMessage, streaming: boolean): Rep
   })
 
   const answer = pendingText.length > 0 ? joinTextBlocks(pendingText, registry) : null
+  const files = new Map<string, PresentedFileRef>()
+  for (const block of reply.blocks) {
+    if (block.type === 'tool_result') {
+      for (const file of block.files ?? []) {
+        // Map 保留首次插入的顺序，覆盖时只更新内容
+        files.set(file.path ?? file.name, file)
+      }
+    }
+  }
   return {
     steps,
     answer: answer && answer.text ? answer : null,
     sources: registry.list,
     searchResults,
+    files: [...files.values()],
   }
 }
 

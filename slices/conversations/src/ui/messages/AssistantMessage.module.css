@@ -176,3 +176,11 @@
     background-position: 0 0;
   }
 }
+
+/* 本条回复产出的文件，紧随正文，不收进思考区 */
+.files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0;
+}

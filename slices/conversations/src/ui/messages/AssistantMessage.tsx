@@ -13,7 +13,7 @@ import { ChatMarkdown as Markdown } from './ChatMarkdown.js'
 import { SiteThumbnails } from '../search/SiteLogo.js'
 import { toggleSearchPanel, useSearchPanel } from '../search/searchPanelState.js'
 import { CopyButton } from './CopyButton.js'
-import { ReplyArea } from './ReplyArea.js'
+import { PresentedFileCard, ReplyArea } from './ReplyArea.js'
 import { needsWorkingIndicator } from '../../view.js'
 import { useReplyView } from './useReplyView.js'
 import {
@@ -81,7 +81,6 @@ export const AssistantMessage = memo(function AssistantMessage({
     <div className={styles.message}>
       {refused ? null : (
         <ReplyArea
-          sessionId={sessionId}
           message={message}
           view={view}
           streaming={streaming}
@@ -97,6 +96,13 @@ export const AssistantMessage = memo(function AssistantMessage({
           disableLink={false}
           sources={view.sources}
         />
+      ) : null}
+      {view.files.length > 0 ? (
+        <div className={styles.files}>
+          {view.files.map((file) => (
+            <PresentedFileCard key={file.path ?? file.name} sessionId={sessionId} file={file} />
+          ))}
+        </div>
       ) : null}
       {waiting ? (
         <div className={styles.waiting}>

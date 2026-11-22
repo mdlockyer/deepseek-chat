@@ -5,6 +5,7 @@ import {
   getAreaTitle,
   needsWorkingIndicator,
   type AssistantMessage,
+  type PresentedFileRef,
 } from '@deepseek-chat/slice-conversations'
 import { installTestSlice } from './harness.js'
 
@@ -329,5 +330,77 @@ describe('needsWorkingIndicator (SPEC invariant 16)', () => {
       needsWorkingIndicator(streamingView([{ type: 'thinking', thinking: 'hm', startedAt: 1 }])),
       false
     )
+  })
+})
+
+describe('reply files (SPEC invariant 17)', () => {
+  const file = (id: string, name: string, extra: Partial<PresentedFileRef> = {}) => ({
+    id,
+    name,
+    size: 10,
+    mimeType: 'text/plain',
+    ...extra,
+  })
+  const call = (id: string, name: string) => ({ type: 'tool_use', id, name, input: {} }) as const
+  const result = (id: string, files?: PresentedFileRef[], status: 'ok' | 'error' = 'ok') =>
+    ({
+      type: 'tool_result',
+      tool_use_id: id,
+      content: '',
+      status,
+      ...(files ? { files } : {}),
+    }) as const
+
+  it('lists one card per file in first-seen order, each at its latest version', () => {
+    const view = buildReplyView(
+      replyWith([
+        call('c1', 'present_file'),
+        result('c1', [file('f1', 'chart.html', { path: 'site/chart.html', version: 1 })]),
+        call('c2', 'python'),
+        result('c2', [file('f2', 'data.csv', { source: 'python' })]),
+        call('c3', 'edit_file'),
+        result('c3', [file('f3', 'chart.html', { path: 'site/chart.html', version: 2 })]),
+        // A failed edit produces no file and leaves the latest version alone.
+        call('c4', 'edit_file'),
+        result('c4', undefined, 'error'),
+        { type: 'text', text: 'Here is your chart.' },
+      ]),
+      false
+    )
+    assert.deepEqual(
+      view.files.map((f) => [f.id, f.name, f.version]),
+      [
+        ['f3', 'chart.html', 2],
+        ['f2', 'data.csv', undefined],
+      ]
+    )
+    // The answer is still the answer.
+    assert.equal(view.answer?.text, 'Here is your chart.')
+  })
+
+  it('tells files apart by path, and by name only when there is no path', () => {
+    const view = buildReplyView(
+      replyWith([
+        call('c1', 'present_file'),
+        result('c1', [
+          file('a', 'index.html', { path: 'one/index.html' }),
+          file('b', 'index.html', { path: 'two/index.html' }),
+        ]),
+        call('c2', 'python'),
+        result('c2', [file('c', 'out.png')]),
+        call('c3', 'python'),
+        result('c3', [file('d', 'out.png')]),
+      ]),
+      false
+    )
+    assert.deepEqual(
+      view.files.map((f) => f.id),
+      ['a', 'b', 'd']
+    )
+  })
+
+  it('has no files for a reply without file results', () => {
+    const view = buildReplyView(replyWith([{ type: 'text', text: 'Just text.' }]), false)
+    assert.deepEqual(view.files, [])
   })
 })

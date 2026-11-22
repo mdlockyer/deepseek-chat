@@ -62,13 +62,11 @@ const useTicker = (active: boolean, interval: number) => {
  * 未开启时只有工具步骤（如普通搜索的「已阅读 N 个网页」）。
  */
 export const ReplyArea = memo(function ReplyArea({
-  sessionId,
   message,
   view,
   streaming,
   hasResponse,
 }: {
-  sessionId: string
   message: AssistantMessage
   view: ReplyView
   streaming: boolean
@@ -101,7 +99,6 @@ export const ReplyArea = memo(function ReplyArea({
           {view.steps.map((step, index) => (
             <StepItem
               key={stepKey(step, index)}
-              sessionId={sessionId}
               step={step}
               message={message}
               sources={view.sources}
@@ -126,14 +123,12 @@ const stepKey = (step: Step, index: number) =>
     : `${step.type}-${index}`
 
 const StepItem = ({
-  sessionId,
   step,
   message,
   sources,
   streaming,
   isLast,
 }: {
-  sessionId: string
   step: Step
   message: AssistantMessage
   sources: Source[]
@@ -177,19 +172,11 @@ const StepItem = ({
     case 'read_link':
       return <ReadLinkRow step={step} isLast={isLast} />
     case 'python':
-      return (
-        <PythonRow
-          sessionId={sessionId}
-          step={step}
-          message={message}
-          streaming={streaming}
-          isLast={isLast}
-        />
-      )
+      return <PythonRow step={step} message={message} streaming={streaming} isLast={isLast} />
     case 'browser':
       return <BrowserRow step={step} isLast={isLast} />
     case 'file':
-      return <FileRow sessionId={sessionId} step={step} isLast={isLast} />
+      return <FileRow step={step} isLast={isLast} />
     default:
       return null
   }
@@ -534,16 +521,8 @@ const BrowserRow = ({ step, isLast }: { step: BrowserStep; isLast: boolean }) =>
   )
 }
 
-/** 文件呈现与编辑步骤：展示状态与可直接点击预览/保存的文件卡片 */
-const FileRow = ({
-  sessionId,
-  step,
-  isLast,
-}: {
-  sessionId: string
-  step: FileStep
-  isLast: boolean
-}) => {
+/** 文件呈现与编辑步骤：只展示状态与错误；产出的文件卡片随正文展示（ReplyView.files） */
+const FileRow = ({ step, isLast }: { step: FileStep; isLast: boolean }) => {
   const t = useTranslate()
   const [open, setOpen] = useState(false)
   const running = step.status === 'wip'
@@ -565,7 +544,6 @@ const FileRow = ({
     }
     return t('previewToolPresent', { name })
   }
-  const files = step.actions.flatMap((action) => action.files ?? [])
   const errors = step.actions.filter((action) => action.error)
   const summaryLabel = lastAction ? describeItem(lastAction) : t('previewPanelTitle')
 
@@ -602,13 +580,6 @@ const FileRow = ({
             {action.error}
           </div>
         ))}
-        {files.length > 0 ? (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
-            {files.map((file) => (
-              <PresentedFileCard key={file.id} sessionId={sessionId} file={file} />
-            ))}
-          </div>
-        ) : null}
       </div>
     </ToolRow>
   )
@@ -616,13 +587,11 @@ const FileRow = ({
 
 /** 浏览器内 Python：标题行显示状态与用时，点击展开代码、输出与图像 */
 const PythonRow = ({
-  sessionId,
   step,
   message,
   streaming,
   isLast,
 }: {
-  sessionId: string
   step: PythonStep
   message: AssistantMessage
   streaming: boolean
@@ -687,13 +656,6 @@ const PythonRow = ({
             ) : null}
           </div>
         ) : null}
-        {(step.result?.files ?? []).length > 0 ? (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
-            {(step.result?.files ?? []).map((file) => (
-              <PresentedFileCard key={file.id} sessionId={sessionId} file={file} />
-            ))}
-          </div>
-        ) : null}
         {images.map((src, index) => (
           <img
             key={index}
@@ -719,7 +681,13 @@ const downloadStoredFile = async (file: PresentedFileRef): Promise<boolean> => {
 }
 
 /** 统一的可预览与下载文件卡片：点击在右侧文件面板预览，右侧按钮可直接保存 */
-const PresentedFileCard = ({ sessionId, file }: { sessionId: string; file: PresentedFileRef }) => {
+export const PresentedFileCard = ({
+  sessionId,
+  file,
+}: {
+  sessionId: string
+  file: PresentedFileRef
+}) => {
   const t = useTranslate()
   const [missing, setMissing] = useState(false)
   const { files } = deps().ui.panels
