@@ -3,19 +3,16 @@ import { Toast, usePresence, PANEL_DURATION_MS } from '@deepseek-chat/spine/desi
 import { useLocale } from '@deepseek-chat/spine/i18n'
 import { useEffect } from 'react'
 import clsx from 'clsx'
-import { translate } from '../i18n/index.js'
+import { translate } from './i18n/index.js'
 import { useLayout } from './layout.js'
 import { useTheme } from './theme.js'
 import { useIsMobile, useMobileViewport, usePreventPageScroll } from './viewport.js'
 import { RightPanel } from './rightPanel/RightPanel.js'
-import {
-  ensureApiKey,
-  openSettingsFromShortcut,
-} from '../components/settings/settingsDialogState.js'
-import { SettingsDialog } from '../components/settings/SettingsDialog.js'
+import { ensureApiKey, openSettingsFromShortcut } from './settings/settingsDialogState.js'
+import { SettingsDialog } from './settings/SettingsDialog.js'
 import { account, browser } from './composition.js'
 import { conversations } from './conversations.js'
-import { isDesktopApp, onOpenSettings } from '../platform/desktop.js'
+import { isDesktopApp, onOpenSettings } from './platform/desktop.js'
 import { AppErrorBoundary } from './AppErrorBoundary.js'
 import styles from './App.module.css'
 

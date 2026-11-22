@@ -8,7 +8,7 @@ import {
   openRightPanel,
   registerOverlayLockListener,
   useSidePanelStore,
-} from './state.js'
+} from '../rightPanel/state.js'
 
 const resetPanelStore = (activeSessionId: string | null = 's1') => {
   useSidePanelStore.setState({

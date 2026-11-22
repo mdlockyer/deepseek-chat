@@ -18,7 +18,7 @@ import {
   makeArtifactKey,
   normalizeWorkspacePath,
 } from '@deepseek-chat/slice-workspace-files'
-import { createId } from '../utils/id.js'
+import { createId } from './utils/id.js'
 import { browser, python, webResearch } from './composition.js'
 import { toFileRecords } from './fileRecords.js'
 import { workspaceFiles } from './workspaceFiles.js'

@@ -18,5 +18,5 @@
     "noImplicitReturns": true,
     "useUnknownInCatchVariables": true
   },
-  "include": ["src", "spine", "libs", "slices", "rspack.config.ts"]
+  "include": ["app", "spine", "libs", "slices", "rspack.config.ts"]
 }

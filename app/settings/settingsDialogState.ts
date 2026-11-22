@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { account } from '../../app/composition.js'
+import { account } from '../composition.js'
 
 /** 设置弹窗的分组：通用设置 / API 密钥 / 数据管理 */
 export type SettingsSection = 'general' | 'apiKey' | 'data'

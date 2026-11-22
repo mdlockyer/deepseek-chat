@@ -26,7 +26,7 @@ import {
   pythonStageUpload,
   saveFirecrawlApiKey,
   saveKeychainApiKey,
-} from '../platform/desktop.js'
+} from './platform/desktop.js'
 import { late } from './lateBindings.js'
 import { createPanelSlot } from './rightPanel/panelSlot.js'
 import {

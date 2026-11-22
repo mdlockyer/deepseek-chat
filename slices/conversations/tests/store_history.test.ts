@@ -97,7 +97,9 @@ describe('conversations store: branches follow the tree model (randomized)', () 
       addChain(root, [`user:${first}`, nextReply()])
       commands.newChat()
       assert.equal(await say(env, null, first), true)
-      sessionId = env.slice.getState().activeId
+      const chatId = env.slice.getState().activeId
+      assert.ok(chatId, 'the first send opened a chat')
+      sessionId = chatId
       check('first send')
 
       for (let step = 0; step < 14; step += 1) {
@@ -112,13 +114,13 @@ describe('conversations store: branches follow the tree model (randomized)', () 
           assert.ok(target?.id && target.parent)
           const text = `q${seed}-${++questions}`
           addChain(target.parent, [`user:${text}`, nextReply()])
-          assert.equal(commands.edit(sessionId!, target.id, text), true)
+          assert.equal(commands.edit(chatId, target.id, text), true)
           await commands.whenIdle()
         } else if (op === 'regenerate') {
           const target = pick(path.filter((n) => n.label.startsWith('assistant:')))
           assert.ok(target?.id && target.parent)
           addChain(target.parent, [nextReply()])
-          commands.regenerate(sessionId!, target.id)
+          commands.regenerate(chatId, target.id)
           await commands.whenIdle()
         } else {
           const withSiblings = path.filter((n) => n.parent && n.parent.children.length > 1)
@@ -129,7 +131,7 @@ describe('conversations store: branches follow the tree model (randomized)', () 
           const choice = pick(target.parent.children.filter((n) => n !== target))
           assert.ok(choice?.id, 'every node was visible once, so its id is known')
           target.parent.selected = choice
-          commands.selectVersion(sessionId!, choice.id)
+          commands.selectVersion(chatId, choice.id)
         }
         check(`step ${step} (${op})`)
       }
@@ -143,7 +145,9 @@ describe('conversations store: facts and history', () => {
     for (const text of ['keep A', 'delete me', 'keep B']) {
       commands.newChat()
       await say(env, null, text)
-      ids.push(env.slice.getState().activeId!)
+      const id = env.slice.getState().activeId
+      assert.ok(id)
+      ids.push(id)
     }
     const [keepA, victim, keepB] = ids as [string, string, string]
     const keptBefore = [visible(keepA), visible(keepB)]

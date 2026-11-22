@@ -1,7 +1,7 @@
 /** The conversations slice instance with its app-provided ports. */
 import { createConversationsSlice } from '@deepseek-chat/slice-conversations'
-import { isDesktopApp } from '../platform/desktop.js'
-import { openSettings } from '../components/settings/settingsDialogState.js'
+import { isDesktopApp } from './platform/desktop.js'
+import { openSettings } from './settings/settingsDialogState.js'
 import { createChatPanels } from './chatPanels.js'
 import {
   API_ORIGIN,

@@ -9,13 +9,18 @@ import {
   IconUploadOutline14,
   Modal,
   settingStyles,
+  showToast,
   usePresence,
 } from '@deepseek-chat/spine/design'
-import { account, browser, preferences, python, voice, webResearch } from '../../app/composition.js'
-import { conversations } from '../../app/conversations.js'
-import { isDesktopApp } from '../../platform/desktop.js'
-import { useTranslate, type TranslationKey, type TranslationMessage } from '../../i18n/index.js'
-import { showToast } from '../base/toastState.js'
+import { account, browser, preferences, python, voice, webResearch } from '../composition.js'
+import { conversations } from '../conversations.js'
+import { isDesktopApp } from '../platform/desktop.js'
+import {
+  translate,
+  useTranslate,
+  type TranslationKey,
+  type TranslationMessage,
+} from '../i18n/index.js'
 import { closeSettings, useSettingsDialog, type SettingsSection } from './settingsDialogState.js'
 import styles from './Settings.module.css'
 
@@ -191,9 +196,9 @@ const useHistoryDelete = () => {
     try {
       await conversations.clearHistory()
       setOpened(false)
-      showToast({ key: 'historyDeleted' })
+      showToast({ text: () => translate('historyDeleted') })
     } catch {
-      showToast({ key: 'historyDeleteFailed', type: 'error' })
+      showToast({ text: () => translate('historyDeleteFailed'), tone: 'error' })
     } finally {
       deleting.current = false
       setBusy(false)

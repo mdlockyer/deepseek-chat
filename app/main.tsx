@@ -1,17 +1,17 @@
 import { onOverlayChange } from '@deepseek-chat/spine/design'
 import { createRoot } from 'react-dom/client'
-import { App } from './app/App.js'
-import { AppErrorBoundary } from './app/AppErrorBoundary.js'
-import { account, browser, webResearch } from './app/composition.js'
+import { App } from './App.js'
+import { AppErrorBoundary } from './AppErrorBoundary.js'
+import { account, browser, webResearch } from './composition.js'
 // 首屏渲染前创建 conversations slice（安装其端口）
-import './app/conversations.js'
-import { acquireSidePanelOverlayLock } from './app/rightPanel/state.js'
-import { setupTheme } from './app/theme.js'
+import './conversations.js'
+import { acquireSidePanelOverlayLock } from './rightPanel/state.js'
+import { setupTheme } from './theme.js'
 import { isDesktopApp, openExternalLinksInBrowser } from './platform/desktop.js'
 import { ensureKatex } from '@deepseek-chat/lib-markdown'
 import '@fontsource-variable/google-sans-flex'
-import './app/theme.css'
-import './app/global.css'
+import './theme.css'
+import './global.css'
 
 ensureKatex()
 setupTheme()

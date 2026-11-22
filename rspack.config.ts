@@ -34,7 +34,7 @@ export const createConfig = ({
   devServer,
 }: ConfigOptions = {}): Configuration => ({
   mode: dev ? 'development' : 'production',
-  entry: './src/main.tsx',
+  entry: './app/main.tsx',
   output: {
     path: path.resolve(root, 'dist'),
     // 运行时按当前脚本地址推导资源路径，file:// 下异步 chunk、字体都按相对位置加载
@@ -98,7 +98,7 @@ export const createConfig = ({
   plugins: [
     // 经典 defer 脚本支持 file:// 页面的资源加载
     new rspack.HtmlRspackPlugin({
-      template: './src/index.html',
+      template: './app/index.html',
       scriptLoading: 'defer',
       meta: { 'application-version': version },
     }),

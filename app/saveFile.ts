@@ -1,4 +1,4 @@
-import { isDesktopApp, saveFileWithDialog } from '../platform/desktop.js'
+import { isDesktopApp, saveFileWithDialog } from './platform/desktop.js'
 
 const triggerBrowserDownload = (name: string, blob: Blob) => {
   const url = URL.createObjectURL(blob)

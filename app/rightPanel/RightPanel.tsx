@@ -1,6 +1,6 @@
 import { useCallback, useRef } from 'react'
-import { useTranslate } from '../../i18n/index.js'
-import { isDesktopApp } from '../../platform/desktop.js'
+import { useTranslate } from '../i18n/index.js'
+import { isDesktopApp } from '../platform/desktop.js'
 import { browser } from '../composition.js'
 import { useSessionFileRecords } from '../useSessionFileRecords.js'
 import { workspaceFiles } from '../workspaceFiles.js'

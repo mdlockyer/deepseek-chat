@@ -2,7 +2,7 @@
 /**
  * Sealed Slice Architecture boundary check.
  *
- * Tiers: app (src/, transitional) -> slices/* -> libs/* -> spine. Enforces:
+ * Tiers: app (app/) -> slices/* -> libs/* -> spine. Enforces:
  * - spine imports no library, slice or app code, and spine/{runtime,ports,design} import no
  *   spine/facts;
  * - a library (domain-free code shared by slices) imports only itself, the spine's domain-blind
@@ -24,7 +24,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const spineDir = path.join(root, 'spine')
 const slicesDir = path.join(root, 'slices')
 const libsDir = path.join(root, 'libs')
-const appDirs = [path.join(root, 'src')]
+const appDirs = [path.join(root, 'app')]
 
 const SCOPE = '@deepseek-chat/'
 const SPINE_PKG = `${SCOPE}spine`

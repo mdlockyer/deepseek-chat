@@ -1,6 +1,6 @@
 /**
  * Stateless, domain-blind UI primitives shared by every slice and the app shell.
- * Visual tokens live in src/app/theme.css (global CSS variables).
+ * Visual tokens live in app/theme.css (global CSS variables).
  */
 export { Button } from './Button.js'
 export { IconButton } from './IconButton.js'

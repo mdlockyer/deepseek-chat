@@ -74,8 +74,8 @@ it, and the header toggle (`visible`, `open`, `toggle`). `panels.browser`: the h
    calling tools still ends (after a bounded number of rounds, see Parameters).
 3. **Prompt.** A turn's system prompt is the assistant identity followed by the gateway's
    instructions for exactly the tools declared that turn, in the gateway's order.
-3a. **Tool context.** A run sees the chat's visible branch with the reply in progress last, knows
-    whether that chat is on screen, and files it saves can be read back through `loadFile`.
+   3a. **Tool context.** A run sees the chat's visible branch with the reply in progress last, knows
+   whether that chat is on screen, and files it saves can be read back through `loadFile`.
 4. **Tool steps by kind.** How a call is shown (search, opened page, browser actions, file actions,
    code) and archived depends only on `kindOf(name)`; anything unclassified is shown as code.
 5. **Composer toggles** (DeepThink, Search, Run code, Browser) load from and save to the store under
