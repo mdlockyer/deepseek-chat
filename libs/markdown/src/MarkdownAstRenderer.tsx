@@ -1,4 +1,12 @@
-import { createElement, memo, useLayoutEffect, useMemo, useRef, type ReactNode } from 'react'
+import {
+  createElement,
+  memo,
+  useContext,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  type ReactNode,
+} from 'react'
 import clsx from 'clsx'
 import type {
   BlockContent,
@@ -8,7 +16,7 @@ import type {
   Root,
   Table as TableNode,
 } from 'mdast'
-import { CitationLink } from '../search/CitationLink.js'
+import { CitationContext, type CitationSource } from './context.js'
 import { CodeBlock } from './CodeBlock.js'
 import { ImageAsLink, Link } from './Link.js'
 import { InlineMath, MathBlock } from './MathFormula.js'
@@ -138,12 +146,18 @@ const MarkdownPhrasingContentItem = memo(function MarkdownPhrasingContentItem({
     case 'text':
       return <TextContent>{node.value}</TextContent>
     case 'citation':
-      return <CitationLink source={node.source} />
+      return <Citation source={node.source} />
     default:
       // 删除线、脚注、引用式链接已在解析时换成文本
       return null
   }
 })
+
+/** 角标交给文档的 renderCitation；未提供时不显示 */
+const Citation = ({ source }: { source: CitationSource }) => {
+  const render = useContext(CitationContext)
+  return render ? render(source) : null
+}
 
 // 按 \n 拆行插 <br>：源文每个换行（含软换行）都渲染为视觉换行
 const TextContent = memo(function TextContent({ children }: { children: string }) {

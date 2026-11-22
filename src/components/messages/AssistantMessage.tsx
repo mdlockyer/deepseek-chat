@@ -10,7 +10,7 @@ import type { AssistantMessage as AssistantMessageType } from '../../services/ch
 import { openSettings } from '../settings/settingsDialogState.js'
 import { IconButton } from '@deepseek-chat/spine/design'
 import { Button } from '@deepseek-chat/spine/design'
-import { Markdown } from '../markdown/Markdown.js'
+import { ChatMarkdown as Markdown } from './ChatMarkdown.js'
 import { SiteThumbnails } from '../search/SiteLogo.js'
 import { toggleSearchPanel, useSearchPanel } from '../search/searchPanelState.js'
 import { CopyButton } from './CopyButton.js'

@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTranslate } from '../../i18n/index.js'
-import { IconCheckOutline16, IconCopyOutline16 } from '@deepseek-chat/spine/design'
-import { IconButton } from '@deepseek-chat/spine/design'
+import {
+  IconButton,
+  IconCheckOutline16,
+  IconCopyOutline16,
+  copyText,
+} from '@deepseek-chat/spine/design'
 import { showToast } from '../base/toastState.js'
-import { copyText } from '../../utils/clipboard.js'
 
 /** 复制成功后图标换成对勾 1 秒，期间再次点击不重复复制 */
 export const CopyButton = ({ text }: { text: string }) => {

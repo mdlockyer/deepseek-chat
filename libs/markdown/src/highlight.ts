@@ -1,4 +1,5 @@
 import Prism from 'prismjs'
+import { useEffect, useMemo, useReducer } from 'react'
 
 type Loader = () => Promise<unknown>
 
@@ -107,4 +108,40 @@ export function isHighlightLoaded(lang: string): boolean {
 
 export function loadHighlight(lang: string): Promise<unknown> {
   return loaders[lang]()
+}
+
+/**
+ * 按需加载语言包后返回高亮 HTML；语言不支持或尚未加载时按纯文本转义。
+ * 超过 `maxChars` 时返回 null，由调用方按纯文本显示。
+ */
+export const useHighlightedHtml = (
+  text: string,
+  infostring: string,
+  maxChars = Number.POSITIVE_INFINITY
+): string | null => {
+  // 语言包注册在全局 Prism 上，每次渲染直接判断；加载完成后触发一次重渲染
+  const rerender = useReducer((n: number) => n + 1, 0)[1]
+  const lang = getHighlightLang(infostring)
+  const loaded = lang !== null && isHighlightLoaded(lang)
+  useEffect(() => {
+    if (lang === null || loaded) {
+      return
+    }
+    let unmounted = false
+    void loadHighlight(lang).then(() => {
+      if (!unmounted) {
+        rerender()
+      }
+    })
+    return () => {
+      unmounted = true
+    }
+  }, [lang, loaded, rerender])
+  return useMemo(() => {
+    if (text.length > maxChars) {
+      return null
+    }
+    const name = lang !== null && loaded ? lang : 'plaintext'
+    return Prism.highlight(text, Prism.languages[name], name)
+  }, [text, lang, loaded, maxChars])
 }

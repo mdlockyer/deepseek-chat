@@ -1,11 +1,8 @@
-/**
- * workspace-files slice instance. Kept apart from composition.ts because its view slots reach
- * Markdown/Mermaid, which import the composition root themselves.
- */
+/** workspace-files slice instance with its app-provided ports and view slots. */
 import { createWorkspaceFilesSlice } from '@deepseek-chat/slice-workspace-files'
+import { copyText } from '@deepseek-chat/spine/design'
 import { desktopPreviewHost, isDesktopApp, saveFileWithDialog } from '../platform/desktop.js'
 import { loadFile } from '../services/chat/db.js'
-import { copyText } from '../utils/clipboard.js'
 import { createId } from '../utils/id.js'
 import { spine } from './composition.js'
 import { createPanelSlot } from './rightPanel/panelSlot.js'

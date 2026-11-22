@@ -1,14 +1,12 @@
-import { useTranslate } from '../../i18n/index.js'
-import { memo, useEffect, useMemo, useReducer, useState } from 'react'
-import Prism from 'prismjs'
+import { memo, useState } from 'react'
 import {
-  getHighlightLang,
-  isHighlightLoaded,
-  loadHighlight,
-} from '../../services/markdown/highlight.js'
-import { IconCheckOutline16, IconCopyOutline16 } from '@deepseek-chat/spine/design'
-import { showToast } from '../base/toastState.js'
-import { copyText } from '../../utils/clipboard.js'
+  IconCheckOutline16,
+  IconCopyOutline16,
+  copyText,
+  showToast,
+} from '@deepseek-chat/spine/design'
+import { useHighlightedHtml } from './highlight.js'
+import { markdownMessages } from './messages.js'
 import { MermaidDiagram } from './MermaidDiagram.js'
 import styles from './CodeBlock.module.css'
 
@@ -24,7 +22,7 @@ const CodeInfoRow = ({
   showDiagram: boolean
   onToggleDiagram?: () => void
 }) => {
-  const t = useTranslate()
+  const t = markdownMessages.useTranslate()
   const [copied, setCopied] = useState(false)
   return (
     <div className={styles.container}>
@@ -55,7 +53,7 @@ const CodeInfoRow = ({
         className={styles.button}
         onClick={async () => {
           if (!(await copyText(code))) {
-            showToast({ key: 'copyFailed' })
+            showToast({ text: () => markdownMessages.translate('copyFailed') })
             return
           }
           setCopied(true)
@@ -81,28 +79,7 @@ export const CodeBlock = memo(function CodeBlock({
 }) {
   const isMermaid = infostring.toLowerCase() === 'mermaid'
   const [showDiagram, setShowDiagram] = useState(true)
-  // 语言包注册在全局 Prism 上，每次渲染直接判断；加载完成后触发一次重渲染
-  const rerender = useReducer((n: number) => n + 1, 0)[1]
-  const lang = getHighlightLang(infostring)
-  const loaded = lang !== null && isHighlightLoaded(lang)
-  useEffect(() => {
-    if (lang === null || loaded) {
-      return
-    }
-    let unmounted = false
-    loadHighlight(lang).then(() => {
-      if (!unmounted) {
-        rerender()
-      }
-    })
-    return () => {
-      unmounted = true
-    }
-  }, [lang, loaded, rerender])
-  const renderedHtml = useMemo(() => {
-    const name = lang !== null && loaded ? lang : 'plaintext'
-    return Prism.highlight(code, Prism.languages[name], name)
-  }, [code, lang, loaded])
+  const renderedHtml = useHighlightedHtml(code, infostring) ?? ''
   return (
     <div className="md-code-block">
       <div className="md-code-block-banner">

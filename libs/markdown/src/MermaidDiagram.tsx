@@ -1,7 +1,7 @@
-import { useTranslate } from '../../i18n/index.js'
 import { memo, useEffect, useRef, useState } from 'react'
-import { useTheme } from '../../app/theme.js'
-import { renderMermaid } from '../../services/markdown/mermaid.js'
+import { useMarkdownDark } from './context.js'
+import { markdownMessages } from './messages.js'
+import { renderMermaid } from './mermaid.js'
 
 /** 流式绘制最新内容、保留上次有效图；回答结束后才显示渲染错误。 */
 export const MermaidDiagram = memo(function MermaidDiagram({
@@ -11,8 +11,8 @@ export const MermaidDiagram = memo(function MermaidDiagram({
   code: string
   loading: boolean
 }) {
-  const t = useTranslate()
-  const dark = useTheme() === 'dark'
+  const t = markdownMessages.useTranslate()
+  const dark = useMarkdownDark()
   const [result, setResult] = useState({ svg: '', failedCode: null as string | null })
   const latestCodeRef = useRef(code)
   latestCodeRef.current = code

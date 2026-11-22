@@ -5,12 +5,12 @@ import { gfmFromMarkdown } from 'mdast-util-gfm'
 import { mathFromMarkdown } from 'mdast-util-math'
 import { gfm } from 'micromark-extension-gfm'
 import { math } from 'micromark-extension-llm-math'
-import type { Source } from '../chat/view.js'
+import type { CitationSource } from './context.js'
 
 /** 正文里的 [citation:N]，已换成对应来源 */
 export interface CitationNode extends MdAstNode {
   type: 'citation'
-  source: Source
+  source: CitationSource
 }
 
 declare module 'mdast' {
@@ -33,7 +33,7 @@ const text = (value: string): Text => ({ type: 'text', value })
  */
 export function toMdAst(
   input: string,
-  { sources, disableLink }: { sources: Source[] | undefined; disableLink: boolean }
+  { sources, disableLink }: { sources: readonly CitationSource[] | undefined; disableLink: boolean }
 ): Root {
   const ast = fromMarkdown(input, {
     extensions: [

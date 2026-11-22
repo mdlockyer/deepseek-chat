@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@deepseek-chat/lib-markdown':
+        specifier: workspace:*
+        version: link:libs/markdown
       '@deepseek-chat/slice-account':
         specifier: workspace:*
         version: link:slices/account
@@ -44,15 +47,6 @@ importers:
       '@tauri-apps/plugin-opener':
         specifier: ^2.7.3
         version: 2.7.3
-      '@types/katex':
-        specifier: ^0.16.5
-        version: 0.16.8
-      '@types/mdast':
-        specifier: ~4.0.3
-        version: 4.0.4
-      '@types/prismjs':
-        specifier: ^1.26.1
-        version: 1.26.6
       '@types/react':
         specifier: ~18.3.1
         version: 18.3.31
@@ -68,33 +62,6 @@ importers:
       idb:
         specifier: 8.0.3
         version: 8.0.3
-      katex:
-        specifier: 0.16.22
-        version: 0.16.22
-      mdast-util-find-and-replace:
-        specifier: 3.0.2
-        version: 3.0.2
-      mdast-util-from-markdown:
-        specifier: 2.0.3
-        version: 2.0.3
-      mdast-util-gfm:
-        specifier: 3.1.0
-        version: 3.1.0
-      mdast-util-math:
-        specifier: 3.0.0
-        version: 3.0.0
-      mermaid:
-        specifier: 11.10.1
-        version: 11.10.1
-      micromark-extension-gfm:
-        specifier: 3.0.0
-        version: 3.0.0
-      micromark-extension-llm-math:
-        specifier: 3.1.0
-        version: 3.1.0
-      prismjs:
-        specifier: 1.30.0
-        version: 1.30.0
       react:
         specifier: 18.3.1
         version: 18.3.1
@@ -135,6 +102,54 @@ importers:
       typescript:
         specifier: 7.0.2
         version: 7.0.2
+
+  libs/markdown:
+    dependencies:
+      '@deepseek-chat/spine':
+        specifier: workspace:*
+        version: link:../../spine
+      '@types/katex':
+        specifier: ^0.16.5
+        version: 0.16.8
+      '@types/mdast':
+        specifier: ~4.0.3
+        version: 4.0.4
+      '@types/prismjs':
+        specifier: ^1.26.1
+        version: 1.26.6
+      clsx:
+        specifier: 2.1.1
+        version: 2.1.1
+      katex:
+        specifier: 0.16.22
+        version: 0.16.22
+      mdast-util-find-and-replace:
+        specifier: 3.0.2
+        version: 3.0.2
+      mdast-util-from-markdown:
+        specifier: 2.0.3
+        version: 2.0.3
+      mdast-util-gfm:
+        specifier: 3.1.0
+        version: 3.1.0
+      mdast-util-math:
+        specifier: 3.0.0
+        version: 3.0.0
+      mermaid:
+        specifier: 11.10.1
+        version: 11.10.1
+      micromark-extension-gfm:
+        specifier: 3.0.0
+        version: 3.0.0
+      micromark-extension-llm-math:
+        specifier: 3.1.0
+        version: 3.1.0
+      prismjs:
+        specifier: 1.30.0
+        version: 1.30.0
+      react:
+        specifier: 18.3.1
+        version: 18.3.1
 
   slices/account:
     dependencies:
@@ -1237,10 +1252,6 @@ packages:
     resolution: {integrity: sha512-XCHRdUw4lf3SKBaJe4EvgqIuWwkPSo9XoeO8GjQW94Bp7TWv9hNhzZjZ+OH9yf1UmLygb7DIT5GSFQiyt16zYg==}
     hasBin: true
 
-  katex@0.16.47:
-    resolution: {integrity: sha512-Eeo8Ys1doU1z+x8AZsPpQu+p/QcZBI5PeOo7QGQdy2x2m0MU/hYagBbGOmXwr5KVbEfVuWv9LpnQWeehogurjg==}
-    hasBin: true
-
   khroma@2.1.0:
     resolution: {integrity: sha512-Ls993zuzfayK269Svk9hzpeGUKob/sIgZzyHYdjQoAdQetRKpOLj+k/QQQ/6Qi0Yz65mlROrfd+Ev+1+7dz9Kw==}
 
@@ -1284,9 +1295,6 @@ packages:
 
   mdast-util-find-and-replace@3.0.2:
     resolution: {integrity: sha512-Tmd1Vg/m3Xz43afeNxDIhWRtFZgM2VLyaf4vSTYwudTyeuTneoL3qtWMA5jeLyz/O1vDJmmV4QuScFCA2tBPwg==}
-
-  mdast-util-find-and-replace@3.0.4:
-    resolution: {integrity: sha512-z4B5c6jrnJ1ltOQemhWYPBSAo6y42Z8Gt2yEgfgNTMcLSU59B8bfj8Z8AnAlJrBGLnqkdAUZ7jdDEqQw3KuipQ==}
 
   mdast-util-from-markdown@2.0.3:
     resolution: {integrity: sha512-W4mAWTvSlKvf8L6J+VN9yLSqQ9AOAAvHuoDAmPkz4dHf553m5gVj2ejadHJhoJmcmxEnOv6Pa8XJhpxE93kb8Q==}
@@ -2408,10 +2416,6 @@ snapshots:
     dependencies:
       commander: 8.3.0
 
-  katex@0.16.47:
-    dependencies:
-      commander: 8.3.0
-
   khroma@2.1.0: {}
 
   kolorist@1.8.0: {}
@@ -2455,13 +2459,6 @@ snapshots:
       unist-util-is: 6.0.1
       unist-util-visit-parents: 6.1.0
 
-  mdast-util-find-and-replace@3.0.4:
-    dependencies:
-      '@types/mdast': 4.0.4
-      escape-string-regexp: 5.0.0
-      unist-util-is: 6.0.1
-      unist-util-visit-parents: 6.1.0
-
   mdast-util-from-markdown@2.0.3:
     dependencies:
       '@types/mdast': 4.0.4
@@ -2484,7 +2481,7 @@ snapshots:
       '@types/mdast': 4.0.4
       ccount: 2.0.1
       devlop: 1.1.0
-      mdast-util-find-and-replace: 3.0.4
+      mdast-util-find-and-replace: 3.0.2
       micromark-util-character: 2.1.1
 
   mdast-util-gfm-footnote@2.1.0:
@@ -2679,7 +2676,7 @@ snapshots:
     dependencies:
       '@types/katex': 0.16.8
       devlop: 1.1.0
-      katex: 0.16.47
+      katex: 0.16.22
       micromark-factory-space: 2.1.0
       micromark-util-character: 2.1.1
       micromark-util-symbol: 2.0.0

@@ -1,8 +1,10 @@
+import { MarkdownTheme } from '@deepseek-chat/lib-markdown'
 import { useLocale } from '@deepseek-chat/spine/i18n'
 import { useEffect } from 'react'
 import clsx from 'clsx'
 import { translate, useTranslate } from '../i18n/index.js'
 import { useLayout } from './layout.js'
+import { useTheme } from './theme.js'
 import { useIsMobile, useMobileViewport, usePreventPageScroll } from './viewport.js'
 import {
   bindChatPersistence,
@@ -37,6 +39,7 @@ import styles from './App.module.css'
 export const App = () => {
   const t = useTranslate()
   const isMobile = useIsMobile()
+  const dark = useTheme() === 'dark'
   const locale = useLocale()
   const desktopSettingsReady = account.useState().status === 'ready'
   // 移动端侧边栏以独立抽屉管理开合状态
@@ -121,7 +124,7 @@ export const App = () => {
   }, [])
 
   return (
-    <>
+    <MarkdownTheme dark={dark}>
       <div ref={frameRef} className={clsx(styles.frame, isDesktopApp && styles.desktop)}>
         {isMobile ? (
           <MobileSider />
@@ -193,6 +196,6 @@ export const App = () => {
       </div>
       <SettingsDialog />
       <Toast />
-    </>
+    </MarkdownTheme>
   )
 }

@@ -48,7 +48,7 @@ import {
 } from '../../services/chat/view.js'
 import { Tooltip } from '@deepseek-chat/spine/design'
 import { FileCard } from '../files/FileCard.js'
-import { Markdown } from '../markdown/Markdown.js'
+import { ChatMarkdown as Markdown } from './ChatMarkdown.js'
 import { SiteThumbnails } from '../search/SiteLogo.js'
 import { toggleSearchPanel, useSearchPanel } from '../search/searchPanelState.js'
 import styles from './ReplyArea.module.css'

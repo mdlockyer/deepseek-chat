@@ -1,3 +1,4 @@
 packages:
   - 'spine'
+  - 'libs/*'
   - 'slices/*'
