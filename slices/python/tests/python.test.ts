@@ -258,6 +258,96 @@ describe('python slice: restart notice', () => {
 
     assert.ok(!other.text.includes(RESTART_NOTICE_TAG), other.text)
   })
+
+  it('prefixes the notice once on the web engine after a worker crash or timeout', async () => {
+    let spawned = 0
+    const makeWebPython = (mode: 'crash' | 'timeout') => {
+      spawned = 0
+      return createPythonSlice({
+        log: new EventLog(),
+        native: null,
+        pyodideIndexURL: 'unused://',
+        now: () => 0,
+        params: { runTimeoutMs: 15, startupTimeoutMs: 15 },
+        spawnWorker: () => {
+          const idx = spawned++
+          const listeners = {
+            message: new Set<(ev: MessageEvent) => void>(),
+            error: new Set<(ev: ErrorEvent) => void>(),
+          }
+          return {
+            postMessage: (msg: unknown) => {
+              const data = msg as { type?: string; id?: number }
+              if (data.type === 'init') {
+                return
+              }
+              if (idx === 0) {
+                if (mode === 'crash') {
+                  queueMicrotask(() => {
+                    for (const fn of listeners.error) {
+                      fn({ message: 'worker crashed' } as ErrorEvent)
+                    }
+                  })
+                } else {
+                  queueMicrotask(() => {
+                    for (const fn of listeners.message) {
+                      fn({ data: { id: data.id, phase: 'running' } } as MessageEvent)
+                    }
+                  })
+                }
+                return
+              }
+              queueMicrotask(() => {
+                for (const fn of listeners.message) {
+                  fn({ data: { id: data.id, phase: 'running' } } as MessageEvent)
+                }
+                for (const fn of listeners.message) {
+                  fn({
+                    data: {
+                      id: data.id,
+                      ok: true,
+                      stdout: 'recovered\n',
+                      result: null,
+                      error: null,
+                      images: [],
+                      dropped: 0,
+                      files: [],
+                    },
+                  } as MessageEvent)
+                }
+              })
+            },
+            terminate: () => {},
+            addEventListener: (type: string, fn: EventListenerOrEventListenerObject) => {
+              if (type === 'message') {
+                listeners.message.add(fn as (ev: MessageEvent) => void)
+              } else if (type === 'error') {
+                listeners.error.add(fn as (ev: ErrorEvent) => void)
+              }
+            },
+            removeEventListener: (type: string, fn: EventListenerOrEventListenerObject) => {
+              if (type === 'message') {
+                listeners.message.delete(fn as (ev: MessageEvent) => void)
+              } else if (type === 'error') {
+                listeners.error.delete(fn as (ev: ErrorEvent) => void)
+              }
+            },
+          }
+        },
+      })
+    }
+
+    for (const mode of ['crash', 'timeout'] as const) {
+      const web = makeWebPython(mode)
+      const failed = await run(web, 'bad')
+      const next = await run(web, 'after')
+      const later = await run(web, 'later')
+
+      assert.equal(failed.status, 'error')
+      assert.ok(next.text.startsWith(RESTART_NOTICE_TAG), `${mode}: ${next.text}`)
+      assert.ok(!later.text.includes(RESTART_NOTICE_TAG), `${mode}: ${later.text}`)
+    }
+  })
 })
 
 describe('python slice: uploads', () => {

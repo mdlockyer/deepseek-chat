@@ -392,7 +392,6 @@ export const createKernel = (deps: KernelDeps) => {
         clearTimeout(timer)
         timer = setTimeout(() => {
           reset()
-          restartNotice = false
           finish({ status: 'error', text: prefix(message), images: [] })
         }, ms)
       }
@@ -437,7 +436,6 @@ export const createKernel = (deps: KernelDeps) => {
       }
       function onError(event: ErrorEvent) {
         reset()
-        restartNotice = false
         finish({
           status: 'error',
           text: prefix(`Python worker error: ${event.message}`),
