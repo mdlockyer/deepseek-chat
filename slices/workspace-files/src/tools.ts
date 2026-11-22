@@ -33,7 +33,7 @@ export const PREVIEW_TOOLS: FileToolDefinition[] = [
   {
     name: PRESENT_FILE_TOOL_NAME,
     description:
-      'Create and display a self-contained file to the user in the right-side File Preview panel (HTML/CSS/JS interactive apps, SVG graphics, Markdown reports, Mermaid diagrams, CSV/TSV tables, JSON, or complete standalone source files). Calling present_file with an existing path creates a new version (v2, v3, ...).',
+      'Create and display a self-contained file to the user in the right-side File Preview panel (HTML/CSS/JS interactive apps, SVG graphics, Markdown reports, Mermaid diagrams, CSV/TSV tables, JSON, or complete standalone source files). Calling present_file with an existing path creates the next version (v2, v3, ...); within the same reply it revises the version that reply already made.',
     input_schema: {
       type: 'object',
       required: ['path', 'content'],
@@ -61,7 +61,7 @@ export const PREVIEW_TOOLS: FileToolDefinition[] = [
   {
     name: EDIT_FILE_TOOL_NAME,
     description:
-      'Apply targeted search-and-replace edits to a file previously presented in this conversation, producing a new version in the preview panel without rewriting the entire file.',
+      'Apply targeted search-and-replace edits to a file previously presented in this conversation, updating it in the preview panel without rewriting the entire file (the next version, or the same version when this reply already made one).',
     input_schema: {
       type: 'object',
       required: ['path', 'edits'],
@@ -193,11 +193,20 @@ export const runPreviewTool = async (
   rawInput: unknown,
   context: {
     records: readonly FileRecord[]
+    /** The reply this call belongs to: saves within one reply form one version. */
+    replyId: string
     loadFile: (id: string) => Promise<Blob | undefined>
     newId: () => string
   }
 ): Promise<PreviewToolRunResult> => {
   const startedAt = Date.now()
+  /** 同一条回复内再次保存沿用最新版本号，否则加一 */
+  const versionAfter = (latest: { version: number; messageId: string } | undefined) =>
+    latest === undefined
+      ? { version: 1, revised: false }
+      : latest.messageId === context.replyId
+        ? { version: latest.version, revised: true }
+        : { version: latest.version + 1, revised: false }
   const input =
     rawInput && typeof rawInput === 'object' && !Array.isArray(rawInput)
       ? (rawInput as Record<string, unknown>)
@@ -234,7 +243,7 @@ export const runPreviewTool = async (
       const existing = collectWorkspaceArtifacts(context.records).find(
         (item) => item.path === cleanPath
       )
-      const version = existing ? existing.latest.version + 1 : 1
+      const { version, revised } = versionAfter(existing?.latest)
       const title =
         typeof input.title === 'string' && input.title.trim() ? input.title.trim() : undefined
       const name = getBasename(cleanPath)
@@ -250,7 +259,7 @@ export const runPreviewTool = async (
       }
       return {
         status: 'ok',
-        text: `Presented "${cleanPath}" (v${version}, ${mimeType}, ${formatSize(blob.size)}) in the user's File Preview panel.`,
+        text: `Presented "${cleanPath}" (v${version}${revised ? ', revised in this reply' : ''}, ${mimeType}, ${formatSize(blob.size)}) in the user's File Preview panel.`,
         file: {
           ref,
           blob,
@@ -304,7 +313,7 @@ export const runPreviewTool = async (
           `Updated file "${target.path}" (${formatSize(blob.size)}) exceeds the ${formatSize(MAX_TEXT_FILE_BYTES)} text preview limit.`
         )
       }
-      const version = target.version + 1
+      const { version, revised } = versionAfter(target)
       const title =
         typeof input.title === 'string' && input.title.trim()
           ? input.title.trim()
@@ -321,7 +330,7 @@ export const runPreviewTool = async (
       }
       return {
         status: 'ok',
-        text: `Updated "${target.path}" to v${version} (${edits.length} ${edits.length === 1 ? 'edit' : 'edits'}, ${formatSize(blob.size)}) in the File Preview panel.`,
+        text: `Updated "${target.path}" ${revised ? `(still v${version}, revised in this reply; ` : `to v${version} (`}${edits.length} ${edits.length === 1 ? 'edit' : 'edits'}, ${formatSize(blob.size)}) in the File Preview panel.`,
         file: {
           ref,
           blob,

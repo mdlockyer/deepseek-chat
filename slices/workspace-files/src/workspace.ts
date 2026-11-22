@@ -109,7 +109,14 @@ export const collectWorkspaceArtifacts = (records: readonly FileRecord[]): Works
     const path = normalizeWorkspacePath(ref.path ?? ref.name) || ref.name
     const key = makeArtifactKey(path)
     const existing = byKey.get(key)
-    const version = ref.version ?? (existing ? existing.versions.length + 1 : 1)
+    const latest = existing?.latest
+    // 版本按回复计：与最新版本同一条回复、且编号相同（或未记录）的记录替换该版本，否则新增一版。
+    // 已记录的编号保持不变：旧会话里同一条回复内的多次保存仍各自成版。
+    const sameReply =
+      latest !== undefined &&
+      latest.messageId === ref.messageId &&
+      (ref.version === undefined || ref.version === latest.version)
+    const version = ref.version ?? (sameReply ? latest.version : (latest?.version ?? 0) + 1)
     const entry: FileVersionEntry = {
       fileId: ref.fileId,
       name: ref.name || getBasename(path),
@@ -123,7 +130,11 @@ export const collectWorkspaceArtifacts = (records: readonly FileRecord[]): Works
       createdAt: ref.createdAt,
     }
     if (existing) {
-      existing.versions.push(entry)
+      if (sameReply) {
+        existing.versions[existing.versions.length - 1] = entry
+      } else {
+        existing.versions.push(entry)
+      }
       existing.latest = entry
       existing.name = entry.name
       existing.title = entry.title ?? existing.title

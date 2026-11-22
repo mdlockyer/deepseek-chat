@@ -127,6 +127,9 @@ const presented = (
   ...extra,
 })
 
+/** A reply after every recorded one: each call below stands for a new reply. */
+const NEXT_REPLY = 'next-reply'
+
 // ---------- tests ----------
 
 describe('workspace-files: tool declaration', () => {
@@ -221,7 +224,12 @@ describe('workspace-files: paths and artifacts', () => {
         messageId: 'a1',
         createdAt: 2_000,
       },
-      presented('f2', './app.html', { title: 'Interactive App', producedBy: 'edit_file' }),
+      // A later reply (same-reply saves are one version; see the per-reply tests).
+      presented('f2', './app.html', {
+        title: 'Interactive App',
+        producedBy: 'edit_file',
+        messageId: 'a2',
+      }),
     ]
 
     const artifacts = collectWorkspaceArtifacts(records)
@@ -230,7 +238,7 @@ describe('workspace-files: paths and artifacts', () => {
       ['app.html', 'out.csv']
     )
     const [app, csv] = artifacts
-    // f2 has no version number: it is the second record of the path, so v2.
+    // f2 has no version number and comes from a later reply, so v2.
     assert.deepEqual(
       app?.versions.map((v) => [v.fileId, v.version]),
       [
@@ -253,7 +261,7 @@ describe('workspace-files: present, edit and read', () => {
     const v1 = await files.run(
       'present_file',
       { path: 'charts/sales.html', content: '<h1>v1</h1>', title: 'Sales Chart' },
-      { records }
+      { records, replyId: NEXT_REPLY }
     )
     assert.equal(v1.status, 'ok')
     assert.equal(v1.file?.ref.version, 1)
@@ -266,7 +274,7 @@ describe('workspace-files: present, edit and read', () => {
     const v2 = await files.run(
       'edit_file',
       { path: 'sales.html', edits: [{ old_text: '<h1>v1</h1>', new_text: '<h1>v2</h1>' }] },
-      { records }
+      { records, replyId: NEXT_REPLY }
     )
     assert.equal(v2.status, 'ok')
     assert.equal(v2.file?.ref.version, 2)
@@ -278,7 +286,11 @@ describe('workspace-files: present, edit and read', () => {
     assert.equal(await store.get(v1.file?.ref.id ?? '')?.text(), '<h1>v1</h1>')
     assert.equal(await store.get(v2.file?.ref.id ?? '')?.text(), '<h1>v2</h1>')
 
-    const read = await files.run('read_file', { path: 'charts/sales.html' }, { records })
+    const read = await files.run(
+      'read_file',
+      { path: 'charts/sales.html' },
+      { records, replyId: NEXT_REPLY }
+    )
     assert.equal(read.status, 'ok')
     assert.match(read.text, /^File: charts\/sales\.html \(v2, text\/html/)
     assert.match(read.text, /<h1>v2<\/h1>$/)
@@ -287,7 +299,7 @@ describe('workspace-files: present, edit and read', () => {
     const v3 = await files.run(
       'present_file',
       { path: '/charts/sales.html', content: 'x' },
-      { records }
+      { records, replyId: NEXT_REPLY }
     )
     assert.equal(v3.file?.ref.version, 3)
   })
@@ -301,7 +313,7 @@ describe('workspace-files: present, edit and read', () => {
       await files.run(
         'present_file',
         { path: 'a.js', content: 'const a = 1\nconst b = 2\n' },
-        { records }
+        { records, replyId: NEXT_REPLY }
       ),
       'present_file',
       1_000
@@ -315,7 +327,7 @@ describe('workspace-files: present, edit and read', () => {
           { old_text: 'a = 10\nconst b = 2', new_text: 'a = 10\nconst b = 20' },
         ],
       },
-      { records }
+      { records, replyId: NEXT_REPLY }
     )
     assert.equal(edited.status, 'ok')
     assert.equal(await edited.file?.blob.text(), 'const a = 10\nconst b = 20\n')
@@ -329,12 +341,16 @@ describe('workspace-files: present, edit and read', () => {
     keep(
       store,
       records,
-      await files.run('present_file', { path: 't.js', content: 'foo\nfoo' }, { records }),
+      await files.run(
+        'present_file',
+        { path: 't.js', content: 'foo\nfoo' },
+        { records, replyId: NEXT_REPLY }
+      ),
       'present_file',
       1_000
     )
     const edit = (path: string, edits: unknown) =>
-      files.run('edit_file', { path, edits }, { records })
+      files.run('edit_file', { path, edits }, { records, replyId: NEXT_REPLY })
 
     const missing = await edit('t.js', [{ old_text: 'nope', new_text: 'x' }])
     assert.equal(missing.status, 'error')
@@ -367,10 +383,14 @@ describe('workspace-files: present, edit and read', () => {
     store.set('up', new Blob(['hello']))
     store.set('f1', new Blob(['<p>']))
 
-    const note = await files.run('read_file', { path: 'notes.txt' }, { records })
+    const note = await files.run(
+      'read_file',
+      { path: 'notes.txt' },
+      { records, replyId: NEXT_REPLY }
+    )
     assert.equal(note.status, 'ok')
     assert.match(note.text, /hello$/)
-    const app = await files.run('read_file', { path: 'APP.HTML' }, { records })
+    const app = await files.run('read_file', { path: 'APP.HTML' }, { records, replyId: NEXT_REPLY })
     assert.match(app.text, /^File: App\.html \(v1/)
   })
 
@@ -385,16 +405,20 @@ describe('workspace-files: present, edit and read', () => {
     store.set('edge', new Blob(['y'.repeat(40_000)]))
     store.set('img', new Blob([new Uint8Array([1, 2, 3])]))
 
-    const big = await files.run('read_file', { path: 'big.txt' }, { records })
+    const big = await files.run('read_file', { path: 'big.txt' }, { records, replyId: NEXT_REPLY })
     assert.equal(big.status, 'ok')
     assert.match(big.text, /\[Truncated after 40,000 of 45,000 characters\]$/)
     assert.ok(big.text.includes('x'.repeat(40_000)))
     assert.ok(!big.text.includes('x'.repeat(40_001)))
 
-    const edge = await files.run('read_file', { path: 'edge.txt' }, { records })
+    const edge = await files.run(
+      'read_file',
+      { path: 'edge.txt' },
+      { records, replyId: NEXT_REPLY }
+    )
     assert.doesNotMatch(edge.text, /Truncated/)
 
-    const img = await files.run('read_file', { path: 'pic.png' }, { records })
+    const img = await files.run('read_file', { path: 'pic.png' }, { records, replyId: NEXT_REPLY })
     assert.equal(img.status, 'error')
     assert.match(img.text, /not a UTF-8 text file/)
   })
@@ -405,22 +429,30 @@ describe('workspace-files: present, edit and read', () => {
     const atLimit = await files.run(
       'present_file',
       { path: 'a.txt', content: 'a'.repeat(limit) },
-      { records: [] }
+      { records: [], replyId: NEXT_REPLY }
     )
     assert.equal(atLimit.status, 'ok')
     const over = await files.run(
       'present_file',
       { path: 'a.txt', content: 'a'.repeat(limit + 1) },
-      { records: [] }
+      { records: [], replyId: NEXT_REPLY }
     )
     assert.equal(over.status, 'error')
     assert.match(over.text, /exceeds the .* text preview limit/)
 
-    const noPath = await files.run('present_file', { path: '../..', content: 'x' }, { records: [] })
+    const noPath = await files.run(
+      'present_file',
+      { path: '../..', content: 'x' },
+      { records: [], replyId: NEXT_REPLY }
+    )
     assert.equal(noPath.status, 'error')
     assert.match(noPath.text, /path must be a non-empty relative file path/)
 
-    const noContent = await files.run('present_file', { path: 'a.txt' }, { records: [] })
+    const noContent = await files.run(
+      'present_file',
+      { path: 'a.txt' },
+      { records: [], replyId: NEXT_REPLY }
+    )
     assert.match(noContent.text, /content \(string\) is required/)
   })
 })
@@ -513,5 +545,126 @@ describe('workspace-files: preview state', () => {
 
     log.publish<SessionHistoryReplaced>({ type: 'SessionHistoryReplaced' })
     assert.equal(files.getSession('s2').activeKey, null)
+  })
+})
+
+/** A tiny seeded PRNG (mulberry32) for reproducible randomized invariants. */
+const seeded = (seed: number) => {
+  let a = seed >>> 0
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0
+    let t = a
+    t = Math.imul(t ^ (t >>> 15), t | 1)
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
+
+describe('workspace-files: a version is what one reply left a file as (SPEC 2–4)', () => {
+  it('numbers saves per reply and lists one version per reply (randomized)', async () => {
+    const PATHS = ['page.html', 'notes/report.md', 'data.csv']
+    for (let seed = 1; seed <= 30; seed += 1) {
+      const random = seeded(seed)
+      const pick = <T>(items: readonly T[]) => items[Math.floor(random() * items.length)] as T
+      const { files, store } = setup()
+      const records: FileRecord[] = []
+      // Reference model, per path: the replies that saved it (in order) and its current text.
+      const savedBy = new Map<string, string[]>()
+      const text = new Map<string, string>()
+      // Per path: the text each reply left it with, in reply order.
+      const leftAs = new Map<string, string[]>()
+      let createdAt = 0
+
+      for (let reply = 1; reply <= 6; reply += 1) {
+        const replyId = `reply-${seed}-${reply}`
+        const saves = 1 + Math.floor(random() * 3)
+        for (let save = 0; save < saves; save += 1) {
+          const path = pick(PATHS)
+          const next = `${path} by ${replyId} save ${save}`
+          const current = text.get(path)
+          const edit = current !== undefined && random() < 0.6
+          const result = edit
+            ? await files.run(
+                'edit_file',
+                { path, edits: [{ old_text: current, new_text: next }] },
+                { records, replyId }
+              )
+            : await files.run('present_file', { path, content: next }, { records, replyId })
+          assert.equal(result.status, 'ok', result.text)
+
+          const replies = savedBy.get(path) ?? []
+          const revised = replies.at(-1) === replyId
+          if (!revised) {
+            replies.push(replyId)
+            leftAs.set(path, [...(leftAs.get(path) ?? []), next])
+          } else {
+            leftAs.get(path)?.splice(-1, 1, next)
+          }
+          savedBy.set(path, replies)
+          text.set(path, next)
+          // Its number counts the replies that saved the path, this one included.
+          const expected = replies.length
+          const where = `seed ${seed}, ${replyId}, save ${save} (${edit ? 'edit' : 'present'} ${path})`
+          assert.equal(result.file?.ref.version, expected, where)
+          assert.equal(result.fileAction.version, expected, where)
+          assert.match(result.text, new RegExp(`\\bv${expected}\\b`), where)
+          assert.equal(/revised in this reply/.test(result.text), revised, where)
+
+          // The app stores it in the reply.
+          assert.ok(result.file)
+          store.set(result.file.ref.id, result.file.blob)
+          const { id, ...ref } = result.file.ref
+          records.push({
+            kind: 'presented',
+            fileId: id,
+            ...ref,
+            producedBy: edit ? 'edit_file' : 'present_file',
+            messageId: replyId,
+            createdAt: (createdAt += 1),
+          })
+        }
+      }
+
+      // One version per reply that saved the path, numbered 1..n, each with that reply's last text.
+      for (const artifact of collectWorkspaceArtifacts(records)) {
+        const expectedTexts = leftAs.get(artifact.path) ?? []
+        assert.deepEqual(
+          artifact.versions.map((v) => v.version),
+          expectedTexts.map((_, index) => index + 1),
+          `seed ${seed}: ${artifact.path}`
+        )
+        const texts = await Promise.all(
+          artifact.versions.map(async (v) => (await store.get(v.fileId)?.text()) ?? null)
+        )
+        assert.deepEqual(texts, expectedTexts, `seed ${seed}: ${artifact.path}`)
+        assert.equal(artifact.latest.fileId, artifact.versions.at(-1)?.fileId)
+      }
+    }
+  })
+
+  it('keeps stored numbers, so older chats that numbered every save still list each one', () => {
+    const records: FileRecord[] = [
+      presented('old1', 'page.html', { version: 1, messageId: 'old-reply' }),
+      presented('old2', 'page.html', { version: 2, messageId: 'old-reply' }),
+      // Python files carry no number: a second save in the same reply revises the version.
+      presented('py1', 'plot.png', { producedBy: 'python', messageId: 'r1' }),
+      presented('py2', 'plot.png', { producedBy: 'python', messageId: 'r1' }),
+      presented('py3', 'plot.png', { producedBy: 'python', messageId: 'r2' }),
+    ]
+    const [page, plot] = collectWorkspaceArtifacts(records)
+    assert.deepEqual(
+      page?.versions.map((v) => [v.fileId, v.version]),
+      [
+        ['old1', 1],
+        ['old2', 2],
+      ]
+    )
+    assert.deepEqual(
+      plot?.versions.map((v) => [v.fileId, v.version]),
+      [
+        ['py2', 1],
+        ['py3', 2],
+      ]
+    )
   })
 })

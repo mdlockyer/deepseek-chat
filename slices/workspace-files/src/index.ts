@@ -89,10 +89,11 @@ export const createWorkspaceFilesSlice = (deps: WorkspaceFilesDeps) => {
     run: (
       toolName: string,
       input: unknown,
-      options: { records: readonly FileRecord[] }
+      options: { records: readonly FileRecord[]; replyId: string }
     ): Promise<PreviewToolRunResult> =>
       runPreviewTool(toolName, input, {
         records: options.records,
+        replyId: options.replyId,
         loadFile: deps.loadFile,
         newId,
       }),

@@ -113,6 +113,8 @@ export const toolGateway: ToolGateway = {
     if (workspaceFiles.handles(call.name)) {
       const outcome = await workspaceFiles.run(call.name, call.input, {
         records: toFileRecords(context.messages),
+        // 可见分支的最后一条就是生成中的回复（conversations SPEC 不变式 3a）
+        replyId: context.messages.at(-1)?.id ?? '',
       })
       let presented: PresentedFileRef[] = []
       if (outcome.file) {
