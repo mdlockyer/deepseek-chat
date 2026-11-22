@@ -1,5 +1,6 @@
 import Prism from 'prismjs'
 import { useEffect, useMemo, useReducer } from 'react'
+import './highlight.css'
 
 type Loader = () => Promise<unknown>
 

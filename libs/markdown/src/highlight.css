@@ -1,4 +1,4 @@
-body.dark .md-code-block {
+body.dark :is(.md-code-block, .ds-code-highlight) {
   .token.comment,
   .token.prolog,
   .token.doctype,
@@ -236,7 +236,7 @@ body.dark .md-code-block {
   }
 }
 
-body.light .md-code-block {
+body.light :is(.md-code-block, .ds-code-highlight) {
   .token.comment,
   .token.prolog,
   .token.cdata {

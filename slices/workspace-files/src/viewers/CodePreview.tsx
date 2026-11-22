@@ -12,12 +12,16 @@ export const CodePreview = ({
   name: string
   mimeType: string
 }) => {
-  const highlightedHtml = useWorkspace().views.useHighlight(text, getCodeLanguage(name, mimeType))
+  const language = getCodeLanguage(name, mimeType)
+  const highlightedHtml = useWorkspace().views.useHighlight(text, language)
   return (
     <div className={styles.scrollPane}>
-      <div className={styles.codeWrap}>
+      <div className={`${styles.codeWrap} ds-code-highlight`}>
         {highlightedHtml !== null ? (
-          <pre className={styles.codePre} dangerouslySetInnerHTML={{ __html: highlightedHtml }} />
+          <pre
+            className={`${styles.codePre} language-${language}`}
+            dangerouslySetInnerHTML={{ __html: highlightedHtml }}
+          />
         ) : (
           <pre className={styles.codePre}>{text}</pre>
         )}
