@@ -42,6 +42,7 @@ import { CollapsedSider } from './ui/sider/CollapsedSider.js'
 import { MobileSider, Sider } from './ui/sider/Sider.js'
 
 export type { ConversationsDeps } from './env.js'
+export type { StreamTrace, StreamTraceBlock } from './streamTrace.js'
 export type { ToolGateway, ToolKind, ToolResult, ToolRunContext } from './tools.js'
 export type {
   ChatFile,
@@ -147,7 +148,7 @@ export {
   settleReply,
   toRequestMessages,
 } from './reply.js'
-export { buildReplyView, getAreaTitle } from './view.js'
+export { buildReplyView, getAreaTitle, needsWorkingIndicator } from './view.js'
 
 /** History archive codec (pure): the v3 export format's sessions and its ZIP container. */
 export { readSessionFile } from './history/schema.js'

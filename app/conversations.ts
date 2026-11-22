@@ -1,5 +1,5 @@
 /** The conversations slice instance with its app-provided ports. */
-import { createConversationsSlice } from '@deepseek-chat/slice-conversations'
+import { createConversationsSlice, type StreamTrace } from '@deepseek-chat/slice-conversations'
 import { isDesktopApp } from './platform/desktop.js'
 import { openSettings } from './settings/settingsDialogState.js'
 import { createChatPanels } from './chatPanels.js'
@@ -29,6 +29,17 @@ export const conversations = createConversationsSlice({
   getLocationLabel: (locale) => preferences.getLocationLabel(locale),
   onActiveSessionChange: setActivePanelSession,
   browserAvailable: isDesktopApp,
+  // 开发诊断：流式请求时序交给开发服务器落盘（生产构建不包含）
+  ...(__DEV__
+    ? {
+        onStreamTrace: (trace: StreamTrace) => {
+          void fetch('/__dev/stream-trace', {
+            method: 'POST',
+            body: JSON.stringify({ at: new Date().toISOString(), ...trace }),
+          }).catch(() => undefined)
+        },
+      }
+    : {}),
   ui: {
     voice: {
       useVoiceInput: voice.useVoiceInput,

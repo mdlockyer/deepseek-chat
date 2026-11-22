@@ -3,6 +3,7 @@ import { describe, it } from 'node:test'
 import {
   buildReplyView,
   getAreaTitle,
+  needsWorkingIndicator,
   type AssistantMessage,
 } from '@deepseek-chat/slice-conversations'
 import { installTestSlice } from './harness.js'
@@ -280,5 +281,53 @@ describe('buildReplyView for Firecrawl client tools', () => {
     assert.equal(fileSteps[0].actions[0]?.files?.[0]?.id, 'blob-1')
     assert.equal(fileSteps[0].actions[1]?.version, 2)
     assert.equal(doneView.answer?.text, 'Chart is ready.')
+  })
+})
+
+describe('needsWorkingIndicator (SPEC invariant 16)', () => {
+  // Views as they look while the reply is still streaming.
+  const streamingView = (blocks: AssistantMessage['blocks']) =>
+    buildReplyView({ ...replyWith(blocks, true), status: 'streaming' }, true)
+  const thought = { type: 'thinking', thinking: 'plan', startedAt: 1, endedAt: 2 } as const
+  const fileCall = { type: 'tool_use', id: 'f1', name: 'present_file', input: {} } as const
+
+  it('shows when the last content is finished and nothing else is running', () => {
+    // The captured case: thinking done, a sentence, then silence while the server writes a tool call.
+    assert.equal(
+      needsWorkingIndicator(streamingView([thought, { type: 'text', text: 'I will build it.' }])),
+      true
+    )
+    // Thinking finished, nothing else yet.
+    assert.equal(needsWorkingIndicator(streamingView([thought])), true)
+    // A tool finished; the next request has not answered yet.
+    assert.equal(
+      needsWorkingIndicator(
+        streamingView([
+          fileCall,
+          { type: 'tool_result', tool_use_id: 'f1', content: 'ok', status: 'ok' },
+        ])
+      ),
+      true
+    )
+  })
+
+  it('stays hidden while the reply has nothing yet or its last step shows it is running', () => {
+    assert.equal(needsWorkingIndicator(streamingView([])), false)
+    // A tool call without its result: its row already shows it is running.
+    assert.equal(needsWorkingIndicator(streamingView([thought, fileCall])), false)
+    assert.equal(
+      needsWorkingIndicator(
+        streamingView([
+          { type: 'tool_use', id: 'p1', name: 'python', input: { code: '1' } },
+          { type: 'tool_result', tool_use_id: 'p1', content: '', status: 'running' },
+        ])
+      ),
+      false
+    )
+    // Thinking still in progress.
+    assert.equal(
+      needsWorkingIndicator(streamingView([{ type: 'thinking', thinking: 'hm', startedAt: 1 }])),
+      false
+    )
   })
 })

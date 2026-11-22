@@ -1,6 +1,7 @@
 import type { EventLog } from '@deepseek-chat/spine/runtime'
 import type { HttpFetch, KeyValueStore } from '@deepseek-chat/spine/ports'
 import type { Locale } from '@deepseek-chat/spine/i18n'
+import type { StreamTrace } from './streamTrace.js'
 import type { ToolGateway } from './tools.js'
 import type { ConversationsViewDeps } from './views.js'
 
@@ -20,6 +21,11 @@ export type ConversationsDeps = {
   readonly onActiveSessionChange: (sessionId: string | null) => void
   /** Whether the built-in browser exists (desktop); its composer toggle defaults off otherwise. */
   readonly browserAvailable: boolean
+  /**
+   * Diagnostics (optional; the app sets it in development): receives the timing of every streamed
+   * request when it ends. Sizes and timings only, never content.
+   */
+  readonly onStreamTrace?: (trace: StreamTrace) => void
   /** Ports for the chat's views. */
   readonly ui: ConversationsViewDeps
 }

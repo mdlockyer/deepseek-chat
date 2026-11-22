@@ -688,3 +688,39 @@ export const getAreaTitle = (
   }
   return translate('messageThinking')
 }
+
+/** 该步骤自身已显示进行中（工具行的进行态、正在输出的思考），无需另行提示仍在处理 */
+const showsRunning = (step: Step): boolean => {
+  switch (step.type) {
+    case 'search':
+    case 'browser':
+    case 'file':
+      return step.status === 'wip'
+    case 'open':
+      return step.pages.some((page) => page.status === 'wip')
+    case 'read_link':
+      return step.links.some((link) => link.status === 'wip')
+    case 'find':
+      return step.patterns.some((item) => item.status === 'wip')
+    case 'python':
+      return step.result === null || step.result.status === 'running'
+    case 'thinking': {
+      const last = step.blocks.at(-1)
+      return last?.startedAt !== undefined && last.endedAt === undefined
+    }
+    case 'text':
+      return false
+  }
+}
+
+/**
+ * 生成中的回复一段时间没有新内容时（服务端可能整块缓冲工具调用），是否需要显示「仍在处理」：
+ * 回复已有内容，且最后一个步骤自身没有显示进行中。
+ */
+export const needsWorkingIndicator = (view: ReplyView): boolean => {
+  const last = view.steps.at(-1)
+  if (!last) {
+    return view.answer !== null
+  }
+  return view.answer !== null || !showsRunning(last)
+}

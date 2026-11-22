@@ -18,6 +18,7 @@ import {
   prepareDraftMessage,
 } from './drafts.js'
 import { createLatestReminder } from './latestReminder.js'
+import { createStreamTracer } from './streamTrace.js'
 import {
   applyEvent,
   canContinueReply,
@@ -1117,6 +1118,13 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
       /** 附件补齐前出错属于上传失败，请求还没有发出 */
       let preparing = true
       let receivedContent = false
+      let tracer: ReturnType<typeof createStreamTracer> | null = null
+      const finishTrace = (error?: unknown) => {
+        if (tracer) {
+          deps().onStreamTrace?.(tracer.finish(Date.now(), error))
+          tracer = null
+        }
+      }
       try {
         // 先执行还没有结果的工具调用：上一个请求刚返回的，或续接中断回复时留下的。
         const calls = pendingToolCalls(reply)
@@ -1175,6 +1183,9 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
           toolRound > 0 ? reply : undefined,
           declaredClientNames
         )
+        if (deps().onStreamTrace) {
+          tracer = createStreamTracer(toolRound, Date.now())
+        }
         const events = streamMessage(
           deps().getApiKey() ?? '',
           {
@@ -1190,6 +1201,7 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
         )
         const blockIndexes = new Map<number, number>()
         for await (const event of events) {
+          tracer?.record(event, Date.now())
           receivedContent ||= event.type === 'content_block_start'
           if (
             event.type === 'message_delta' &&
@@ -1210,6 +1222,7 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
             frame ||= requestAnimationFrame(flush)
           }
         }
+        finishTrace()
         // 有未执行的工具调用就继续往返，不只看 stop_reason（服务端可能以 end_turn 结束带调用的回复）。
         if (reply.stopReason !== 'refusal' && pendingToolCalls(reply).length > 0) {
           attempt = -1
@@ -1218,6 +1231,7 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
         reply = settleReply(reply, 'done', Date.now())
         break
       } catch (error) {
+        finishTrace(error)
         if (controller.signal.aborted) {
           reply = settleReply(reply, 'stopped', Date.now())
           break

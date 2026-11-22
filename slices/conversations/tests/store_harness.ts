@@ -6,6 +6,7 @@ import 'fake-indexeddb/auto'
 import { memoryStore } from '@deepseek-chat/spine/ports'
 import { EventLog } from '@deepseek-chat/spine/runtime'
 import type {
+  StreamTrace,
   ToolCallPart,
   ToolKind,
   ToolResult,
@@ -100,9 +101,13 @@ export const createStoreEnv = (
   ) => ({ content: `ran ${call.name}`, status: 'ok' })
   const log = new EventLog()
   const kinds = options.kinds ?? {}
+  const traces: StreamTrace[] = []
 
   const slice = installTestSlice({
     log,
+    onStreamTrace: (trace) => {
+      traces.push(trace)
+    },
     fetch: async (url, init) => {
       if (!url.endsWith('/messages')) {
         throw new Error(`unexpected request ${url}`)
@@ -137,6 +142,8 @@ export const createStoreEnv = (
     log,
     requests,
     runs,
+    /** Stream traces reported through `onStreamTrace`, in order. */
+    traces,
     /** Sets how the API answers each request. */
     respondWith: (fn: (request: ApiRequest) => ApiReply) => {
       respond = fn

@@ -44,6 +44,7 @@ file (the test runner gives each file its own process).
 | `getLocationLabel(locale)`  | The user's location as text for the model ('' when unset).        |
 | `onActiveSessionChange(id)` | The chat on screen changed (`null`: the new-chat screen).         |
 | `browserAvailable`          | Whether the built-in browser exists; its toggle is off otherwise. |
+| `onStreamTrace` (optional)  | Diagnostics: each streamed request's timing when it ends.         |
 
 **Tool gateway.** `declare({ search, python, browser, questionText })` returns the client tools for
 a turn; `instructions(declaredNames)` the system-prompt sections for them, in order;
@@ -105,6 +106,16 @@ it, and the header toggle (`visible`, `open`, `toggle`). `panels.browser`: the h
 14. **History round trip.** Exporting the history and importing that file restores the same chats
     with the same titles and, for each, the same visible branch (roles and text). Choices on
     branches that were not visible are not kept (see the history README).
+15. **Stream traces.** When `onStreamTrace` is given, every streamed request reports one trace when
+    it ends (completed, failed or aborted): its tool round, the stop reason, and per content block
+    its type (with the tool name), delta count, characters received and timings, ordered in time.
+    A trace never contains message, tool-input or reply content.
+16. **Still working.** While a reply streams and nothing new has arrived for the stall delay (see
+    Parameters), a "Working…" line shows at the end of the reply, until the next content arrives.
+    It does not show while the reply has nothing yet (the waiting dots or the thinking title show
+    instead), or while its last step already shows it is running (a tool without its result, a
+    running Python call, thinking in progress). The server may hold a whole tool call back until
+    its input (e.g. a file) is written, so this gap can last tens of seconds.
 
 ## Parameters
 
@@ -118,3 +129,4 @@ it, and the header toggle (`visible`, `open`, `toggle`). `panels.browser`: the h
 | Attachment size                          | 64 MB                                       |
 | Concurrent uploads                       | 3                                           |
 | Request body limit                       | 3,000,000 bytes                             |
+| Stall delay before "Working…"            | 1.5 s                                       |

@@ -1,6 +1,6 @@
 import { useTranslate } from '../../messages.js'
 import clsx from 'clsx'
-import { memo } from 'react'
+import { memo, useEffect, useState } from 'react'
 import { IconRefreshOutline16, IconWarningOutline16 } from '@deepseek-chat/spine/design'
 import { describeReply } from '../../describe.js'
 import { canContinueReply } from '../../reply.js'
@@ -14,6 +14,7 @@ import { SiteThumbnails } from '../search/SiteLogo.js'
 import { toggleSearchPanel, useSearchPanel } from '../search/searchPanelState.js'
 import { CopyButton } from './CopyButton.js'
 import { ReplyArea } from './ReplyArea.js'
+import { needsWorkingIndicator } from '../../view.js'
 import { useReplyView } from './useReplyView.js'
 import {
   BranchSwitcher,
@@ -23,6 +24,25 @@ import {
 import styles from './AssistantMessage.module.css'
 
 const TOP_UP_URL = 'https://platform.deepseek.com/top_up'
+
+/** 生成中的回复超过这么久没有新内容，就提示仍在处理 */
+const STALL_DELAY_MS = 1500
+
+/**
+ * 生成中且自上次内容变化起已过 `delay`：每个流式事件都会换掉消息对象，变化即重新计时。
+ * 记录「哪个消息对象停住了」，内容一变就自动失效，不必在 effect 里重置状态。
+ */
+const useStalled = (message: object, streaming: boolean, delay: number) => {
+  const [stalledAt, setStalledAt] = useState<object | null>(null)
+  useEffect(() => {
+    if (!streaming) {
+      return
+    }
+    const timer = setTimeout(() => setStalledAt(message), delay)
+    return () => clearTimeout(timer)
+  }, [message, streaming, delay])
+  return streaming && stalledAt === message
+}
 
 export const AssistantMessage = memo(function AssistantMessage({
   sessionId,
@@ -54,6 +74,8 @@ export const AssistantMessage = memo(function AssistantMessage({
     .join('\n\n')
   const copyText = responseText || notice?.text
   const waiting = streaming && view.steps.length === 0 && !view.answer && !message.thinking
+  const stalled = useStalled(message, streaming, STALL_DELAY_MS)
+  const working = stalled && !waiting && !refused && needsWorkingIndicator(view)
   const summaryEntry = `${message.id}-summary`
   return (
     <div className={styles.message}>
@@ -81,6 +103,11 @@ export const AssistantMessage = memo(function AssistantMessage({
           {[0, 1, 2].map((index) => (
             <span key={index} className={styles.waitingDot} />
           ))}
+        </div>
+      ) : null}
+      {working ? (
+        <div className={styles.working} role="status">
+          {t('replyWorking')}
         </div>
       ) : null}
       {notice?.presentation === 'response' ? (

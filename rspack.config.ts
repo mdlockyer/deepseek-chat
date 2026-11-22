@@ -1,10 +1,14 @@
-import { readFileSync } from 'node:fs'
+import { appendFileSync, readFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import type { IncomingMessage, ServerResponse } from 'node:http'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { defineConfig } from '@rspack/cli'
 import { rspack, type Configuration } from '@rspack/core'
 
 const dev = process.env.NODE_ENV !== 'production'
+/** 开发诊断：流式请求时序的落盘位置，见 devServer.setupMiddlewares */
+const STREAM_TRACE_FILE = path.join(tmpdir(), 'deepseek-chat-stream-trace.jsonl')
 /**
  * PYODIDE_LOCAL=1 ships Pyodide with the build (dist/pyodide/, from vendor/pyodide/ prepared by
  * scripts/fetch-pyodide.mjs). The desktop app sets it; the web build loads Pyodide from jsDelivr.
@@ -105,6 +109,7 @@ export const createConfig = ({
     new rspack.DefinePlugin({
       __API_ORIGIN__: JSON.stringify(apiOrigin),
       __PYODIDE_LOCAL__: JSON.stringify(pyodideLocal),
+      __DEV__: JSON.stringify(dev),
     }),
     new rspack.CopyRspackPlugin({
       patterns: [
@@ -114,7 +119,27 @@ export const createConfig = ({
     }),
   ],
   performance: { hints: false },
-  devServer: { port: 8090, ...devServer },
+  devServer: {
+    port: 8090,
+    // 开发诊断：应用把每次流式请求的时序 POST 到这里，逐行追加到临时文件（只有大小与时间，没有内容）
+    setupMiddlewares: (middlewares) => [
+      {
+        name: 'stream-trace',
+        path: '/__dev/stream-trace',
+        middleware: (req: IncomingMessage, res: ServerResponse) => {
+          let body = ''
+          req.on('data', (chunk: Buffer) => (body += chunk.toString('utf8')))
+          req.on('end', () => {
+            appendFileSync(STREAM_TRACE_FILE, `${body.replace(/\n/g, ' ')}\n`)
+            res.statusCode = 204
+            res.end()
+          })
+        },
+      },
+      ...middlewares,
+    ],
+    ...devServer,
+  },
 })
 
 // eslint-disable-next-line import/no-default-export

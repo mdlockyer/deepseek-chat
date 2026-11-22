@@ -145,3 +145,34 @@
     --search-row-site-logo-color: var(--dsw-alias-interactive-bg-hover);
   }
 }
+
+/* 生成中长时间没有新内容（如服务端整块输出工具调用）：与步骤行一致的扫光文字 */
+.working {
+  display: flex;
+  align-items: center;
+  height: 34px;
+  font-size: 14px;
+  line-height: 22px;
+  color: transparent;
+  background: linear-gradient(
+      90deg,
+      var(--dsw-alias-label-secondary) 0%,
+      var(--dsw-alias-label-secondary) 40%,
+      var(--dsw-alias-label-caption) 50%,
+      var(--dsw-alias-label-secondary) 60%,
+      var(--dsw-alias-label-secondary) 100%
+    )
+    0 0 / 300% 100%;
+  background-clip: text;
+  animation: working-shimmer 2s ease-out infinite;
+  width: fit-content;
+}
+
+@keyframes working-shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0 0;
+  }
+}

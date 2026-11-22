@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import type { ToolKind, ToolResult } from '@deepseek-chat/slice-conversations'
+import type { StreamTrace, ToolKind, ToolResult } from '@deepseek-chat/slice-conversations'
 import { createStoreEnv, seeded, type ApiReply, type ApiRequest } from './store_harness.js'
 
 // Tool names unlike the real ones: the store must rely on the gateway alone.
@@ -169,6 +169,46 @@ describe('conversations store: the tool-call loop', () => {
     assert.deepEqual(ran, [1, 2])
     assert.equal(env.requests.length, requestsAtAbort, 'no request after the abort')
     assert.equal(lastReply().status, 'stopped')
+  })
+
+  it('reports one trace per request, with sizes and timings but no content', async () => {
+    const secret = 'TOP-SECRET-FILE-BODY'
+    env.respondWith((request) =>
+      resultsSent(request).length === 0
+        ? { calls: [{ name: 'make_doc', input: { body: secret } }] }
+        : { text: `answer ${secret}` }
+    )
+    env.runToolsWith(async () => ({ content: 'ok', status: 'ok' }))
+    const before = env.traces.length
+    await turn('trace check')
+    const traces = env.traces.slice(before)
+    // Two requests: the tool round and the answer.
+    assert.deepEqual(
+      traces.map((trace) => [trace.round, trace.stopReason, trace.error]),
+      [
+        [0, 'tool_use', undefined],
+        [1, 'end_turn', undefined],
+      ]
+    )
+    const [toolRound, answer] = traces as [StreamTrace, StreamTrace]
+    // The harness streams each block's input/text as one delta.
+    const input = JSON.stringify({ body: secret })
+    assert.deepEqual(
+      toolRound.blocks.map((b) => [b.type, b.deltas, b.chars]),
+      [['tool_use:make_doc', 1, input.length]]
+    )
+    assert.deepEqual(
+      answer.blocks.map((b) => [b.type, b.chars]),
+      [['text', `answer ${secret}`.length]]
+    )
+    for (const trace of traces) {
+      assert.ok(!JSON.stringify(trace).includes(secret), 'no content in a trace')
+      const block = trace.blocks[0]
+      assert.ok(trace.firstEventMs !== null && block?.stopMs != null)
+      // Timings are ordered within the request.
+      assert.ok(trace.firstEventMs <= block.startMs && block.startMs <= block.stopMs)
+      assert.ok(block.stopMs <= trace.endMs)
+    }
   })
 
   it('ends a turn whose model never stops calling tools', { timeout: 20_000 }, async () => {
