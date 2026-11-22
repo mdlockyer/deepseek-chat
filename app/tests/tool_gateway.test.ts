@@ -37,6 +37,29 @@ describe('app wiring: tool gateway', () => {
     )
   })
 
+  it('prepends a required summary parameter as the first property on every declared client tool', () => {
+    const tools = toolGateway.declare({
+      search: true,
+      python: true,
+      browser: true,
+      questionText: 'check https://example.com',
+    })
+    assert.ok(tools.length > 0)
+    for (const tool of tools) {
+      if (!('input_schema' in tool)) {
+        continue
+      }
+      const props = tool.input_schema.properties as Record<string, { type?: string }> | undefined
+      assert.ok(props, `${tool.name} has properties`)
+      assert.equal(Object.keys(props)[0], 'summary', `${tool.name} emits summary first`)
+      assert.equal(props.summary?.type, 'string')
+      assert.ok(
+        Array.isArray(tool.input_schema.required) && tool.input_schema.required.includes('summary'),
+        `${tool.name} marks summary required`
+      )
+    }
+  })
+
   it('declares Python only when its toggle is on, and never a browser on the web build', () => {
     const kindsOf = (python: boolean) =>
       declaredNames({ search: true, python }).map((name) => toolGateway.kindOf(name))

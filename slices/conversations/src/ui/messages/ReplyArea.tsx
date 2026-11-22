@@ -56,6 +56,30 @@ const useTicker = (active: boolean, interval: number) => {
   return tick
 }
 
+const getAreaTitleIcon = (view: ReplyView, active: boolean): ReactNode => {
+  if (!active) {
+    return <IconThinkOutline16 />
+  }
+  const last = view.steps.at(-1)
+  if (last?.type === 'search' && last.status === 'wip') {
+    return <IconSearchOutline16 />
+  }
+  if (
+    (last?.type === 'open' && last.pages.some((page) => page.status === 'wip')) ||
+    (last?.type === 'find' && last.patterns.some((item) => item.status === 'wip')) ||
+    (last?.type === 'file' && last.status === 'wip')
+  ) {
+    return <IconBrowseOutline16 />
+  }
+  if (last?.type === 'browser' && last.status === 'wip') {
+    return <IconBrowserOutline14 />
+  }
+  if (last?.type === 'read_link' && last.links.some((link) => link.status === 'wip')) {
+    return <IconLinkOutline16 />
+  }
+  return <IconThinkOutline16 />
+}
+
 /**
  * 思考与工具步骤的时间线：
  * 开启深度思考时带可折叠的标题（正在思考 / 正在搜索 / 正在浏览网页 / 已思考（用时 N 秒））；
@@ -88,7 +112,7 @@ export const ReplyArea = memo(function ReplyArea({
       {title ? (
         <div className={styles.title} onClick={() => setOpen((value) => !value)}>
           <span className={clsx(styles.titleIcon, stopped && styles.stoppedIcon)}>
-            <IconThinkOutline16 />
+            {getAreaTitleIcon(view, titleActive)}
           </span>
           <span className={clsx(styles.titleText, titleActive && styles.shimmer)}>{title}</span>
           {open ? <IconChevronDownOutline14 /> : <IconChevronRightOutline14 />}
@@ -224,17 +248,18 @@ const SearchRow = ({
 
   let body: ReactNode
   if (wip) {
-    body =
-      step.queries.length > 0 ? (
-        <>
-          <span className={styles.prefix}>{t('toolSearchIntro')}</span>
-          <span className={styles.query} key={tick}>
-            {step.queries[tick % step.queries.length]}
-          </span>
-        </>
-      ) : (
-        <span>{t(isImageSearchKind(step.kind) ? 'imageSearching' : 'messageSearching')}</span>
-      )
+    body = step.summary ? (
+      <span className={clsx(styles.query, styles.shimmer)}>{step.summary}</span>
+    ) : step.queries.length > 0 ? (
+      <>
+        <span className={styles.prefix}>{t('toolSearchIntro')}</span>
+        <span className={styles.query} key={tick}>
+          {step.queries[tick % step.queries.length]}
+        </span>
+      </>
+    ) : (
+      <span>{t(isImageSearchKind(step.kind) ? 'imageSearching' : 'messageSearching')}</span>
+    )
   } else if (interrupted) {
     body = <span>{t('searchStopped')}</span>
   } else if (failed) {
@@ -329,6 +354,7 @@ const OpenRow = ({
   const count = step.pages.length
   const intro = t(count === 1 ? 'toolOpenOneIntro' : 'toolOpensIntro', { count })
   const panelEntry = `open-${step.pages[0]?.id}`
+  const summary = [...step.pages].reverse().find((page) => page.summary)?.summary
   return (
     <ToolRow
       icon={allFailed ? <IconBrowseWarningOutline16 /> : <IconBrowseOutline16 />}
@@ -355,6 +381,7 @@ const OpenRow = ({
               {t('toolOpenViewAll')}
             </span>
           ) : null}
+          {summary ? <div className={styles.stepSummary}>{summary}</div> : null}
         </>
       )}
     </ToolRow>
@@ -569,12 +596,16 @@ const FileRow = ({ step, isLast }: { step: FileStep; isLast: boolean }) => {
         ) : (
           <span className={clsx(styles.intro, running && styles.shimmer)}>{summaryLabel}</span>
         )}
+        {!open && lastAction?.summary ? (
+          <div className={styles.stepSummary}>{lastAction.summary}</div>
+        ) : null}
         {open && step.actions.length > 1 ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4 }}>
             {step.actions.map((action, index) => (
               <div key={action.id} style={{ fontSize: 13, lineHeight: '18px' }}>
                 <span style={{ opacity: 0.6 }}>{index + 1}. </span>
                 <span>{describeItem(action)}</span>
+                {action.summary ? <div className={styles.stepSummary}>{action.summary}</div> : null}
               </div>
             ))}
           </div>
@@ -629,6 +660,11 @@ const PythonRow = ({
       : running && step.result?.startedAt !== undefined
         ? ` · ${Math.floor((Date.now() - step.result.startedAt) / 1000)}s`
         : ''
+  const headline = step.summary
+    ? status === 'error' || status === 'aborted'
+      ? `${step.summary} (${label})`
+      : step.summary
+    : label
   const images = step.result?.images ?? []
   return (
     <ToolRow icon={<IconThinkOutline16 />} isLast={isLast}>
@@ -640,7 +676,7 @@ const PythonRow = ({
         >
           {/* 微光效果会把文字颜色设为透明，只加在文字上，箭头保持可见 */}
           <span className={clsx(running && styles.shimmer)}>
-            {label}
+            {headline}
             {seconds}
           </span>
           {open ? <IconChevronDownOutline14 /> : <IconChevronRightOutline14 />}

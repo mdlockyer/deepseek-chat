@@ -44,6 +44,7 @@ export type SearchStep = {
   queries: string[]
   results: Source[]
   status: ToolStatus
+  summary?: string
 }
 
 export type PageItem = {
@@ -51,6 +52,7 @@ export type PageItem = {
   url: string
   title: string
   status: ToolStatus
+  summary?: string
 }
 
 export type OpenStep = { type: 'open'; pages: PageItem[] }
@@ -72,6 +74,7 @@ export type PythonStep = {
   type: 'python'
   key: string
   code: string
+  summary?: string
   result: ToolResultPart | null
 }
 
@@ -99,6 +102,7 @@ export type FileActionItem = {
   tool: 'present_file' | 'edit_file' | 'read_file'
   path: string
   title?: string
+  summary?: string
   version?: number
   files?: PresentedFileRef[]
   status: ToolStatus
@@ -209,6 +213,11 @@ const getPartialStringField = (input: unknown, inputJson: string | undefined, ke
     }
   }
 }
+const getToolSummary = (input: unknown, inputJson: string | undefined): string | undefined => {
+  const raw = getPartialStringField(input, inputJson, 'summary').replace(/\s+/g, ' ').trim()
+  return raw || undefined
+}
+
 const mergeStatus = (statuses: ToolStatus[]): ToolStatus =>
   statuses.includes('wip') ? 'wip' : statuses.every((s) => s === 'failed') ? 'failed' : 'done'
 
@@ -382,6 +391,7 @@ export const buildReplyView = (reply: AssistantMessage, streaming: boolean): Rep
       flushPreamble()
       const toolResult = toolResults.get(block.id)
       const toolKind = kindOf(block.name)
+      const toolSummary = getToolSummary(block.input, block.inputJson)
       if (toolKind === 'web_search') {
         const query = getPartialStringField(block.input, block.inputJson, 'query')
         const kind: ServerToolKind = reply.thinking ? 'deep_search' : 'search'
@@ -403,6 +413,9 @@ export const buildReplyView = (reply: AssistantMessage, streaming: boolean): Rep
           if (query) {
             target.queries.push(query)
           }
+          if (toolSummary) {
+            target.summary = toolSummary
+          }
           target.results.push(...found.filter((source) => !target.results.includes(source)))
           target.status = mergeStatus([target.status, status])
         } else {
@@ -413,6 +426,7 @@ export const buildReplyView = (reply: AssistantMessage, streaming: boolean): Rep
             queries: query ? [query] : [],
             results: found,
             status,
+            ...(toolSummary ? { summary: toolSummary } : {}),
           }
           steps.push(step)
           if (!isDeepSearchKind(kind)) {
@@ -426,7 +440,13 @@ export const buildReplyView = (reply: AssistantMessage, streaming: boolean): Rep
           toolResult?.scrapedPage?.url || getPartialStringField(block.input, block.inputJson, 'url')
         const title = toolResult?.scrapedPage?.title || url
         const status = getClientToolStatus(toolResult, streaming)
-        const page: PageItem = { id: block.id, url, title, status }
+        const page: PageItem = {
+          id: block.id,
+          url,
+          title,
+          status,
+          ...(toolSummary ? { summary: toolSummary } : {}),
+        }
         const last = steps.at(-1)
         if (last?.type === 'open') {
           last.pages.push(page)
@@ -471,7 +491,7 @@ export const buildReplyView = (reply: AssistantMessage, streaming: boolean): Rep
         const item: BrowserActionItem = {
           id: block.id,
           tool: block.name,
-          summary: meta?.summary ?? fallbackSummary,
+          summary: toolSummary ?? meta?.summary ?? fallbackSummary,
           url,
           title: meta?.title,
           images: toolResult?.images,
@@ -501,6 +521,7 @@ export const buildReplyView = (reply: AssistantMessage, streaming: boolean): Rep
           tool: fileTool,
           path,
           ...(title ? { title } : {}),
+          ...(toolSummary ? { summary: toolSummary } : {}),
           ...(meta?.version !== undefined ? { version: meta.version } : {}),
           ...(toolResult?.files?.length ? { files: toolResult.files } : {}),
           status,
@@ -521,6 +542,7 @@ export const buildReplyView = (reply: AssistantMessage, streaming: boolean): Rep
         type: 'python',
         key: block.id,
         code: typeof input?.code === 'string' ? input.code : (block.inputJson ?? ''),
+        ...(toolSummary ? { summary: toolSummary } : {}),
         result: toolResult ?? null,
       })
       return
@@ -675,25 +697,34 @@ export const getAreaTitle = (
   }
   const last = view.steps.at(-1)
   if (last?.type === 'search' && last.status === 'wip') {
-    return translate(isImageSearchKind(last.kind) ? 'imageSearching' : 'deepSearchSearching')
+    return (
+      last.summary ||
+      translate(isImageSearchKind(last.kind) ? 'imageSearching' : 'deepSearchSearching')
+    )
   }
-  if (
-    (last?.type === 'open' && last.pages.some((page) => page.status === 'wip')) ||
-    (last?.type === 'find' && last.patterns.some((item) => item.status === 'wip'))
-  ) {
+  if (last?.type === 'open' && last.pages.some((page) => page.status === 'wip')) {
+    const activeSummary = [...last.pages]
+      .reverse()
+      .find((page) => page.status === 'wip' && page.summary)?.summary
+    return activeSummary || translate('groupTitleToolOpen')
+  }
+  if (last?.type === 'find' && last.patterns.some((item) => item.status === 'wip')) {
     return translate('groupTitleToolOpen')
   }
   if (last?.type === 'read_link' && last.links.some((link) => link.status === 'wip')) {
     return translate('readingLink')
   }
   if (last?.type === 'python' && (!last.result || last.result.status === 'running')) {
-    return translate('pythonRunning')
+    return last.summary || translate('pythonRunning')
   }
   if (last?.type === 'browser' && last.status === 'wip') {
-    return translate('groupTitleToolOpen')
+    return last.actions.at(-1)?.summary || translate('groupTitleToolOpen')
   }
   if (last?.type === 'file' && last.status === 'wip') {
     const lastAction = last.actions.at(-1)
+    if (lastAction?.summary) {
+      return lastAction.summary
+    }
     const name = lastAction?.title || lastAction?.path || ''
     if (lastAction?.tool === 'edit_file') {
       return translate('previewToolEditing', { name })

@@ -283,6 +283,105 @@ describe('buildReplyView for Firecrawl client tools', () => {
     assert.equal(fileSteps[0].actions[1]?.version, 2)
     assert.equal(doneView.answer?.text, 'Chart is ready.')
   })
+
+  it('surfaces streaming and settled tool summaries in steps and getAreaTitle', () => {
+    // Partial JSON with summary first, while a large payload is still streaming.
+    const streamingFile = buildReplyView(
+      replyWith(
+        [
+          {
+            type: 'tool_use',
+            id: 'f1',
+            name: 'present_file',
+            input: {},
+            inputJson:
+              '{"summary":"Building the Northstar landing page with pricing toggle","path":"index.html","content":"<!doctype html>...',
+          },
+        ],
+        true
+      ),
+      true
+    )
+    assert.equal(
+      getAreaTitle(streamingFile, true, 2_000, false),
+      'Building the Northstar landing page with pricing toggle'
+    )
+    assert.equal(
+      streamingFile.steps[0]?.type === 'file' ? streamingFile.steps[0].actions[0]?.summary : null,
+      'Building the Northstar landing page with pricing toggle'
+    )
+
+    // Streaming Python with summary.
+    const streamingPython = buildReplyView(
+      replyWith(
+        [
+          {
+            type: 'tool_use',
+            id: 'p1',
+            name: 'python',
+            input: {},
+            inputJson: '{"summary":"Plotting monthly churn by cohort","code":"import matplotlib',
+          },
+        ],
+        true
+      ),
+      true
+    )
+    assert.equal(
+      getAreaTitle(streamingPython, true, 2_000, false),
+      'Plotting monthly churn by cohort'
+    )
+
+    // Settled browser + search + scrape prefer model summary over generic fallbacks.
+    const settled = buildReplyView(
+      replyWith([
+        {
+          type: 'tool_use',
+          id: 's1',
+          name: 'web_search',
+          input: { summary: 'Checking Firecrawl rate limit tiers', query: 'firecrawl limits' },
+        },
+        { type: 'tool_result', tool_use_id: 's1', content: 'ok', status: 'ok', searchResults: [] },
+        {
+          type: 'tool_use',
+          id: 'o1',
+          name: 'web_scrape',
+          input: {
+            summary: 'Reading pricing table from Firecrawl docs',
+            url: 'https://firecrawl.dev/pricing',
+          },
+        },
+        {
+          type: 'tool_result',
+          tool_use_id: 'o1',
+          content: 'ok',
+          status: 'ok',
+          scrapedPage: { url: 'https://firecrawl.dev/pricing', title: 'Pricing' },
+        },
+        {
+          type: 'tool_use',
+          id: 'b1',
+          name: 'browser_click',
+          input: { summary: 'Switching pricing toggle to annual billing', ref: 'e4' },
+        },
+        {
+          type: 'tool_result',
+          tool_use_id: 'b1',
+          content: 'Clicked',
+          status: 'ok',
+          browserAction: { tool: 'browser_click', summary: 'Clicking [e4]' },
+        },
+      ]),
+      false
+    )
+
+    const search = settled.steps.find((s) => s.type === 'search')
+    const open = settled.steps.find((s) => s.type === 'open')
+    const browserStep = settled.steps.find((s) => s.type === 'browser')
+    assert.equal(search?.summary, 'Checking Firecrawl rate limit tiers')
+    assert.equal(open?.pages[0]?.summary, 'Reading pricing table from Firecrawl docs')
+    assert.equal(browserStep?.actions[0]?.summary, 'Switching pricing toggle to annual billing')
+  })
 })
 
 describe('needsWorkingIndicator (SPEC invariant 16)', () => {

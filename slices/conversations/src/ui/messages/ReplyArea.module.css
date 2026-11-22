@@ -19,6 +19,7 @@
 
 .titleIcon {
   display: flex;
+  flex-shrink: 0;
   margin-right: 6px;
   color: var(--dsw-alias-brand-primary);
 }
@@ -28,7 +29,11 @@
 }
 
 .titleText {
+  min-width: 0;
   margin-right: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font: var(--dsw-font-markdown-base);
 }
 
@@ -230,6 +235,14 @@
   display: inline-block;
   margin-right: 6px;
   font-variant: tabular-nums;
+}
+
+.stepSummary {
+  width: 100%;
+  margin-top: 2px;
+  font: var(--dsw-font-xs-13);
+  line-height: 18px;
+  color: var(--dsw-alias-label-tertiary);
 }
 
 .page {

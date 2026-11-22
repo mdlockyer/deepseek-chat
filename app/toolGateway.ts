@@ -75,13 +75,49 @@ const kindOf = (name: string): ToolKind | null => {
   }
 }
 
+const TOOL_SUMMARY_SCHEMA = {
+  type: 'string',
+  description:
+    "Brief 1-sentence summary (6–18 words, in the user's language) explaining what this tool call is doing and why, shown live in the activity indicator. Always emit this field first.",
+} as const
+
+type DeclaredTool = ReturnType<ToolGateway['declare']>[number]
+
+/** Prepends `summary` as the first property of every client tool schema so it streams before large payloads. */
+const withSummaryParam = (tool: DeclaredTool): DeclaredTool => {
+  if (!('input_schema' in tool)) {
+    return tool
+  }
+  const schema = tool.input_schema
+  const rawProps =
+    schema.properties && typeof schema.properties === 'object'
+      ? (schema.properties as Record<string, unknown>)
+      : {}
+  const properties = Object.hasOwn(rawProps, 'summary')
+    ? rawProps
+    : { summary: TOOL_SUMMARY_SCHEMA, ...rawProps }
+  const rawRequired = Array.isArray(schema.required)
+    ? schema.required.filter((item: unknown): item is string => typeof item === 'string')
+    : []
+  const required = rawRequired.includes('summary') ? rawRequired : ['summary', ...rawRequired]
+  return {
+    ...tool,
+    input_schema: {
+      ...schema,
+      properties,
+      required,
+    },
+  }
+}
+
 export const toolGateway: ToolGateway = {
-  declare: ({ search, python: pythonEnabled, browser: browserEnabled, questionText }) => [
-    ...workspaceFiles.declareTools(),
-    ...webResearch.declareTools({ searchEnabled: search, questionText }),
-    ...(pythonEnabled ? [python.tool] : []),
-    ...browser.declareTools({ enabled: browserEnabled }),
-  ],
+  declare: ({ search, python: pythonEnabled, browser: browserEnabled, questionText }) =>
+    [
+      ...workspaceFiles.declareTools(),
+      ...webResearch.declareTools({ searchEnabled: search, questionText }),
+      ...(pythonEnabled ? [python.tool] : []),
+      ...browser.declareTools({ enabled: browserEnabled }),
+    ].map(withSummaryParam),
 
   instructions: (names) => {
     const has = (handles: (name: string) => boolean) => [...names].some(handles)
