@@ -1,3 +1,4 @@
+import type { PanelSlot } from '@deepseek-chat/spine/design'
 import { memoryStore } from '@deepseek-chat/spine/ports'
 import { EventLog } from '@deepseek-chat/spine/runtime'
 import {
@@ -5,6 +6,34 @@ import {
   type ConversationsDeps,
   type ToolKind,
 } from '@deepseek-chat/slice-conversations'
+
+/** A closed right-panel slot with no chat on screen. */
+const fakeSearchSlot = (): PanelSlot => ({
+  useStageSize: () => null,
+  setStageSize: () => {},
+  setResizing: () => {},
+  isResizing: () => false,
+  isOpen: () => false,
+  open: () => {},
+  close: () => {},
+  setAnimating: () => {},
+  getLayout: () => ({
+    activeSessionId: null,
+    animating: false,
+    resizing: false,
+    overlayLocked: false,
+    width: 540,
+  }),
+  subscribe: () => () => {},
+  useLayout: (select) =>
+    select({
+      activeSessionId: null,
+      animating: false,
+      resizing: false,
+      overlayLocked: false,
+      width: 540,
+    }),
+})
 
 /** Tool names as the app maps them from the slices that own them. */
 const KINDS: Record<string, ToolKind> = {
@@ -38,5 +67,34 @@ export const installTestSlice = (overrides: Partial<ConversationsDeps> = {}) =>
     getLocationLabel: () => '',
     onActiveSessionChange: () => {},
     browserAvailable: false,
+    ui: {
+      voice: {
+        useVoiceInput: () => ({
+          status: 'idle',
+          seconds: 0,
+          available: false,
+          getAnalyser: () => null,
+          toggle: () => {},
+          cancel: () => {},
+        }),
+        VoiceButton: () => null,
+        Spectrum: () => null,
+        ReadAloudButton: () => null,
+        stopReadAloud: () => {},
+      },
+      panels: {
+        files: {
+          useIsShown: () => false,
+          open: () => {},
+          useToggle: () => ({ visible: false, open: false, toggle: () => {} }),
+        },
+        browser: null,
+        search: fakeSearchSlot(),
+      },
+      openSettings: () => {},
+      openInApp: null,
+      saveFile: async () => {},
+      setSiderCollapsed: () => {},
+    },
     ...overrides,
   })

@@ -1,7 +1,3 @@
-import {
-  translateConversations,
-  type ConversationsMessageKey,
-} from '@deepseek-chat/slice-conversations'
 import clsx from 'clsx'
 import { useRef, useState, type ReactNode } from 'react'
 import {
@@ -15,14 +11,8 @@ import {
   settingStyles,
   usePresence,
 } from '@deepseek-chat/spine/design'
-import {
-  BackupError,
-  clearHistory,
-  exportHistory,
-  importHistory,
-} from '@deepseek-chat/slice-conversations'
-import { useChatStore } from '@deepseek-chat/slice-conversations'
 import { account, browser, preferences, python, voice, webResearch } from '../../app/composition.js'
+import { conversations } from '../../app/conversations.js'
 import { isDesktopApp } from '../../platform/desktop.js'
 import { useTranslate, type TranslationKey, type TranslationMessage } from '../../i18n/index.js'
 import { showToast } from '../base/toastState.js'
@@ -62,7 +52,7 @@ const SettingsContent = ({ exiting = false }: { exiting?: boolean }) => {
   const firecrawlEditor = webResearch.useKeyEditor()
   const historyImport = useHistoryImport()
   const historyDelete = useHistoryDelete()
-  const replacingHistory = useChatStore((state) => state.importingHistory)
+  const replacingHistory = conversations.useHistoryState().replacing
   const historyBusy = historyImport.busy || historyDelete.busy || replacingHistory
   const importConfirm = usePresence(historyImport.file !== null, 160)
   const deleteConfirm = usePresence(historyDelete.opened, 160)
@@ -199,7 +189,7 @@ const useHistoryDelete = () => {
     deleting.current = true
     setBusy(true)
     try {
-      await clearHistory()
+      await conversations.clearHistory()
       setOpened(false)
       showToast({ key: 'historyDeleted' })
     } catch {
@@ -254,17 +244,20 @@ const ImportConfirm = ({
   )
 }
 
-/** `reason` 为失败原因的文案 key，展示时按当前语言翻译后填入 `message` 参数。 */
-type Status = (TranslationMessage & { error?: boolean; reason?: ConversationsMessageKey }) | null
+/** `reason` 给出失败原因的文案，展示时按当前语言生成后填入 `message` 参数。 */
+type Status = (TranslationMessage & { error?: boolean; reason?: () => string }) | null
 
 /** 导出失败附带原因：预期的错误用对应文案作原因，其他错误用错误信息。 */
-const errorStatus = (key: TranslationKey, error: unknown): Status => ({
-  key,
-  ...(error instanceof BackupError
-    ? { reason: error.key }
-    : { params: { message: error instanceof Error ? error.message : String(error) } }),
-  error: true,
-})
+const errorStatus = (key: TranslationKey, error: unknown): Status => {
+  const reason = conversations.historyErrorText(error)
+  return {
+    key,
+    ...(reason
+      ? { reason }
+      : { params: { message: error instanceof Error ? error.message : String(error) } }),
+    error: true,
+  }
+}
 
 const SettingCell = ({
   label,
@@ -287,10 +280,7 @@ const SettingCell = ({
         {status || description ? (
           <div className={clsx(settingStyles.description, status?.error && settingStyles.error)}>
             {status
-              ? t(
-                  status.key,
-                  status.reason ? { message: translateConversations(status.reason) } : status.params
-                )
+              ? t(status.key, status.reason ? { message: status.reason() } : status.params)
               : description}
           </div>
         ) : null}
@@ -316,7 +306,7 @@ const useHistoryImport = () => {
     setBusy(true)
     setStatus(null)
     try {
-      const count = await importHistory(file)
+      const count = await conversations.importHistory(file)
       setStatus({ key: count === 1 ? 'historyImportedOne' : 'historyImported', params: { count } })
     } catch {
       setStatus({ key: 'historyImportFailed', error: true })
@@ -379,7 +369,7 @@ const ImportHistory = ({
 /** 将全部会话及图片导出为 ZIP 文件并下载 */
 const ExportHistory = ({ disabled }: { disabled: boolean }) => {
   const t = useTranslate()
-  const empty = useChatStore((state) => state.sessions.length === 0)
+  const empty = conversations.useHistoryState().empty
   const [busy, setBusy] = useState(false)
   const [status, setStatus] = useState<Status>(null)
 
@@ -387,7 +377,7 @@ const ExportHistory = ({ disabled }: { disabled: boolean }) => {
     setBusy(true)
     setStatus(null)
     try {
-      const { name, blob } = await exportHistory()
+      const { name, blob } = await conversations.exportHistory()
       const url = URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = url

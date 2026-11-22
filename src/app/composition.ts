@@ -27,6 +27,7 @@ import {
   saveFirecrawlApiKey,
   saveKeychainApiKey,
 } from '../platform/desktop.js'
+import { late } from './lateBindings.js'
 import { createPanelSlot } from './rightPanel/panelSlot.js'
 import {
   clearAllSidePanelSessions,
@@ -103,11 +104,8 @@ export const browser = createBrowserSlice({
   panel: createPanelSlot('browser'),
   store: localStore,
   openExternal: openExternalUrl,
-  // conversations 依赖本模块，按需加载以避免循环引用
-  stopController: (sessionId) =>
-    void import('./conversations.js').then(({ conversations }) =>
-      conversations.stopReply(sessionId)
-    ),
+  // conversations 在本模块之后创建
+  stopController: (sessionId) => late.stopReply(sessionId),
 })
 
 /** 右侧面板跟随当前会话：面板栏位与各 slice 的会话状态一起切换 */

@@ -1,6 +1,6 @@
 import { Markdown, MermaidDiagram, useHighlightedHtml } from '@deepseek-chat/lib-markdown'
 import type { WorkspaceViews } from '@deepseek-chat/slice-workspace-files'
-import { FileIcon } from '../components/files/FileIcon.js'
+import { FileIcon } from '@deepseek-chat/spine/design'
 
 /** 超长文本不高亮 */
 const MAX_HIGHLIGHT_CHARS = 300_000

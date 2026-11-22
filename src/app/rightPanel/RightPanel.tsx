@@ -6,8 +6,7 @@ import { useSessionFileRecords } from '../useSessionFileRecords.js'
 import { workspaceFiles } from '../workspaceFiles.js'
 import { getActiveRightPanel, useSidePanelStore, type RightPanelKind } from './state.js'
 import { IconSearchOutline16 } from '@deepseek-chat/spine/design'
-import { SearchPanel } from '../../components/search/SearchPanel.js'
-import { restoreLastSearchPanel, useSearchPanel } from '../../components/search/searchPanelState.js'
+import { conversations } from '../conversations.js'
 import { SidePanel } from './SidePanel.js'
 import { panelStyles } from '@deepseek-chat/spine/design'
 
@@ -21,9 +20,7 @@ export const RightPanel = () => {
 
   const fileRecords = useSessionFileRecords(activeSessionId)
 
-  const hasLastSearch = useSearchPanel(
-    (state) => state.lastEntry !== null && state.lastSources.length > 0
-  )
+  const hasLastSearch = conversations.useHasLastSearch()
 
   const lastKindRef = useRef<RightPanelKind | null>(effectiveKind)
   if (effectiveKind !== null) {
@@ -54,7 +51,7 @@ export const RightPanel = () => {
         className={panelStyles.modeChip}
         title={t('browserBackToResults')}
         aria-label={t('browserBackToResults')}
-        onClick={restoreLastSearchPanel}
+        onClick={conversations.restoreLastSearchPanel}
       >
         <IconSearchOutline16 />
         <span>{t('browserBackToResults')}</span>
@@ -68,7 +65,7 @@ export const RightPanel = () => {
       ) : shownKind === 'preview' ? (
         <workspaceFiles.PreviewPanel records={fileRecords} topActions={searchAction} />
       ) : shownKind === 'search' ? (
-        <SearchPanel />
+        <conversations.SearchPanel />
       ) : null}
     </SidePanel>
   )

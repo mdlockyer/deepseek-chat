@@ -10,14 +10,27 @@ chat through the tool gateway the app supplies.
 
 ## Public entrypoint
 
-`createConversationsSlice(deps)` installs the ports and returns `{ stopReply(sessionId) }`.
+`createConversationsSlice(deps)` installs the ports and returns the instance:
+
+| Member                                                          | Meaning                                                                               |
+| :-------------------------------------------------------------- | :------------------------------------------------------------------------------------ |
+| `stopReply(sessionId)`                                          | Stops that chat's reply in progress.                                                  |
+| `loadFile(id)`                                                  | Stored file contents (attachments, presented files).                                  |
+| `getChatMessages(id)`, `useChatMessages(id)`                    | A loaded chat's visible branch (empty while not loaded).                              |
+| `exportHistory()`, `importHistory(file)`, `clearHistory()`      | History as a v3 ZIP; import and clear replace everything.                             |
+| `useHistoryState()`, `historyErrorText(error)`                  | Replace in progress / no chats; an import error's reason.                             |
+| `useChatLifecycle()`                                            | Starts the chat and follows the chat on screen (call once, outside error boundaries). |
+| `useActiveSessionId()`                                          | The chat on screen (`null`: the new-chat screen).                                     |
+| `Sider`, `MobileSider`, `CollapsedSider`                        | The session list.                                                                     |
+| `ChatMain({ siderCollapsed })`, `ChatSaveBanner`                | Loading state, chat or welcome screen; the save-failure banner.                       |
+| `SearchPanel`, `useHasLastSearch()`, `restoreLastSearchPanel()` | Search results in the right-hand panel.                                               |
+
+The package also exports the pure model functions (branches, reply events, the reply view, the API
+transport, the archive codec) and the composer toggles; the boundary tests use them.
 
 **One instance per app.** The chat's state is module-level (one zustand store, one IndexedDB
 connection), so the slice may be created once; a second call throws. Tests create it once per test
 file (the test runner gives each file its own process).
-
-Until the chat UI moves into the slice (step 6c), the package also exports the functions, hooks
-and types that UI uses; they are marked transitional in `src/index.ts`.
 
 ## Ports (`ConversationsDeps`)
 
@@ -40,6 +53,12 @@ file; `run(call, context)` runs one call and always resolves to the result writt
 `tool_result` block. The context gives the session, abort signal, the reply's blocks so far, the
 visible branch with the reply last, whether the chat is on screen, a phase callback, and the file
 store (save/load).
+
+**View ports (`ui`).** `voice`: the voice input hook, voice button, spectrum, read-aloud button
+and stop. `panels.files`: whether the file panel shows a given file (`presented` or `upload`), open
+it, and the header toggle (`visible`, `open`, `toggle`). `panels.browser`: the header toggle, or
+`null` without a browser. `panels.search`: this slice's `PanelSlot`. `openSettings(section)`,
+`openInApp(url)` (or `null`: ordinary links), `saveFile(name, blob)`, `setSiderCollapsed`.
 
 ## Behavioural invariants
 
@@ -64,6 +83,16 @@ store (save/load).
    network error saying the request timed out, and a caller's abort is passed through as an abort.
    The reply stream itself has no overall timeout.
 9. **Session list groups:** Today, Yesterday, Previous 7 days, Previous 30 days, then by month.
+10. **Missing API key.** Sending, attaching, editing a question or starting voice input without a
+    key opens Settings on the key section instead.
+11. **Search results panel.** Clicking a reply's sources shows them in the search slot; clicking the
+    same sources again closes it. When the slot shows something else, the last results are kept and
+    `restoreLastSearchPanel` shows them again. Switching chats closes them.
+12. **Links.** Citation marks and browser-step links open with `openInApp` when given (desktop:
+    the built-in browser); otherwise citations open a new tab and other links behave normally.
+13. **Following the chat on screen** (`useChatLifecycle`): the right-hand panels follow it
+    (`onActiveSessionChange`), read-aloud stops, search results close, and the mobile drawer
+    closes.
 
 ## Parameters
 

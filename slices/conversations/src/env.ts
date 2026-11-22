@@ -2,6 +2,7 @@ import type { EventLog } from '@deepseek-chat/spine/runtime'
 import type { HttpFetch, KeyValueStore } from '@deepseek-chat/spine/ports'
 import type { Locale } from '@deepseek-chat/spine/i18n'
 import type { ToolGateway } from './tools.js'
+import type { ConversationsViewDeps } from './views.js'
 
 /** The ports the conversations slice runs on, given once at startup. */
 export type ConversationsDeps = {
@@ -19,6 +20,17 @@ export type ConversationsDeps = {
   readonly onActiveSessionChange: (sessionId: string | null) => void
   /** Whether the built-in browser exists (desktop); its composer toggle defaults off otherwise. */
   readonly browserAvailable: boolean
+  /** Ports for the chat's views. */
+  readonly ui: ConversationsViewDeps
+}
+
+/** No API key: opens Settings on the key section. Returns whether a key is set. */
+export const ensureApiKey = () => {
+  if (deps().getApiKey()) {
+    return true
+  }
+  deps().ui.openSettings('apiKey')
+  return false
 }
 
 let current: ConversationsDeps | null = null
