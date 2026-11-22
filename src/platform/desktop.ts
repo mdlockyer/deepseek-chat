@@ -338,3 +338,25 @@ export const pythonRuntimeStatus = (): Promise<ManagedPythonStatus> =>
 
 export const pythonRuntimeReset = (): Promise<void> =>
   invoke<null>('python_runtime_reset').then(() => undefined)
+
+/** 桌面端内置浏览器的宿主接口（browser slice 的 BrowserHost） */
+export const desktopBrowserHost = {
+  setOptions: browserSetOptions,
+  createTab: browserCreateTab,
+  closeTab: browserCloseTab,
+  setActiveTab: browserSetActiveTab,
+  setBounds: browserSetBounds,
+  setZoom: browserSetZoom,
+  setVisible: browserSetVisible,
+  navigate: browserNavigate,
+  history: browserHistory,
+  getState: browserGetState,
+  evalJs: browserEvalJs,
+  takeSnapshot: browserTakeSnapshot,
+  clearData: browserClearData,
+  openDevtools: browserOpenDevtools,
+  onState: onBrowserState,
+  onNewTabRequested: onBrowserNewTabRequested,
+  onNavigationBlocked: onBrowserNavigationBlocked,
+  onDownloadBlocked: onBrowserDownloadBlocked,
+}

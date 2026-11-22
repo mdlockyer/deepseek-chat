@@ -11,6 +11,9 @@ importers:
       '@deepseek-chat/slice-account':
         specifier: workspace:*
         version: link:slices/account
+      '@deepseek-chat/slice-browser':
+        specifier: workspace:*
+        version: link:slices/browser
       '@deepseek-chat/slice-preferences':
         specifier: workspace:*
         version: link:slices/preferences
@@ -141,6 +144,21 @@ importers:
       react:
         specifier: 18.3.1
         version: 18.3.1
+
+  slices/browser:
+    dependencies:
+      '@deepseek-chat/spine':
+        specifier: workspace:*
+        version: link:../../spine
+      clsx:
+        specifier: 2.1.1
+        version: 2.1.1
+      react:
+        specifier: 18.3.1
+        version: 18.3.1
+      zustand:
+        specifier: 4.4.7
+        version: 4.4.7(@types/react@18.3.31)(react@18.3.1)
 
   slices/preferences:
     dependencies:

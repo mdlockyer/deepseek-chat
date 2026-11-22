@@ -1,6 +1,6 @@
 import { WEB_SCRAPE_TOOL_NAME, WEB_SEARCH_TOOL_NAME } from '@deepseek-chat/slice-web-research'
 import type { ServerToolUseBlock } from '../../api/types.js'
-import { BROWSER_TOOL_NAMES } from '../../browser/tools.js'
+import { BROWSER_TOOL_NAMES } from '@deepseek-chat/slice-browser'
 import { getCodeLanguage } from '../../preview/fileKinds.js'
 import {
   EDIT_FILE_TOOL_NAME,

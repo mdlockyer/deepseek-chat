@@ -1,6 +1,6 @@
 import type { MouseEvent } from 'react'
 import { isDesktopApp } from '../../platform/desktop.js'
-import { openUrlInBrowserPanel } from '../../services/browser/state.js'
+import { browser } from '../../app/composition.js'
 import type { Source } from '../../services/chat/view.js'
 import { HoverCard, type HoverCardTrigger } from './HoverCard.js'
 import { SourceCard } from './SourceCard.js'
@@ -14,7 +14,7 @@ export const CitationLink = ({ source }: { source: Source }) => {
     event.preventDefault()
     event.stopPropagation()
     if (isDesktopApp) {
-      void openUrlInBrowserPanel(source.url, { initiator: 'user' })
+      void browser.openUrl(source.url, { initiator: 'user' })
       return
     }
     window.open(source.url, '_blank', 'noopener,noreferrer')

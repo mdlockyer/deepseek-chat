@@ -16,7 +16,7 @@ import {
   IconThinkOutline16,
 } from '@deepseek-chat/spine/design'
 import { isDesktopApp, saveFileWithDialog } from '../../platform/desktop.js'
-import { openUrlInBrowserPanel } from '../../services/browser/state.js'
+import { browser } from '../../app/composition.js'
 import { formatSize, getExtension } from '../../services/attachments.js'
 import { getVisibleMessages } from '../../services/chat/branches.js'
 import { loadFile } from '../../services/chat/db.js'
@@ -508,7 +508,7 @@ const BrowserRow = ({ step, isLast }: { step: BrowserStep; isLast: boolean }) =>
                             onClick={(event) => {
                               if (isDesktopApp) {
                                 event.preventDefault()
-                                void openUrlInBrowserPanel(targetUrl, { initiator: 'user' })
+                                void browser.openUrl(targetUrl, { initiator: 'user' })
                               }
                             }}
                           >

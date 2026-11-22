@@ -42,6 +42,6 @@ export {
 export { StageFrame } from './stage/StageFrame.js'
 export { ViewportMenu } from './stage/ViewportMenu.js'
 export * from './stage/viewport.js'
-export type { StageHost, StageSize } from './stage/host.js'
+export type { PanelLayout, PanelSlot, StageHost, StageSize } from './stage/host.js'
 /** Shared side-panel chrome (empty states, error banner, top actions, mode chip) and stage styles. */
 export { default as panelStyles } from './stage/stage.module.css'

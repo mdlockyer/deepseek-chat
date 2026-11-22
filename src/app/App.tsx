@@ -13,7 +13,6 @@ import {
 } from '../services/chat/store.js'
 import { RightPanel } from './rightPanel/RightPanel.js'
 import { closeSearchPanel } from '../components/search/searchPanelState.js'
-import { bindBrowserEvents, setActiveBrowserSession } from '../services/browser/state.js'
 import { SessionView } from '../components/session/SessionView.js'
 import { MobileHeader } from '../components/session/MobileHeader.js'
 import { Welcome } from '../components/session/Welcome.js'
@@ -26,7 +25,7 @@ import { Toast } from '@deepseek-chat/spine/design'
 import { showToast } from '../components/base/toastState.js'
 import { onUploadNotice } from '../services/attachments.js'
 import { Button } from '@deepseek-chat/spine/design'
-import { account, voice } from './composition.js'
+import { account, browser, setActivePanelSession, voice } from './composition.js'
 import { isDesktopApp, onOpenSettings } from '../platform/desktop.js'
 import { usePresence, PANEL_DURATION_MS } from '@deepseek-chat/spine/design'
 import { CollapsedSider } from '../components/sider/CollapsedSider.js'
@@ -75,13 +74,13 @@ export const App = () => {
   // 文件数、存储空间达到上限时，附件上只显示「上传失败」，原因用 toast 说明
   useEffect(() => onUploadNotice(showToast), [])
   useEffect(bindChatPersistence, [])
-  useEffect(bindBrowserEvents, [])
+  useEffect(() => browser.start(), [])
 
   // 搜索结果面板只属于当前会话
   useEffect(closeSearchPanel, [activeId])
   // 浏览器面板标签页绑定到当前会话
   useEffect(() => {
-    setActiveBrowserSession(activeId)
+    setActivePanelSession(activeId)
   }, [activeId])
   // 切换会话时停止朗读
   useEffect(() => voice.readAloud.stop(), [activeId])

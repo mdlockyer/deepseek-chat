@@ -4,11 +4,6 @@ import { isDesktopApp } from '../../platform/desktop.js'
 import { createId } from '../../utils/id.js'
 import { ApiError, streamMessage, uploadFile } from '../api/client.js'
 import {
-  clearAllSessionBrowsers,
-  disposeSessionBrowser,
-  setActiveBrowserSession,
-} from '../browser/state.js'
-import {
   clearAllSessionPreviews,
   disposeSessionPreview,
   revealPresentedFile,
@@ -20,18 +15,14 @@ import {
   runPreviewTool,
 } from '../preview/tools.js'
 import { makeArtifactKey, normalizeWorkspacePath } from '../preview/workspace.js'
-import {
-  BROWSER_TOOLS,
-  BROWSER_TOOL_INSTRUCTIONS,
-  BROWSER_TOOL_NAMES,
-  runBrowserTool,
-} from '../browser/tools.js'
 import type { PythonRunResult } from '@deepseek-chat/slice-python'
 import type { SessionDeleted, SessionHistoryReplaced } from '@deepseek-chat/spine/facts/session'
 import {
   account,
+  browser as browserSlice,
   preferences,
   python as pythonSlice,
+  setActivePanelSession,
   spine,
   webResearch,
 } from '../../app/composition.js'
@@ -101,9 +92,7 @@ const declaredTools = (
   if (python) {
     tools.push(pythonSlice.tool)
   }
-  if (browser && isDesktopApp) {
-    tools.push(...BROWSER_TOOLS)
-  }
+  tools.push(...browserSlice.declareTools({ enabled: browser }))
   return tools
 }
 
@@ -485,7 +474,6 @@ export const replaceHistory = async (write: () => Promise<void>): Promise<number
     initTask = undefined
     sessionLoads.clear()
     await waitForIdle()
-    void clearAllSessionBrowsers()
     clearAllSessionPreviews()
     await db.clearStaging()
     let summaries: SessionSummary[]
@@ -527,7 +515,7 @@ export const replaceHistory = async (write: () => Promise<void>): Promise<number
 export const newChat = () => {
   if (!get().importingHistory) {
     set({ activeId: null })
-    setActiveBrowserSession(null)
+    setActivePanelSession(null)
     trimSessionCache()
   }
 }
@@ -536,7 +524,7 @@ export const selectSession = (id: string) => {
   if (!get().importingHistory && get().sessions.some((session) => session.id === id)) {
     touchSession(id)
     set({ activeId: id })
-    setActiveBrowserSession(id)
+    setActivePanelSession(id)
     void ensureSessionLoaded(id)
     trimSessionCache()
   }
@@ -588,7 +576,6 @@ const removeSessionData = async (id: string): Promise<boolean> => {
     }
     await db.deleteSession(id)
     spine.publish<SessionDeleted>({ type: 'SessionDeleted', sessionId: id })
-    void disposeSessionBrowser(id)
     disposeSessionPreview(id)
     if (epoch !== historyEpoch) {
       return true
@@ -667,7 +654,7 @@ export const sendMessage = (targetSessionId: string | null) => {
       sessionCache: { ...state.sessionCache, [session.id]: session },
       activeId: session.id,
     }))
-    setActiveBrowserSession(session.id)
+    setActivePanelSession(session.id)
   }
   const current = getSession(sessionId)
   if (!current) {
@@ -1176,8 +1163,11 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
         continue
       }
 
-      if (BROWSER_TOOL_NAMES.has(call.name)) {
-        const outcome = await runBrowserTool(call.name, call.input, controller.signal, sessionId)
+      if (browserSlice.handles(call.name)) {
+        const outcome = await browserSlice.run(call.name, call.input, {
+          signal: controller.signal,
+          sessionId,
+        })
         reply = {
           ...reply,
           blocks: reply.blocks.map((block) =>
@@ -1413,7 +1403,7 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
           tools.flatMap((tool) => ('type' in tool ? [] : [tool.name]))
         )
         const hasWebTool = [...declaredClientNames].some(webResearch.handles)
-        const hasBrowserTool = BROWSER_TOOLS.some((tool) => declaredClientNames.has(tool.name))
+        const hasBrowserTool = [...declaredClientNames].some(browserSlice.handles)
         const hasPreviewTool = PREVIEW_TOOLS.some((tool) => declaredClientNames.has(tool.name))
         const systemParts = [SYSTEM_PROMPT]
         if (hasPreviewTool) {
@@ -1423,7 +1413,7 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
           systemParts.push(webResearch.instructions)
         }
         if (hasBrowserTool) {
-          systemParts.push(BROWSER_TOOL_INSTRUCTIONS)
+          systemParts.push(browserSlice.instructions)
         }
         // 工具往返中的后续请求不再带续写前缀，本轮内容整体接在提问之后。
         const messages = toRequestMessages(

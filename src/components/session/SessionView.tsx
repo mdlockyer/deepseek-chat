@@ -4,7 +4,7 @@ import { useMemo } from 'react'
 import { useIsMobile } from '../../app/viewport.js'
 import { useTranslate } from '../../i18n/index.js'
 import { isDesktopApp } from '../../platform/desktop.js'
-import { toggleBrowserPanel } from '../../services/browser/state.js'
+import { browser } from '../../app/composition.js'
 import { getVisibleMessages } from '../../services/chat/branches.js'
 import type { Session } from '../../services/chat/types.js'
 import {
@@ -86,7 +86,7 @@ export const SessionView = ({
                   tooltip={t(browserOpen ? 'closeBrowser' : 'openBrowser')}
                   tooltipPlacement="bottom"
                   aria-pressed={browserOpen}
-                  onClick={() => void toggleBrowserPanel(session.id)}
+                  onClick={() => void browser.togglePanel(session.id)}
                 />
               ) : null}
             </div>

@@ -1,6 +1,6 @@
 import { translate } from '../../i18n/index.js'
 import { WEB_SCRAPE_TOOL_NAME, WEB_SEARCH_TOOL_NAME } from '@deepseek-chat/slice-web-research'
-import { BROWSER_TOOL_NAMES } from '../browser/tools.js'
+import { BROWSER_TOOL_NAMES } from '@deepseek-chat/slice-browser'
 import { EDIT_FILE_TOOL_NAME, PREVIEW_TOOL_NAMES, READ_FILE_TOOL_NAME } from '../preview/tools.js'
 import type {
   ServerToolKind,

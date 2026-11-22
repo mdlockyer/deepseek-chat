@@ -8,7 +8,6 @@ import {
   IconSettingsOutline16,
   IconUploadOutline14,
   Modal,
-  Select,
   settingStyles,
   usePresence,
 } from '@deepseek-chat/spine/design'
@@ -19,9 +18,8 @@ import {
   importHistory,
 } from '../../services/chat/backup.js'
 import { useChatStore } from '../../services/chat/store.js'
-import { account, preferences, python, voice, webResearch } from '../../app/composition.js'
+import { account, browser, preferences, python, voice, webResearch } from '../../app/composition.js'
 import { isDesktopApp } from '../../platform/desktop.js'
-import { setBrowserAllowLocalhost, useBrowserPrefs } from '../../services/browser/prefs.js'
 import { useTranslate, type TranslationKey, type TranslationMessage } from '../../i18n/index.js'
 import { showToast } from '../base/toastState.js'
 import { closeSettings, useSettingsDialog, type SettingsSection } from './settingsDialogState.js'
@@ -102,7 +100,7 @@ const SettingsContent = ({ exiting = false }: { exiting?: boolean }) => {
               <preferences.LocationSetting />
               {isDesktopApp ? (
                 <>
-                  <BrowserLocalhostSetting />
+                  <browser.LocalhostSetting />
                   <python.RuntimeSetting />
                 </>
               ) : null}
@@ -219,30 +217,6 @@ const useHistoryDelete = () => {
     },
     confirm,
   }
-}
-
-/** 内置浏览器是否允许模型访问 localhost / 内网地址 */
-const BrowserLocalhostSetting = () => {
-  const t = useTranslate()
-  const allow = useBrowserPrefs((state) => state.allowLocalhost)
-  return (
-    <SettingCell
-      label={t('browserAllowLocalhostLabel')}
-      description={t('browserAllowLocalhostDescription')}
-      status={null}
-      action={
-        <Select
-          ariaLabel={t('browserAllowLocalhostLabel')}
-          value={allow ? 'allow' : 'public'}
-          options={[
-            { value: 'public', label: t('browserAllowLocalhostOff') },
-            { value: 'allow', label: t('browserAllowLocalhostOn') },
-          ]}
-          onChange={(value) => setBrowserAllowLocalhost(value === 'allow')}
-        />
-      }
-    />
-  )
 }
 
 /** 覆盖导入的二次确认，叠在设置弹窗上 */

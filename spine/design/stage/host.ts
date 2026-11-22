@@ -11,3 +11,29 @@ export type StageHost = {
   setResizing(resizing: boolean): void
   isResizing(): boolean
 }
+
+/** The app's right-hand panel as one slice's slot in it (bound to that slice's panel kind). */
+export type PanelLayout = {
+  readonly activeSessionId: string | null
+  /** Opening/closing animation in progress. */
+  readonly animating: boolean
+  /** The panel or a stage inside it is being resized. */
+  readonly resizing: boolean
+  /** An HTML overlay (menu, dialog) is open over the page. */
+  readonly overlayLocked: boolean
+  /** Panel width in CSS pixels. */
+  readonly width: number
+}
+
+export type PanelSlot = StageHost & {
+  /** Whether this slot is the panel shown for the session. */
+  isOpen(sessionId: string | null): boolean
+  open(sessionId: string): void
+  close(sessionId: string): void
+  setAnimating(animating: boolean): void
+  getLayout(): PanelLayout
+  /** Called after any layout or open-state change. */
+  subscribe(listener: () => void): () => void
+  /** React: a value derived from the layout (selectors should return primitives). */
+  useLayout<T>(select: (layout: PanelLayout) => T): T
+}

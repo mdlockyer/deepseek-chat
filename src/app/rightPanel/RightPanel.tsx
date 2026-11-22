@@ -1,11 +1,10 @@
 import { useCallback, useRef } from 'react'
 import { useTranslate } from '../../i18n/index.js'
 import { isDesktopApp } from '../../platform/desktop.js'
-import { refreshActiveTabSnapshot } from '../../services/browser/state.js'
+import { browser } from '../composition.js'
 import { triggerNativePreviewSnapshot } from '../../services/preview/state.js'
 import { getActiveRightPanel, useSidePanelStore, type RightPanelKind } from './state.js'
 import { IconSearchOutline16 } from '@deepseek-chat/spine/design'
-import { BrowserPanel } from '../../components/browser/BrowserPanel.js'
 import { PreviewPanel } from '../../components/preview/PreviewPanel.js'
 import { SearchPanel } from '../../components/search/SearchPanel.js'
 import { restoreLastSearchPanel, useSearchPanel } from '../../components/search/searchPanelState.js'
@@ -38,15 +37,16 @@ export const RightPanel = () => {
     }
     if (effectiveKind === 'browser') {
       lastHoverSnapshotAtRef.current = now
-      void refreshActiveTabSnapshot()
+      void browser.refreshSnapshot()
     } else if (effectiveKind === 'preview' && isDesktopApp) {
       lastHoverSnapshotAtRef.current = now
       triggerNativePreviewSnapshot()
     }
   }, [effectiveKind])
 
-  const previewSearchAction =
-    shownKind === 'preview' && hasLastSearch ? (
+  // 「返回搜索结果」入口：文件预览与内置浏览器的顶栏都可以带上
+  const searchAction =
+    hasLastSearch && (shownKind === 'preview' || shownKind === 'browser') ? (
       <button
         type="button"
         className={panelStyles.modeChip}
@@ -62,9 +62,9 @@ export const RightPanel = () => {
   return (
     <SidePanel open={effectiveKind !== null} onResizeHoverStart={handleResizeHoverStart}>
       {shownKind === 'browser' ? (
-        <BrowserPanel />
+        <browser.BrowserPanel topActions={searchAction} />
       ) : shownKind === 'preview' ? (
-        <PreviewPanel topActions={previewSearchAction} />
+        <PreviewPanel topActions={searchAction} />
       ) : shownKind === 'search' ? (
         <SearchPanel />
       ) : null}

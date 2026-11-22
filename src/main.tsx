@@ -2,10 +2,10 @@ import { onOverlayChange } from '@deepseek-chat/spine/design'
 import { createRoot } from 'react-dom/client'
 import { App } from './app/App.js'
 import { AppErrorBoundary } from './app/AppErrorBoundary.js'
-import { account, webResearch } from './app/composition.js'
+import { account, browser, webResearch } from './app/composition.js'
+import { acquireSidePanelOverlayLock } from './app/rightPanel/state.js'
 import { setupTheme } from './app/theme.js'
 import { isDesktopApp, openExternalLinksInBrowser } from './platform/desktop.js'
-import { acquireBrowserOverlayLock, openUrlInBrowserPanel } from './services/browser/state.js'
 import { ensureKatex } from './services/markdown/katex.js'
 import '@fontsource-variable/google-sans-flex'
 import './app/theme.css'
@@ -17,7 +17,14 @@ setupTheme()
 let releaseBrowserOverlay: (() => void) | null = null
 onOverlayChange((open) => {
   if (open) {
-    releaseBrowserOverlay ??= acquireBrowserOverlayLock()
+    if (!releaseBrowserOverlay) {
+      const releaseBrowser = browser.acquireOverlayLock()
+      const releasePanel = acquireSidePanelOverlayLock()
+      releaseBrowserOverlay = () => {
+        releaseBrowser()
+        releasePanel()
+      }
+    }
   } else {
     releaseBrowserOverlay?.()
     releaseBrowserOverlay = null
@@ -25,7 +32,7 @@ onOverlayChange((open) => {
 })
 if (isDesktopApp) {
   openExternalLinksInBrowser((url) => {
-    void openUrlInBrowserPanel(url, { initiator: 'user' })
+    void browser.openUrl(url, { initiator: 'user' })
   })
 }
 
