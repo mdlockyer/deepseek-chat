@@ -235,3 +235,89 @@ describe('account: key verification', () => {
     assert.deepEqual(await hanging.verifyKey('k'), { kind: 'unreachable' })
   })
 })
+
+describe('account: desktop migration never overwrites a newer or unreadable key', () => {
+  /** A slot whose reads wait for `release()`; `failLoad` makes the read fail. */
+  const slotWith = (initial: string | null, options: { failLoad?: boolean } = {}) => {
+    let value = initial
+    let release: () => void = () => undefined
+    const gate = new Promise<void>((resolve) => (release = resolve))
+    const slot: SecretSlot = {
+      load: async () => {
+        const read = value
+        await gate
+        if (options.failLoad) {
+          throw new Error('keychain busy')
+        }
+        return read
+      },
+      save: async (next) => {
+        value = next
+      },
+    }
+    return { slot, release, value: () => value }
+  }
+
+  it('keeps a key saved while a legacy key was being migrated, in the state and the slot', async () => {
+    const secret = slotWith(null)
+    const store = memoryStore({ [KEY]: 'sk-legacy' })
+    const account = createAccountSlice(deps({ store, secret: secret.slot }))
+    const hydrating = account.hydrate()
+    await account.setApiKey('sk-typed')
+    secret.release()
+    await hydrating
+    assert.equal(account.getApiKey(), 'sk-typed')
+    assert.equal(secret.value(), 'sk-typed', 'the next launch reads the typed key')
+    // The legacy copy waits for the next launch, which reads the saved key and removes it.
+    assert.equal(store.get(KEY), 'sk-legacy')
+    const nextLaunch = createAccountSlice(
+      deps({ store, secret: { load: async () => secret.value(), save: async () => undefined } })
+    )
+    await nextLaunch.hydrate()
+    assert.equal(nextLaunch.getApiKey(), 'sk-typed')
+    assert.equal(store.get(KEY), null, 'no key stays in web storage after that')
+  })
+
+  it('does not migrate over a slot it could not read, and keeps the legacy copy', async () => {
+    const secret = slotWith('sk-stored', { failLoad: true })
+    const store = memoryStore({ [KEY]: 'sk-legacy' })
+    const account = createAccountSlice(deps({ store, secret: secret.slot }))
+    secret.release()
+    await account.hydrate()
+    // SPEC 3: a failed read leaves the app ready without a key.
+    assert.deepEqual(account.getState(), { status: 'ready', apiKey: null })
+    assert.equal(secret.value(), 'sk-stored', 'the stored key is untouched')
+    assert.equal(store.get(KEY), 'sk-legacy', 'the legacy copy stays for the next launch')
+  })
+})
+
+it('account: a save that fails during migration loses no key', async () => {
+  let value: string | null = null
+  let release: () => void = () => undefined
+  const gate = new Promise<void>((resolve) => (release = resolve))
+  const store = memoryStore({ [KEY]: 'sk-legacy' })
+  const account = createAccountSlice(
+    deps({
+      store,
+      secret: {
+        load: async () => {
+          const read = value
+          await gate
+          return read
+        },
+        save: async (next) => {
+          if (next === 'sk-typed') {
+            throw new Error('keychain locked')
+          }
+          value = next
+        },
+      },
+    })
+  )
+  const hydrating = account.hydrate()
+  await assert.rejects(() => account.setApiKey('sk-typed'), /keychain locked/)
+  release()
+  await hydrating
+  // The legacy key is still somewhere the next launch can find it.
+  assert.ok(value === 'sk-legacy' || store.get(KEY) === 'sk-legacy')
+})

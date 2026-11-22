@@ -523,3 +523,58 @@ describe('web-research: key storage on desktop', () => {
     assert.equal(authHeader(calls[0]), 'Bearer fc-desk')
   })
 })
+
+describe('web-research: desktop migration never overwrites a newer or unreadable key', () => {
+  /** A slot whose reads wait for `release()`; `failLoad` makes the read fail. */
+  const slotWith = (initial: string | null, options: { failLoad?: boolean } = {}) => {
+    let value = initial
+    let release: () => void = () => undefined
+    const gate = new Promise<void>((resolve) => (release = resolve))
+    const slot: SecretSlot = {
+      load: async () => {
+        const read = value
+        await gate
+        if (options.failLoad) {
+          throw new Error('keychain busy')
+        }
+        return read
+      },
+      save: async (next) => {
+        value = next
+      },
+    }
+    return { slot, release, value: () => value }
+  }
+
+  it('keeps a key saved while a legacy key was being migrated, in the state and the slot', async () => {
+    const secret = slotWith(null)
+    const store = memoryStore({ [KEY]: 'fc-legacy' })
+    const web = slice(store, secret.slot)
+    const hydrating = web.hydrate()
+    await web.setApiKey('fc-typed')
+    secret.release()
+    await hydrating
+    assert.equal(web.getApiKey(), 'fc-typed')
+    assert.equal(secret.value(), 'fc-typed', 'the next launch reads the typed key')
+    // The legacy copy waits for the next launch, which reads the saved key and removes it.
+    assert.equal(store.get(KEY), 'fc-legacy')
+    const nextLaunch = slice(store, {
+      load: async () => secret.value(),
+      save: async () => undefined,
+    })
+    await nextLaunch.hydrate()
+    assert.equal(nextLaunch.getApiKey(), 'fc-typed')
+    assert.equal(store.get(KEY), null, 'no key stays in web storage after that')
+  })
+
+  it('does not migrate over a slot it could not read, and keeps the legacy copy', async () => {
+    const secret = slotWith('fc-stored', { failLoad: true })
+    const store = memoryStore({ [KEY]: 'fc-legacy' })
+    const web = slice(store, secret.slot)
+    secret.release()
+    await web.hydrate()
+    assert.deepEqual(web.getKeyState(), { status: 'ready', apiKey: null })
+    assert.equal(secret.value(), 'fc-stored', 'the stored key is untouched')
+    assert.equal(store.get(KEY), 'fc-legacy', 'the legacy copy stays for the next launch')
+  })
+})

@@ -57,9 +57,11 @@ The key is read on every call, so a key change applies to the next call.
     (network, timeout) → `unreachable`; any other failure → `failed` with the server's message.
 11. **Key storage.** Web: under `chat-demo:firecrawl-api-key` in `KeyValueStore`, `ready` at once.
     Desktop (`secret` given): `loading` (keyless) until `hydrate()` settles. If the slot is empty a
-    legacy web key is copied into it; any legacy web copy is then removed. If that fails the state
-    becomes `ready` with no key and the legacy copy stays for the next launch. A key saved during
-    hydration wins over the one being read. Saving writes storage first, then updates the state.
+    legacy web key is copied into it; any legacy web copy is then removed. If that fails, or the
+    slot cannot be read, the state becomes `ready` with no key and the legacy copy stays for the
+    next launch. A key saved during hydration wins over the one being read, in the state and in
+    the slot: no legacy key is copied over it, and the legacy copy stays until the next launch reads
+    the saved key (the save may have failed). Saving writes storage first, then updates the state.
 12. **Settings view** verifies before saving and never saves an unverified key.
 
 ## Facts

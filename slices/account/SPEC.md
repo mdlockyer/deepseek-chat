@@ -25,7 +25,10 @@ DeepSeek API (chat, uploads, speech) reads the key from here.
    `ready` immediately. Desktop (`secret` given): the state is `loading` until `hydrate()` settles.
 2. **Desktop migration.** If the secret slot is empty and web storage holds a legacy key, the
    legacy key is copied into the slot. Any legacy key is then removed from web storage, so a key
-   never stays in web storage on desktop.
+   never stays in web storage on desktop. Two exceptions: if the slot cannot be read, nothing is
+   migrated and the legacy copy stays for the next launch; and if a key is saved while hydrating,
+   no legacy key is copied over it, and the legacy copy stays until the next launch reads the
+   saved key (the save may have failed).
 3. **Hydration never blocks the app.** If reading or migrating fails, the state becomes `ready`
    with no key.
 4. **Saving.** `setApiKey` writes to the desktop slot or web storage, then updates the state

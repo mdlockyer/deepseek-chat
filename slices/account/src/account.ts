@@ -98,20 +98,31 @@ export const createAccount = (deps: AccountDeps) => {
   }
 
   let hydration: Promise<void> | null = null
+  /** Saves started so far; a save during hydration cancels the legacy migration. */
+  let saves = 0
   const hydrate = (): Promise<void> => {
     if (!secret) {
       return Promise.resolve()
     }
     hydration ??= (async () => {
+      const savesBefore = saves
       let apiKey: string | null = null
+      let readable = true
       try {
-        apiKey = clean(await secret.load().catch(() => null))
+        apiKey = clean(await secret.load())
+      } catch {
+        // 读不到不等于没有：不迁移，旧副本留待下次启动。
+        readable = false
+      }
+      try {
         const legacy = clean(store.get(STORAGE_KEY))
-        if (!apiKey && legacy) {
-          await secret.save(legacy)
-          apiKey = legacy
-        }
-        if (legacy) {
+        // 载入期间用户保存过密钥时不迁移也不删除旧副本：旧密钥不能覆盖新密钥，而新密钥可能
+        // 没有保存成功；下次启动读到新密钥后再删除旧副本。
+        if (readable && legacy && saves === savesBefore) {
+          if (!apiKey) {
+            await secret.save(legacy)
+            apiKey = legacy
+          }
           store.set(STORAGE_KEY, null)
         }
       } catch {
@@ -128,6 +139,7 @@ export const createAccount = (deps: AccountDeps) => {
 
   const setApiKey = async (key: string | null): Promise<void> => {
     const apiKey = clean(key)
+    saves += 1
     if (secret) {
       await secret.save(apiKey)
     } else {
