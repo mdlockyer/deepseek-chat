@@ -120,7 +120,7 @@ export const PREVIEW_TOOL_INSTRUCTIONS = [
   'Use `present_file` for substantial, self-contained artifacts meant to be viewed, rendered, copied, or saved—such as interactive single-file HTML/CSS/JS widgets or visualizations, SVG graphics, long Markdown documents/reports, Mermaid diagrams, CSV/JSON datasets, or complete standalone source files (~25+ lines).',
   'Keep short code snippets, terminal commands, quick examples, and conversational answers inline in Markdown rather than creating a file.',
   'When revising a file you already presented, prefer `edit_file` (or `read_file` first if unsure of exact lines) with the same `path` so versions increment cleanly (v1 -> v2) instead of creating duplicate files.',
-  'Get a file right before you present it: work out the details first and present it once, complete. Within the same reply, use `edit_file` on it only to fix a real error you found, not for polish or second thoughts.',
+  'Get a file right before you present it: plan it briefly in your thinking, then put the file’s full text only in `content`; never draft the file itself in your thinking. Present it once, complete. Within the same reply, use `edit_file` on it only to fix a real error you found, not for polish or second thoughts.',
   'Presented files exist only in the File Preview panel: they have no URL or path that any other tool can open (the built-in browser refuses `file://` URLs), and you cannot see them rendered yourself. Do not try to open or screenshot a presented file to check it; review its content before presenting instead.',
   'After `present_file` or `edit_file`, briefly summarize what you created or changed without pasting the full file contents into your message.',
 ].join(' ')
@@ -227,7 +227,10 @@ export const runPreviewTool = async (
 
     if (toolName === PRESENT_FILE_TOOL_NAME) {
       if (typeof input.content !== 'string') {
-        throw new Error('content (string) is required for present_file.')
+        const given = Object.keys(input)
+        throw new Error(
+          `present_file needs the file's full text in \`content\`; this call only had: ${given.length > 0 ? given.join(', ') : 'nothing'}. Call present_file again with the complete file in \`content\`.`
+        )
       }
       const content = input.content
       const mimeType = inferMimeType(

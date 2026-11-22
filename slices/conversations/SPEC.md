@@ -113,9 +113,11 @@ it, and the header toggle (`visible`, `open`, `toggle`). `panels.browser`: the h
 16. **Still working.** While a reply streams and nothing new has arrived for the stall delay (see
     Parameters), a "Working…" line shows at the end of the reply, until the next content arrives.
     It does not show while the reply has nothing yet (the waiting dots or the thinking title show
-    instead), or while its last step already shows it is running (a tool without its result, a
-    running Python call, thinking in progress). The server may hold a whole tool call back until
-    its input (e.g. a file) is written, so this gap can last tens of seconds.
+    instead), or while its last step is a tool that already shows it is running (a tool without its
+    result, a running Python call). An open thinking block does not count: during a stall it
+    receives nothing, and it may stay open until the held-back tool call arrives. The server may
+    hold a whole tool call back until its input (e.g. a file) is written, so this gap can last tens
+    of seconds.
 17. **Files with the answer.** The files a reply produced (from any tool result: presented or
     edited files, files from Python) show as cards with the answer, not inside the thinking and
     tools timeline, so they stay visible when the timeline is collapsed. There is one card per file

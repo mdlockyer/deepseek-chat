@@ -536,6 +536,13 @@ const FileRow = ({ step, isLast }: { step: FileStep; isLast: boolean }) => {
           ? t('previewToolReading', { name })
           : t('previewToolPresenting', { name })
     }
+    if (action.status === 'failed') {
+      return action.tool === 'edit_file'
+        ? t('previewToolEditFailed', { name })
+        : action.tool === 'read_file'
+          ? t('previewToolReadFailed', { name })
+          : t('previewToolPresentFailed', { name })
+    }
     if (action.tool === 'edit_file') {
       return t('previewToolEdit', { name, version: action.version ?? 2 })
     }

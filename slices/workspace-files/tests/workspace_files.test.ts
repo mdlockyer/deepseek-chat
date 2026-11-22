@@ -450,10 +450,14 @@ describe('workspace-files: present, edit and read', () => {
 
     const noContent = await files.run(
       'present_file',
-      { path: 'a.txt' },
+      { path: 'a.txt', title: 'Notes' },
       { records: [], replyId: NEXT_REPLY }
     )
-    assert.match(noContent.text, /content \(string\) is required/)
+    assert.equal(noContent.status, 'error')
+    assert.equal(noContent.file, undefined)
+    // The model learns what was missing and what its call did contain.
+    assert.match(noContent.text, /`content`/)
+    assert.match(noContent.text, /only had: path, title\b/)
   })
 })
 

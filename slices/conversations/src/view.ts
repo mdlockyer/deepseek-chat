@@ -706,7 +706,10 @@ export const getAreaTitle = (
   return translate('messageThinking')
 }
 
-/** 该步骤自身已显示进行中（工具行的进行态、正在输出的思考），无需另行提示仍在处理 */
+/**
+ * 该步骤自身已显示进行中（工具行的进行态），无需另行提示仍在处理。
+ * 思考不算：停顿时思考块可能仍未结束（签名随后才到），但并没有新内容在输出。
+ */
 const showsRunning = (step: Step): boolean => {
   switch (step.type) {
     case 'search':
@@ -721,10 +724,7 @@ const showsRunning = (step: Step): boolean => {
       return step.patterns.some((item) => item.status === 'wip')
     case 'python':
       return step.result === null || step.result.status === 'running'
-    case 'thinking': {
-      const last = step.blocks.at(-1)
-      return last?.startedAt !== undefined && last.endedAt === undefined
-    }
+    case 'thinking':
     case 'text':
       return false
   }

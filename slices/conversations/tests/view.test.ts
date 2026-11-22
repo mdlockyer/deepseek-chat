@@ -325,10 +325,19 @@ describe('needsWorkingIndicator (SPEC invariant 16)', () => {
       ),
       false
     )
-    // Thinking still in progress.
+  })
+
+  it('shows during a stall even while a thinking block is still open', () => {
+    // The captured case: thinking stayed open for 15 s (its signature came with the file) while
+    // the server held back the whole tool call; no thinking text was arriving.
     assert.equal(
-      needsWorkingIndicator(streamingView([{ type: 'thinking', thinking: 'hm', startedAt: 1 }])),
-      false
+      needsWorkingIndicator(
+        streamingView([
+          thought,
+          { type: 'thinking', thinking: 'I need to include content.', startedAt: 3 },
+        ])
+      ),
+      true
     )
   })
 })
