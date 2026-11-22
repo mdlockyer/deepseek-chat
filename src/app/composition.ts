@@ -27,7 +27,6 @@ import {
   saveFirecrawlApiKey,
   saveKeychainApiKey,
 } from '../platform/desktop.js'
-import { API_ORIGIN } from '../services/api/client.js'
 import { createPanelSlot } from './rightPanel/panelSlot.js'
 import {
   clearAllSidePanelSessions,
@@ -45,6 +44,9 @@ const pyodideIndexURL = () =>
     ? new URL('pyodide/', document.baseURI).href
     : `https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/full/`
 
+/** 构建期 API 地址，默认 https://api.deepseek.com；本地开发支持开发服务器代理 */
+export const API_ORIGIN = __API_ORIGIN__
+
 export const spine = new EventLog()
 
 /** 先于首屏创建：恢复界面语言、主题与位置 */
@@ -54,7 +56,9 @@ export const preferences = createPreferencesSlice({
 })
 
 /** 桌面版走原生 HTTP（不受 CORS 限制），网页版走 WebView fetch */
-const httpFetch = isDesktopApp ? desktopFetch : (url: string, init: RequestInit) => fetch(url, init)
+export const httpFetch = isDesktopApp
+  ? desktopFetch
+  : (url: string, init: RequestInit) => fetch(url, init)
 
 /** 桌面版密钥存在应用私有存储，网页版存在 localStorage */
 export const account = createAccountSlice({
@@ -99,9 +103,11 @@ export const browser = createBrowserSlice({
   panel: createPanelSlot('browser'),
   store: localStore,
   openExternal: openExternalUrl,
-  // 聊天 store 依赖本模块，按需加载以避免循环引用
+  // conversations 依赖本模块，按需加载以避免循环引用
   stopController: (sessionId) =>
-    void import('../services/chat/store.js').then(({ stopReply }) => stopReply(sessionId)),
+    void import('./conversations.js').then(({ conversations }) =>
+      conversations.stopReply(sessionId)
+    ),
 })
 
 /** 右侧面板跟随当前会话：面板栏位与各 slice 的会话状态一起切换 */

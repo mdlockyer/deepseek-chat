@@ -7,9 +7,9 @@ import {
   IconEllipsisOutline16,
   IconTrashOutline16,
 } from '@deepseek-chat/spine/design'
-import { renameSession, selectSession } from '../../services/chat/store.js'
-import type { SessionSummary } from '../../services/chat/types.js'
-import { sessionTitle } from '../../utils/format.js'
+import { renameSession, selectSession } from '@deepseek-chat/slice-conversations'
+import type { SessionSummary } from '@deepseek-chat/slice-conversations'
+import { sessionTitle } from '@deepseek-chat/slice-conversations'
 import { IconButton } from '@deepseek-chat/spine/design'
 import { Menu } from '@deepseek-chat/spine/design'
 import { closeMobileSider } from './mobileSiderState.js'

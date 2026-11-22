@@ -1,6 +1,6 @@
 import clsx from 'clsx'
-import type { Source } from '../../services/chat/view.js'
-import { formatDate } from '../../utils/format.js'
+import type { Source } from '@deepseek-chat/slice-conversations'
+import { formatDate } from '@deepseek-chat/slice-conversations'
 import { SiteLogo } from './SiteLogo.js'
 import styles from './SourceCard.module.css'
 

@@ -1,3 +1,4 @@
+import { showConversationsNotice } from '@deepseek-chat/slice-conversations'
 import clsx from 'clsx'
 import { memo, useCallback, useEffect, useRef } from 'react'
 import {
@@ -15,9 +16,9 @@ import {
   setSearch,
   setThinking,
   useComposerOptions,
-} from '../../services/chat/composerOptions.js'
+} from '@deepseek-chat/slice-conversations'
 import { useIsMobile } from '../../app/viewport.js'
-import { sendMessage, stopReply, useChatStore } from '../../services/chat/store.js'
+import { sendMessage, stopReply, useChatStore } from '@deepseek-chat/slice-conversations'
 import {
   addDraftFiles,
   EMPTY_DRAFT,
@@ -27,13 +28,12 @@ import {
   retryDraftAttachment,
   setDraftText,
   useDrafts,
-} from '../../services/chat/drafts.js'
+} from '@deepseek-chat/slice-conversations'
 import { account, voice as voiceSlice } from '../../app/composition.js'
 import { ensureApiKey } from '../settings/settingsDialogState.js'
 import { ComposerMenu, isUploadShortcut, type ComposerToolSwitch } from './ComposerMenu.js'
 import { DragMask, useFileDrop } from './DragMask.js'
-import { showToast } from '../base/toastState.js'
-import { ACCEPT, useUploads } from '../../services/attachments.js'
+import { ACCEPT, useUploads } from '@deepseek-chat/slice-conversations'
 import { DraftAttachments } from './DraftAttachments.js'
 import { useTranslate } from '../../i18n/index.js'
 import styles from './ChatInput.module.css'
@@ -77,7 +77,7 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
     }
     const error = addDraftFiles(sessionId, files, account.getApiKey() ?? '')
     if (error) {
-      showToast(error)
+      showConversationsNotice(error)
     }
   }
   const retryFile = useCallback(

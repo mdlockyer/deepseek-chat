@@ -17,18 +17,18 @@ import {
 } from '@deepseek-chat/spine/design'
 import { isDesktopApp, saveFileWithDialog } from '../../platform/desktop.js'
 import { browser } from '../../app/composition.js'
-import { formatSize, getExtension } from '../../services/attachments.js'
-import { getVisibleMessages } from '../../services/chat/branches.js'
-import { loadFile } from '../../services/chat/db.js'
-import { useChatStore } from '../../services/chat/store.js'
-import type { AssistantMessage, PresentedFileRef } from '../../services/chat/types.js'
+import { formatSize, getExtension } from '@deepseek-chat/slice-conversations'
+import { getVisibleMessages } from '@deepseek-chat/slice-conversations'
+import { loadFile } from '@deepseek-chat/slice-conversations'
+import { useChatStore } from '@deepseek-chat/slice-conversations'
+import type { AssistantMessage, PresentedFileRef } from '@deepseek-chat/slice-conversations'
 import {
   collectWorkspaceArtifacts,
   makeArtifactKey,
   normalizeWorkspacePath,
 } from '@deepseek-chat/slice-workspace-files'
 import { workspaceFiles } from '../../app/workspaceFiles.js'
-import { toFileRecords } from '../../services/chat/fileRecords.js'
+import { toFileRecords } from '../../app/fileRecords.js'
 import { getActiveRightPanel, useSidePanelStore } from '../../app/rightPanel/state.js'
 import {
   getAreaTitle,
@@ -45,7 +45,7 @@ import {
   type SearchStep,
   type Source,
   type Step,
-} from '../../services/chat/view.js'
+} from '@deepseek-chat/slice-conversations'
 import { Tooltip } from '@deepseek-chat/spine/design'
 import { FileCard } from '../files/FileCard.js'
 import { ChatMarkdown as Markdown } from './ChatMarkdown.js'

@@ -1,5 +1,5 @@
 import { Markdown } from '@deepseek-chat/lib-markdown'
-import type { Source } from '../../services/chat/view.js'
+import type { Source } from '@deepseek-chat/slice-conversations'
 import { CitationLink } from '../search/CitationLink.js'
 import { useScrollToBottom } from './scrollContext.js'
 

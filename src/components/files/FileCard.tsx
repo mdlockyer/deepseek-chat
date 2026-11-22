@@ -1,7 +1,7 @@
 import clsx from 'clsx'
 import type { ReactNode } from 'react'
 import { useTranslate } from '../../i18n/index.js'
-import { formatSize, getExtension } from '../../services/attachments.js'
+import { formatSize, getExtension } from '@deepseek-chat/slice-conversations'
 import {
   IconCloseFill14,
   IconDownloadOutline16,

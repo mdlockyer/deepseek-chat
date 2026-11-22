@@ -4,14 +4,14 @@ import {
   buildMessageVersions,
   getVisibleMessages,
   type MessageVersions,
-} from '../../services/chat/branches.js'
-import { selectMessageVersion } from '../../services/chat/store.js'
-import type { Session } from '../../services/chat/types.js'
+} from '@deepseek-chat/slice-conversations'
+import { selectMessageVersion } from '@deepseek-chat/slice-conversations'
+import type { Session } from '@deepseek-chat/slice-conversations'
 import { closeSearchPanel } from '../search/searchPanelState.js'
 import { AssistantMessage } from './AssistantMessage.js'
 import { ScrollToBottomContext } from './scrollContext.js'
 import { UserMessage } from './UserMessage.js'
-import type { Message } from '../../services/chat/types.js'
+import type { Message } from '@deepseek-chat/slice-conversations'
 
 /**
  * 会话共用可重试的附件上传失败入口，覆盖当前提问与历史消息中的附件。

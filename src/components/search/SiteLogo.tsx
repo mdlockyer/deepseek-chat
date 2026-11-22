@@ -2,7 +2,7 @@ import type { CSSProperties } from 'react'
 import clsx from 'clsx'
 import { FallbackImage } from './FallbackImage.js'
 import { IconLinkOutline14 } from '@deepseek-chat/spine/design'
-import type { Source } from '../../services/chat/view.js'
+import type { Source } from '@deepseek-chat/slice-conversations'
 import styles from './SiteLogo.module.css'
 
 /** 站点图标：加载中显示骨架，没有图标或加载失败时显示链接图标 */

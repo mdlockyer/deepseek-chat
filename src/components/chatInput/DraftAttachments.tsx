@@ -1,8 +1,9 @@
+import { useConversationsTranslate } from '@deepseek-chat/slice-conversations'
 import clsx from 'clsx'
 import { memo } from 'react'
 import { useTranslate } from '../../i18n/index.js'
-import { useUploads, type UploadTask } from '../../services/attachments.js'
-import type { DraftAttachment } from '../../services/chat/drafts.js'
+import { useUploads, type UploadTask } from '@deepseek-chat/slice-conversations'
+import type { DraftAttachment } from '@deepseek-chat/slice-conversations'
 import { IconCloseFill14, IconRefreshOutline16 } from '@deepseek-chat/spine/design'
 import { Tooltip } from '@deepseek-chat/spine/design'
 import { FileCard } from '../files/FileCard.js'
@@ -48,9 +49,10 @@ const AttachmentItem = ({
   onRemove: () => void
 }) => {
   const t = useTranslate()
+  const tc = useConversationsTranslate()
   const task = useUploads((state) => state.tasks[item.id] ?? UPLOADING)
   const status = task.status
-  const error = task.status === 'error' ? t(task.error.key, task.error.params) : undefined
+  const error = task.status === 'error' ? tc(task.error.key, task.error.params) : undefined
   // 过大、格式不支持等重试无效的失败只提示原因，需删除后再发送
   const retry = task.status === 'error' && task.retryable ? onRetry : undefined
   const failed = status === 'error'

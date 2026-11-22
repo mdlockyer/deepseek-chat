@@ -1,9 +1,10 @@
+import { useConversationsTranslate } from '@deepseek-chat/slice-conversations'
 import clsx from 'clsx'
 import { useEffect, useState } from 'react'
 import { useTranslate } from '../../i18n/index.js'
-import { useUploads } from '../../services/attachments.js'
-import { loadFile } from '../../services/chat/db.js'
-import type { FileAttachment } from '../../services/chat/types.js'
+import { useUploads } from '@deepseek-chat/slice-conversations'
+import { loadFile } from '@deepseek-chat/slice-conversations'
+import type { FileAttachment } from '@deepseek-chat/slice-conversations'
 import { makeUploadPreviewKey } from '@deepseek-chat/slice-workspace-files'
 import { workspaceFiles } from '../../app/workspaceFiles.js'
 import { getActiveRightPanel, useSidePanelStore } from '../../app/rightPanel/state.js'
@@ -61,13 +62,14 @@ export const MessageFile = ({
   onRetry: (() => void) | null
 }) => {
   const t = useTranslate()
+  const tc = useConversationsTranslate()
   const url = useFileUrl(file.id)
   const [failedUrl, setFailedUrl] = useState<string | null>(null)
   const upload = useUploadState(file)
   const uploading = upload?.status === 'uploading'
   const failed = upload?.status === 'error'
   const retryable = failed && upload.retryable
-  const errorText = failed ? t(upload.error.key, upload.error.params) : undefined
+  const errorText = failed ? tc(upload.error.key, upload.error.params) : undefined
   const previewKey = makeUploadPreviewKey(file.id)
   const activePanel = useSidePanelStore((state) => getActiveRightPanel(sessionId, state))
   const isPreviewOpen =

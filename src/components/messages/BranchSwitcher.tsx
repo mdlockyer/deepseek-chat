@@ -1,11 +1,11 @@
 import { useTranslate } from '../../i18n/index.js'
 import { useRef } from 'react'
-import type { MessageVersions } from '../../services/chat/branches.js'
+import type { MessageVersions } from '@deepseek-chat/slice-conversations'
 import { IconChevronRightOutline14 } from '@deepseek-chat/spine/design'
 import { IconButton } from '@deepseek-chat/spine/design'
 import styles from './BranchSwitcher.module.css'
 
-export type { MessageVersions } from '../../services/chat/branches.js'
+export type { MessageVersions } from '@deepseek-chat/slice-conversations'
 export type SelectMessageVersion = (messageId: string, anchorTop: number) => void
 
 export const BranchSwitcher = ({

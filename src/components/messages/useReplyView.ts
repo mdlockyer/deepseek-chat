@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
-import type { AssistantMessage } from '../../services/chat/types.js'
-import { buildReplyView, type Source } from '../../services/chat/view.js'
+import type { AssistantMessage } from '@deepseek-chat/slice-conversations'
+import { buildReplyView, type Source } from '@deepseek-chat/slice-conversations'
 
 const sameSource = (a: Source, b: Source) =>
   a.url === b.url &&

@@ -1,3 +1,7 @@
+import {
+  translateConversations,
+  type ConversationsMessageKey,
+} from '@deepseek-chat/slice-conversations'
 import clsx from 'clsx'
 import { useRef, useState, type ReactNode } from 'react'
 import {
@@ -16,8 +20,8 @@ import {
   clearHistory,
   exportHistory,
   importHistory,
-} from '../../services/chat/backup.js'
-import { useChatStore } from '../../services/chat/store.js'
+} from '@deepseek-chat/slice-conversations'
+import { useChatStore } from '@deepseek-chat/slice-conversations'
 import { account, browser, preferences, python, voice, webResearch } from '../../app/composition.js'
 import { isDesktopApp } from '../../platform/desktop.js'
 import { useTranslate, type TranslationKey, type TranslationMessage } from '../../i18n/index.js'
@@ -251,7 +255,7 @@ const ImportConfirm = ({
 }
 
 /** `reason` 为失败原因的文案 key，展示时按当前语言翻译后填入 `message` 参数。 */
-type Status = (TranslationMessage & { error?: boolean; reason?: TranslationKey }) | null
+type Status = (TranslationMessage & { error?: boolean; reason?: ConversationsMessageKey }) | null
 
 /** 导出失败附带原因：预期的错误用对应文案作原因，其他错误用错误信息。 */
 const errorStatus = (key: TranslationKey, error: unknown): Status => ({
@@ -283,7 +287,10 @@ const SettingCell = ({
         {status || description ? (
           <div className={clsx(settingStyles.description, status?.error && settingStyles.error)}>
             {status
-              ? t(status.key, status.reason ? { message: t(status.reason) } : status.params)
+              ? t(
+                  status.key,
+                  status.reason ? { message: translateConversations(status.reason) } : status.params
+                )
               : description}
           </div>
         ) : null}

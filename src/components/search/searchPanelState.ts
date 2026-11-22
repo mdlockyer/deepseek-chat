@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { Source } from '../../services/chat/view.js'
+import type { Source } from '@deepseek-chat/slice-conversations'
 import {
   closeActiveRightPanelKind,
   getActiveRightPanel,

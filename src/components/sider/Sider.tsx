@@ -1,3 +1,4 @@
+import { useConversationsTranslate } from '@deepseek-chat/slice-conversations'
 import clsx from 'clsx'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslate } from '../../i18n/index.js'
@@ -8,9 +9,9 @@ import {
   NewChatIcon,
 } from '@deepseek-chat/spine/design'
 import { setSiderCollapsed } from '../../app/layout.js'
-import { groupSessions } from '../../services/chat/sessionGroups.js'
-import { newChat, removeSession, useChatStore } from '../../services/chat/store.js'
-import type { SessionSummary } from '../../services/chat/types.js'
+import { groupSessions } from '@deepseek-chat/slice-conversations'
+import { newChat, removeSession, useChatStore } from '@deepseek-chat/slice-conversations'
+import type { SessionSummary } from '@deepseek-chat/slice-conversations'
 import { Button } from '@deepseek-chat/spine/design'
 import { IconButton } from '@deepseek-chat/spine/design'
 import { Modal } from '@deepseek-chat/spine/design'
@@ -37,7 +38,8 @@ export const Sider = ({
   const sessions = useChatStore((state) => state.sessions)
   const activeId = useChatStore((state) => state.activeId)
   const [now, setNow] = useState(Date.now)
-  const groups = useMemo(() => groupSessions(sessions, now, t), [sessions, now, t])
+  const tc = useConversationsTranslate()
+  const groups = useMemo(() => groupSessions(sessions, now, tc), [sessions, now, tc])
   const [deleting, setDeleting] = useState<SessionSummary | null>(null)
   // 退场淡出期间 deleting 已清空，保留最后一条供确认弹窗播放退场
   const lastDeletingRef = useRef(deleting)

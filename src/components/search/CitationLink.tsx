@@ -1,7 +1,7 @@
 import type { MouseEvent } from 'react'
 import { isDesktopApp } from '../../platform/desktop.js'
 import { browser } from '../../app/composition.js'
-import type { Source } from '../../services/chat/view.js'
+import type { Source } from '@deepseek-chat/slice-conversations'
 import { HoverCard, type HoverCardTrigger } from './HoverCard.js'
 import { SourceCard } from './SourceCard.js'
 

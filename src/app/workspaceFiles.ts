@@ -2,7 +2,7 @@
 import { createWorkspaceFilesSlice } from '@deepseek-chat/slice-workspace-files'
 import { copyText } from '@deepseek-chat/spine/design'
 import { desktopPreviewHost, isDesktopApp, saveFileWithDialog } from '../platform/desktop.js'
-import { loadFile } from '../services/chat/db.js'
+import { loadFile } from '@deepseek-chat/slice-conversations'
 import { createId } from '../utils/id.js'
 import { spine } from './composition.js'
 import { createPanelSlot } from './rightPanel/panelSlot.js'

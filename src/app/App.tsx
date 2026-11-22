@@ -1,3 +1,4 @@
+import { showConversationsNotice } from '@deepseek-chat/slice-conversations'
 import { MarkdownTheme } from '@deepseek-chat/lib-markdown'
 import { useLocale } from '@deepseek-chat/spine/i18n'
 import { useEffect } from 'react'
@@ -12,7 +13,7 @@ import {
   retrySaveSessions,
   selectSession,
   useChatStore,
-} from '../services/chat/store.js'
+} from '@deepseek-chat/slice-conversations'
 import { RightPanel } from './rightPanel/RightPanel.js'
 import { closeSearchPanel } from '../components/search/searchPanelState.js'
 import { SessionView } from '../components/session/SessionView.js'
@@ -24,8 +25,7 @@ import {
 } from '../components/settings/settingsDialogState.js'
 import { SettingsDialog } from '../components/settings/SettingsDialog.js'
 import { Toast } from '@deepseek-chat/spine/design'
-import { showToast } from '../components/base/toastState.js'
-import { onUploadNotice } from '../services/attachments.js'
+import { onUploadNotice } from '@deepseek-chat/slice-conversations'
 import { Button } from '@deepseek-chat/spine/design'
 import { account, browser, setActivePanelSession, voice } from './composition.js'
 import { isDesktopApp, onOpenSettings } from '../platform/desktop.js'
@@ -75,7 +75,7 @@ export const App = () => {
   }, [locale])
 
   // 文件数、存储空间达到上限时，附件上只显示「上传失败」，原因用 toast 说明
-  useEffect(() => onUploadNotice(showToast), [])
+  useEffect(() => onUploadNotice(showConversationsNotice), [])
   useEffect(bindChatPersistence, [])
   useEffect(() => browser.start(), [])
 
