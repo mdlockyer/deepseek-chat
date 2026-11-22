@@ -403,4 +403,22 @@ describe('reply files (SPEC invariant 17)', () => {
     const view = buildReplyView(replyWith([{ type: 'text', text: 'Just text.' }]), false)
     assert.deepEqual(view.files, [])
   })
+
+  it('shows no cards while the reply streams, and the final version once it ends', () => {
+    const blocks: AssistantMessage['blocks'] = [
+      call('c1', 'present_file'),
+      result('c1', [file('f1', 'page.html', { path: 'page.html', version: 1 })]),
+      call('c2', 'edit_file'),
+      result('c2', [file('f2', 'page.html', { path: 'page.html', version: 2 })]),
+      { type: 'thinking', thinking: 'checking it once more', startedAt: 1 },
+    ]
+    const streaming = buildReplyView({ ...replyWith(blocks, true), status: 'streaming' }, true)
+    assert.deepEqual(streaming.files, [])
+    // Stopped mid-turn counts as finished: the cards show.
+    const stopped = buildReplyView({ ...replyWith(blocks, true), status: 'stopped' }, false)
+    assert.deepEqual(
+      stopped.files.map((f) => [f.id, f.version]),
+      [['f2', 2]]
+    )
+  })
 })

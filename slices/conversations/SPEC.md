@@ -120,7 +120,9 @@ it, and the header toggle (`visible`, `open`, `toggle`). `panels.browser`: the h
     edited files, files from Python) show as cards with the answer, not inside the thinking and
     tools timeline, so they stay visible when the timeline is collapsed. There is one card per file
     (by path, or by name when there is no path), in the order the files first appeared, showing
-    the latest version. The timeline keeps each file step's line and errors.
+    the latest version. The timeline keeps each file step's line and errors. The cards appear once
+    the reply has finished (done, stopped or failed); while it streams there are none, since the
+    file panel opens by itself and follows each new version.
 
 ## Parameters
 

@@ -13,18 +13,18 @@ panel's views; the chat owns storing messages and file contents.
 `createWorkspaceFilesSlice({ log, panel, host, loadFile, saveFile, copyText, views, newId? })`
 returns:
 
-| Member                                                 | Meaning                                                                                                      |
-| :----------------------------------------------------- | :----------------------------------------------------------------------------------------------------------- |
-| `declareTools()`, `instructions`, `handles(name)`      | The three file tools, offered on every turn, and their system-prompt text.                                   |
-| `toolNames`                                            | `present_file`, `edit_file`, `read_file`. Persisted in chat history; never rename.                           |
-| `run(name, input, { records })`                        | Run one tool against the chat's files. Always resolves to `{ status, text, file?, fileAction, durationMs }`. |
-| `reveal(sessionId, key, { openPanel?, defaultMode? })` | Show a newly stored file.                                                                                    |
-| `openFile(sessionId, key, fileId?, isLatest?)`         | The user opened a file card or attachment.                                                                   |
-| `togglePanel(sessionId, fallbackKeys)`, `closePanel()` | The chat's preview panel.                                                                                    |
-| `getSession(id)`, `useSession(id)`                     | A chat's preview state: `{ activeKey, uploadKeys, selectedFileIdByKey, viewModeByKey, viewportByKey }`.      |
-| `refreshSnapshot()`                                    | Refresh the still image shown while the native preview is hidden.                                            |
-| `PreviewPanel({ records, topActions? })`               | The panel view for the chat on screen.                                                                       |
-| `dispose()`                                            | Stop listening to facts.                                                                                     |
+| Member                                                 | Meaning                                                                                                                                              |
+| :----------------------------------------------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `declareTools()`, `instructions`, `handles(name)`      | The three file tools, offered on every turn, and their system-prompt text (when to make a file; present it once, complete; revise with `edit_file`). |
+| `toolNames`                                            | `present_file`, `edit_file`, `read_file`. Persisted in chat history; never rename.                                                                   |
+| `run(name, input, { records })`                        | Run one tool against the chat's files. Always resolves to `{ status, text, file?, fileAction, durationMs }`.                                         |
+| `reveal(sessionId, key, { openPanel?, defaultMode? })` | Show a newly stored file.                                                                                                                            |
+| `openFile(sessionId, key, fileId?, isLatest?)`         | The user opened a file card or attachment.                                                                                                           |
+| `togglePanel(sessionId, fallbackKeys)`, `closePanel()` | The chat's preview panel.                                                                                                                            |
+| `getSession(id)`, `useSession(id)`                     | A chat's preview state: `{ activeKey, uploadKeys, selectedFileIdByKey, viewModeByKey, viewportByKey }`.                                              |
+| `refreshSnapshot()`                                    | Refresh the still image shown while the native preview is hidden.                                                                                    |
+| `PreviewPanel({ records, topActions? })`               | The panel view for the chat on screen.                                                                                                               |
+| `dispose()`                                            | Stop listening to facts.                                                                                                                             |
 
 Pure helpers exported by the package: `collectWorkspaceArtifacts`, `normalizeWorkspacePath`,
 `makeArtifactKey`, `makeUploadPreviewKey`, `inferMimeType`, `classifyPreviewKind`,

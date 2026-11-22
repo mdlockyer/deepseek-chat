@@ -120,6 +120,7 @@ export const PREVIEW_TOOL_INSTRUCTIONS = [
   'Use `present_file` for substantial, self-contained artifacts meant to be viewed, rendered, copied, or saved—such as interactive single-file HTML/CSS/JS widgets or visualizations, SVG graphics, long Markdown documents/reports, Mermaid diagrams, CSV/JSON datasets, or complete standalone source files (~25+ lines).',
   'Keep short code snippets, terminal commands, quick examples, and conversational answers inline in Markdown rather than creating a file.',
   'When revising a file you already presented, prefer `edit_file` (or `read_file` first if unsure of exact lines) with the same `path` so versions increment cleanly (v1 -> v2) instead of creating duplicate files.',
+  'Get a file right before you present it: work out the details first and present it once, complete. Within the same reply, use `edit_file` on it only to fix a real error you found, not for polish or second thoughts.',
   'After `present_file` or `edit_file`, briefly summarize what you created or changed without pasting the full file contents into your message.',
 ].join(' ')
 

@@ -133,7 +133,8 @@ export type ReplyView = {
   /** 搜索到的网页（去重），用于底部汇总与搜索结果列表 */
   searchResults: Source[]
   /**
-   * 本条回复产出的文件（文件工具与 Python），和正文一起展示：同一文件（按路径，没有路径时按名称）
+   * 本条回复产出的文件（文件工具与 Python），回复结束（完成、停止或失败）后和正文一起展示，生成中为空：
+   * 同一文件（按路径，没有路径时按名称）
    * 只保留一张卡片，位置取首次出现，内容取最新版本。
    */
   files: PresentedFileRef[]
@@ -630,7 +631,8 @@ export const buildReplyView = (reply: AssistantMessage, streaming: boolean): Rep
     answer: answer && answer.text ? answer : null,
     sources: registry.list,
     searchResults,
-    files: [...files.values()],
+    // 生成中不展示：文件面板会自动打开并跟随新版本，结束后再给出最终版本的卡片
+    files: streaming ? [] : [...files.values()],
   }
 }
 
