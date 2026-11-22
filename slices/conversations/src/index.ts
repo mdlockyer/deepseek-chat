@@ -11,7 +11,21 @@ import { loadFile } from './db.js'
 import { installDeps, type ConversationsDeps } from './env.js'
 import { translate } from './messages.js'
 import { getChatMessages, useChatMessages, useHistoryState } from './sessionAccess.js'
-import { stopReply } from './store.js'
+import { setDraftText } from './drafts.js'
+import {
+  editMessage,
+  initChat,
+  newChat,
+  regenerateReply,
+  removeSession,
+  renameSession,
+  selectMessageVersion,
+  selectSession,
+  sendMessage,
+  stopReply,
+  useChatStore,
+  waitForIdle,
+} from './store.js'
 import {
   bindSearchPanel,
   restoreLastSearchPanel,
@@ -58,6 +72,34 @@ export const createConversationsSlice = (deps: ConversationsDeps) => {
   return {
     /** Stops the chat's reply in progress, if any. */
     stopReply,
+
+    /**
+     * Headless commands: the same operations the views perform. `null` as a session id is the
+     * new-chat screen.
+     */
+    commands: {
+      /** Loads the session list; resolves when ready (or failed). */
+      init: initChat,
+      newChat,
+      selectSession,
+      renameSession,
+      /** Resolves `true` once the chat is deleted from storage. */
+      removeSession,
+      setDraft: setDraftText,
+      /** Sends the chat's draft; `false` when nothing was sent. */
+      send: sendMessage,
+      regenerate: regenerateReply,
+      /** Edits a question into a new version and replies to it; `false` when refused. */
+      edit: editMessage,
+      selectVersion: selectMessageVersion,
+      /** Resolves when that chat (or every chat) has no reply in progress. */
+      whenIdle: waitForIdle,
+    },
+    /** The session list (newest first), the chat on screen, and which chats are replying. */
+    getState: () => {
+      const { ready, sessions, activeId, streaming } = useChatStore.getState()
+      return { ready, sessions, activeId, replying: Object.keys(streaming) }
+    },
     /** Stored file contents (attachments, presented files) by id. */
     loadFile,
     /** A loaded chat's visible branch; the React hook re-renders on change. */

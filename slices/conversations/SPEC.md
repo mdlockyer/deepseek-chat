@@ -62,21 +62,30 @@ it, and the header toggle (`visible`, `open`, `toggle`). `panels.browser`: the h
 
 ## Behavioural invariants
 
-1. **Facts.** After a session is deleted from storage the slice publishes `SessionDeleted`; after
-   the whole history is replaced (import, clear) it publishes `SessionHistoryReplaced`. Neither is
-   published when the change fails.
-2. **Tool calls run in order.** Each call first appears as a running result (with phase
-   `starting` when its kind is `python`), then takes the gateway's result. When the turn is aborted
-   the loop stops after the current call. At most 50 tool rounds per turn.
+1. **Facts.** After a session is deleted from storage the slice publishes `SessionDeleted` for it,
+   once, and removes it from the list; other chats are untouched. After the whole history is
+   replaced (import, clear) it publishes `SessionHistoryReplaced`, once. Neither is published when
+   the change fails, and a failed import leaves every chat as it was.
+2. **Tool calls.** Every call the model makes runs through the gateway exactly once, in the order
+   the model made it. While it runs, its result shows as running (phase `starting` exactly when its
+   kind is `python`); afterwards its `tool_result` holds the gateway's result. The next request
+   sends every result back to the model, in call order. When the turn is aborted during a call, no
+   later call runs and no further request is made; the reply ends stopped. A turn whose model keeps
+   calling tools still ends (after a bounded number of rounds, see Parameters).
 3. **Prompt.** A turn's system prompt is the assistant identity followed by the gateway's
-   instructions for the tools declared that turn.
+   instructions for exactly the tools declared that turn, in the gateway's order.
+3a. **Tool context.** A run sees the chat's visible branch with the reply in progress last, knows
+    whether that chat is on screen, and files it saves can be read back through `loadFile`.
 4. **Tool steps by kind.** How a call is shown (search, opened page, browser actions, file actions,
    code) and archived depends only on `kindOf(name)`; anything unclassified is shown as code.
 5. **Composer toggles** (DeepThink, Search, Run code, Browser) load from and save to the store under
    `chat-demo:thinking`, `chat-demo:search`, `chat-demo:python`, `chat-demo:browser` as `'true'` /
    `'false'`.
-6. **Branches.** Editing a question or regenerating a reply adds a sibling version; the visible
-   branch follows the selected version at each level.
+6. **Branches.** A chat is a tree. Sending adds a question and its reply below the visible leaf.
+   Editing a question adds a sibling question (and its reply) and selects it; regenerating adds a
+   sibling reply and selects it; selecting a version selects that sibling. Each message remembers
+   which child was selected below it, so the visible branch is the path of selected children from
+   the root. Questions and replies alternate along it, starting with a question.
 7. **History archive** rules (format, validation, replacement, what is kept) are in
    [`src/history/README.md`](src/history/README.md).
 8. **Requests.** REST requests time out after 15 s, uploads after 60 s; a timeout is reported as a
@@ -93,6 +102,9 @@ it, and the header toggle (`visible`, `open`, `toggle`). `panels.browser`: the h
 13. **Following the chat on screen** (`useChatLifecycle`): the right-hand panels follow it
     (`onActiveSessionChange`), read-aloud stops, search results close, and the mobile drawer
     closes.
+14. **History round trip.** Exporting the history and importing that file restores the same chats
+    with the same titles and, for each, the same visible branch (roles and text). Choices on
+    branches that were not visible are not kept (see the history README).
 
 ## Parameters
 

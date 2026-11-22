@@ -394,7 +394,7 @@ const ensureSessionLoaded = (id: string): Promise<void> => {
 }
 
 /** 等所有回复的收尾（落盘）完成 */
-const waitForIdle = (sessionId?: string) =>
+export const waitForIdle = (sessionId?: string) =>
   new Promise<void>((resolve) => {
     const isIdle = (state: ChatState) =>
       sessionId === undefined
@@ -518,7 +518,11 @@ export const removeSession = (id: string): Promise<boolean> => {
 }
 
 const removeSessionData = async (id: string): Promise<boolean> => {
-  if (get().importingHistory || deletingSessions.has(id)) {
+  if (
+    get().importingHistory ||
+    deletingSessions.has(id) ||
+    !get().sessions.some((session) => session.id === id)
+  ) {
     return false
   }
   const epoch = historyEpoch
