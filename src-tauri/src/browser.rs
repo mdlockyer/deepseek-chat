@@ -358,16 +358,29 @@ fn get_tab_webview(app: &AppHandle, state: &BrowserState, tab_id: &str) -> Resul
         .ok_or_else(|| format!("Browser webview `{label}` is no longer attached"))
 }
 
-fn spawn_tab_webview(
-    app: &AppHandle,
-    state: &BrowserState,
-    tab_id: &str,
+struct SpawnTabConfig {
+    tab_id: String,
     url: Url,
     bounds: BrowserBounds,
     visible: bool,
     zoom: f64,
     allow_private_nav: bool,
+}
+
+fn spawn_tab_webview(
+    app: &AppHandle,
+    state: &BrowserState,
+    cfg: SpawnTabConfig,
 ) -> Result<Webview, String> {
+    let SpawnTabConfig {
+        tab_id,
+        url,
+        bounds,
+        visible,
+        zoom,
+        allow_private_nav,
+    } = cfg;
+    let tab_id = tab_id.as_str();
     {
         let tabs = state
             .tabs
@@ -860,12 +873,14 @@ pub async fn browser_create_tab(
     let created = spawn_tab_webview(
         &app,
         &state,
-        &tab_id,
-        parsed,
-        bounds,
-        visible,
-        zoom,
-        allow_private_nav,
+        SpawnTabConfig {
+            tab_id: tab_id.clone(),
+            url: parsed,
+            bounds,
+            visible,
+            zoom,
+            allow_private_nav,
+        },
     )?;
     if visible {
         let prev_id = {

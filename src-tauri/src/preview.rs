@@ -144,7 +144,7 @@ fn ensure_preview_webview(
     }
 
     builder = builder
-        .on_navigation(|target_url| is_allowed_preview_navigation(target_url))
+        .on_navigation(is_allowed_preview_navigation)
         .on_new_window(|_url, _features| NewWindowResponse::Deny)
         .on_download(|_wv, event| {
             let _ = matches!(event, DownloadEvent::Requested { .. });
