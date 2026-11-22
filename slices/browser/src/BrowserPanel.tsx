@@ -75,6 +75,7 @@ export const createBrowserPanel = (state: BrowserState, deps: BrowserPanelDeps) 
     )
     const { tabs, activeTabId } = sessionBrowser
     const overlayLocks = useBrowserStore((state) => state.overlayLocks)
+    const overlayLocked = deps.panel.useLayout((layout) => layout.overlayLocked)
     const panelAnimating = deps.panel.useLayout((layout) => layout.animating)
     const panelResizing = deps.panel.useLayout((layout) => layout.resizing)
     const controlling = useBrowserStore((state) => state.controlling)
@@ -164,7 +165,8 @@ export const createBrowserPanel = (state: BrowserState, deps: BrowserPanelDeps) 
     }
 
     const showSnapshotFallback =
-      Boolean(activeTab?.snapshotUrl) && (panelAnimating || overlayLocks > 0 || panelResizing)
+      Boolean(activeTab?.snapshotUrl) &&
+      (panelAnimating || overlayLocked || overlayLocks > 0 || panelResizing)
     const isHttps = activeUrl.startsWith('https://')
 
     return (

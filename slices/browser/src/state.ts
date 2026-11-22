@@ -3,6 +3,7 @@ import {
   fitViewportToStage,
   type BrowserStageFit,
   type BrowserViewportSpec,
+  type PanelLayout,
   type PanelSlot,
 } from '@deepseek-chat/spine/design'
 import { NO_HOST, type BrowserBounds, type BrowserHost } from './host.js'
@@ -39,8 +40,6 @@ export const EMPTY_SESSION_BROWSER_STATE: SessionBrowserState = {
 type BrowserStoreState = {
   activeSessionId: string | null
   sessions: Record<string, SessionBrowserState>
-  panelAnimating: boolean
-  panelResizing: boolean
   overlayLocks: number
   controlling: boolean
   controllingAction: string | null
@@ -82,10 +81,8 @@ const findTabOwner = (
 }
 
 export const isBrowserWebviewVisibleState = (
-  state: Pick<
-    BrowserStoreState,
-    'activeSessionId' | 'sessions' | 'panelAnimating' | 'panelResizing' | 'overlayLocks'
-  >,
+  state: Pick<BrowserStoreState, 'activeSessionId' | 'sessions' | 'overlayLocks'>,
+  layout: Pick<PanelLayout, 'animating' | 'resizing' | 'overlayLocked'>,
   desktop: boolean,
   isNativeCreated: (tabId: string) => boolean,
   isActiveRightPanel = true
@@ -94,8 +91,9 @@ export const isBrowserWebviewVisibleState = (
     !desktop ||
     !state.activeSessionId ||
     !isActiveRightPanel ||
-    state.panelAnimating ||
-    state.panelResizing ||
+    layout.animating ||
+    layout.resizing ||
+    layout.overlayLocked ||
     state.overlayLocks > 0
   ) {
     return false
@@ -164,8 +162,6 @@ export const createBrowserState = (deps: BrowserStateDeps) => {
   const useBrowserStore = create<BrowserStoreState>(() => ({
     activeSessionId: null,
     sessions: {},
-    panelAnimating: false,
-    panelResizing: false,
     overlayLocks: 0,
     controlling: false,
     controllingAction: null,
@@ -219,6 +215,7 @@ export const createBrowserState = (deps: BrowserStateDeps) => {
   const shouldShowNativeWebview = (state: BrowserStoreState): boolean =>
     isBrowserWebviewVisibleState(
       state,
+      panel.getLayout(),
       desktop,
       (tabId) => nativeCreated.has(tabId),
       panel.isOpen(state.activeSessionId)
@@ -323,15 +320,14 @@ export const createBrowserState = (deps: BrowserStateDeps) => {
       deps.notify.downloadBlocked(reason)
     })
 
-    // 镜像面板的动画/调整大小状态；面板换成其他内容时把本会话的浏览器标记为关闭
+    // 面板布局（动画/调整大小/遮罩锁）变化时同步原生 Webview 可见性；面板换成其他内容时把本会话的浏览器标记为关闭
     let prevLayout = panel.getLayout()
     const unsubSidePanel = panel.subscribe(() => {
       const layout = panel.getLayout()
-      let changed = false
-      if (layout.animating !== prevLayout.animating || layout.resizing !== prevLayout.resizing) {
-        set({ panelAnimating: layout.animating, panelResizing: layout.resizing })
-        changed = true
-      }
+      let changed =
+        layout.animating !== prevLayout.animating ||
+        layout.resizing !== prevLayout.resizing ||
+        layout.overlayLocked !== prevLayout.overlayLocked
       const current = get()
       let nextSessions = current.sessions
       for (const [sid, session] of Object.entries(current.sessions)) {
@@ -369,12 +365,8 @@ export const createBrowserState = (deps: BrowserStateDeps) => {
     if (state.activeSessionId === sessionId) {
       return
     }
-    const prevOpen = getSessionBrowser(state, state.activeSessionId).panelOpen
     const nextOpen = sessionId !== null && getSessionBrowser(state, sessionId).panelOpen
-    set({
-      activeSessionId: sessionId,
-      panelAnimating: prevOpen !== nextOpen,
-    })
+    set({ activeSessionId: sessionId })
     const nextTab = sessionId ? getActiveBrowserTab(sessionId) : null
     if (
       nextOpen &&
@@ -398,9 +390,7 @@ export const createBrowserState = (deps: BrowserStateDeps) => {
       sessions: Object.fromEntries(
         Object.entries(current.sessions).filter(([key]) => key !== sessionId)
       ),
-      ...(current.activeSessionId === sessionId
-        ? { activeSessionId: null, panelAnimating: false }
-        : {}),
+      ...(current.activeSessionId === sessionId ? { activeSessionId: null } : {}),
       ...(current.controllingSessionId === sessionId
         ? { controlling: false, controllingAction: null, controllingSessionId: null }
         : {}),
@@ -425,8 +415,6 @@ export const createBrowserState = (deps: BrowserStateDeps) => {
     set({
       activeSessionId: null,
       sessions: {},
-      panelAnimating: false,
-      panelResizing: false,
       controlling: false,
       controllingAction: null,
       controllingSessionId: null,
@@ -598,7 +586,6 @@ export const createBrowserState = (deps: BrowserStateDeps) => {
             panelOpen: closingLast ? false : currSession.panelOpen,
           },
         },
-        ...(closingLast && current.activeSessionId === sessionId ? { panelAnimating: false } : {}),
       }
     })
 
@@ -655,7 +642,6 @@ export const createBrowserState = (deps: BrowserStateDeps) => {
             panelOpen: true,
           },
         },
-        ...(current.activeSessionId === targetSessionId ? { panelAnimating: true } : {}),
       }))
     }
     if (getSessionBrowser(get(), targetSessionId).tabs.length === 0) {
@@ -683,7 +669,6 @@ export const createBrowserState = (deps: BrowserStateDeps) => {
           panelOpen: false,
         },
       },
-      ...(current.activeSessionId === targetSessionId ? { panelAnimating: false } : {}),
     }))
     if (isViewing) {
       await syncNativeVisibility()
@@ -708,24 +693,6 @@ export const createBrowserState = (deps: BrowserStateDeps) => {
       return
     }
     await closeBrowserPanel(activeSessionId)
-  }
-
-  const setBrowserPanelAnimating = (animating: boolean) => {
-    panel.setAnimating(animating)
-    if (get().panelAnimating === animating) {
-      return
-    }
-    set({ panelAnimating: animating })
-    void syncNativeVisibility()
-  }
-
-  const setBrowserPanelResizing = (resizing: boolean) => {
-    panel.setResizing(resizing)
-    if (get().panelResizing === resizing) {
-      return
-    }
-    set({ panelResizing: resizing })
-    void syncNativeVisibility()
   }
 
   const setBrowserStageSize = (size: { width: number; height: number }) => {
@@ -821,8 +788,9 @@ export const createBrowserState = (deps: BrowserStateDeps) => {
       return
     }
     const state = get()
+    const layout = panel.getLayout()
     const sessionId = state.activeSessionId
-    if (!sessionId || state.panelAnimating || state.panelResizing) {
+    if (!sessionId || layout.animating || layout.resizing) {
       return
     }
     const session = getSessionBrowser(state, sessionId)
@@ -835,7 +803,7 @@ export const createBrowserState = (deps: BrowserStateDeps) => {
     }
     try {
       const snap = await native.takeSnapshot(active.id, 1280)
-      if (get().panelResizing) {
+      if (panel.getLayout().resizing) {
         return
       }
       updateSessionBrowser(sessionId, (curr) => ({
@@ -1129,8 +1097,6 @@ export const createBrowserState = (deps: BrowserStateDeps) => {
     closeBrowserPanel,
     toggleBrowserPanel,
     hideBrowserPanelForOtherView,
-    setBrowserPanelAnimating,
-    setBrowserPanelResizing,
     setBrowserStageSize,
     setBrowserPanelBounds,
     setBrowserTabViewport,
