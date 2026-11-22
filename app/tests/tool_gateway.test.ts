@@ -4,8 +4,8 @@
  */
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import type { ToolRunContext } from '@deepseek-chat/slice-conversations'
-import { toolGateway } from '../toolGateway.js'
+import type { Message, ToolRunContext } from '@deepseek-chat/slice-conversations'
+import { collectPythonUploads, toolGateway } from '../toolGateway.js'
 
 const declaredNames = (toggles: { search: boolean; python: boolean }) =>
   toolGateway
@@ -74,4 +74,115 @@ describe('app wiring: tool gateway', () => {
       assert.equal(noCode.status, 'error')
     }
   )
+
+  it('mounts user uploads and the latest model-presented files for Python, excluding Python outputs', () => {
+    const messages: Message[] = [
+      {
+        id: 'u1',
+        role: 'user',
+        content: 'analyze',
+        createdAt: 1,
+        files: [
+          {
+            id: 'up-1',
+            serverId: null,
+            name: 'raw.csv',
+            size: 10,
+            isImage: false,
+            mimeType: 'text/csv',
+          },
+        ],
+      },
+      {
+        id: 'a1',
+        role: 'assistant',
+        createdAt: 2,
+        model: 'deepseek-flash',
+        thinking: false,
+        search: false,
+        python: true,
+        browser: false,
+        prefix: false,
+        status: 'done',
+        blocks: [
+          { type: 'tool_use', id: 't1', name: 'present_file', input: {} },
+          {
+            type: 'tool_result',
+            tool_use_id: 't1',
+            content: 'ok',
+            status: 'ok',
+            files: [
+              {
+                id: 'p1',
+                name: 'report.md',
+                path: 'report.md',
+                size: 5,
+                mimeType: 'text/markdown',
+                version: 1,
+                source: 'model',
+              },
+            ],
+          },
+          { type: 'tool_use', id: 't2', name: 'python', input: {} },
+          {
+            type: 'tool_result',
+            tool_use_id: 't2',
+            content: 'ok',
+            status: 'ok',
+            files: [
+              {
+                id: 'py1',
+                name: 'chart.png',
+                path: 'chart.png',
+                size: 20,
+                mimeType: 'image/png',
+                source: 'python',
+              },
+            ],
+          },
+        ],
+      },
+      {
+        id: 'a2',
+        role: 'assistant',
+        createdAt: 3,
+        model: 'deepseek-flash',
+        thinking: false,
+        search: false,
+        python: true,
+        browser: false,
+        prefix: false,
+        status: 'done',
+        blocks: [
+          { type: 'tool_use', id: 't3', name: 'edit_file', input: {} },
+          {
+            type: 'tool_result',
+            tool_use_id: 't3',
+            content: 'ok',
+            status: 'ok',
+            files: [
+              {
+                id: 'p2',
+                name: 'report.md',
+                path: 'report.md',
+                size: 8,
+                mimeType: 'text/markdown',
+                version: 2,
+                source: 'model',
+              },
+            ],
+          },
+        ],
+      },
+    ]
+
+    const uploads = collectPythonUploads(messages, async () => undefined)
+    assert.deepEqual(
+      uploads.map((u) => [u.id, u.name]),
+      [
+        ['up-1', 'raw.csv'],
+        ['p2', 'report.md'],
+      ]
+    )
+  })
 })

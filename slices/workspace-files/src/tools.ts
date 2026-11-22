@@ -121,7 +121,7 @@ export const PREVIEW_TOOL_INSTRUCTIONS = [
   'Keep short code snippets, terminal commands, quick examples, and conversational answers inline in Markdown rather than creating a file.',
   'When revising a file you already presented, prefer `edit_file` (or `read_file` first if unsure of exact lines) with the same `path` so versions increment cleanly (v1 -> v2) instead of creating duplicate files.',
   'Get a file right before you present it: plan it briefly in your thinking, then put the file’s full text only in `content`; never draft the file itself in your thinking. Present it once, complete. Within the same reply, use `edit_file` on it only to fix a real error you found, not for polish or second thoughts.',
-  'Presented files exist only in the File Preview panel: they have no URL or path that any other tool can open (the built-in browser refuses `file://` URLs), and you cannot see them rendered yourself. Do not try to open or screenshot a presented file to check it; review its content before presenting instead.',
+  'Presented files open in the File Preview panel (and on desktop are also readable in Python under `uploads/`); they have no `http://` URL for the built-in browser, and you cannot screenshot them yourself, so review HTML/SVG content before presenting.',
   'After `present_file` or `edit_file`, briefly summarize what you created or changed without pasting the full file contents into your message.',
 ].join(' ')
 

@@ -14,14 +14,47 @@ import {
   EDIT_FILE_TOOL_NAME,
   PRESENT_FILE_TOOL_NAME,
   READ_FILE_TOOL_NAME,
+  collectWorkspaceArtifacts,
   getCodeLanguage,
   makeArtifactKey,
   normalizeWorkspacePath,
 } from '@deepseek-chat/slice-workspace-files'
+import type { Message } from '@deepseek-chat/slice-conversations'
 import { createId } from './utils/id.js'
 import { browser, python, webResearch } from './composition.js'
 import { toFileRecords } from './fileRecords.js'
 import { workspaceFiles } from './workspaceFiles.js'
+
+/** Collects user attachments plus the latest version of model-presented files for Python's read-only `uploads/`. */
+export const collectPythonUploads = (
+  messages: readonly Message[],
+  loadFile: (id: string) => Promise<Blob | undefined>
+) => {
+  const seen = new Set<string>()
+  const uploads: { id: string; name: string; loadBlob: () => Promise<Blob | undefined> }[] = []
+  for (const message of messages) {
+    if (message.role !== 'user') {
+      continue
+    }
+    for (const file of message.files) {
+      if (!seen.has(file.id)) {
+        seen.add(file.id)
+        uploads.push({ id: file.id, name: file.name, loadBlob: () => loadFile(file.id) })
+      }
+    }
+  }
+  for (const artifact of collectWorkspaceArtifacts(toFileRecords(messages))) {
+    if (artifact.source === 'python') {
+      continue
+    }
+    const { fileId, name } = artifact.latest
+    if (!seen.has(fileId)) {
+      seen.add(fileId)
+      uploads.push({ id: fileId, name, loadBlob: () => loadFile(fileId) })
+    }
+  }
+  return uploads
+}
 
 const kindOf = (name: string): ToolKind | null => {
   switch (name) {
@@ -153,20 +186,7 @@ export const toolGateway: ToolGateway = {
         durationMs: 0,
       }
     }
-    // 只提供用户上传的附件（按对话顺序去重）
-    const seen = new Set<string>()
-    const uploads: { id: string; name: string; loadBlob: () => Promise<Blob | undefined> }[] = []
-    for (const message of context.messages) {
-      if (message.role !== 'user') {
-        continue
-      }
-      for (const file of message.files) {
-        if (!seen.has(file.id)) {
-          seen.add(file.id)
-          uploads.push({ id: file.id, name: file.name, loadBlob: () => context.loadFile(file.id) })
-        }
-      }
-    }
+    const uploads = collectPythonUploads(context.messages, context.loadFile)
     const outcome = await python.run(code, {
       signal: context.signal,
       onPhase: context.onPhase,
