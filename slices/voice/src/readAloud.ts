@@ -106,6 +106,15 @@ export const createReadAloud = (deps: {
     void (async () => {
       let nextTime = 0
       let lastSource: AudioBufferSourceNode | null = null
+      /** 最后排程的那段已播完（按顺序排程，它播完即全部播完） */
+      let lastEnded = false
+      let streamDone = false
+      // 流结束与最后一段播完先后不定，两者都发生后才结束朗读
+      const finishIfDone = () => {
+        if (streamDone && (lastSource === null || lastEnded)) {
+          finish(controller)
+        }
+      }
       let rest = new Uint8Array(0)
       try {
         const stream = await deps.api.synthesize(apiKey ?? '', text, voice, controller.signal)
@@ -134,15 +143,19 @@ export const createReadAloud = (deps: {
           source.start(nextTime)
           nextTime += buffer.duration
           lastSource = source
+          lastEnded = false
+          source.onended = () => {
+            if (lastSource === source) {
+              lastEnded = true
+              finishIfDone()
+            }
+          }
           if (state.status === 'loading' && current?.controller === controller) {
             setState({ status: 'playing', messageId })
           }
         }
-        if (lastSource) {
-          lastSource.onended = () => finish(controller)
-        } else {
-          finish(controller)
-        }
+        streamDone = true
+        finishIfDone()
       } catch (error) {
         if (!controller.signal.aborted) {
           finish(controller)

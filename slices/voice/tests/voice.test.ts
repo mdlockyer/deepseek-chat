@@ -214,6 +214,26 @@ describe('voice: read-aloud', () => {
     assert.equal(fake.contexts[0]?.closed, true)
   })
 
+  it('returns to idle when the audio finished playing before the stream closed', async () => {
+    const pcm = controllableStream()
+    const { voice, fake } = setup(() => new Response(pcm.stream))
+    voice.readAloud.toggle('m1', 'text', () => undefined)
+    pcm.push([0x00, 0x40])
+    await settle()
+    pcm.push([0x00, 0x20])
+    await settle()
+    assert.deepEqual(voice.readAloud.getState(), { status: 'playing', messageId: 'm1' })
+    // Everything scheduled plays to its end; the server closes the stream only afterwards.
+    for (const chunk of fake.contexts[0]?.scheduled ?? []) {
+      chunk.end()
+    }
+    assert.equal(voice.readAloud.getState().status, 'playing', 'the stream may still bring more')
+    pcm.end()
+    await settle()
+    assert.deepEqual(voice.readAloud.getState(), { status: 'idle' })
+    assert.equal(fake.contexts[0]?.closed, true)
+  })
+
   it('decodes 16-bit little-endian PCM, carrying an odd byte across chunks', async () => {
     const pcm = controllableStream()
     const { voice, fake } = setup(() => new Response(pcm.stream))
