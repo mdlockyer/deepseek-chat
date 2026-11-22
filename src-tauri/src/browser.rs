@@ -123,6 +123,7 @@ pub struct BrowserStateResult {
 struct TabMeta {
     label: String,
     zoom: f64,
+    allow_private_nav: bool,
 }
 
 fn default_zoom() -> f64 {
@@ -197,6 +198,22 @@ impl BrowserState {
             .ok_or_else(|| format!("Unknown browser tab: {tab_id}"))?;
         meta.zoom = zoom;
         Ok(())
+    }
+
+    fn tab_allows_private_nav(&self, tab_id: &str, default_val: bool) -> bool {
+        self.tabs
+            .lock()
+            .ok()
+            .and_then(|tabs| tabs.get(tab_id).map(|meta| meta.allow_private_nav))
+            .unwrap_or(default_val)
+    }
+
+    fn set_tab_allows_private_nav(&self, tab_id: &str, allow: bool) {
+        if let Ok(mut tabs) = self.tabs.lock()
+            && let Some(meta) = tabs.get_mut(tab_id)
+        {
+            meta.allow_private_nav = allow;
+        }
     }
 }
 
@@ -305,6 +322,36 @@ fn is_allowed_navigation(url: &Url) -> bool {
     }
 }
 
+fn is_allowed_navigation_for_tab(
+    url: &Url,
+    allow_localhost: bool,
+    tab_allows_private: bool,
+) -> bool {
+    if !is_allowed_navigation(url) {
+        return false;
+    }
+    if !allow_localhost
+        && !tab_allows_private
+        && url.host_str().is_some_and(is_private_or_loopback_host)
+    {
+        return false;
+    }
+    true
+}
+
+fn ensure_model_access_allowed(url: &Url, allow_localhost: bool) -> Result<(), String> {
+    if url.host_str().is_some_and(is_link_local_or_metadata) {
+        return Err("Access to link-local or cloud metadata addresses is blocked.".into());
+    }
+    if !allow_localhost && url.host_str().is_some_and(is_private_or_loopback_host) {
+        return Err(
+            "Model access to localhost/private network addresses is disabled. Enable it in Settings."
+                .into(),
+        );
+    }
+    Ok(())
+}
+
 fn get_tab_webview(app: &AppHandle, state: &BrowserState, tab_id: &str) -> Result<Webview, String> {
     let label = state.tab_label(tab_id)?;
     app.get_webview(&label)
@@ -319,6 +366,7 @@ fn spawn_tab_webview(
     bounds: BrowserBounds,
     visible: bool,
     zoom: f64,
+    allow_private_nav: bool,
 ) -> Result<Webview, String> {
     {
         let tabs = state
@@ -363,7 +411,10 @@ fn spawn_tab_webview(
     let app_nav = app.clone();
     let tab_nav = tab_id.to_string();
     builder = builder.on_navigation(move |target_url| {
-        if is_allowed_navigation(target_url) {
+        let nav_state = app_nav.state::<BrowserState>();
+        let allow_localhost = nav_state.allow_localhost.load(Ordering::Relaxed);
+        let tab_allows_private = nav_state.tab_allows_private_nav(&tab_nav, allow_private_nav);
+        if is_allowed_navigation_for_tab(target_url, allow_localhost, tab_allows_private) {
             return true;
         }
         let _ = app_nav.emit_to(
@@ -372,7 +423,7 @@ fn spawn_tab_webview(
             BrowserBlockedEvent {
                 tab_id: tab_nav.clone(),
                 url: target_url.to_string(),
-                reason: "Blocked unsupported or restricted URL scheme".into(),
+                reason: "Blocked unsupported or restricted URL".into(),
             },
         );
         false
@@ -422,7 +473,12 @@ fn spawn_tab_webview(
     let app_popup = app.clone();
     let tab_popup = tab_id.to_string();
     builder = builder.on_new_window(move |target_url, _features| {
-        if is_allowed_navigation(&target_url) && target_url.as_str() != "about:blank" {
+        let popup_state = app_popup.state::<BrowserState>();
+        let allow_localhost = popup_state.allow_localhost.load(Ordering::Relaxed);
+        let tab_allows_private = popup_state.tab_allows_private_nav(&tab_popup, allow_private_nav);
+        if is_allowed_navigation_for_tab(&target_url, allow_localhost, tab_allows_private)
+            && target_url.as_str() != "about:blank"
+        {
             let _ = app_popup.emit_to(
                 MAIN_WEBVIEW_LABEL,
                 "browser://new-tab-requested",
@@ -474,7 +530,14 @@ fn spawn_tab_webview(
             .tabs
             .lock()
             .map_err(|_| "Browser state lock poisoned".to_string())?;
-        tabs.insert(tab_id.to_string(), TabMeta { label, zoom });
+        tabs.insert(
+            tab_id.to_string(),
+            TabMeta {
+                label,
+                zoom,
+                allow_private_nav,
+            },
+        );
     }
 
     Ok(created)
@@ -785,6 +848,7 @@ pub async fn browser_create_tab(
     let is_model = initiator.as_deref() == Some("model");
     let allow_localhost = state.allow_localhost.load(Ordering::Relaxed);
     let parsed = validate_browser_url(&url, true, is_model, allow_localhost)?;
+    let allow_private_nav = !is_model && parsed.host_str().is_some_and(is_private_or_loopback_host);
     {
         let mut b = state
             .bounds
@@ -793,7 +857,16 @@ pub async fn browser_create_tab(
         *b = Some(bounds.sanitized());
     }
     state.visible.store(visible, Ordering::Relaxed);
-    let created = spawn_tab_webview(&app, &state, &tab_id, parsed, bounds, visible, zoom)?;
+    let created = spawn_tab_webview(
+        &app,
+        &state,
+        &tab_id,
+        parsed,
+        bounds,
+        visible,
+        zoom,
+        allow_private_nav,
+    )?;
     if visible {
         let prev_id = {
             let mut active = state
@@ -1002,6 +1075,8 @@ pub async fn browser_navigate(
     let is_model = initiator.as_deref() == Some("model");
     let allow_localhost = state.allow_localhost.load(Ordering::Relaxed);
     let parsed = validate_browser_url(&url, false, is_model, allow_localhost)?;
+    let allow_private_nav = !is_model && parsed.host_str().is_some_and(is_private_or_loopback_host);
+    state.set_tab_allows_private_nav(&tab_id, allow_private_nav);
     let tab_wv = get_tab_webview(&app, &state, &tab_id)?;
     tab_wv
         .navigate(parsed.clone())
@@ -1052,6 +1127,10 @@ pub async fn browser_eval_js(
 ) -> Result<String, String> {
     ensure_main_webview(&webview)?;
     let tab_wv = get_tab_webview(&app, &state, &tab_id)?;
+    let allow_localhost = state.allow_localhost.load(Ordering::Relaxed);
+    if let Ok(current_url) = tab_wv.url() {
+        ensure_model_access_allowed(&current_url, allow_localhost)?;
+    }
     let ms = timeout_ms
         .unwrap_or(DEFAULT_EVAL_TIMEOUT_MS)
         .clamp(500, MAX_EVAL_TIMEOUT_MS);
@@ -1139,6 +1218,19 @@ mod tests {
         assert!(validate_browser_url("http://localhost:3000", false, true, true).is_ok());
         // User-initiated localhost is allowed
         assert!(validate_browser_url("http://localhost:3000", false, false, false).is_ok());
+
+        // Redirects to private/loopback are blocked unless allow_localhost or user-initiated private tab
+        let local_url = Url::parse("http://127.0.0.1:8080/secret").unwrap();
+        assert!(!is_allowed_navigation_for_tab(&local_url, false, false));
+        assert!(is_allowed_navigation_for_tab(&local_url, false, true));
+        assert!(is_allowed_navigation_for_tab(&local_url, true, false));
+
+        // Model script/snapshot access to private/loopback pages requires allow_localhost
+        assert!(ensure_model_access_allowed(&local_url, false).is_err());
+        assert!(ensure_model_access_allowed(&local_url, true).is_ok());
+        assert!(
+            ensure_model_access_allowed(&Url::parse("https://example.com").unwrap(), false).is_ok()
+        );
     }
 
     #[test]
