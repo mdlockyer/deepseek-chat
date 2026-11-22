@@ -145,6 +145,8 @@ pub struct CreateTabOptions {
     pub visible: bool,
     #[serde(default = "default_zoom")]
     pub zoom: f64,
+    #[serde(default)]
+    pub initiator: Option<String>,
 }
 
 pub struct BrowserState {
@@ -775,12 +777,14 @@ pub async fn browser_create_tab(
         bounds,
         visible,
         zoom,
+        initiator,
     } = options;
     if !is_valid_tab_id(&tab_id) {
         return Err("Invalid browser tab id".into());
     }
+    let is_model = initiator.as_deref() == Some("model");
     let allow_localhost = state.allow_localhost.load(Ordering::Relaxed);
-    let parsed = validate_browser_url(&url, true, false, allow_localhost)?;
+    let parsed = validate_browser_url(&url, true, is_model, allow_localhost)?;
     {
         let mut b = state
             .bounds

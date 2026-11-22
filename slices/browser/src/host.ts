@@ -35,6 +35,7 @@ export type BrowserHost = {
     bounds: BrowserBounds
     visible: boolean
     zoom?: number
+    initiator?: 'user' | 'model'
   }): Promise<void>
   closeTab(tabId: string): Promise<void>
   setActiveTab(tabId: string | null, bounds: BrowserBounds | null, visible: boolean): Promise<void>

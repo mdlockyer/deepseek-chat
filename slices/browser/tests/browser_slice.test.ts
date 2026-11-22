@@ -525,6 +525,32 @@ describe('browser: tool runs', () => {
     assert.equal(env.host.scripts.length, before + 1, 'only the first call reached the page')
   })
 
+  it('passes initiator="model" when browser_tabs opens a new tab, and drops the tab if the host blocks it', async () => {
+    const env = await withVisiblePage()
+    const baseCreateTab = env.host.host.createTab
+    env.host.host.createTab = async (opts) => {
+      await baseCreateTab(opts)
+      if (opts.initiator === 'model' && opts.url.includes('127.0.0.1')) {
+        throw new Error('Model navigation to localhost/private network addresses is disabled.')
+      }
+    }
+    const beforeTabs = env.browser.getSession('s1').tabs.length
+
+    const blocked = await env.browser.run(
+      'browser_tabs',
+      { action: 'new', url: 'http://127.0.0.1:8080/secret' },
+      { signal: signal(), sessionId: 's1' }
+    )
+
+    assert.equal(blocked.status, 'error')
+    assert.match(blocked.text, /localhost\/private network/)
+    const lastCreate = env.host.named('createTab').at(-1)?.args[0] as
+      | { url: string; initiator?: string }
+      | undefined
+    assert.equal(lastCreate?.initiator, 'model')
+    assert.equal(env.browser.getSession('s1').tabs.length, beforeTabs)
+  })
+
   it('stores a viewport per tab and zooms it to fit the stage', async () => {
     const { browser } = setup()
     browser.setStageSize({ width: 520, height: 660 })

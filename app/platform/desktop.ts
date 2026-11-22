@@ -160,6 +160,7 @@ export const browserCreateTab = (options: {
   bounds: BrowserBounds
   visible: boolean
   zoom?: number
+  initiator?: 'user' | 'model'
 }): Promise<void> => invoke<null>('browser_create_tab', { options }).then(() => undefined)
 
 export const browserCloseTab = (tabId: string): Promise<void> =>

@@ -691,6 +691,7 @@ export const createBrowserTools = (state: BrowserState, host: BrowserHost | null
             const tab = await createBrowserTab(url || 'about:blank', {
               sessionId: targetSessionId,
               activate: true,
+              initiator: 'model',
             })
             if (url && isHttpUrl(tab.url)) {
               await waitForTabLoad(tab.id, signal, 15_000)

@@ -308,7 +308,11 @@ export const createBrowserState = (deps: BrowserStateDeps) => {
       if (!ownerId) {
         return
       }
-      void openUrlInBrowserPanel(url, { sessionId: ownerId, newTab: true })
+      void openUrlInBrowserPanel(url, {
+        sessionId: ownerId,
+        newTab: true,
+        initiator: state.controlling ? 'model' : 'user',
+      })
     })
 
     const unlistenNavBlocked = native.onNavigationBlocked(({ url, reason }) => {
@@ -461,7 +465,10 @@ export const createBrowserState = (deps: BrowserStateDeps) => {
     }
   }
 
-  const ensureNativeTab = async (tabId: string): Promise<void> => {
+  const ensureNativeTab = async (
+    tabId: string,
+    initiator: 'user' | 'model' = 'user'
+  ): Promise<void> => {
     if (!desktop) {
       throw new Error('Built-in browser is only available in the desktop app.')
     }
@@ -487,6 +494,7 @@ export const createBrowserState = (deps: BrowserStateDeps) => {
         bounds: state.bounds ?? DEFAULT_BOUNDS,
         visible: false,
         zoom: tab.zoom,
+        initiator,
       })
       nativeCreated.add(tabId)
     })().finally(() => {
@@ -499,7 +507,7 @@ export const createBrowserState = (deps: BrowserStateDeps) => {
 
   const createBrowserTab = async (
     url = 'about:blank',
-    options: { sessionId?: string; activate?: boolean } = {}
+    options: { sessionId?: string; activate?: boolean; initiator?: 'user' | 'model' } = {}
   ): Promise<BrowserTab> => {
     const state = get()
     const sessionId = options.sessionId ?? state.activeSessionId
@@ -507,8 +515,18 @@ export const createBrowserState = (deps: BrowserStateDeps) => {
       throw new Error('Start or select a chat session before opening browser tabs.')
     }
     const activate = options.activate ?? true
+    const initiator = options.initiator ?? 'user'
     const id = `tab-${deps.newId()}`
-    const normalized = url === 'about:blank' ? 'about:blank' : normalizeOmniboxInput(url)
+    const normalized =
+      url === 'about:blank'
+        ? 'about:blank'
+        : initiator === 'model'
+          ? url.trim()
+          : normalizeOmniboxInput(url)
+    if (initiator === 'model' && normalized !== 'about:blank' && !isHttpUrl(normalized)) {
+      throw new Error(`Unsupported URL: ${normalized}. Only http:// and https:// are allowed.`)
+    }
+    const prevActiveTabId = getSessionBrowser(state, sessionId).activeTabId
     const tab: BrowserTab = {
       id,
       url: normalized,
@@ -529,8 +547,23 @@ export const createBrowserState = (deps: BrowserStateDeps) => {
       activeTabId: activate ? id : (session.activeTabId ?? id),
     }))
     if (isHttpUrl(normalized) && desktop) {
-      await ensureNativeTab(id)
-      await syncNativeVisibility()
+      try {
+        await ensureNativeTab(id, initiator)
+        await syncNativeVisibility()
+      } catch (error) {
+        updateSessionBrowser(sessionId, (session) => {
+          const remaining = session.tabs.filter((t) => t.id !== id)
+          return {
+            ...session,
+            tabs: remaining,
+            activeTabId:
+              session.activeTabId === id
+                ? (prevActiveTabId ?? remaining.at(-1)?.id ?? null)
+                : session.activeTabId,
+          }
+        })
+        throw error
+      }
     }
     return tab
   }
@@ -938,7 +971,11 @@ export const createBrowserState = (deps: BrowserStateDeps) => {
       targetTab = active
       await navigateBrowserTab(targetTab.id, url, options.initiator ?? 'user')
     } else if (options.newTab || !active) {
-      targetTab = await createBrowserTab(url, { sessionId: targetSessionId, activate: true })
+      targetTab = await createBrowserTab(url, {
+        sessionId: targetSessionId,
+        activate: true,
+        initiator: options.initiator ?? 'user',
+      })
     } else {
       targetTab = active
       await navigateBrowserTab(targetTab.id, url, options.initiator ?? 'user')
