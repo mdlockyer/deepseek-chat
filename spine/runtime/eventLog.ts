@@ -9,6 +9,8 @@
  * - Every emission is wrapped in a causal envelope. Emitting from inside a handler links
  *   `causationId` to the triggering envelope and increments `hopDepth`; reaching `maxHops`
  *   throws `CausalLoopError` with the full chain instead of looping.
+ * - A subscriber that throws is reported through `onHandlerError` and skipped; the other
+ *   subscribers still receive the fact and the publisher is not interrupted.
  *
  * Domain-blind: no slice or product nouns belong in this file.
  */
@@ -53,6 +55,12 @@ export type EventLogOptions = {
   /** Most recent envelopes kept for `history()`. Default 256. */
   readonly historyLimit?: number
   readonly clock?: EventLogClock
+  /**
+   * Receives an error thrown by a subscriber. Delivery to the other subscribers and the
+   * publisher's own work go on. Default: rethrown asynchronously, so it still surfaces as an
+   * uncaught error. A CausalLoopError is never isolated: it propagates to the publisher.
+   */
+  readonly onHandlerError?: (error: unknown, envelope: CausalEnvelope) => void
 }
 
 export class CausalLoopError extends Error {
@@ -80,6 +88,7 @@ export class EventLog {
   readonly maxHops: number
   readonly #historyLimit: number
   readonly #clock: EventLogClock
+  readonly #onHandlerError: (error: unknown, envelope: CausalEnvelope) => void
   readonly #sticky = new Map<string, Map<string, CausalEnvelope>>()
   readonly #subscribers = new Map<string, Set<Subscriber>>()
   readonly #history: CausalEnvelope[] = []
@@ -90,6 +99,12 @@ export class EventLog {
     this.maxHops = options.maxHops ?? 12
     this.#historyLimit = options.historyLimit ?? 256
     this.#clock = options.clock ?? { nowMs: () => Date.now() }
+    this.#onHandlerError =
+      options.onHandlerError ??
+      ((error) =>
+        queueMicrotask(() => {
+          throw error
+        }))
     if (!Number.isInteger(this.maxHops) || this.maxHops < 1) {
       throw new RangeError(`maxHops must be a positive integer, got ${String(this.maxHops)}`)
     }
@@ -223,7 +238,10 @@ export class EventLog {
     }
   }
 
-  /** Runs `notify` for each subscriber of `type`, with `envelope` as the cause of any emission. */
+  /**
+   * Runs `notify` for each subscriber of `type`, with `envelope` as the cause of any emission.
+   * A subscriber that throws is reported and skipped; a causal loop still propagates.
+   */
   #deliver(type: string, envelope: CausalEnvelope, notify: (subscriber: Subscriber) => void) {
     const subscribers = this.#subscribers.get(type)
     if (!subscribers || subscribers.size === 0) {
@@ -232,7 +250,14 @@ export class EventLog {
     this.#causalStack.push(envelope)
     try {
       for (const subscriber of [...subscribers]) {
-        notify(subscriber)
+        try {
+          notify(subscriber)
+        } catch (error) {
+          if (error instanceof CausalLoopError) {
+            throw error
+          }
+          this.#onHandlerError(error, envelope)
+        }
       }
     } finally {
       this.#causalStack.pop()

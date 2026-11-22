@@ -238,17 +238,53 @@ describe('EventLog causal envelopes', () => {
   })
 
   it('returns to hop 0 after a handler throws', () => {
-    const log = new EventLog()
+    const reported: unknown[] = []
+    const log = new EventLog({ onHandlerError: (error) => reported.push(error) })
     const failing: FactHandler<Ping> = () => {
       throw new Error('handler failed')
     }
     const unsubscribe = log.subscribe<Ping>('Ping', failing)
-    assert.throws(() => log.publish<Ping>({ type: 'Ping', n: 1 }), /handler failed/)
+    log.publish<Ping>({ type: 'Ping', n: 1 })
+    assert.equal(reported.length, 1)
     unsubscribe()
 
     const next = log.publish<Ping>({ type: 'Ping', n: 2 })
     assert.equal(next.hopDepth, 0)
     assert.equal(next.causationId, null)
+  })
+
+  it('isolates a failing subscriber: the others still get the fact and the publisher goes on', () => {
+    const reported: [unknown, string][] = []
+    const log = new EventLog({
+      onHandlerError: (error, envelope) => reported.push([error, envelope.fact.type]),
+    })
+    const seen: string[] = []
+    log.subscribe<Ping>('Ping', () => {
+      throw new Error('first failed')
+    })
+    log.subscribe<Ping>('Ping', ({ fact }) => seen.push(`second ${fact.n}`))
+
+    const envelope = log.publish<Ping>({ type: 'Ping', n: 7 })
+    assert.equal(envelope.fact.n, 7)
+    assert.deepEqual(seen, ['second 7'])
+    assert.equal(reported.length, 1)
+    assert.match(String(reported[0]?.[0]), /first failed/)
+    assert.equal(reported[0]?.[1], 'Ping')
+
+    // Tombstone delivery is isolated the same way.
+    const evicted: string[] = []
+    log.subscribe<Counter>('Counter', () => undefined, {
+      onTombstone: () => {
+        throw new Error('tombstone handler failed')
+      },
+    })
+    log.subscribe<Counter>('Counter', () => undefined, {
+      onTombstone: (key) => evicted.push(key),
+    })
+    log.publishSticky<Counter>('a', { type: 'Counter', value: 1 })
+    assert.ok(log.tombstone('Counter', 'a'))
+    assert.deepEqual(evicted, ['a'])
+    assert.equal(reported.length, 2)
   })
 })
 
