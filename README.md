@@ -42,7 +42,7 @@ pnpm desktop:build
 
 ## Notes
 
-When DeepThink is enabled, the model gets a persistent Python 3 runner powered by Pyodide in a Web Worker. Desktop builds bundle `numpy`, `pandas`, `matplotlib`, `Pillow`, and `micropip` locally; other packages load from jsDelivr when online. Matplotlib plots show inline and go back to the model, and files written with `present_file()` download through a native save dialog.
+When the **Run code** toggle is enabled, the model gets a persistent Python 3 runner: on desktop, an OS-sandboxed native CPython 3.13 environment (`sandbox-exec` on macOS, Landlock + seccomp on Linux) with `numpy`, `pandas`, `matplotlib`, `Pillow`, and `scipy`; on the web build, Pyodide in a Web Worker. Matplotlib plots show inline and go back to the model, and files written with `present_file()` open in the File Preview panel and download through a native save dialog.
 
 On desktop, API requests go through `tauri-plugin-http` instead of the webview's `fetch` to avoid CORS limits, links open in your default browser, `Cmd+,` opens Settings on macOS, and your API key is saved in `~/Library/Application Support/com.mlockyer.deepseekchat/api-key` (`0600`) rather than `localStorage`.
 
