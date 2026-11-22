@@ -206,31 +206,50 @@ fn is_valid_tab_id(tab_id: &str) -> bool {
             .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
 }
 
+fn normalize_ip_host(host: &str) -> String {
+    let trimmed = host.trim_matches(['[', ']']);
+    let without_zone = trimmed.split('%').next().unwrap_or(trimmed);
+    without_zone.to_ascii_lowercase()
+}
+
+fn is_link_local_v4(v4: std::net::Ipv4Addr) -> bool {
+    let o = v4.octets();
+    o[0] == 169 && o[1] == 254
+}
+
+fn is_private_or_loopback_v4(v4: std::net::Ipv4Addr) -> bool {
+    v4.is_loopback() || v4.is_private() || v4.is_link_local() || v4.is_unspecified()
+}
+
 fn is_link_local_or_metadata(host: &str) -> bool {
-    if let Ok(ip) = host.parse::<IpAddr>() {
+    let normalized = normalize_ip_host(host);
+    if let Ok(ip) = normalized.parse::<IpAddr>() {
         return match ip {
-            IpAddr::V4(v4) => {
-                let o = v4.octets();
-                o[0] == 169 && o[1] == 254
+            IpAddr::V4(v4) => is_link_local_v4(v4),
+            IpAddr::V6(v6) => {
+                if let Some(mapped) = v6.to_ipv4_mapped() {
+                    return is_link_local_v4(mapped);
+                }
+                (v6.segments()[0] & 0xffc0) == 0xfe80
             }
-            IpAddr::V6(v6) => (v6.segments()[0] & 0xffc0) == 0xfe80,
         };
     }
     false
 }
 
 fn is_private_or_loopback_host(host: &str) -> bool {
-    let lower = host.trim_matches(['[', ']']).to_ascii_lowercase();
+    let lower = normalize_ip_host(host);
     if lower == "localhost" || lower.ends_with(".localhost") || lower == "0.0.0.0" || lower == "::"
     {
         return true;
     }
     if let Ok(ip) = lower.parse::<IpAddr>() {
         return match ip {
-            IpAddr::V4(v4) => {
-                v4.is_loopback() || v4.is_private() || v4.is_link_local() || v4.is_unspecified()
-            }
+            IpAddr::V4(v4) => is_private_or_loopback_v4(v4),
             IpAddr::V6(v6) => {
+                if let Some(mapped) = v6.to_ipv4_mapped() {
+                    return is_private_or_loopback_v4(mapped);
+                }
                 v6.is_loopback()
                     || v6.is_unspecified()
                     || (v6.segments()[0] & 0xfe00) == 0xfc00
@@ -1093,10 +1112,25 @@ mod tests {
         assert!(validate_browser_url("file:///etc/passwd", true, false, true).is_err());
         assert!(validate_browser_url("tauri://localhost", true, false, true).is_err());
         assert!(validate_browser_url("javascript:alert(1)", true, false, true).is_err());
-        // Link-local metadata is always blocked
+        // Link-local metadata is always blocked (IPv4, bracketed IPv6, IPv4-mapped IPv6)
         assert!(validate_browser_url("http://169.254.169.254/latest", false, false, true).is_err());
-        // Model-initiated loopback is blocked unless allow_localhost=true
+        assert!(validate_browser_url("http://[fe80::1]/", false, false, true).is_err());
+        assert!(
+            validate_browser_url("http://[::ffff:169.254.169.254]/latest", false, false, true)
+                .is_err()
+        );
+        assert!(!is_allowed_navigation(
+            &Url::parse("http://[fe80::1]/").unwrap()
+        ));
+        assert!(!is_allowed_navigation(
+            &Url::parse("http://[::ffff:169.254.169.254]/latest").unwrap()
+        ));
+        // Model-initiated loopback/private is blocked unless allow_localhost=true
         assert!(validate_browser_url("http://127.0.0.1:8080", false, true, false).is_err());
+        assert!(
+            validate_browser_url("http://[::ffff:127.0.0.1]:8080/", false, true, false).is_err()
+        );
+        assert!(validate_browser_url("http://[::ffff:10.0.0.1]/", false, true, false).is_err());
         assert!(validate_browser_url("http://localhost:3000", false, true, false).is_err());
         assert!(validate_browser_url("http://localhost:3000", false, true, true).is_ok());
         // User-initiated localhost is allowed
