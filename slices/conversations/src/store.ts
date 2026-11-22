@@ -2,6 +2,7 @@ import { getLocale } from '@deepseek-chat/spine/i18n'
 import { create } from 'zustand'
 import { createId } from './id.js'
 import { ApiError, streamMessage, uploadFile } from './api/client.js'
+import { buildAutoTitleRequest, parseAutoTitleResponse } from './autoTitle.js'
 import type { SessionDeleted, SessionHistoryReplaced } from '@deepseek-chat/spine/facts/session'
 import { deps } from './env.js'
 import type { ChatModel, CreateMessageRequest } from './api/types.js'
@@ -84,6 +85,23 @@ const pendingToolCalls = (reply: AssistantMessage) => {
 
 /** 允许自动补标题的请求；手动重命名后取消本轮标题写入，包含主动清空标题的情况。 */
 const titleRequests = new Set<AbortController>()
+/** 回合结束后在后台复用前缀缓存刷新会话标题的请求（独立于 streaming，不阻塞下一轮发送）。 */
+const autoTitleControllers = new Map<string, AbortController>()
+
+const cancelAutoTitle = (sessionId?: string) => {
+  if (sessionId !== undefined) {
+    const controller = autoTitleControllers.get(sessionId)
+    if (controller) {
+      autoTitleControllers.delete(sessionId)
+      controller.abort()
+    }
+    return
+  }
+  for (const controller of autoTitleControllers.values()) {
+    controller.abort()
+  }
+  autoTitleControllers.clear()
+}
 
 type ChatState = {
   ready: boolean
@@ -423,6 +441,7 @@ export const replaceHistory = async (write: () => Promise<void>): Promise<number
   }
   set({ importingHistory: true })
   try {
+    cancelAutoTitle()
     for (const controller of Object.values(get().streaming)) {
       controller.abort()
     }
@@ -491,12 +510,14 @@ export const renameSession = (id: string, title: string) => {
   if (get().importingHistory || deletingSessions.has(id)) {
     return
   }
+  cancelAutoTitle(id)
   const controller = getStreamController(id)
   if (controller) {
     titleRequests.delete(controller)
   }
+  const titleLocked = title.trim().length > 0
   if (getSession(id)) {
-    updateSession(id, (session) => ({ ...session, title }))
+    updateSession(id, (session) => ({ ...session, title, titleLocked }))
     persist(id)
   } else {
     set((state) => ({
@@ -504,7 +525,7 @@ export const renameSession = (id: string, title: string) => {
         session.id === id ? { ...session, title } : session
       ),
     }))
-    void db.renameSession(id, title).catch(db.reportStorageError('rename session'))
+    void db.renameSession(id, title, titleLocked).catch(db.reportStorageError('rename session'))
   }
 }
 
@@ -529,6 +550,7 @@ const removeSessionData = async (id: string): Promise<boolean> => {
   const epoch = historyEpoch
   deletingSessions.add(id)
   try {
+    cancelAutoTitle(id)
     getStreamController(id)?.abort()
     // 等本会话的流收尾，避免删除之后又被收尾保存写回来。
     await waitForIdle(id)
@@ -648,6 +670,7 @@ export const sendMessage = (targetSessionId: string | null) => {
   }
   persist(sessionId)
   clearSentDraft(targetSessionId)
+  cancelAutoTitle(sessionId)
   void streamReply(sessionId, reply, { history, question })
   return true
 }
@@ -675,6 +698,7 @@ export const regenerateReply = (sessionId: string, messageId?: string) => {
     updatedAt: Date.now(),
   }))
   persist(sessionId)
+  cancelAutoTitle(sessionId)
   void streamReply(sessionId, reply, { history, question })
 }
 
@@ -707,6 +731,7 @@ export const editMessage = (sessionId: string, messageId: string, content: strin
     updatedAt: Date.now(),
   }))
   persist(sessionId)
+  cancelAutoTitle(sessionId)
   void streamReply(sessionId, reply, { history: path.slice(0, index), question })
   return true
 }
@@ -718,6 +743,7 @@ export const selectMessageVersion = (sessionId: string, messageId: string) => {
   if (getStreamController(sessionId)) {
     return
   }
+  cancelAutoTitle(sessionId)
   updateSession(sessionId, (session) => selectVersion(session, messageId))
   persist(sessionId)
 }
@@ -762,6 +788,7 @@ export const continueReply = (sessionId: string, messageId: string) => {
   updateReply(sessionId, reply)
   updateSession(sessionId, (s) => ({ ...s, updatedAt: Date.now() }))
   persist(sessionId)
+  cancelAutoTitle(sessionId)
   void streamReply(sessionId, reply, {
     history: path.slice(0, -2),
     question,
@@ -792,6 +819,7 @@ export const retryUpload = (sessionId: string, messageId: string) => {
   const reply: AssistantMessage = { ...previous, status: 'pending', error: undefined }
   updateReply(sessionId, reply)
   persist(sessionId)
+  cancelAutoTitle(sessionId)
   void streamReply(sessionId, reply, { history: path.slice(0, index - 1), question })
 }
 
@@ -1001,17 +1029,125 @@ const waitForRetry = (attempt: number, signal: AbortSignal) =>
   })
 
 /**
+ * 回合结束后在后台复用前缀缓存刷新会话标题：
+ * - 不进入 streaming 状态，不阻塞下一轮发送，不写入 session.messages，也不修改 updatedAt；
+ * - 遇到 tool_use 立即中止且不执行工具；失败静默忽略。
+ */
+const runAutoTitle = (params: {
+  sessionId: string
+  epoch: number
+  model: ChatModel
+  system: string
+  tools: CreateMessageRequest['tools']
+  safetyCheck?: CreateMessageRequest['safety_check']
+  history: Message[]
+  question: UserMessage
+  reply: AssistantMessage
+  declaredClientNames: ReadonlySet<string>
+}) => {
+  const { sessionId, epoch, reply } = params
+  const currentSession = getSession(sessionId)
+  if (
+    deps().autoTitle === false ||
+    !currentSession ||
+    currentSession.titleLocked ||
+    epoch !== historyEpoch ||
+    get().importingHistory ||
+    deletingSessions.has(sessionId)
+  ) {
+    return
+  }
+  // 首轮已收到服务端内联 delta.title 时无需再发一次请求；第二轮起或首轮无标题时走前缀缓存刷新。
+  if (params.history.length === 0 && currentSession.title.trim()) {
+    return
+  }
+  const apiKey = deps().getApiKey() ?? ''
+  if (!apiKey) {
+    return
+  }
+  cancelAutoTitle(sessionId)
+  const ac = new AbortController()
+  autoTitleControllers.set(sessionId, ac)
+  const req = buildAutoTitleRequest({
+    model: params.model,
+    system: params.system,
+    tools: params.tools,
+    safetyCheck: params.safetyCheck,
+    history: params.history,
+    question: params.question,
+    reply,
+    declaredClientNames: params.declaredClientNames,
+    currentTitle: currentSession.title,
+  })
+  void (async () => {
+    let rawText = ''
+    try {
+      for await (const event of streamMessage(apiKey, req, ac.signal)) {
+        if (
+          event.type === 'content_block_start' &&
+          (event.content_block.type === 'tool_use' ||
+            event.content_block.type === 'server_tool_use')
+        ) {
+          ac.abort()
+          return
+        }
+        if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+          rawText += event.delta.text
+        }
+      }
+      if (
+        ac.signal.aborted ||
+        epoch !== historyEpoch ||
+        get().importingHistory ||
+        deletingSessions.has(sessionId)
+      ) {
+        return
+      }
+      const latest = getSession(sessionId)
+      if (!latest || latest.titleLocked || getVisibleMessages(latest).at(-1)?.id !== reply.id) {
+        return
+      }
+      const nextTitle = parseAutoTitleResponse(rawText, latest.title)
+      if (!nextTitle) {
+        return
+      }
+      updateSession(sessionId, (session) =>
+        session.titleLocked ? session : { ...session, title: nextTitle }
+      )
+      persist(sessionId)
+    } catch {
+      // 后台标题刷新失败不影响主对话
+    } finally {
+      if (autoTitleControllers.get(sessionId) === ac) {
+        autoTitleControllers.delete(sessionId)
+      }
+    }
+  })()
+}
+
+/**
  * 请求并消费流：先补齐附件的 serverId，再发请求；流式增量按动画帧刷新内存，完成、失败或停止后落盘。
  * 补传失败时回复记为 upload 错误，可重试。
  * 服务端判定 file_id 失效时重新补传后重发，退避重试且次数有上限，超过则按原始报错收尾。
  */
 const streamReply = async (sessionId: string, initial: AssistantMessage, request: Request) => {
+  const epoch = historyEpoch
   const controller = new AbortController()
-  if (!getSession(sessionId)?.title) {
+  const initialSession = getSession(sessionId)
+  if (!initialSession?.title && !initialSession?.titleLocked) {
     titleRequests.add(controller)
   }
   set((state) => ({ streaming: { ...state.streaming, [sessionId]: controller } }))
   let reply = initial
+  let lastTurnContext: {
+    model: ChatModel
+    system: string
+    tools: CreateMessageRequest['tools']
+    safetyCheck?: CreateMessageRequest['safety_check']
+    history: Message[]
+    question: UserMessage
+    declaredClientNames: ReadonlySet<string>
+  } | null = null
   let frame = 0
   const flush = () => {
     cancelAnimationFrame(frame)
@@ -1186,14 +1322,26 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
         if (deps().onStreamTrace) {
           tracer = createStreamTracer(toolRound, Date.now())
         }
+        const system = systemParts.join('\n\n')
+        const model = initial.model ?? MODEL
+        const safetyCheck = initial.thinking || tools.length === 0 ? SAFETY_CHECK : undefined
+        lastTurnContext = {
+          model,
+          system,
+          tools,
+          safetyCheck,
+          history: prepared.history,
+          question: prepared.question,
+          declaredClientNames,
+        }
         const events = streamMessage(
           deps().getApiKey() ?? '',
           {
-            model: initial.model ?? MODEL,
-            system: systemParts.join('\n\n'),
+            model,
+            system,
             messages,
             thinking: { type: initial.thinking ? 'enabled' : 'disabled' },
-            ...(initial.thinking || tools.length === 0 ? { safety_check: SAFETY_CHECK } : {}),
+            ...(safetyCheck ? { safety_check: safetyCheck } : {}),
             tools,
             ...(titleRequests.has(controller) ? { title: { enabled: true } } : {}),
           },
@@ -1305,5 +1453,13 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
       ),
     }))
     persist(sessionId)
+    if (
+      reply.status === 'done' &&
+      reply.stopReason !== 'refusal' &&
+      !controller.signal.aborted &&
+      lastTurnContext
+    ) {
+      runAutoTitle({ sessionId, epoch, reply, ...lastTurnContext })
+    }
   }
 }

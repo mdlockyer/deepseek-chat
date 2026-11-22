@@ -138,6 +138,13 @@ export type ConversationsSlice = ReturnType<typeof createConversationsSlice>
 // ---------- Pure model functions (also the boundary tests' surface) ----------
 
 export { ApiError, request } from './api/client.js'
+export {
+  AUTO_TITLE_KEEP,
+  MAX_AUTO_TITLE_CHARS,
+  buildAutoTitlePrompt,
+  buildAutoTitleRequest,
+  parseAutoTitleResponse,
+} from './autoTitle.js'
 export { ServerSentEventDecoder, readServerSentEvents } from './api/sse.js'
 export { appendBranch, getVisibleMessages, normalizeSession, selectVersion } from './branches.js'
 export { setBrowser, setThinking, useComposerOptions } from './composerOptions.js'

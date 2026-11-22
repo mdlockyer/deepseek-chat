@@ -179,6 +179,8 @@ export type Message = UserMessage | AssistantMessage
 export type Session = {
   id: string
   title: string
+  /** 用户手动重命名后锁定，自动标题不再覆盖；清空标题会解除锁定。 */
+  titleLocked?: boolean
   createdAt: number
   updatedAt: number
   /** 包含所有分支的消息，按创建顺序存储。 */

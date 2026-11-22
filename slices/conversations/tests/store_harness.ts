@@ -90,10 +90,16 @@ export const createStoreEnv = (
   options: {
     kinds?: Record<string, ToolKind>
     instructions?: (names: ReadonlySet<string>) => string[]
+    autoTitle?: boolean
   } = {}
 ) => {
   const requests: ApiRequest[] = []
-  let respond: (request: ApiRequest) => ApiReply = () => ({ text: 'ok' })
+  let respond: (
+    request: ApiRequest,
+    signal?: AbortSignal
+  ) => ApiReply | Promise<ApiReply> = () => ({
+    text: 'ok',
+  })
   let callCounter = 0
   const runs: GatewayRun[] = []
   let runTool: (call: ToolCallPart, context: ToolRunContext) => Promise<ToolResult> = async (
@@ -105,6 +111,7 @@ export const createStoreEnv = (
 
   const slice = installTestSlice({
     log,
+    autoTitle: options.autoTitle ?? false,
     onStreamTrace: (trace) => {
       traces.push(trace)
     },
@@ -114,7 +121,8 @@ export const createStoreEnv = (
       }
       const body = JSON.parse(String(init.body)) as ApiRequest
       requests.push(body)
-      return sseResponse(toEvents(respond(body), () => `call${++callCounter}`))
+      const reply = await respond(body, init.signal ?? undefined)
+      return sseResponse(toEvents(reply, () => `call${++callCounter}`))
     },
     store: memoryStore(),
     tools: {
@@ -145,7 +153,9 @@ export const createStoreEnv = (
     /** Stream traces reported through `onStreamTrace`, in order. */
     traces,
     /** Sets how the API answers each request. */
-    respondWith: (fn: (request: ApiRequest) => ApiReply) => {
+    respondWith: (
+      fn: (request: ApiRequest, signal?: AbortSignal) => ApiReply | Promise<ApiReply>
+    ) => {
       respond = fn
     },
     /** Sets how the gateway runs each call. */

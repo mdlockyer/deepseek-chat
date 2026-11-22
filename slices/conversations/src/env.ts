@@ -26,6 +26,8 @@ export type ConversationsDeps = {
    * request when it ends. Sizes and timings only, never content.
    */
   readonly onStreamTrace?: (trace: StreamTrace) => void
+  /** Whether to run the detached cache-riding turn-end title refresh hook (default true). */
+  readonly autoTitle?: boolean
   /** Ports for the chat's views. */
   readonly ui: ConversationsViewDeps
 }

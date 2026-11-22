@@ -125,6 +125,15 @@ it, and the header toggle (`visible`, `open`, `toggle`). `panels.browser`: the h
     the latest version. The timeline keeps each file step's line and errors. The cards appear once
     the reply has finished (done, stopped or failed); while it streams there are none, since the
     file panel opens by itself and follows each new version.
+18. **Living session titles (turn-end hook).** After a reply finishes normally (not stopped, failed
+    or refused), if the user has not locked the title by manually renaming the chat, a detached
+    background fork request rides the turn's exact prompt prefix (`model`, `system`, `tools`,
+    `safety_check`, and `messages` up through the finished reply) with one ephemeral final user
+    prompt asking for an updated title or `KEEP`. On turn 1 it is skipped when the inline
+    `delta.title` already named the chat. The fork is never persisted to `session.messages`, never
+    executes tools, never blocks the next turn, and never bumps `updatedAt`. Any new send, edit,
+    regenerate, branch switch, manual rename, delete or history replacement cancels an in-flight
+    title refresh. Clearing a title manually unlocks auto-titling again.
 
 ## Parameters
 
