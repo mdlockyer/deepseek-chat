@@ -25,6 +25,58 @@ const cssLoader = {
   options: { targets },
 }
 
+/** 轨迹只含大小与时间，远小于此；超过即拒绝 */
+const STREAM_TRACE_MAX_BYTES = 64 * 1024
+const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1'])
+
+/**
+ * 开发诊断端点：开发服务器监听所有网卡，只接受本机的 POST，请求体须为不超过上限的 JSON，
+ * 作为一行交给 `append`。
+ */
+export const createStreamTraceHandler =
+  (append: (line: string) => void) => (req: IncomingMessage, res: ServerResponse) => {
+    const reply = (status: number) => {
+      res.statusCode = status
+      res.end()
+    }
+    if (!LOOPBACK.has(req.socket.remoteAddress ?? '')) {
+      reply(403)
+      return
+    }
+    if (req.method !== 'POST') {
+      res.setHeader('Allow', 'POST')
+      reply(405)
+      return
+    }
+    let body = ''
+    let tooLarge = false
+    req.on('data', (chunk: Buffer) => {
+      if (tooLarge) {
+        return
+      }
+      body += chunk.toString('utf8')
+      if (body.length > STREAM_TRACE_MAX_BYTES) {
+        tooLarge = true
+        body = ''
+        reply(413)
+        req.destroy()
+      }
+    })
+    req.on('end', () => {
+      if (tooLarge) {
+        return
+      }
+      try {
+        // 重新序列化：只写入合法的 JSON，且保证一行
+        append(`${JSON.stringify(JSON.parse(body))}\n`)
+      } catch {
+        reply(400)
+        return
+      }
+      reply(204)
+    })
+  }
+
 type ConfigOptions = {
   /** 公开 API 的地址，注入为 __API_ORIGIN__ */
   apiOrigin?: string
@@ -126,15 +178,7 @@ export const createConfig = ({
       {
         name: 'stream-trace',
         path: '/__dev/stream-trace',
-        middleware: (req: IncomingMessage, res: ServerResponse) => {
-          let body = ''
-          req.on('data', (chunk: Buffer) => (body += chunk.toString('utf8')))
-          req.on('end', () => {
-            appendFileSync(STREAM_TRACE_FILE, `${body.replace(/\n/g, ' ')}\n`)
-            res.statusCode = 204
-            res.end()
-          })
-        },
+        middleware: createStreamTraceHandler((line) => appendFileSync(STREAM_TRACE_FILE, line)),
       },
       ...middlewares,
     ],
