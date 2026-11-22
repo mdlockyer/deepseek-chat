@@ -1,0 +1,17 @@
+{
+  "name": "@deepseek-chat/slice-workspace-files",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@deepseek-chat/spine": "workspace:*",
+    "clsx": "2.1.1",
+    "zustand": "4.4.7"
+  },
+  "peerDependencies": {
+    "react": "18.3.1"
+  }
+}

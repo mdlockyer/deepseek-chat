@@ -1,14 +1,20 @@
 import clsx from 'clsx'
 import { useCallback, useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { formatSize, getExtension } from '../../services/attachments.js'
+import { formatSize, getExtension } from './format.js'
 import { acquireOverlay } from '@deepseek-chat/spine/design'
-import type { FileVersionEntry } from '../../services/preview/workspace.js'
+import type { FileVersionEntry } from './workspace.js'
 import { usePresence } from '@deepseek-chat/spine/design'
 import { useAnchoredPosition, useDismiss } from '@deepseek-chat/spine/design'
 import { IconCheckedOutline14, IconChevronDownOutline14 } from '@deepseek-chat/spine/design'
-import { FileIcon } from '../files/FileIcon.js'
+import { useWorkspace } from './context.js'
 import styles from './PreviewPanel.module.css'
+
+/** 文件类型图标由应用提供 */
+const FileIcon = ({ ext }: { ext: string }) => {
+  const { FileIcon: Icon } = useWorkspace().views
+  return <Icon ext={ext} />
+}
 
 export type PreviewFileItem = {
   key: string

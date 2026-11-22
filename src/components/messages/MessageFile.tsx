@@ -4,12 +4,8 @@ import { useTranslate } from '../../i18n/index.js'
 import { useUploads } from '../../services/attachments.js'
 import { loadFile } from '../../services/chat/db.js'
 import type { FileAttachment } from '../../services/chat/types.js'
-import {
-  EMPTY_SESSION_PREVIEW_STATE,
-  openPreviewFile,
-  usePreviewStore,
-} from '../../services/preview/state.js'
-import { makeUploadPreviewKey } from '../../services/preview/workspace.js'
+import { makeUploadPreviewKey } from '@deepseek-chat/slice-workspace-files'
+import { workspaceFiles } from '../../app/workspaceFiles.js'
 import { getActiveRightPanel, useSidePanelStore } from '../../app/rightPanel/state.js'
 import { IconPhotoErrorFill20, IconRefreshOutline16 } from '@deepseek-chat/spine/design'
 import { Tooltip } from '@deepseek-chat/spine/design'
@@ -74,16 +70,12 @@ export const MessageFile = ({
   const errorText = failed ? t(upload.error.key, upload.error.params) : undefined
   const previewKey = makeUploadPreviewKey(file.id)
   const activePanel = useSidePanelStore((state) => getActiveRightPanel(sessionId, state))
-  const isPreviewOpen = usePreviewStore((state) => {
-    const sess = Object.hasOwn(state.sessions, sessionId)
-      ? state.sessions[sessionId]
-      : EMPTY_SESSION_PREVIEW_STATE
-    return activePanel === 'preview' && sess.activeKey === previewKey
-  })
+  const isPreviewOpen =
+    activePanel === 'preview' && workspaceFiles.useSession(sessionId).activeKey === previewKey
 
   const retry = retryable ? onRetry : null
   const openInPreview =
-    url && !upload ? () => openPreviewFile(sessionId, previewKey, file.id, true) : undefined
+    url && !upload ? () => workspaceFiles.openFile(sessionId, previewKey, file.id, true) : undefined
 
   if (file.isImage && url !== null) {
     const preview = url ? (

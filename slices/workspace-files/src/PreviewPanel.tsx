@@ -1,53 +1,24 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { useTranslate } from '../../i18n/index.js'
-import { stageHost } from '../../app/rightPanel/stageHost.js'
-import {
-  isDesktopApp,
-  previewOpenDevtools,
-  previewReload,
-  saveFileWithDialog,
-} from '../../platform/desktop.js'
-import { getVisibleMessages } from '../../services/chat/branches.js'
-import { loadFile } from '../../services/chat/db.js'
-import { useChatStore } from '../../services/chat/store.js'
-import {
-  classifyPreviewKind,
-  isTextPreviewKind,
-  supportsPreviewToggle,
-} from '../../services/preview/fileKinds.js'
-import {
-  EMPTY_SESSION_PREVIEW_STATE,
-  closePreviewPanel,
-  selectPreviewFile,
-  selectPreviewVersion,
-  setPreviewViewMode,
-  setPreviewViewport,
-  usePreviewStore,
-} from '../../services/preview/state.js'
-import {
-  collectUserUploadEntries,
-  collectWorkspaceArtifacts,
-  makeUploadPreviewKey,
-  type FileVersionEntry,
-} from '../../services/preview/workspace.js'
-import { useSidePanelStore } from '../../app/rightPanel/state.js'
-import { fitViewportToStage } from '@deepseek-chat/spine/design'
-import { copyText } from '../../utils/clipboard.js'
-import { IconButton } from '@deepseek-chat/spine/design'
-import { showToast } from '../base/toastState.js'
 import {
   IconBrowseOutline16,
   IconBrowserOutline14,
+  IconButton,
   IconCheckOutline16,
   IconCloseOutline16,
   IconCopyOutline16,
   IconDownloadOutline16,
   IconRefreshOutline16,
+  ViewportMenu,
+  fitViewportToStage,
+  panelStyles,
+  showToast,
 } from '@deepseek-chat/spine/design'
-import { ViewportMenu } from '@deepseek-chat/spine/design'
-import { panelStyles } from '@deepseek-chat/spine/design'
+import { useWorkspace, WorkspaceProvider, type WorkspaceEnv } from './context.js'
+import { classifyPreviewKind, isTextPreviewKind, supportsPreviewToggle } from './fileKinds.js'
 import { FileSwitcherMenu, type PreviewFileItem } from './FileSwitcherMenu.js'
+import { workspaceMessages } from './messages.js'
 import styles from './PreviewPanel.module.css'
+import { EMPTY_SESSION_PREVIEW_STATE } from './state.js'
 import { VersionMenu } from './VersionMenu.js'
 import { BinaryFallback } from './viewers/BinaryFallback.js'
 import { CodePreview } from './viewers/CodePreview.js'
@@ -57,6 +28,13 @@ import { MarkdownPreview } from './viewers/MarkdownPreview.js'
 import { MermaidPreview } from './viewers/MermaidPreview.js'
 import { PdfPreview } from './viewers/PdfPreview.js'
 import { TablePreview } from './viewers/TablePreview.js'
+import {
+  collectUserUploadEntries,
+  collectWorkspaceArtifacts,
+  makeUploadPreviewKey,
+  type FileRecord,
+  type FileVersionEntry,
+} from './workspace.js'
 
 type LoadedFilePayload = {
   fileId: string
@@ -67,35 +45,44 @@ type LoadedFilePayload = {
   missing: boolean
 }
 
-const triggerBrowserDownload = (name: string, blob: Blob) => {
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = name
-  document.body.append(link)
-  link.click()
-  link.remove()
-  setTimeout(() => URL.revokeObjectURL(url), 60_000)
-}
-
-const saveBlob = async (name: string, blob: Blob) => {
-  if (isDesktopApp) {
-    await saveFileWithDialog(name, blob)
-    return
-  }
-  triggerBrowserDownload(name, blob)
+/** 右侧文件预览面板：提供本 slice 的依赖给各预览视图 */
+export const createPreviewPanel = (env: WorkspaceEnv) => {
+  const PreviewPanel = ({
+    records,
+    topActions,
+  }: {
+    /** Files of the active chat's visible branch, in conversation order. */
+    records: readonly FileRecord[]
+    topActions?: ReactNode
+  }) => (
+    <WorkspaceProvider value={env}>
+      <PreviewPanelContent records={records} topActions={topActions} />
+    </WorkspaceProvider>
+  )
+  return PreviewPanel
 }
 
 /** 右侧文件预览面板内容（托管在共享 SidePanel 壳层内，单行 52px 顶栏） */
-export const PreviewPanel = ({ topActions }: { topActions?: ReactNode } = {}) => {
-  const t = useTranslate()
-  const activeSessionId = useSidePanelStore((state) => state.activeSessionId)
-  const stageSize = useSidePanelStore((state) => state.stageSize)
-  const session = useChatStore((state) =>
-    activeSessionId && Object.hasOwn(state.sessionCache, activeSessionId)
-      ? state.sessionCache[activeSessionId]
-      : undefined
-  )
+const PreviewPanelContent = ({
+  records,
+  topActions,
+}: {
+  records: readonly FileRecord[]
+  topActions?: ReactNode
+}) => {
+  const t = workspaceMessages.useTranslate()
+  const env = useWorkspace()
+  const isDesktopApp = env.host !== null
+  const {
+    closePreviewPanel,
+    selectPreviewFile,
+    selectPreviewVersion,
+    setPreviewViewMode,
+    setPreviewViewport,
+    usePreviewStore,
+  } = env.state
+  const activeSessionId = env.panel.useLayout((layout) => layout.activeSessionId)
+  const stageSize = env.panel.useStageSize()
   const sessionPreview = usePreviewStore((state) =>
     activeSessionId && Object.hasOwn(state.sessions, activeSessionId)
       ? state.sessions[activeSessionId]
@@ -107,9 +94,8 @@ export const PreviewPanel = ({ topActions }: { topActions?: ReactNode } = {}) =>
   const [reloadKey, setReloadKey] = useState(0)
   const [loaded, setLoaded] = useState<LoadedFilePayload | null>(null)
 
-  const visibleMessages = useMemo(() => (session ? getVisibleMessages(session) : []), [session])
-  const artifacts = useMemo(() => collectWorkspaceArtifacts(visibleMessages), [visibleMessages])
-  const uploads = useMemo(() => collectUserUploadEntries(visibleMessages), [visibleMessages])
+  const artifacts = useMemo(() => collectWorkspaceArtifacts(records), [records])
+  const uploads = useMemo(() => collectUserUploadEntries(records), [records])
 
   // 收集当前分支内可用于预览的文件条目（产物 + 已打开过的上传附件）
   const items = useMemo(() => {
@@ -205,7 +191,7 @@ export const PreviewPanel = ({ topActions }: { topActions?: ReactNode } = {}) =>
     setCopied(false)
 
     void (async () => {
-      const blob = await loadFile(fileId)
+      const blob = await env.loadFile(fileId)
       if (cancelled) {
         return
       }
@@ -261,7 +247,7 @@ export const PreviewPanel = ({ topActions }: { topActions?: ReactNode } = {}) =>
         URL.revokeObjectURL(objectUrl)
       }
     }
-  }, [activeEntry?.fileId, activeEntry?.name, activeEntry?.mimeType])
+  }, [activeEntry?.fileId, activeEntry?.name, activeEntry?.mimeType, env, isDesktopApp])
 
   const activeLoaded = loaded && activeEntry && loaded.fileId === activeEntry.fileId ? loaded : null
 
@@ -349,7 +335,7 @@ export const PreviewPanel = ({ topActions }: { topActions?: ReactNode } = {}) =>
             reloadKey={reloadKey}
             onSave={() => {
               if (activeLoaded.blob) {
-                void saveBlob(activeEntry.name, activeLoaded.blob)
+                void env.saveFile(activeEntry.name, activeLoaded.blob)
               }
             }}
           />
@@ -363,7 +349,7 @@ export const PreviewPanel = ({ topActions }: { topActions?: ReactNode } = {}) =>
             mimeType={activeEntry.mimeType}
             onSave={() => {
               if (activeLoaded.blob) {
-                void saveBlob(activeEntry.name, activeLoaded.blob)
+                void env.saveFile(activeEntry.name, activeLoaded.blob)
               }
             }}
           />
@@ -426,7 +412,7 @@ export const PreviewPanel = ({ topActions }: { topActions?: ReactNode } = {}) =>
           {activeItem && activeKind === 'html' && effectiveMode === 'preview' ? (
             <>
               <ViewportMenu
-                host={stageHost}
+                host={env.panel}
                 viewport={activeViewport}
                 zoom={viewportZoom}
                 onSelect={(next) =>
@@ -440,7 +426,7 @@ export const PreviewPanel = ({ topActions }: { topActions?: ReactNode } = {}) =>
                 tooltipPlacement="bottom"
                 onClick={() => {
                   if (isDesktopApp) {
-                    void previewReload()
+                    void env.host?.reload()
                   } else {
                     setReloadKey((n) => n + 1)
                   }
@@ -452,7 +438,7 @@ export const PreviewPanel = ({ topActions }: { topActions?: ReactNode } = {}) =>
                   icon={<IconBrowserOutline14 />}
                   tooltip={t('previewOpenDevtools')}
                   tooltipPlacement="bottom"
-                  onClick={() => void previewOpenDevtools()}
+                  onClick={() => void env.host?.openDevtools()}
                 />
               ) : null}
             </>
@@ -466,9 +452,9 @@ export const PreviewPanel = ({ topActions }: { topActions?: ReactNode } = {}) =>
               tooltipPlacement="bottom"
               onClick={() => {
                 const content = activeLoaded.text ?? ''
-                void copyText(content).then((ok) => {
+                void env.copyText(content).then((ok) => {
                   if (!ok) {
-                    showToast({ key: 'copyFailed' })
+                    showToast({ text: () => workspaceMessages.translate('copyFailed') })
                     return
                   }
                   setCopied(true)
@@ -486,7 +472,7 @@ export const PreviewPanel = ({ topActions }: { topActions?: ReactNode } = {}) =>
               tooltipPlacement="bottom"
               onClick={() => {
                 if (activeLoaded.blob) {
-                  void saveBlob(activeEntry.name, activeLoaded.blob)
+                  void env.saveFile(activeEntry.name, activeLoaded.blob)
                 }
               }}
             />

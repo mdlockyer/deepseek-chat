@@ -1,5 +1,5 @@
-import { useTranslate } from '../../../i18n/index.js'
-import { isDesktopApp } from '../../../platform/desktop.js'
+import { workspaceMessages } from '../messages.js'
+import { useWorkspace } from '../context.js'
 import styles from '../PreviewPanel.module.css'
 import { NativePreviewSurface } from './NativePreviewSurface.js'
 
@@ -17,7 +17,8 @@ export const PdfPreview = ({
   reloadKey: number
   onSave: () => void
 }) => {
-  const t = useTranslate()
+  const t = workspaceMessages.useTranslate()
+  const isDesktopApp = useWorkspace().host !== null
 
   if (isDesktopApp) {
     return (

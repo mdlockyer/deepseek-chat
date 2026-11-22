@@ -3,18 +3,9 @@ import { create } from 'zustand'
 import { isDesktopApp } from '../../platform/desktop.js'
 import { createId } from '../../utils/id.js'
 import { ApiError, streamMessage, uploadFile } from '../api/client.js'
-import {
-  clearAllSessionPreviews,
-  disposeSessionPreview,
-  revealPresentedFile,
-} from '../preview/state.js'
-import {
-  PREVIEW_TOOLS,
-  PREVIEW_TOOL_INSTRUCTIONS,
-  PREVIEW_TOOL_NAMES,
-  runPreviewTool,
-} from '../preview/tools.js'
-import { makeArtifactKey, normalizeWorkspacePath } from '../preview/workspace.js'
+import { makeArtifactKey, normalizeWorkspacePath } from '@deepseek-chat/slice-workspace-files'
+import { workspaceFiles } from '../../app/workspaceFiles.js'
+import { toFileRecords } from './fileRecords.js'
 import type { PythonRunResult } from '@deepseek-chat/slice-python'
 import type { SessionDeleted, SessionHistoryReplaced } from '@deepseek-chat/spine/facts/session'
 import {
@@ -87,7 +78,7 @@ const declaredTools = (
   browser: boolean,
   questionText: string
 ): CreateMessageRequest['tools'] => {
-  const tools: CreateMessageRequest['tools'] = [...PREVIEW_TOOLS]
+  const tools: CreateMessageRequest['tools'] = [...workspaceFiles.declareTools()]
   tools.push(...webResearch.declareTools({ searchEnabled: search, questionText }))
   if (python) {
     tools.push(pythonSlice.tool)
@@ -474,7 +465,6 @@ export const replaceHistory = async (write: () => Promise<void>): Promise<number
     initTask = undefined
     sessionLoads.clear()
     await waitForIdle()
-    clearAllSessionPreviews()
     await db.clearStaging()
     let summaries: SessionSummary[]
     try {
@@ -576,7 +566,6 @@ const removeSessionData = async (id: string): Promise<boolean> => {
     }
     await db.deleteSession(id)
     spine.publish<SessionDeleted>({ type: 'SessionDeleted', sessionId: id })
-    disposeSessionPreview(id)
     if (epoch !== historyEpoch) {
       return true
     }
@@ -1190,21 +1179,20 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
         continue
       }
 
-      if (PREVIEW_TOOL_NAMES.has(call.name)) {
+      if (workspaceFiles.handles(call.name)) {
         const currentSession = getSession(sessionId)
         const visibleMessages = currentSession
           ? getVisibleMessages(currentSession).map((msg) => (msg.id === reply.id ? reply : msg))
           : [...request.history, request.question, reply]
-        const outcome = await runPreviewTool(call.name, call.input, {
-          messages: visibleMessages,
-          loadFile: db.loadFile,
+        const outcome = await workspaceFiles.run(call.name, call.input, {
+          records: toFileRecords(visibleMessages),
         })
         let presented: PresentedFileRef[] = []
         if (outcome.file) {
           try {
             await db.saveFiles([{ id: outcome.file.ref.id, blob: outcome.file.blob }])
             presented = [outcome.file.ref]
-            revealPresentedFile(sessionId, outcome.file.artifactKey, {
+            workspaceFiles.reveal(sessionId, outcome.file.artifactKey, {
               openPanel: get().activeId === sessionId,
             })
           } catch {
@@ -1319,7 +1307,7 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
           }))
           const lastFile = presented.at(-1)
           if (lastFile) {
-            revealPresentedFile(sessionId, makeArtifactKey(lastFile.path ?? lastFile.name), {
+            workspaceFiles.reveal(sessionId, makeArtifactKey(lastFile.path ?? lastFile.name), {
               openPanel: get().activeId === sessionId,
             })
           }
@@ -1404,10 +1392,10 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
         )
         const hasWebTool = [...declaredClientNames].some(webResearch.handles)
         const hasBrowserTool = [...declaredClientNames].some(browserSlice.handles)
-        const hasPreviewTool = PREVIEW_TOOLS.some((tool) => declaredClientNames.has(tool.name))
+        const hasPreviewTool = [...declaredClientNames].some(workspaceFiles.handles)
         const systemParts = [SYSTEM_PROMPT]
         if (hasPreviewTool) {
-          systemParts.push(PREVIEW_TOOL_INSTRUCTIONS)
+          systemParts.push(workspaceFiles.instructions)
         }
         if (hasWebTool) {
           systemParts.push(webResearch.instructions)

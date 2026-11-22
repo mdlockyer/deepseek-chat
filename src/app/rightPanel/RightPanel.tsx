@@ -2,10 +2,10 @@ import { useCallback, useRef } from 'react'
 import { useTranslate } from '../../i18n/index.js'
 import { isDesktopApp } from '../../platform/desktop.js'
 import { browser } from '../composition.js'
-import { triggerNativePreviewSnapshot } from '../../services/preview/state.js'
+import { useSessionFileRecords } from '../../services/chat/useSessionFileRecords.js'
+import { workspaceFiles } from '../workspaceFiles.js'
 import { getActiveRightPanel, useSidePanelStore, type RightPanelKind } from './state.js'
 import { IconSearchOutline16 } from '@deepseek-chat/spine/design'
-import { PreviewPanel } from '../../components/preview/PreviewPanel.js'
 import { SearchPanel } from '../../components/search/SearchPanel.js'
 import { restoreLastSearchPanel, useSearchPanel } from '../../components/search/searchPanelState.js'
 import { SidePanel } from './SidePanel.js'
@@ -18,6 +18,8 @@ export const RightPanel = () => {
   const activePanels = useSidePanelStore((state) => state.activePanels)
   const activeKind = getActiveRightPanel(activeSessionId, { activePanels })
   const effectiveKind = activeKind === 'browser' && !isDesktopApp ? null : activeKind
+
+  const fileRecords = useSessionFileRecords(activeSessionId)
 
   const hasLastSearch = useSearchPanel(
     (state) => state.lastEntry !== null && state.lastSources.length > 0
@@ -40,7 +42,7 @@ export const RightPanel = () => {
       void browser.refreshSnapshot()
     } else if (effectiveKind === 'preview' && isDesktopApp) {
       lastHoverSnapshotAtRef.current = now
-      triggerNativePreviewSnapshot()
+      workspaceFiles.refreshSnapshot()
     }
   }, [effectiveKind])
 
@@ -64,7 +66,7 @@ export const RightPanel = () => {
       {shownKind === 'browser' ? (
         <browser.BrowserPanel topActions={searchAction} />
       ) : shownKind === 'preview' ? (
-        <PreviewPanel topActions={searchAction} />
+        <workspaceFiles.PreviewPanel records={fileRecords} topActions={searchAction} />
       ) : shownKind === 'search' ? (
         <SearchPanel />
       ) : null}

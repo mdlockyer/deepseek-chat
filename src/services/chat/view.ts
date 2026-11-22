@@ -1,7 +1,11 @@
 import { translate } from '../../i18n/index.js'
 import { WEB_SCRAPE_TOOL_NAME, WEB_SEARCH_TOOL_NAME } from '@deepseek-chat/slice-web-research'
 import { BROWSER_TOOL_NAMES } from '@deepseek-chat/slice-browser'
-import { EDIT_FILE_TOOL_NAME, PREVIEW_TOOL_NAMES, READ_FILE_TOOL_NAME } from '../preview/tools.js'
+import {
+  EDIT_FILE_TOOL_NAME,
+  FILE_TOOL_NAMES,
+  READ_FILE_TOOL_NAME,
+} from '@deepseek-chat/slice-workspace-files'
 import type {
   ServerToolKind,
   TextCitation,
@@ -480,7 +484,7 @@ export const buildReplyView = (reply: AssistantMessage, streaming: boolean): Rep
         }
         return
       }
-      if (PREVIEW_TOOL_NAMES.has(block.name)) {
+      if (FILE_TOOL_NAMES.has(block.name)) {
         const status = getClientToolStatus(toolResult, streaming)
         const meta = toolResult?.fileAction
         const toolKind =

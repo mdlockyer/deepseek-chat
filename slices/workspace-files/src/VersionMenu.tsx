@@ -1,10 +1,10 @@
 import clsx from 'clsx'
 import { useCallback, useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { useTranslate } from '../../i18n/index.js'
-import { formatSize } from '../../services/attachments.js'
+import { workspaceMessages } from './messages.js'
+import { formatSize } from './format.js'
 import { acquireOverlay } from '@deepseek-chat/spine/design'
-import type { FileVersionEntry } from '../../services/preview/workspace.js'
+import type { FileVersionEntry } from './workspace.js'
 import { usePresence } from '@deepseek-chat/spine/design'
 import { useAnchoredPosition, useDismiss } from '@deepseek-chat/spine/design'
 import { IconCheckedOutline14, IconChevronDownOutline14 } from '@deepseek-chat/spine/design'
@@ -20,7 +20,7 @@ export const VersionMenu = ({
   selectedFileId: string
   onSelect: (fileId: string | null) => void
 }) => {
-  const t = useTranslate()
+  const t = workspaceMessages.useTranslate()
   const [open, setOpen] = useState(false)
   const { mounted, exiting } = usePresence(open, 140)
   const latest = versions.at(-1)

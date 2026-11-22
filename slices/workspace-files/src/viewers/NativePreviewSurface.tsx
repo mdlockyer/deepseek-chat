@@ -1,17 +1,6 @@
 import clsx from 'clsx'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { stageHost } from '../../../app/rightPanel/stageHost.js'
-import {
-  previewSetBounds,
-  previewSetContent,
-  previewSetVisible,
-  previewTakeSnapshot,
-} from '../../../platform/desktop.js'
-import {
-  registerNativePreviewSnapshotTrigger,
-  triggerNativePreviewSnapshot,
-} from '../../../services/preview/state.js'
-import { registerOverlayLockListener, useSidePanelStore } from '../../../app/rightPanel/state.js'
+import { useWorkspace } from '../context.js'
 import type { BrowserStageFit, BrowserViewportSpec } from '@deepseek-chat/spine/design'
 import { StageFrame } from '@deepseek-chat/spine/design'
 import { panelStyles } from '@deepseek-chat/spine/design'
@@ -33,11 +22,12 @@ export const NativePreviewSurface = ({
   onViewportCommit?: (next: BrowserViewportSpec) => void
   banner?: React.ReactNode
 }) => {
+  const { host, panel, state: previewState } = useWorkspace()
   const viewportRef = useRef<HTMLDivElement>(null)
-  const panelAnimating = useSidePanelStore((state) => state.panelAnimating)
-  const panelResizing = useSidePanelStore((state) => state.panelResizing)
-  const overlayLocks = useSidePanelStore((state) => state.overlayLocks)
-  const storedWidth = useSidePanelStore((state) => state.width)
+  const panelAnimating = panel.useLayout((layout) => layout.animating)
+  const panelResizing = panel.useLayout((layout) => layout.resizing)
+  const overlayLocked = panel.useLayout((layout) => layout.overlayLocked)
+  const storedWidth = panel.useLayout((layout) => layout.width)
   const [stageFit, setStageFit] = useState<BrowserStageFit | null>(null)
   const [snapshot, setSnapshot] = useState<{
     dataUrl: string
@@ -46,14 +36,14 @@ export const NativePreviewSurface = ({
   } | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const occluded = panelAnimating || panelResizing || overlayLocks > 0
+  const occluded = panelAnimating || panelResizing || overlayLocked
 
   // 推送文件内容到 Rust ds-preview 协议，并在首次挂载/内容变更时显示
   useEffect(() => {
     let cancelled = false
     setError(null)
     setSnapshot(null)
-    void previewSetContent(bytes, mimeType).catch((err: unknown) => {
+    void host?.setContent(bytes, mimeType).catch((err: unknown) => {
       if (!cancelled) {
         setError(err instanceof Error ? err.message : String(err))
       }
@@ -61,55 +51,61 @@ export const NativePreviewSurface = ({
     return () => {
       cancelled = true
     }
-  }, [bytes, mimeType, reloadKey])
+  }, [host, bytes, mimeType, reloadKey])
 
   // 订阅弹窗/菜单覆盖锁与拖拽悬停：隐藏前抓取快照，防止原生 Webview 遮挡浮层或留白
   useEffect(() => {
     const captureSnapshot = () => {
-      const state = useSidePanelStore.getState()
-      if (state.panelAnimating || state.panelResizing) {
+      const layout = panel.getLayout()
+      if (layout.animating || layout.resizing) {
         return
       }
-      void previewTakeSnapshot(1280)
+      void host
+        ?.takeSnapshot(1280)
         .then((snap) => {
           setSnapshot(snap)
         })
         .catch(() => {})
     }
-    const unsubHover = registerNativePreviewSnapshotTrigger(captureSnapshot)
-    const unsubLock = registerOverlayLockListener((locked) => {
-      if (!locked) {
+    const unsubHover = previewState.registerNativePreviewSnapshotTrigger(captureSnapshot)
+    // 覆盖层出现（未锁定 → 锁定）时先抓快照再隐藏原生视图
+    let wasLocked = panel.getLayout().overlayLocked
+    const unsubLock = panel.subscribe(() => {
+      const layout = panel.getLayout()
+      const locked = layout.overlayLocked
+      if (locked === wasLocked) {
         return
       }
-      const state = useSidePanelStore.getState()
-      if (state.panelAnimating || state.panelResizing) {
+      wasLocked = locked
+      if (!locked || layout.animating || layout.resizing) {
         return
       }
-      void previewTakeSnapshot(1280)
+      void host
+        ?.takeSnapshot(1280)
         .then((snap) => {
           setSnapshot(snap)
         })
         .catch(() => {})
         .finally(() => {
-          void previewSetVisible(false).catch(() => {})
+          void host.setVisible(false).catch(() => {})
         })
     })
     return () => {
       unsubHover()
       unsubLock()
     }
-  }, [])
+  }, [host, panel, previewState])
 
   // 控制原生子 Webview 显示/隐藏与卸载隐藏
   useEffect(() => {
-    void previewSetVisible(!occluded).catch(() => {})
-  }, [occluded])
+    void host?.setVisible(!occluded).catch(() => {})
+  }, [host, occluded])
 
   useEffect(() => {
     return () => {
-      void previewSetVisible(false).catch(() => {})
+      void host?.setVisible(false).catch(() => {})
     }
-  }, [])
+  }, [host])
 
   // 同步舞台区域逻辑坐标与缩放比例到原生 Webview
   useLayoutEffect(() => {
@@ -121,17 +117,20 @@ export const NativePreviewSurface = ({
     if (rect.width > 1 && rect.height > 1) {
       const left = Math.ceil(rect.left)
       const top = Math.ceil(rect.top)
-      void previewSetBounds(
-        {
-          x: left,
-          y: top,
-          width: Math.max(1, Math.floor(rect.right) - left),
-          height: Math.max(1, Math.floor(rect.bottom) - top),
-        },
-        stageFit?.zoom ?? 1
-      ).catch(() => {})
+      void host
+        ?.setBounds(
+          {
+            x: left,
+            y: top,
+            width: Math.max(1, Math.floor(rect.right) - left),
+            height: Math.max(1, Math.floor(rect.bottom) - top),
+          },
+          stageFit?.zoom ?? 1
+        )
+        .catch(() => {})
     }
   }, [
+    host,
     storedWidth,
     panelResizing,
     occluded,
@@ -145,10 +144,10 @@ export const NativePreviewSurface = ({
 
   return (
     <StageFrame
-      host={stageHost}
+      host={panel}
       viewport={viewport}
       onFitChange={setStageFit}
-      onViewportResizeHoverStart={triggerNativePreviewSnapshot}
+      onViewportResizeHoverStart={previewState.triggerNativePreviewSnapshot}
       onViewportCommit={onViewportCommit}
       banner={error ? <div className={panelStyles.errorBanner}>{error}</div> : banner}
     >

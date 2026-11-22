@@ -360,3 +360,13 @@ export const desktopBrowserHost = {
   onNavigationBlocked: onBrowserNavigationBlocked,
   onDownloadBlocked: onBrowserDownloadBlocked,
 }
+
+/** 桌面端文件预览子 Webview 的宿主接口（workspace-files slice 的 PreviewHost） */
+export const desktopPreviewHost = {
+  setContent: previewSetContent,
+  setBounds: previewSetBounds,
+  setVisible: previewSetVisible,
+  reload: previewReload,
+  takeSnapshot: previewTakeSnapshot,
+  openDevtools: previewOpenDevtools,
+}

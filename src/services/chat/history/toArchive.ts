@@ -1,13 +1,13 @@
 import { WEB_SCRAPE_TOOL_NAME, WEB_SEARCH_TOOL_NAME } from '@deepseek-chat/slice-web-research'
 import type { ServerToolUseBlock } from '../../api/types.js'
 import { BROWSER_TOOL_NAMES } from '@deepseek-chat/slice-browser'
-import { getCodeLanguage } from '../../preview/fileKinds.js'
 import {
   EDIT_FILE_TOOL_NAME,
+  FILE_TOOL_NAMES,
+  getCodeLanguage,
   PRESENT_FILE_TOOL_NAME,
-  PREVIEW_TOOL_NAMES,
   READ_FILE_TOOL_NAME,
-} from '../../preview/tools.js'
+} from '@deepseek-chat/slice-workspace-files'
 import { getVisibleMessages, normalizeSession } from '../branches.js'
 import { describeReply } from '../describe.js'
 import type {
@@ -220,7 +220,7 @@ const assistantFragments = (message: AssistantMessage): Fragment[] => {
       webToolIds.add(block.id)
     } else if (block.type === 'tool_use' && BROWSER_TOOL_NAMES.has(block.name)) {
       browserToolIds.add(block.id)
-    } else if (block.type === 'tool_use' && PREVIEW_TOOL_NAMES.has(block.name)) {
+    } else if (block.type === 'tool_use' && FILE_TOOL_NAMES.has(block.name)) {
       previewToolIds.add(block.id)
     }
   }
@@ -287,7 +287,7 @@ const assistantFragments = (message: AssistantMessage): Fragment[] => {
         }
         continue
       }
-      if (PREVIEW_TOOL_NAMES.has(block.name)) {
+      if (FILE_TOOL_NAMES.has(block.name)) {
         const toolResult = clientResults.get(block.id)
         const input =
           block.input && typeof block.input === 'object'

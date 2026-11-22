@@ -337,7 +337,8 @@ export const parseDelimitedText = (
       cell = ''
       if (row.length > 1 || row[0] !== '') {
         allRows.push(row)
-        if (allRows.length > maxRows) {
+        // 表头不计入行数上限
+        if (allRows.length > maxRows + 1) {
           truncated = true
           break
         }

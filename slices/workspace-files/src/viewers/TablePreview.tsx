@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
-import { useTranslate } from '../../../i18n/index.js'
-import { getTableDelimiter, parseDelimitedText } from '../../../services/preview/fileKinds.js'
+import { workspaceMessages } from '../messages.js'
+import { getTableDelimiter, parseDelimitedText } from '../fileKinds.js'
 import styles from '../PreviewPanel.module.css'
 
 const MAX_TABLE_ROWS = 2_000
@@ -15,7 +15,7 @@ export const TablePreview = ({
   name: string
   mimeType: string
 }) => {
-  const t = useTranslate()
+  const t = workspaceMessages.useTranslate()
   const [filter, setFilter] = useState('')
   const delimiter = getTableDelimiter(name, mimeType)
 

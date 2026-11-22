@@ -26,6 +26,9 @@ importers:
       '@deepseek-chat/slice-web-research':
         specifier: workspace:*
         version: link:slices/web-research
+      '@deepseek-chat/slice-workspace-files':
+        specifier: workspace:*
+        version: link:slices/workspace-files
       '@deepseek-chat/spine':
         specifier: workspace:*
         version: link:spine
@@ -198,6 +201,21 @@ importers:
       '@deepseek-chat/spine':
         specifier: workspace:*
         version: link:../../spine
+
+  slices/workspace-files:
+    dependencies:
+      '@deepseek-chat/spine':
+        specifier: workspace:*
+        version: link:../../spine
+      clsx:
+        specifier: 2.1.1
+        version: 2.1.1
+      react:
+        specifier: 18.3.1
+        version: 18.3.1
+      zustand:
+        specifier: 4.4.7
+        version: 4.4.7(@types/react@18.3.31)(react@18.3.1)
 
   spine:
     dependencies:

@@ -23,15 +23,12 @@ import { loadFile } from '../../services/chat/db.js'
 import { useChatStore } from '../../services/chat/store.js'
 import type { AssistantMessage, PresentedFileRef } from '../../services/chat/types.js'
 import {
-  EMPTY_SESSION_PREVIEW_STATE,
-  openPreviewFile,
-  usePreviewStore,
-} from '../../services/preview/state.js'
-import {
   collectWorkspaceArtifacts,
   makeArtifactKey,
   normalizeWorkspacePath,
-} from '../../services/preview/workspace.js'
+} from '@deepseek-chat/slice-workspace-files'
+import { workspaceFiles } from '../../app/workspaceFiles.js'
+import { toFileRecords } from '../../services/chat/fileRecords.js'
 import { getActiveRightPanel, useSidePanelStore } from '../../app/rightPanel/state.js'
 import {
   getAreaTitle,
@@ -748,11 +745,7 @@ const PresentedFileCard = ({ sessionId, file }: { sessionId: string; file: Prese
   const t = useTranslate()
   const [missing, setMissing] = useState(false)
   const activePanel = useSidePanelStore((state) => getActiveRightPanel(sessionId, state))
-  const sessionPreview = usePreviewStore((state) =>
-    Object.hasOwn(state.sessions, sessionId)
-      ? state.sessions[sessionId]
-      : EMPTY_SESSION_PREVIEW_STATE
-  )
+  const sessionPreview = workspaceFiles.useSession(sessionId)
   const session = useChatStore((state) =>
     Object.hasOwn(state.sessionCache, sessionId) ? state.sessionCache[sessionId] : undefined
   )
@@ -763,7 +756,7 @@ const PresentedFileCard = ({ sessionId, file }: { sessionId: string; file: Prese
     if (!session) {
       return file.id
     }
-    const artifact = collectWorkspaceArtifacts(getVisibleMessages(session)).find(
+    const artifact = collectWorkspaceArtifacts(toFileRecords(getVisibleMessages(session))).find(
       (item) => item.key === key
     )
     return artifact?.latest.fileId ?? file.id
@@ -788,7 +781,7 @@ const PresentedFileCard = ({ sessionId, file }: { sessionId: string; file: Prese
       status={missing ? 'error' : 'done'}
       error={missing ? t('pythonFileMissing') : undefined}
       active={isOpen}
-      onOpen={() => openPreviewFile(sessionId, key, file.id, isLatest)}
+      onOpen={() => workspaceFiles.openFile(sessionId, key, file.id, isLatest)}
       onDownload={() => {
         void downloadStoredFile(file).then(
           (ok) => setMissing(!ok),

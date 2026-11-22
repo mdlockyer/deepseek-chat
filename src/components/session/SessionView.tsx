@@ -7,12 +7,9 @@ import { isDesktopApp } from '../../platform/desktop.js'
 import { browser } from '../../app/composition.js'
 import { getVisibleMessages } from '../../services/chat/branches.js'
 import type { Session } from '../../services/chat/types.js'
-import {
-  EMPTY_SESSION_PREVIEW_STATE,
-  togglePreviewPanel,
-  usePreviewStore,
-} from '../../services/preview/state.js'
-import { collectWorkspaceArtifacts } from '../../services/preview/workspace.js'
+import { collectWorkspaceArtifacts } from '@deepseek-chat/slice-workspace-files'
+import { workspaceFiles } from '../../app/workspaceFiles.js'
+import { toFileRecords } from '../../services/chat/fileRecords.js'
 import { getActiveRightPanel, useSidePanelStore } from '../../app/rightPanel/state.js'
 import { sessionTitle } from '../../utils/format.js'
 import { IconButton } from '@deepseek-chat/spine/design'
@@ -38,15 +35,9 @@ export const SessionView = ({
   const activePanel = useSidePanelStore((state) => getActiveRightPanel(session.id, state))
   const browserOpen = activePanel === 'browser'
   const previewOpen = activePanel === 'preview'
-  const hasOpenPreview = usePreviewStore(
-    (state) =>
-      (Object.hasOwn(state.sessions, session.id)
-        ? state.sessions[session.id]
-        : EMPTY_SESSION_PREVIEW_STATE
-      ).activeKey !== null
-  )
+  const hasOpenPreview = workspaceFiles.useSession(session.id).activeKey !== null
   const artifactKeys = useMemo(
-    () => collectWorkspaceArtifacts(getVisibleMessages(session)).map((a) => a.key),
+    () => collectWorkspaceArtifacts(toFileRecords(getVisibleMessages(session))).map((a) => a.key),
     [session]
   )
   const showPreviewToggle = previewOpen || artifactKeys.length > 0 || hasOpenPreview
@@ -74,7 +65,7 @@ export const SessionView = ({
                   tooltip={t(previewOpen ? 'previewClosePanel' : 'previewOpenPanel')}
                   tooltipPlacement="bottom"
                   aria-pressed={previewOpen}
-                  onClick={() => togglePreviewPanel(session.id, artifactKeys)}
+                  onClick={() => workspaceFiles.togglePanel(session.id, artifactKeys)}
                 />
               ) : null}
               {isDesktopApp ? (

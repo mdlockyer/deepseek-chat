@@ -1,7 +1,4 @@
-import { formatSize } from '../attachments.js'
-import type { ClientTool } from '../api/types.js'
-import type { Message, PresentedFileRef } from '../chat/types.js'
-import { createId } from '../../utils/id.js'
+import { formatSize } from './format.js'
 import { classifyPreviewKind, inferMimeType, isTextPreviewKind } from './fileKinds.js'
 import {
   collectWorkspaceArtifacts,
@@ -9,7 +6,16 @@ import {
   getBasename,
   makeArtifactKey,
   normalizeWorkspacePath,
+  type FileRecord,
+  type PresentedFile,
 } from './workspace.js'
+
+/** Model-visible client tool definition (client tools carry no `type` field). */
+export type FileToolDefinition = {
+  readonly name: string
+  readonly description: string
+  readonly input_schema: Record<string, unknown>
+}
 
 export const PRESENT_FILE_TOOL_NAME = 'present_file'
 export const EDIT_FILE_TOOL_NAME = 'edit_file'
@@ -23,7 +29,7 @@ export type FileTextEdit = {
   new_text: string
 }
 
-export const PREVIEW_TOOLS: ClientTool[] = [
+export const PREVIEW_TOOLS: FileToolDefinition[] = [
   {
     name: PRESENT_FILE_TOOL_NAME,
     description:
@@ -167,7 +173,7 @@ export type PreviewToolRunResult = {
   status: 'ok' | 'error'
   text: string
   file?: {
-    ref: PresentedFileRef
+    ref: PresentedFile
     blob: Blob
     artifactKey: string
   }
@@ -184,8 +190,9 @@ export const runPreviewTool = async (
   toolName: string,
   rawInput: unknown,
   context: {
-    messages: Message[]
+    records: readonly FileRecord[]
     loadFile: (id: string) => Promise<Blob | undefined>
+    newId: () => string
   }
 ): Promise<PreviewToolRunResult> => {
   const startedAt = Date.now()
@@ -222,15 +229,15 @@ export const runPreviewTool = async (
           `File "${cleanPath}" (${formatSize(blob.size)}) exceeds the ${formatSize(MAX_TEXT_FILE_BYTES)} text preview limit.`
         )
       }
-      const existing = collectWorkspaceArtifacts(context.messages).find(
+      const existing = collectWorkspaceArtifacts(context.records).find(
         (item) => item.path === cleanPath
       )
       const version = existing ? existing.latest.version + 1 : 1
       const title =
         typeof input.title === 'string' && input.title.trim() ? input.title.trim() : undefined
       const name = getBasename(cleanPath)
-      const ref: PresentedFileRef = {
-        id: createId(),
+      const ref: PresentedFile = {
+        id: context.newId(),
         name,
         path: cleanPath,
         ...(title ? { title } : {}),
@@ -273,7 +280,7 @@ export const runPreviewTool = async (
         return { old_text: rec.old_text, new_text: rec.new_text }
       })
 
-      const target = findWorkspaceFile(context.messages, cleanPath, { includeUploads: false })
+      const target = findWorkspaceFile(context.records, cleanPath, { includeUploads: false })
       if (!target) {
         throw new Error(
           `Presented file "${cleanPath}" was not found in this branch. Call present_file first.`
@@ -300,8 +307,8 @@ export const runPreviewTool = async (
         typeof input.title === 'string' && input.title.trim()
           ? input.title.trim()
           : (target.title ?? undefined)
-      const ref: PresentedFileRef = {
-        id: createId(),
+      const ref: PresentedFile = {
+        id: context.newId(),
         name: target.name,
         path: target.path,
         ...(title ? { title } : {}),
@@ -329,7 +336,7 @@ export const runPreviewTool = async (
     }
 
     if (toolName === READ_FILE_TOOL_NAME) {
-      const target = findWorkspaceFile(context.messages, cleanPath, { includeUploads: true })
+      const target = findWorkspaceFile(context.records, cleanPath, { includeUploads: true })
       if (!target) {
         throw new Error(`File "${cleanPath}" was not found in this conversation.`)
       }

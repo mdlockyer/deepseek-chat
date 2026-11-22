@@ -1,6 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
-import { isDesktopApp } from '../../../platform/desktop.js'
-import { stageHost } from '../../../app/rightPanel/stageHost.js'
+import { useWorkspace } from '../context.js'
 import type { BrowserViewportSpec } from '@deepseek-chat/spine/design'
 import { StageFrame } from '@deepseek-chat/spine/design'
 import { panelStyles } from '@deepseek-chat/spine/design'
@@ -39,13 +38,15 @@ export const HtmlPreview = ({
   reloadKey: number
   onViewportCommit?: (next: BrowserViewportSpec) => void
 }) => {
+  const { host, panel } = useWorkspace()
+  const isDesktopApp = host !== null
   const instanceId = useId()
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const [runtimeError, setRuntimeError] = useState<string | null>(null)
 
   const wrappedHtml = useMemo(
     () => (isDesktopApp ? html : injectErrorBridge(html, instanceId)),
-    [html, instanceId]
+    [isDesktopApp, html, instanceId]
   )
 
   useEffect(() => {
@@ -67,7 +68,7 @@ export const HtmlPreview = ({
     }
     window.addEventListener('message', onMessage)
     return () => window.removeEventListener('message', onMessage)
-  }, [instanceId])
+  }, [instanceId, isDesktopApp])
 
   if (isDesktopApp) {
     return (
@@ -83,7 +84,7 @@ export const HtmlPreview = ({
 
   return (
     <StageFrame
-      host={stageHost}
+      host={panel}
       viewport={viewport}
       onViewportCommit={onViewportCommit}
       banner={runtimeError ? <div className={panelStyles.errorBanner}>{runtimeError}</div> : null}
