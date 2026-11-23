@@ -30,7 +30,6 @@ declare const styles: {
   readonly askWaitingDot: string
   readonly askSummary: string
   readonly askEntry: string
-  readonly askSep: string
   readonly askEntryKey: string
   readonly askEntryVal: string
   readonly page: string

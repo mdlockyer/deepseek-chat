@@ -765,14 +765,9 @@ const AskRow = ({ step, isLast }: { step: AskStep; isLast: boolean }) => {
         <span className={clsx(styles.intro, waiting && styles.shimmer)}>{headline}</span>
         {!waiting && answeredItems.length > 0 ? (
           <div className={styles.askSummary}>
-            {answeredItems.map((item, index) => (
+            {answeredItems.map((item) => (
               <span key={item.id} className={styles.askEntry}>
-                {index > 0 ? (
-                  <span className={styles.askSep} aria-hidden="true">
-                    ·
-                  </span>
-                ) : null}
-                <span className={styles.askEntryKey}>{item.header}:</span>{' '}
+                <span className={styles.askEntryKey}>{item.header}:</span>
                 <span className={styles.askEntryVal}>
                   {Array.isArray(item.answer) ? item.answer.join(', ') : item.answer}
                 </span>

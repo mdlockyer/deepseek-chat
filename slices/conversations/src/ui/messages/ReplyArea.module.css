@@ -270,8 +270,8 @@
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  column-gap: 6px;
-  row-gap: 2px;
+  column-gap: 16px;
+  row-gap: 4px;
   margin-top: 2px;
   font: var(--dsw-font-xs-13);
   line-height: 18px;
@@ -281,11 +281,6 @@
   display: inline-flex;
   align-items: baseline;
   gap: 4px;
-}
-
-.askSep {
-  margin-right: 2px;
-  color: var(--dsw-alias-label-caption);
 }
 
 .askEntryKey {
