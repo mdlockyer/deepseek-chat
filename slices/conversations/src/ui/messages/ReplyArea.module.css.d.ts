@@ -25,6 +25,8 @@ declare const styles: {
   readonly toolBody: string
   readonly intro: string
   readonly stepSummary: string
+  readonly searchStep: string
+  readonly searchSummary: string
   readonly page: string
   readonly pageText: string
   readonly pageIcon: string

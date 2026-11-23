@@ -245,6 +245,19 @@
   color: var(--dsw-alias-label-tertiary);
 }
 
+.searchStep {
+  position: relative;
+}
+
+.searchSummary {
+  padding-left: 22px;
+  margin-top: -2px;
+  margin-bottom: 4px;
+  font: var(--dsw-font-xs-13);
+  line-height: 18px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
 .page {
   display: inline-flex;
   align-items: center;

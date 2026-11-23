@@ -107,6 +107,10 @@ export const ReplyArea = memo(function ReplyArea({
   const thinking = message.thinking ?? view.steps.some((step) => step.type === 'thinking')
   const title = thinking ? getAreaTitle(view, streaming, Date.now(), hasResponse) : null
   const stopped = !streaming && !hasResponse
+  const visibleSteps =
+    open || !title
+      ? view.steps
+      : view.steps.filter((step) => step.type !== 'thinking' && step.type !== 'text')
   return (
     <div className={styles.area}>
       {title ? (
@@ -118,16 +122,16 @@ export const ReplyArea = memo(function ReplyArea({
           {open ? <IconChevronDownOutline14 /> : <IconChevronRightOutline14 />}
         </div>
       ) : null}
-      {open || !title ? (
+      {visibleSteps.length > 0 ? (
         <div className={styles.steps}>
-          {view.steps.map((step, index) => (
+          {visibleSteps.map((step, index) => (
             <StepItem
               key={stepKey(step, index)}
               step={step}
               message={message}
               sources={view.sources}
               streaming={streaming}
-              isLast={index === view.steps.length - 1}
+              isLast={index === visibleSteps.length - 1}
             />
           ))}
         </div>
@@ -286,20 +290,23 @@ const SearchRow = ({
       </>
     )
   }
+  const showSummary = !wip && !!step.summary
   return (
-    <div
-      className={clsx(
-        styles.row,
-        !isLast && styles.withLine,
-        clickable && styles.clickable,
-        entry === panelEntry && styles.active
-      )}
-      onClick={clickable ? () => toggleSearchPanel(panelEntry, step.results) : undefined}
-    >
-      <span className={styles.rowIcon}>
-        {failed ? <IconSearchWarningOutline16 /> : <IconSearchOutline16 />}
-      </span>
-      {body}
+    <div className={clsx(styles.searchStep, !isLast && styles.withLine)}>
+      <div
+        className={clsx(
+          styles.row,
+          clickable && styles.clickable,
+          entry === panelEntry && styles.active
+        )}
+        onClick={clickable ? () => toggleSearchPanel(panelEntry, step.results) : undefined}
+      >
+        <span className={styles.rowIcon}>
+          {failed ? <IconSearchWarningOutline16 /> : <IconSearchOutline16 />}
+        </span>
+        {body}
+      </div>
+      {showSummary ? <div className={styles.searchSummary}>{step.summary}</div> : null}
     </div>
   )
 }
@@ -453,7 +460,7 @@ const BrowserRow = ({ step, isLast }: { step: BrowserStep; isLast: boolean }) =>
   const label = running
     ? lastAction?.summary || t('browserStepRunning')
     : step.actions.length === 1
-      ? t('browserStepOne')
+      ? lastAction?.summary || t('browserStepOne')
       : t('browserStepMany', { count: step.actions.length })
   const seconds = !running && totalMs > 0 ? ` · ${(totalMs / 1000).toFixed(1)}s` : ''
   const screenshots = step.actions.flatMap((action) => action.images ?? [])
@@ -472,6 +479,9 @@ const BrowserRow = ({ step, isLast }: { step: BrowserStep; isLast: boolean }) =>
           </span>
           {open ? <IconChevronDownOutline14 /> : <IconChevronRightOutline14 />}
         </span>
+        {!open && !running && step.actions.length > 1 && lastAction?.summary ? (
+          <div className={styles.stepSummary}>{lastAction.summary}</div>
+        ) : null}
         {open ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6 }}>
             {step.actions.map((action, index) => (
