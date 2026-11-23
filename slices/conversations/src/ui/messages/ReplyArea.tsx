@@ -23,6 +23,7 @@ import {
   getAreaTitle,
   isDeepSearchKind,
   isImageSearchKind,
+  type AskStep,
   type BrowserStep,
   type FileStep,
   type FindStep,
@@ -146,7 +147,8 @@ const stepKey = (step: Step, index: number) =>
   step.type === 'search' ||
   step.type === 'python' ||
   step.type === 'browser' ||
-  step.type === 'file'
+  step.type === 'file' ||
+  step.type === 'ask'
     ? step.key
     : `${step.type}-${index}`
 
@@ -205,6 +207,8 @@ const StepItem = ({
       return <BrowserRow step={step} isLast={isLast} />
     case 'file':
       return <FileRow step={step} isLast={isLast} />
+    case 'ask':
+      return <AskRow step={step} isLast={isLast} />
     default:
       return null
   }
@@ -717,6 +721,42 @@ const PythonRow = ({
             style={{ display: 'block', maxWidth: '100%', marginTop: 8, borderRadius: 8 }}
           />
         ))}
+      </div>
+    </ToolRow>
+  )
+}
+
+/** 澄清提问步骤：等待中展示提示，已回答时以紧凑标签展示每题选择 */
+const AskRow = ({ step, isLast }: { step: AskStep; isLast: boolean }) => {
+  const t = useTranslate()
+  const waiting = step.status === 'wip'
+  const ask = step.askAction
+  const answeredItems =
+    ask?.status === 'answered'
+      ? ask.items.filter((item) =>
+          Array.isArray(item.answer) ? item.answer.length > 0 : Boolean(item.answer)
+        )
+      : []
+  const headline = waiting
+    ? step.summary || t('askWaiting')
+    : ask?.status === 'skipped'
+      ? t('askSkipped')
+      : step.summary || t('askAnswered')
+
+  return (
+    <ToolRow icon={<IconCheckedOutline14 />} isLast={isLast}>
+      <div style={{ width: '100%', minWidth: 0 }}>
+        <span className={clsx(styles.intro, waiting && styles.shimmer)}>{headline}</span>
+        {!waiting && answeredItems.length > 0 ? (
+          <div className={styles.askChips}>
+            {answeredItems.map((item) => (
+              <span key={item.id} className={styles.askChip}>
+                <span className={styles.askChipKey}>{item.header}:</span>{' '}
+                <span>{Array.isArray(item.answer) ? item.answer.join(', ') : item.answer}</span>
+              </span>
+            ))}
+          </div>
+        ) : null}
       </div>
     </ToolRow>
   )

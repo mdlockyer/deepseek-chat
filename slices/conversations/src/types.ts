@@ -96,6 +96,18 @@ export type WebSearchSourceMeta = {
   publishedAt: string | null
 }
 
+export type AskActionItem = {
+  id: string
+  header: string
+  question: string
+  answer?: string | string[]
+}
+
+export type AskActionMeta = {
+  status: 'answered' | 'skipped'
+  items: AskActionItem[]
+}
+
 /** 浏览器本地执行客户端工具后的结果；content 原样作为 tool_result 回传给模型 */
 export type ToolResultPart = {
   type: 'tool_result'
@@ -128,6 +140,8 @@ export type ToolResultPart = {
     title?: string
     version?: number
   }
+  /** 澄清提问的结果元信息，用于在时间线展示用户选择 */
+  askAction?: AskActionMeta
   durationMs?: number
 }
 

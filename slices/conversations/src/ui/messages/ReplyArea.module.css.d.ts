@@ -27,6 +27,9 @@ declare const styles: {
   readonly stepSummary: string
   readonly searchStep: string
   readonly searchSummary: string
+  readonly askChips: string
+  readonly askChip: string
+  readonly askChipKey: string
   readonly page: string
   readonly pageText: string
   readonly pageIcon: string

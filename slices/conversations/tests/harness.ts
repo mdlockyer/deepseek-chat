@@ -43,6 +43,7 @@ const KINDS: Record<string, ToolKind> = {
   edit_file: 'edit_file',
   read_file: 'read_file',
   python: 'python',
+  ask_user: 'ask_user',
 }
 
 /**

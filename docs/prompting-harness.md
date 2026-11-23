@@ -36,6 +36,7 @@ The harness splits context into three layers so the model gets complete situatio
 | Dynamic context (`latest_reminder`)                     | `slices/conversations/src/latestReminder.ts`                         |
 | Tool aggregation, `summary` injection, section order    | `app/toolGateway.ts`                                                 |
 | File Preview (`present_file`, `edit_file`, `read_file`) | `PREVIEW_TOOL_INSTRUCTIONS` in `slices/workspace-files/src/tools.ts` |
+| Clarifying Questions (`ask_user`)                       | `ASK_USER_INSTRUCTIONS` in `slices/conversations/src/askUser.ts`     |
 | Web Research (`web_search`, `web_scrape`)               | `INSTRUCTIONS` in `slices/web-research/src/index.ts`                 |
 | Python (`python`, native vs. web)                       | `buildPythonInstructions` in `slices/python/src/tool.ts`             |
 | Built-in Browser (`browser_*`)                          | `BROWSER_TOOL_INSTRUCTIONS` in `slices/browser/src/tools.ts`         |

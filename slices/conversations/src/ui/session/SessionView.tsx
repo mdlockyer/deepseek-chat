@@ -8,6 +8,7 @@ import { type Session } from '../../types.js'
 import { sessionTitle } from '../../format.js'
 import { IconButton } from '@deepseek-chat/spine/design'
 import { IconBrowseOutline16, IconGlobeLanguageOutline16 } from '@deepseek-chat/spine/design'
+import { AskUserCard } from '../ask/AskUserCard.js'
 import { ChatInput } from '../chatInput/ChatInput.js'
 import { MessageList } from '../messages/MessageList.js'
 import { MobileHeader } from './MobileHeader.js'
@@ -67,6 +68,7 @@ export const SessionView = ({
         streaming={streaming}
         footer={
           <div className={styles.inputContainer}>
+            <AskUserCard sessionId={session.id} />
             <ChatInput sessionId={session.id} />
             <div className={styles.caveat}>{t('contentCaveat')}</div>
           </div>

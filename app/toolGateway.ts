@@ -3,11 +3,16 @@
  * files, web research, Python, the built-in browser) to the chat's tool-call loop.
  */
 import { BROWSER_TOOL_NAMES } from '@deepseek-chat/slice-browser'
-import type {
-  PresentedFileRef,
-  ToolGateway,
-  ToolKind,
-  ToolResult,
+import {
+  ASK_USER_INSTRUCTIONS,
+  ASK_USER_TOOL,
+  ASK_USER_TOOL_NAME,
+  runAskUser,
+  type Message,
+  type PresentedFileRef,
+  type ToolGateway,
+  type ToolKind,
+  type ToolResult,
 } from '@deepseek-chat/slice-conversations'
 import { WEB_SCRAPE_TOOL_NAME, WEB_SEARCH_TOOL_NAME } from '@deepseek-chat/slice-web-research'
 import {
@@ -19,7 +24,6 @@ import {
   makeArtifactKey,
   normalizeWorkspacePath,
 } from '@deepseek-chat/slice-workspace-files'
-import type { Message } from '@deepseek-chat/slice-conversations'
 import { createId } from './utils/id.js'
 import { browser, python, webResearch } from './composition.js'
 import { toFileRecords } from './fileRecords.js'
@@ -70,6 +74,8 @@ const kindOf = (name: string): ToolKind | null => {
       return 'read_file'
     case python.toolName:
       return 'python'
+    case ASK_USER_TOOL_NAME:
+      return 'ask_user'
     default:
       return BROWSER_TOOL_NAMES.has(name) ? 'browser' : null
   }
@@ -114,6 +120,7 @@ export const toolGateway: ToolGateway = {
   declare: ({ search, python: pythonEnabled, browser: browserEnabled, questionText }) =>
     [
       ...workspaceFiles.declareTools(),
+      ASK_USER_TOOL,
       ...webResearch.declareTools({ searchEnabled: search, questionText }),
       ...(pythonEnabled ? [python.tool] : []),
       ...browser.declareTools({ enabled: browserEnabled }),
@@ -123,6 +130,7 @@ export const toolGateway: ToolGateway = {
     const has = (handles: (name: string) => boolean) => [...names].some(handles)
     return [
       ...(has(workspaceFiles.handles) ? [workspaceFiles.instructions] : []),
+      ...(names.has(ASK_USER_TOOL_NAME) ? [ASK_USER_INSTRUCTIONS] : []),
       ...(has(webResearch.handles) ? [webResearch.instructions] : []),
       ...(names.has(python.toolName) ? [python.instructions] : []),
       ...(has(browser.handles) ? [browser.instructions] : []),
@@ -135,6 +143,13 @@ export const toolGateway: ToolGateway = {
 
   run: async (call, context): Promise<ToolResult> => {
     const startedAt = Date.now()
+
+    if (call.name === ASK_USER_TOOL_NAME) {
+      return runAskUser(call.input, {
+        sessionId: context.sessionId,
+        signal: context.signal,
+      })
+    }
 
     if (webResearch.handles(call.name)) {
       // 同一回复内已编号的来源 URL → 编号，保证多次搜索时 [citation:N] 与前端编号一致

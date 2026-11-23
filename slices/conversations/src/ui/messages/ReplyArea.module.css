@@ -258,6 +258,31 @@
   color: var(--dsw-alias-label-tertiary);
 }
 
+.askChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.askChip {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: 2px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-layer-2);
+  font: var(--dsw-font-xs-13);
+  line-height: 18px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.askChipKey {
+  color: var(--dsw-alias-label-tertiary);
+  margin-right: 4px;
+}
+
 .page {
   display: inline-flex;
   align-items: center;

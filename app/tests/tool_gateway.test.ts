@@ -4,7 +4,13 @@
  */
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import type { Message, ToolRunContext } from '@deepseek-chat/slice-conversations'
+import {
+  ASK_USER_TOOL_NAME,
+  skipAskUser,
+  submitAskUser,
+  type Message,
+  type ToolRunContext,
+} from '@deepseek-chat/slice-conversations'
 import { collectPythonUploads, toolGateway } from '../toolGateway.js'
 
 const declaredNames = (toggles: { search: boolean; python: boolean }) =>
@@ -33,8 +39,78 @@ describe('app wiring: tool gateway', () => {
     // The file, web and Python owners each contribute their kinds; one tool per kind here.
     assert.deepEqual(
       [...kinds].sort(),
-      ['edit_file', 'present_file', 'python', 'read_file', 'web_scrape', 'web_search'].sort()
+      [
+        'ask_user',
+        'edit_file',
+        'present_file',
+        'python',
+        'read_file',
+        'web_scrape',
+        'web_search',
+      ].sort()
     )
+  })
+
+  it('runs ask_user through submit, skip, and abort cleanly', async () => {
+    // Submit path
+    const ask1 = toolGateway.run(
+      {
+        type: 'tool_use',
+        id: 'ask-1',
+        name: ASK_USER_TOOL_NAME,
+        input: {
+          questions: [
+            {
+              id: 'theme',
+              header: 'Theme',
+              question: 'Which visual theme do you want?',
+              options: [{ label: 'Dark', recommended: true }, { label: 'Light' }],
+            },
+          ],
+        },
+      },
+      context()
+    )
+    assert.equal(submitAskUser('wiring', { theme: 'Dark' }), true)
+    const res1 = await ask1
+    assert.equal(res1.status, 'ok')
+    assert.equal(res1.askAction?.status, 'answered')
+    assert.equal(res1.askAction?.items[0]?.answer, 'Dark')
+    assert.deepEqual(JSON.parse(res1.content), { status: 'answered', answers: { theme: 'Dark' } })
+
+    // Skip path
+    const ask2 = toolGateway.run(
+      {
+        type: 'tool_use',
+        id: 'ask-2',
+        name: ASK_USER_TOOL_NAME,
+        input: {
+          questions: [{ id: 'tone', header: 'Tone', question: 'What tone?' }],
+        },
+      },
+      context()
+    )
+    assert.equal(skipAskUser('wiring'), true)
+    const res2 = await ask2
+    assert.equal(res2.status, 'ok')
+    assert.equal(res2.askAction?.status, 'skipped')
+
+    // Abort path
+    const controller = new AbortController()
+    const ask3 = toolGateway.run(
+      {
+        type: 'tool_use',
+        id: 'ask-3',
+        name: ASK_USER_TOOL_NAME,
+        input: {
+          questions: [{ id: 'a', header: 'A', question: 'Pick one?' }],
+        },
+      },
+      { ...context(), signal: controller.signal }
+    )
+    controller.abort()
+    const res3 = await ask3
+    assert.equal(res3.status, 'aborted')
   })
 
   it('prepends a required summary parameter as the first property on every declared client tool', () => {

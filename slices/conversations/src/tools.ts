@@ -13,6 +13,7 @@ export type ToolKind =
   | 'edit_file'
   | 'read_file'
   | 'python'
+  | 'ask_user'
 
 /** Everything a tool run may need from the chat. */
 export type ToolRunContext = {
@@ -46,6 +47,7 @@ export type ToolResult = Pick<ToolResultPart, 'content' | 'status'> &
       | 'scrapedPage'
       | 'browserAction'
       | 'fileAction'
+      | 'askAction'
     >
   >
 

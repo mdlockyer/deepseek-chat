@@ -205,6 +205,7 @@ const assistantFragments = (message: AssistantMessage): Fragment[] => {
   const webToolIds = new Set<string>()
   const browserToolIds = new Set<string>()
   const previewToolIds = new Set<string>()
+  const askToolIds = new Set<string>()
   for (const block of blocks) {
     if (block.type === 'web_search_tool_result' || block.type === 'web_fetch_tool_result') {
       results.set(block.tool_use_id, block)
@@ -218,6 +219,8 @@ const assistantFragments = (message: AssistantMessage): Fragment[] => {
         browserToolIds.add(block.id)
       } else if (isFileKind(kind)) {
         previewToolIds.add(block.id)
+      } else if (kind === 'ask_user') {
+        askToolIds.add(block.id)
       }
     }
   }
@@ -310,6 +313,24 @@ const assistantFragments = (message: AssistantMessage): Fragment[] => {
         }
         continue
       }
+      if (kind === 'ask_user') {
+        const toolResult = clientResults.get(block.id)
+        const ask = toolResult?.askAction
+        if (ask?.status === 'answered') {
+          const lines = ask.items.map((item) => {
+            const val = Array.isArray(item.answer)
+              ? item.answer.join(', ')
+              : (item.answer ?? '(unanswered)')
+            return `${item.header}: ${val}`
+          })
+          appendResponse(fence('text', lines.join('\n')), true)
+          separateNextText = true
+        } else if (ask?.status === 'skipped') {
+          appendResponse(fence('text', '[Skipped clarifying questions]'), true)
+          separateNextText = true
+        }
+        continue
+      }
       const input = block.input as { code?: unknown } | null
       const code = typeof input?.code === 'string' ? input.code : (block.inputJson ?? '')
       if (code.trim()) {
@@ -322,7 +343,8 @@ const assistantFragments = (message: AssistantMessage): Fragment[] => {
       if (
         webToolIds.has(block.tool_use_id) ||
         browserToolIds.has(block.tool_use_id) ||
-        previewToolIds.has(block.tool_use_id)
+        previewToolIds.has(block.tool_use_id) ||
+        askToolIds.has(block.tool_use_id)
       ) {
         continue
       }

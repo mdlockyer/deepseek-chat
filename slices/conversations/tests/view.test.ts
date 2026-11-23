@@ -385,6 +385,56 @@ describe('buildReplyView for Firecrawl client tools', () => {
     assert.equal(browserStep?.actions[0]?.summary, 'Switching pricing toggle to annual billing')
     assert.deepEqual(browserStep?.actions[0]?.images, ['data:image/jpeg;base64,clean'])
   })
+
+  it('maps ask_user calls into AskStep while waiting and after user answers', () => {
+    const waitingView = buildReplyView(
+      replyWith(
+        [
+          {
+            type: 'tool_use',
+            id: 'a1',
+            name: 'ask_user',
+            input: { summary: 'Checking preferred landing page theme' },
+          },
+          { type: 'tool_result', tool_use_id: 'a1', content: '', status: 'running' },
+        ],
+        true
+      ),
+      true
+    )
+    assert.equal(waitingView.steps[0]?.type, 'ask')
+    assert.equal(waitingView.steps[0]?.status, 'wip')
+    assert.equal(
+      getAreaTitle(waitingView, true, 2_000, false),
+      'Checking preferred landing page theme'
+    )
+    assert.equal(needsWorkingIndicator(waitingView), false)
+
+    const settledView = buildReplyView(
+      replyWith([
+        {
+          type: 'tool_use',
+          id: 'a1',
+          name: 'ask_user',
+          input: { summary: 'Checking preferred landing page theme' },
+        },
+        {
+          type: 'tool_result',
+          tool_use_id: 'a1',
+          content: '{"status":"answered","answers":{"theme":"Dark"}}',
+          status: 'ok',
+          askAction: {
+            status: 'answered',
+            items: [{ id: 'theme', header: 'Theme', question: 'Which theme?', answer: 'Dark' }],
+          },
+        },
+      ]),
+      false
+    )
+    const askStep = settledView.steps.find((s) => s.type === 'ask')
+    assert.equal(askStep?.status, 'done')
+    assert.equal(askStep?.askAction?.items[0]?.answer, 'Dark')
+  })
 })
 
 describe('needsWorkingIndicator (SPEC invariant 16)', () => {

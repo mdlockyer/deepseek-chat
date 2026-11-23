@@ -53,6 +53,8 @@ export type {
 } from './views.js'
 export type { ClientTool } from './api/types.js'
 export type {
+  AskActionItem,
+  AskActionMeta,
   AssistantMessage,
   FileAttachment,
   Message,
@@ -65,6 +67,7 @@ export type {
   UserMessage,
   WebSearchSourceMeta,
 } from './types.js'
+export type { AskUserOption, AskUserQuestion, PendingAskUser } from './askUser.js'
 
 export const createConversationsSlice = (deps: ConversationsDeps) => {
   installDeps(deps)
@@ -138,6 +141,16 @@ export type ConversationsSlice = ReturnType<typeof createConversationsSlice>
 // ---------- Pure model functions (also the boundary tests' surface) ----------
 
 export { ApiError, request } from './api/client.js'
+export {
+  ASK_USER_INSTRUCTIONS,
+  ASK_USER_TOOL,
+  ASK_USER_TOOL_NAME,
+  parseAskUserInput,
+  runAskUser,
+  skipAskUser,
+  submitAskUser,
+  useAskUserStore,
+} from './askUser.js'
 export {
   AUTO_TITLE_KEEP,
   MAX_AUTO_TITLE_CHARS,

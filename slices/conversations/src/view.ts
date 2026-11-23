@@ -7,7 +7,13 @@ import type {
   WebSearchResult,
   WebSearchToolResultBlock,
 } from './api/types.js'
-import type { AssistantMessage, PresentedFileRef, ThinkingPart, ToolResultPart } from './types.js'
+import type {
+  AskActionMeta,
+  AssistantMessage,
+  PresentedFileRef,
+  ThinkingPart,
+  ToolResultPart,
+} from './types.js'
 
 /**
  * 由回复的内容块推导界面需要的结构：思考与工具步骤的时间线、带引用角标的正文、可引用的来源列表。
@@ -117,6 +123,14 @@ export type FileStep = {
   status: ToolStatus
 }
 
+export type AskStep = {
+  type: 'ask'
+  key: string
+  summary?: string
+  status: ToolStatus
+  askAction?: AskActionMeta
+}
+
 export type Step =
   | SearchStep
   | OpenStep
@@ -127,6 +141,7 @@ export type Step =
   | PythonStep
   | BrowserStep
   | FileStep
+  | AskStep
 
 export type ReplyView = {
   steps: Step[]
@@ -537,6 +552,17 @@ export const buildReplyView = (reply: AssistantMessage, streaming: boolean): Rep
         }
         return
       }
+      if (toolKind === 'ask_user') {
+        const status = getClientToolStatus(toolResult, streaming)
+        steps.push({
+          type: 'ask',
+          key: block.id,
+          ...(toolSummary ? { summary: toolSummary } : {}),
+          status,
+          ...(toolResult?.askAction ? { askAction: toolResult.askAction } : {}),
+        })
+        return
+      }
       const input = block.input as { code?: unknown } | null
       steps.push({
         type: 'python',
@@ -734,6 +760,9 @@ export const getAreaTitle = (
     }
     return translate('previewToolPresenting', { name })
   }
+  if (last?.type === 'ask' && last.status === 'wip') {
+    return last.summary || translate('askWaiting')
+  }
   return translate('messageThinking')
 }
 
@@ -746,6 +775,7 @@ const showsRunning = (step: Step): boolean => {
     case 'search':
     case 'browser':
     case 'file':
+    case 'ask':
       return step.status === 'wip'
     case 'open':
       return step.pages.some((page) => page.status === 'wip')
