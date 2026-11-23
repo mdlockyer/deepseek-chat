@@ -195,7 +195,7 @@ export const conversationsMessages = defineMessages({
     collapseSiderbarButton: 'Close sidebar',
     composerMenuActiveTooltip: 'Add files and tools ({tools})',
     composerMenuTooltip: 'Add files and tools',
-    contentCaveat: 'AI-generated, for reference only',
+    contentCaveat: 'Responses are AI-generated and may be inaccurate.',
     continueGenerating: 'Continue',
     copy: 'Copy',
     copyFailed: 'Copy failed. Please long-press or select the text to copy.',
