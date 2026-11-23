@@ -3,6 +3,7 @@ import clsx from 'clsx'
 import { useEffect, useState } from 'react'
 import { useAskUserStore, type AskUserQuestion, type PendingAskUser } from '../../askUser.js'
 import { useTranslate } from '../../messages.js'
+import { stopReply } from '../../store.js'
 import styles from './AskUserCard.module.css'
 
 const hasAnswer = (value: string | string[] | undefined): boolean =>
@@ -10,11 +11,12 @@ const hasAnswer = (value: string | string[] | undefined): boolean =>
 
 const AskUserCardBody = ({ pending }: { pending: PendingAskUser }) => {
   const t = useTranslate()
-  const { questions, submit, skip } = pending
+  const { sessionId, questions, submit, skip } = pending
   const isSingleQuestion = questions.length === 1
   const [activeIndex, setActiveIndex] = useState(0)
   const [answers, setAnswers] = useState<Record<string, string | string[]>>({})
   const [customById, setCustomById] = useState<Record<string, string>>({})
+  const [validationError, setValidationError] = useState<string | null>(null)
 
   const current: AskUserQuestion = questions[activeIndex] ?? questions[0]
   const currentValue = answers[current.id]
@@ -47,6 +49,7 @@ const AskUserCardBody = ({ pending }: { pending: PendingAskUser }) => {
   }
 
   const pickOption = (label: string) => {
+    setValidationError(null)
     if (current.multiSelect) {
       setAnswers((prev) => {
         const existing = Array.isArray(prev[current.id]) ? (prev[current.id] as string[]) : []
@@ -73,21 +76,21 @@ const AskUserCardBody = ({ pending }: { pending: PendingAskUser }) => {
 
   const handleSubmitOrNext = () => {
     if (!isLast) {
+      setValidationError(null)
       setActiveIndex((idx) => Math.min(idx + 1, questions.length - 1))
       return
     }
     const finalAnswers = buildFinalAnswers()
     if (Object.keys(finalAnswers).length === 0) {
+      setValidationError(t('askEmptyError'))
       return
     }
+    setValidationError(null)
     submit(finalAnswers)
   }
 
   const currentAnswered =
     hasAnswer(currentValue) || (current.allowCustom && currentCustom.trim().length > 0)
-  const anyAnswered = questions.some(
-    (q) => hasAnswer(answers[q.id]) || (q.allowCustom && (customById[q.id] ?? '').trim().length > 0)
-  )
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -119,7 +122,12 @@ const AskUserCardBody = ({ pending }: { pending: PendingAskUser }) => {
     return () => window.removeEventListener('keydown', onKeyDown)
   })
 
-  const showFooter = !isSingleQuestion || current.multiSelect || !current.options?.length
+  const showPrimaryAction =
+    current.multiSelect || !current.options?.length || isLast || currentAnswered
+  const showBack = activeIndex > 0
+  const showFooter =
+    (!isSingleQuestion && (showPrimaryAction || showBack)) ||
+    (isSingleQuestion && (current.multiSelect || !current.options?.length))
 
   return (
     <div className={styles.card} role="region" aria-label={t('askCardTitle')}>
@@ -138,7 +146,10 @@ const AskUserCardBody = ({ pending }: { pending: PendingAskUser }) => {
                     role="tab"
                     aria-selected={index === activeIndex}
                     className={styles.tab}
-                    onClick={() => setActiveIndex(index)}
+                    onClick={() => {
+                      setValidationError(null)
+                      setActiveIndex(index)
+                    }}
                   >
                     {done ? (
                       <span className={styles.tabCheck}>
@@ -154,15 +165,21 @@ const AskUserCardBody = ({ pending }: { pending: PendingAskUser }) => {
             <span className={styles.titleBadge}>{current.header || t('askCardTitle')}</span>
           )}
         </div>
-        <button type="button" className={styles.skipBtn} onClick={skip}>
-          {t('askSkip')}
-        </button>
+        <div className={styles.headerActions}>
+          <button type="button" className={styles.headerAction} onClick={skip}>
+            {t('askSkip')}
+          </button>
+          <button
+            type="button"
+            className={styles.headerAction}
+            onClick={() => stopReply(sessionId)}
+          >
+            {t('chatInputStopButtonTooltip')}
+          </button>
+        </div>
       </div>
 
-      <p className={styles.question}>
-        {current.question}
-        {current.multiSelect ? <span className={styles.multiHint}>{t('askMultiHint')}</span> : null}
-      </p>
+      <p className={styles.question}>{current.question}</p>
 
       {current.options?.length ? (
         <div className={styles.options}>
@@ -174,13 +191,24 @@ const AskUserCardBody = ({ pending }: { pending: PendingAskUser }) => {
               <button
                 key={opt.label}
                 type="button"
+                role={current.multiSelect ? 'checkbox' : undefined}
+                aria-checked={current.multiSelect ? selected : undefined}
+                aria-pressed={current.multiSelect ? undefined : selected}
                 className={clsx(styles.option, selected && styles.optionSelected)}
-                aria-pressed={selected}
                 onClick={() => pickOption(opt.label)}
               >
-                <span className={styles.keycap}>
-                  {selected ? <IconCheckedOutline14 /> : index + 1}
-                </span>
+                {current.multiSelect ? (
+                  <span
+                    className={clsx(styles.checkbox, selected && styles.checkboxChecked)}
+                    aria-hidden="true"
+                  >
+                    {selected ? <IconCheckedOutline14 /> : null}
+                  </span>
+                ) : (
+                  <span className={styles.optionIndex} aria-hidden="true">
+                    {selected ? <IconCheckedOutline14 /> : index + 1}
+                  </span>
+                )}
                 <span className={styles.optionBody}>
                   <span className={styles.optionTop}>
                     <span className={styles.optionLabel}>{opt.label}</span>
@@ -200,15 +228,22 @@ const AskUserCardBody = ({ pending }: { pending: PendingAskUser }) => {
 
       {current.allowCustom ? (
         <div className={styles.customRow}>
+          {current.options?.length ? (
+            <span className={styles.customLead} aria-hidden="true">
+              +
+            </span>
+          ) : null}
           <input
             type="text"
             className={styles.customInput}
+            aria-label={current.options?.length ? t('askOtherLabel') : current.question}
             value={currentCustom}
             placeholder={
               current.options?.length ? t('askOtherPlaceholder') : t('askFreeTextPlaceholder')
             }
             onChange={(event) => {
               const text = event.target.value
+              setValidationError(null)
               setCustomById((prev) => ({ ...prev, [current.id]: text }))
               if (!current.multiSelect && text.trim()) {
                 setAnswers((prev) => ({ ...prev, [current.id]: '' }))
@@ -223,13 +258,11 @@ const AskUserCardBody = ({ pending }: { pending: PendingAskUser }) => {
               }
             }}
           />
-          {isSingleQuestion && !current.multiSelect && current.options?.length ? (
-            <Button
-              variant="primary"
-              size="s"
-              disabled={!currentCustom.trim()}
-              onClick={handleSubmitOrNext}
-            >
+          {isSingleQuestion &&
+          !current.multiSelect &&
+          current.options?.length &&
+          currentCustom.trim() ? (
+            <Button variant="primary" size="s" onClick={handleSubmitOrNext}>
               {t('askSubmit')}
             </Button>
           ) : null}
@@ -238,23 +271,30 @@ const AskUserCardBody = ({ pending }: { pending: PendingAskUser }) => {
 
       {showFooter ? (
         <div className={styles.footer}>
-          {activeIndex > 0 ? (
-            <Button
-              variant="outlined"
-              size="s"
-              onClick={() => setActiveIndex((idx) => Math.max(0, idx - 1))}
-            >
-              {t('askBack')}
-            </Button>
+          {validationError ? (
+            <span className={styles.errorText} role="alert">
+              {validationError}
+            </span>
           ) : null}
-          <Button
-            variant="primary"
-            size="s"
-            disabled={isLast ? !anyAnswered : !currentAnswered}
-            onClick={handleSubmitOrNext}
-          >
-            {isLast ? t('askSubmit') : t('askNext')}
-          </Button>
+          <div className={styles.footerButtons}>
+            {showBack ? (
+              <Button
+                variant="outlined"
+                size="s"
+                onClick={() => {
+                  setValidationError(null)
+                  setActiveIndex((idx) => Math.max(0, idx - 1))
+                }}
+              >
+                {t('askBack')}
+              </Button>
+            ) : null}
+            {showPrimaryAction ? (
+              <Button variant="primary" size="s" onClick={handleSubmitOrNext}>
+                {isLast ? t('askSubmit') : t('askNext')}
+              </Button>
+            ) : null}
+          </div>
         </div>
       ) : null}
     </div>

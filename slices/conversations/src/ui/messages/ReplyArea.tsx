@@ -111,7 +111,15 @@ export const ReplyArea = memo(function ReplyArea({
   const visibleSteps =
     open || !title
       ? view.steps
-      : view.steps.filter((step) => step.type !== 'thinking' && step.type !== 'text')
+      : view.steps.filter((step) => {
+          if (step.type === 'thinking' || step.type === 'text') {
+            return false
+          }
+          if (step.type === 'ask' && step.status === 'wip' && titleActive) {
+            return false
+          }
+          return true
+        })
   return (
     <div className={styles.area}>
       {title ? (
@@ -726,7 +734,7 @@ const PythonRow = ({
   )
 }
 
-/** 澄清提问步骤：等待中展示提示，已回答时以紧凑标签展示每题选择 */
+/** 澄清提问步骤：等待中展示脉冲点，已回答时以紧凑行内文字展示每题选择 */
 const AskRow = ({ step, isLast }: { step: AskStep; isLast: boolean }) => {
   const t = useTranslate()
   const waiting = step.status === 'wip'
@@ -743,16 +751,31 @@ const AskRow = ({ step, isLast }: { step: AskStep; isLast: boolean }) => {
       ? t('askSkipped')
       : step.summary || t('askAnswered')
 
+  const icon = waiting ? (
+    <span className={styles.askWaitingDot}>
+      <span className={styles.dotInner} />
+    </span>
+  ) : (
+    <IconCheckedOutline14 />
+  )
+
   return (
-    <ToolRow icon={<IconCheckedOutline14 />} isLast={isLast}>
+    <ToolRow icon={icon} isLast={isLast}>
       <div style={{ width: '100%', minWidth: 0 }}>
         <span className={clsx(styles.intro, waiting && styles.shimmer)}>{headline}</span>
         {!waiting && answeredItems.length > 0 ? (
-          <div className={styles.askChips}>
-            {answeredItems.map((item) => (
-              <span key={item.id} className={styles.askChip}>
-                <span className={styles.askChipKey}>{item.header}:</span>{' '}
-                <span>{Array.isArray(item.answer) ? item.answer.join(', ') : item.answer}</span>
+          <div className={styles.askSummary}>
+            {answeredItems.map((item, index) => (
+              <span key={item.id} className={styles.askEntry}>
+                {index > 0 ? (
+                  <span className={styles.askSep} aria-hidden="true">
+                    ·
+                  </span>
+                ) : null}
+                <span className={styles.askEntryKey}>{item.header}:</span>{' '}
+                <span className={styles.askEntryVal}>
+                  {Array.isArray(item.answer) ? item.answer.join(', ') : item.answer}
+                </span>
               </span>
             ))}
           </div>

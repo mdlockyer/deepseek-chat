@@ -258,29 +258,42 @@
   color: var(--dsw-alias-label-tertiary);
 }
 
-.askChips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 4px;
-}
-
-.askChip {
+.askWaitingDot {
   display: inline-flex;
   align-items: center;
-  max-width: 100%;
-  padding: 2px 8px;
-  border-radius: 8px;
-  border: 1px solid var(--dsw-alias-border-l2);
-  background: var(--dsw-alias-bg-layer-2);
-  font: var(--dsw-font-xs-13);
-  line-height: 18px;
-  color: var(--dsw-alias-label-primary);
+  justify-content: center;
+  width: 14px;
+  height: 14px;
 }
 
-.askChipKey {
+.askSummary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 6px;
+  row-gap: 2px;
+  margin-top: 2px;
+  font: var(--dsw-font-xs-13);
+  line-height: 18px;
+}
+
+.askEntry {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.askSep {
+  margin-right: 2px;
+  color: var(--dsw-alias-label-caption);
+}
+
+.askEntryKey {
   color: var(--dsw-alias-label-tertiary);
-  margin-right: 4px;
+}
+
+.askEntryVal {
+  color: var(--dsw-alias-label-primary);
 }
 
 .page {

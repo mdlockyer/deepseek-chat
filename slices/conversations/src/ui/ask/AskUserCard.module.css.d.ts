@@ -6,20 +6,25 @@ declare const styles: {
   readonly tabs: string
   readonly tab: string
   readonly tabCheck: string
-  readonly skipBtn: string
+  readonly headerActions: string
+  readonly headerAction: string
   readonly question: string
-  readonly multiHint: string
   readonly options: string
   readonly option: string
   readonly optionSelected: string
-  readonly keycap: string
+  readonly optionIndex: string
+  readonly checkbox: string
+  readonly checkboxChecked: string
   readonly optionBody: string
   readonly optionTop: string
   readonly optionLabel: string
   readonly recommended: string
   readonly optionDesc: string
   readonly customRow: string
+  readonly customLead: string
   readonly customInput: string
   readonly footer: string
+  readonly errorText: string
+  readonly footerButtons: string
 }
 export = styles

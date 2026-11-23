@@ -8,6 +8,7 @@ import { type Session } from '../../types.js'
 import { sessionTitle } from '../../format.js'
 import { IconButton } from '@deepseek-chat/spine/design'
 import { IconBrowseOutline16, IconGlobeLanguageOutline16 } from '@deepseek-chat/spine/design'
+import { useAskUserStore } from '../../askUser.js'
 import { AskUserCard } from '../ask/AskUserCard.js'
 import { ChatInput } from '../chatInput/ChatInput.js'
 import { MessageList } from '../messages/MessageList.js'
@@ -29,6 +30,7 @@ export const SessionView = ({
   const locale = useLocale()
   const { panels } = deps().ui
   const filesToggle = panels.files.useToggle(session)
+  const hasPendingAsk = useAskUserStore((state) => Boolean(state.pendingBySession[session.id]))
   const title = sessionTitle(session, t('untitledChat'), locale)
   return (
     <div className={styles.view}>
@@ -68,8 +70,11 @@ export const SessionView = ({
         streaming={streaming}
         footer={
           <div className={styles.inputContainer}>
-            <AskUserCard sessionId={session.id} />
-            <ChatInput sessionId={session.id} />
+            {hasPendingAsk ? (
+              <AskUserCard sessionId={session.id} />
+            ) : (
+              <ChatInput sessionId={session.id} />
+            )}
             <div className={styles.caveat}>{t('contentCaveat')}</div>
           </div>
         }

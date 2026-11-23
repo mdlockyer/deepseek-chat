@@ -27,9 +27,12 @@ declare const styles: {
   readonly stepSummary: string
   readonly searchStep: string
   readonly searchSummary: string
-  readonly askChips: string
-  readonly askChip: string
-  readonly askChipKey: string
+  readonly askWaitingDot: string
+  readonly askSummary: string
+  readonly askEntry: string
+  readonly askSep: string
+  readonly askEntryKey: string
+  readonly askEntryVal: string
   readonly page: string
   readonly pageText: string
   readonly pageIcon: string
