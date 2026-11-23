@@ -13,7 +13,12 @@ import {
   type WorkerLike,
 } from './kernel.js'
 import { createRuntimeSetting } from './RuntimeSetting.js'
-import { PYTHON_TOOL_NAME, buildPythonTool, type PythonToolDefinition } from './tool.js'
+import {
+  PYTHON_TOOL_NAME,
+  buildPythonInstructions,
+  buildPythonTool,
+  type PythonToolDefinition,
+} from './tool.js'
 
 export type {
   NativePythonHost,
@@ -44,6 +49,7 @@ export type PythonSliceDeps = {
 export type PythonSlice = {
   readonly toolName: typeof PYTHON_TOOL_NAME
   readonly tool: PythonToolDefinition
+  readonly instructions: string
   /** Runs code in the shared kernel. Always resolves; see SPEC.md. */
   run(code: string, options: RunOptions): Promise<PythonRunResult>
   /** Desktop only: the managed Python install. `null` on web. */
@@ -88,9 +94,11 @@ export const createPythonSlice = (deps: PythonSliceDeps): PythonSlice => {
       }
     : null
 
+  const engine = native ? 'native' : 'web'
   return {
     toolName: PYTHON_TOOL_NAME,
-    tool: buildPythonTool(native ? 'native' : 'web'),
+    tool: buildPythonTool(engine),
+    instructions: buildPythonInstructions(engine),
     run: kernel.run,
     runtime,
     RuntimeSetting: createRuntimeSetting(runtime),

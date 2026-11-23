@@ -3,18 +3,27 @@ import { formatDate } from './format.js'
 import { translate } from './messages.js'
 
 /**
- * 模型约定的五项信息；日期与星期使用浏览器本地时区，避免 UTC 日期跨日。
- * `locationLabel` 由 preferences slice 按当前语言给出，未设置时为空串。
+ * Dynamic per-round environment snapshot sent in `latest_reminder` (kept out of `system` so the
+ * prompt prefix stays cacheable across turns). Uses local browser/OS date and timezone.
  */
 export const createLatestReminder = (
-  { locale, locationLabel }: { locale: Locale; locationLabel: string },
+  {
+    locale,
+    locationLabel,
+    platform = 'Web',
+  }: { locale: Locale; locationLabel: string; platform?: string },
   now = new Date()
 ): string => {
-  return [
-    formatDate(now),
-    new Intl.DateTimeFormat(locale, { weekday: 'long' }).format(now),
-    locationLabel,
-    'Web',
-    translate('latestReminderLanguage'),
-  ].join(',')
+  const weekday = new Intl.DateTimeFormat(locale, { weekday: 'long' }).format(now)
+  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone
+  const parts = [`Date: ${formatDate(now)} (${weekday})`]
+  if (timeZone) {
+    parts.push(`Timezone: ${timeZone}`)
+  }
+  parts.push(`Platform: ${platform}`)
+  if (locationLabel) {
+    parts.push(`Location: ${locationLabel}`)
+  }
+  parts.push(`UI Language: ${translate('latestReminderLanguage')}`)
+  return parts.join(' | ')
 }

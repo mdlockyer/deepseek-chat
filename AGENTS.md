@@ -41,6 +41,10 @@ Tiers, top to bottom: `app/` → `slices/*` → `libs/*` → `spine/`. `src-taur
   transforms pure. Never mask invariant failures with broad catches or silent fallbacks.
 - **App tier cycles.** Lint enforces `import/no-cycle` (dynamic imports count). Break app wiring
   cycles with `app/lateBindings.ts` or lazy factories, not dynamic imports.
+- **Harness prompting.** System prompt sections, tool descriptions, and `latest_reminder` follow
+  the unified human-voiced prompting architecture documented in `docs/prompting-harness.md`.
+  Whenever you add/change tools, UI surfaces, or sandbox/security boundaries, update the matching
+  prompt layer in the same commit and keep `system` static for KV-cache reuse.
 - **Verification.** Test only sealed boundaries in `slices/<target>/tests/` (the package
   entrypoint, an in-memory `EventLog`, fake ports, `fake-indexeddb` where storage is IndexedDB) and
   wiring in `app/tests/`, with zero internal mocks; tests import a slice by its package name, never

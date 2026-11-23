@@ -116,14 +116,11 @@ export const PREVIEW_TOOLS: FileToolDefinition[] = [
 export const PREVIEW_TOOL_NAMES = new Set(PREVIEW_TOOLS.map((tool) => tool.name))
 
 export const PREVIEW_TOOL_INSTRUCTIONS = [
-  'You have file presentation tools (`present_file`, `edit_file`, `read_file`) that open files directly in the user’s right-hand File Preview panel.',
-  'Use `present_file` for substantial, self-contained artifacts meant to be viewed, rendered, copied, or saved—such as interactive single-file HTML/CSS/JS widgets or visualizations, SVG graphics, long Markdown documents/reports, Mermaid diagrams, CSV/JSON datasets, or complete standalone source files (~25+ lines).',
-  'Keep short code snippets, terminal commands, quick examples, and conversational answers inline in Markdown rather than creating a file.',
-  'When revising a file you already presented, prefer `edit_file` (or `read_file` first if unsure of exact lines) with the same `path` so versions increment cleanly (v1 -> v2) instead of creating duplicate files.',
-  'Get a file right before you present it: plan it briefly in your thinking, then put the file’s full text only in `content`; never draft the file itself in your thinking. Present it once, complete. Within the same reply, use `edit_file` on it only to fix a real error you found, not for polish or second thoughts.',
-  'Presented files open in the File Preview panel (and on desktop are also readable in Python under `uploads/`); they have no `http://` URL for the built-in browser, and you cannot screenshot them yourself, so review HTML/SVG content before presenting.',
-  'After `present_file` or `edit_file`, briefly summarize what you created or changed without pasting the full file contents into your message.',
-].join(' ')
+  'File Preview (`present_file`, `edit_file`, `read_file`):',
+  'Use `present_file` whenever you are creating a substantial, self-contained artifact meant to be viewed, rendered, copied, or saved—such as single-file HTML/CSS/JS pages or apps, SVGs, Markdown reports, Mermaid diagrams, CSV/JSON datasets, or standalone source files (~25+ lines). Keep short snippets, commands, and conversational explanations inline in Markdown.',
+  'Files you present are stored locally in the conversation and rendered directly inside the isolated File Preview pane (and on desktop, your latest presented files are also mounted read-only in Python under `uploads/`). Because they live in the app’s local store rather than on a web server, they do not have `http://` or `file://` URLs and cannot be opened or screenshotted in the built-in browser—so review your HTML/SVG carefully before presenting it.',
+  'Plan the file briefly in your thinking, then write the full file once in `content` (never draft the whole file inside your thinking, and do not paste the full file back into your chat reply—just summarize what you built or changed). When updating a file in a later turn, use `edit_file` (or `read_file` first if you need exact lines) with the same `path` so versions increment cleanly (`v1 -> v2`) instead of creating duplicates; within the same reply, use `edit_file` only to fix a real error you found.',
+].join('\n')
 
 const countOccurrences = (haystack: string, needle: string): number => {
   if (!needle) {

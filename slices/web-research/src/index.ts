@@ -102,8 +102,11 @@ const SCRAPE_TOOL: WebToolDefinition = {
   },
 }
 
-const INSTRUCTIONS =
-  'You have live web tools (`web_search` and `web_scrape`) powered by Firecrawl. Use `web_search` when current information or verification is needed, and `web_scrape` to read full pages or user-provided URLs. When citing `web_search` results in your final answer, cite them inline using `[citation:1]`, `[citation:2]`, etc. matching the 1-based result numbers returned by `web_search`.'
+const INSTRUCTIONS = [
+  'Web Research (`web_search`, `web_scrape`):',
+  'You have fast headless web tools powered by Firecrawl. Reach for `web_search` and `web_scrape` when you need current facts, documentation, or clean Markdown from a URL—they are much faster and lighter than driving the built-in browser. Save the built-in browser for interactive flows, logged-in sessions, JavaScript-heavy apps, or visual inspection.',
+  'When citing `web_search` results in your answer, place inline markers like `[citation:1]`, `[citation:2]` matching the 1-based result numbers returned by `web_search`—the app renders them as clickable source links and populates the Search Results panel.',
+].join('\n')
 
 const containsHttpUrl = (text: string) => /https?:\/\/\S+/i.test(text)
 

@@ -124,6 +124,7 @@ export const toolGateway: ToolGateway = {
     return [
       ...(has(workspaceFiles.handles) ? [workspaceFiles.instructions] : []),
       ...(has(webResearch.handles) ? [webResearch.instructions] : []),
+      ...(names.has(python.toolName) ? [python.instructions] : []),
       ...(has(browser.handles) ? [browser.instructions] : []),
     ]
   },
