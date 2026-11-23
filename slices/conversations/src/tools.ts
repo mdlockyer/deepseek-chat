@@ -40,6 +40,7 @@ export type ToolResult = Pick<ToolResultPart, 'content' | 'status'> &
       ToolResultPart,
       | 'durationMs'
       | 'images'
+      | 'previewImages'
       | 'files'
       | 'searchResults'
       | 'scrapedPage'

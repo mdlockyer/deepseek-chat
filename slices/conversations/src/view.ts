@@ -494,7 +494,7 @@ export const buildReplyView = (reply: AssistantMessage, streaming: boolean): Rep
           summary: toolSummary ?? meta?.summary ?? fallbackSummary,
           url,
           title: meta?.title,
-          images: toolResult?.images,
+          images: toolResult?.previewImages?.length ? toolResult.previewImages : toolResult?.images,
           status,
           durationMs: toolResult?.durationMs,
           output: toolResult?.status === 'error' ? toolResult.content : undefined,

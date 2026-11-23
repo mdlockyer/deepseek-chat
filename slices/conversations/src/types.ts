@@ -109,6 +109,8 @@ export type ToolResultPart = {
   startedAt?: number
   /** 代码生成的图片（data URL），展示给用户，并经 Files API 上传后附给模型 */
   images?: string[]
+  /** 仅用于界面展示的干净预览图（如不含 [eN] 标记的浏览器截图）；缺省时回退到 images，不回传给模型 */
+  previewImages?: string[]
   /** present_file() 交给用户下载的文件；原件存在 IndexedDB 的 files 表，按 id 读取 */
   files?: PresentedFileRef[]
   /** 与 images 一一对应的 Files API file_id；undefined 为尚未上传，null 为上传失败 */

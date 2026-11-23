@@ -174,6 +174,7 @@ export const toolGateway: ToolGateway = {
         content: outcome.text,
         status: outcome.status,
         ...(outcome.images.length > 0 ? { images: outcome.images } : {}),
+        ...(outcome.previewImages?.length ? { previewImages: outcome.previewImages } : {}),
         durationMs: outcome.durationMs,
         browserAction: outcome.meta,
       }

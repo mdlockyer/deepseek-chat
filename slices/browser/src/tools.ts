@@ -295,6 +295,7 @@ export type BrowserToolRunResult = {
   status: 'ok' | 'error' | 'aborted'
   text: string
   images: string[]
+  previewImages?: string[]
   meta: BrowserActionMeta
   durationMs: number
 }
@@ -536,7 +537,13 @@ export const createBrowserTools = (state: BrowserState, host: BrowserHost | null
       selector?: string
       actionNote?: string
     }
-  ): Promise<{ text: string; images: string[]; url: string; title: string }> => {
+  ): Promise<{
+    text: string
+    images: string[]
+    previewImages: string[]
+    url: string
+    title: string
+  }> => {
     const tab = getSessionBrowser(useBrowserStore.getState(), sessionId).tabs.find(
       (t) => t.id === tabId
     )
@@ -544,6 +551,7 @@ export const createBrowserTools = (state: BrowserState, host: BrowserHost | null
       return {
         text: `${options.actionNote ? options.actionNote + '\n\n' : ''}The active browser tab is blank (about:blank). Call browser_navigate with an http:// or https:// URL first.`,
         images: [],
+        previewImages: [],
         url: 'about:blank',
         title: 'New tab',
       }
@@ -558,7 +566,11 @@ export const createBrowserTools = (state: BrowserState, host: BrowserHost | null
       true
     )
     const images: string[] = []
+    const previewImages: string[] = []
     if (options.includeScreenshot) {
+      // Clean screenshot for the user-facing transcript (no [eN] SoM badges).
+      const cleanShot = await native.takeSnapshot(tabId, 1280)
+      previewImages.push(cleanShot.dataUrl)
       try {
         await evalDriverJson(tabId, buildShowSomBadgesScript(tab.zoom), true, 3_000).catch(() => {})
         const shot = await native.takeSnapshot(tabId, 1280)
@@ -570,6 +582,7 @@ export const createBrowserTools = (state: BrowserState, host: BrowserHost | null
     return {
       text: formatSnapshot(snap, options.actionNote),
       images,
+      previewImages,
       url: snap.url,
       title: snap.title,
     }
@@ -789,6 +802,7 @@ export const createBrowserTools = (state: BrowserState, host: BrowserHost | null
             status: 'ok',
             text: observed.text,
             images: observed.images,
+            ...(observed.previewImages.length > 0 ? { previewImages: observed.previewImages } : {}),
             meta: {
               tool: toolName,
               summary,
@@ -813,6 +827,7 @@ export const createBrowserTools = (state: BrowserState, host: BrowserHost | null
             status: 'ok',
             text: observed.text,
             images: observed.images,
+            ...(observed.previewImages.length > 0 ? { previewImages: observed.previewImages } : {}),
             meta: {
               tool: toolName,
               summary,
@@ -853,6 +868,7 @@ export const createBrowserTools = (state: BrowserState, host: BrowserHost | null
             status: 'ok',
             text: observed.text,
             images: observed.images,
+            ...(observed.previewImages.length > 0 ? { previewImages: observed.previewImages } : {}),
             meta: {
               tool: toolName,
               summary,
@@ -1101,6 +1117,7 @@ export const createBrowserTools = (state: BrowserState, host: BrowserHost | null
             status: 'ok',
             text: observed.text,
             images: observed.images,
+            ...(observed.previewImages.length > 0 ? { previewImages: observed.previewImages } : {}),
             meta: {
               tool: toolName,
               summary: spec

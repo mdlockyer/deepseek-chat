@@ -369,6 +369,8 @@ describe('buildReplyView for Firecrawl client tools', () => {
           tool_use_id: 'b1',
           content: 'Clicked',
           status: 'ok',
+          images: ['data:image/jpeg;base64,annotated'],
+          previewImages: ['data:image/jpeg;base64,clean'],
           browserAction: { tool: 'browser_click', summary: 'Clicking [e4]' },
         },
       ]),
@@ -381,6 +383,7 @@ describe('buildReplyView for Firecrawl client tools', () => {
     assert.equal(search?.summary, 'Checking Firecrawl rate limit tiers')
     assert.equal(open?.pages[0]?.summary, 'Reading pricing table from Firecrawl docs')
     assert.equal(browserStep?.actions[0]?.summary, 'Switching pricing toggle to annual billing')
+    assert.deepEqual(browserStep?.actions[0]?.images, ['data:image/jpeg;base64,clean'])
   })
 })
 
