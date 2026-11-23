@@ -27,18 +27,9 @@ export const formatClock = (value: string | number | Date, locale: string): stri
   if (!date) {
     return null
   }
-  return new Intl.DateTimeFormat(locale, { hour: '2-digit', minute: '2-digit' }).format(date)
+  return new Intl.DateTimeFormat(locale, { hour: 'numeric', minute: '2-digit' }).format(date)
 }
 
-/** 会话标题：未命名的会话用时间区分，避免列表里出现多个相同的「新对话」 */
-export const sessionTitle = (
-  session: { title: string; updatedAt: number },
-  untitledLabel: string,
-  locale: string
-): string => {
-  if (session.title) {
-    return session.title
-  }
-  const clock = formatClock(session.updatedAt, locale)
-  return clock ? `${untitledLabel} · ${clock}` : untitledLabel
-}
+/** 会话标题：未命名的会话显示默认标签，时间由侧边栏弱化呈现 */
+export const sessionTitle = (session: { title: string }, untitledLabel: string): string =>
+  session.title || untitledLabel

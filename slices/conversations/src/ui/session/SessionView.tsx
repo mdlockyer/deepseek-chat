@@ -1,4 +1,3 @@
-import { useLocale } from '@deepseek-chat/spine/i18n'
 import clsx from 'clsx'
 import { useIsMobile } from '@deepseek-chat/spine/design'
 import { useTranslate } from '../../messages.js'
@@ -27,11 +26,10 @@ export const SessionView = ({
 }) => {
   const t = useTranslate()
   const isMobile = useIsMobile()
-  const locale = useLocale()
   const { panels } = deps().ui
   const filesToggle = panels.files.useToggle(session)
   const hasPendingAsk = useAskUserStore((state) => Boolean(state.pendingBySession[session.id]))
-  const title = sessionTitle(session, t('untitledChat'), locale)
+  const title = sessionTitle(session, t('untitledChat'))
   return (
     <div className={styles.view}>
       {isMobile ? (

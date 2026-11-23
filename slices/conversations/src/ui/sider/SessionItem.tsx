@@ -9,7 +9,7 @@ import {
 } from '@deepseek-chat/spine/design'
 import { renameSession, selectSession } from '../../store.js'
 import { type SessionSummary } from '../../types.js'
-import { sessionTitle } from '../../format.js'
+import { formatClock, sessionTitle } from '../../format.js'
 import { IconButton } from '@deepseek-chat/spine/design'
 import { Menu } from '@deepseek-chat/spine/design'
 import { closeMobileSider } from './mobileSiderState.js'
@@ -29,7 +29,9 @@ export const SessionItem = memo(function SessionItem({
   const t = useTranslate()
   const locale = useLocale()
   const [editing, setEditing] = useState(false)
-  const displayTitle = sessionTitle(session, t('untitledChat'), locale)
+  const untitled = !session.title
+  const displayTitle = sessionTitle(session, t('untitledChat'))
+  const clock = untitled ? formatClock(session.updatedAt, locale) : null
 
   if (editing) {
     const finish = (title: string) => {
@@ -43,7 +45,7 @@ export const SessionItem = memo(function SessionItem({
         <input
           className={styles.renameInput}
           aria-label={t('sessionItemMenuRenameOption')}
-          defaultValue={displayTitle}
+          defaultValue={session.title || displayTitle}
           autoFocus
           onFocus={(event) => event.target.select()}
           onBlur={(event) => finish(event.target.value)}
@@ -73,8 +75,13 @@ export const SessionItem = memo(function SessionItem({
           closeMobileSider()
         }}
       >
-        <span className={styles.title}>{displayTitle}</span>
+        <span className={clsx(styles.title, untitled && styles.untitled)}>{displayTitle}</span>
       </button>
+      {clock ? (
+        <span className={styles.time} aria-hidden="true">
+          {clock}
+        </span>
+      ) : null}
       <div className={styles.action} onClick={(event) => event.stopPropagation()}>
         <Menu
           options={[

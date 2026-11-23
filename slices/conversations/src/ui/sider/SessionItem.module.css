@@ -32,14 +32,24 @@
         visibility: visible;
         transition: opacity var(--ds-transition-duration) var(--ds-ease-in-out);
       }
+
+      .time {
+        opacity: 0;
+      }
     }
   }
 
   /* 键盘进入这一行时也显示菜单按钮 */
-  &:focus-within .action {
-    opacity: 1;
-    visibility: visible;
-    transition: opacity var(--ds-transition-duration) var(--ds-ease-in-out);
+  &:focus-within {
+    .action {
+      opacity: 1;
+      visibility: visible;
+      transition: opacity var(--ds-transition-duration) var(--ds-ease-in-out);
+    }
+
+    .time {
+      opacity: 0;
+    }
   }
 }
 
@@ -74,6 +84,25 @@
   line-height: 18px;
 }
 
+.untitled {
+  color: var(--dsw-alias-label-secondary);
+
+  .active & {
+    color: inherit;
+  }
+}
+
+.time {
+  position: absolute;
+  right: 12px;
+  pointer-events: none;
+  font-size: 12px;
+  line-height: 16px;
+  font-variant-numeric: tabular-nums;
+  color: var(--dsw-alias-label-tertiary);
+  transition: opacity var(--ds-transition-duration) var(--ds-ease-in-out);
+}
+
 /* 常驻占位、淡入淡出：悬停时标题宽度不跳 */
 .action {
   display: flex;
@@ -104,6 +133,10 @@
   .action {
     opacity: 1;
     visibility: visible;
+  }
+
+  .time {
+    display: none;
   }
 }
 
