@@ -3,27 +3,23 @@ import { formatDate } from './format.js'
 import { translate } from './messages.js'
 
 /**
- * Dynamic per-round environment snapshot sent in `latest_reminder` (kept out of `system` so the
- * prompt prefix stays cacheable across turns). Uses local browser/OS date and timezone.
+ * DeepSeek Chat Engine's strict 5-field CSV contract for `latest_reminder`:
+ * `<date>,<weekday>,<location>,<platform>,<language>` where `date` is local `YYYY-MM-DD`,
+ * `location` may be empty, and `platform` is strictly `'App'` or `'Web'`.
  */
 export const createLatestReminder = (
   {
     locale,
     locationLabel,
     platform = 'Web',
-  }: { locale: Locale; locationLabel: string; platform?: string },
+  }: { locale: Locale; locationLabel: string; platform?: 'App' | 'Web' },
   now = new Date()
 ): string => {
-  const weekday = new Intl.DateTimeFormat(locale, { weekday: 'long' }).format(now)
-  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone
-  const parts = [`Date: ${formatDate(now)} (${weekday})`]
-  if (timeZone) {
-    parts.push(`Timezone: ${timeZone}`)
-  }
-  parts.push(`Platform: ${platform}`)
-  if (locationLabel) {
-    parts.push(`Location: ${locationLabel}`)
-  }
-  parts.push(`UI Language: ${translate('latestReminderLanguage')}`)
-  return parts.join(' | ')
+  return [
+    formatDate(now),
+    new Intl.DateTimeFormat(locale, { weekday: 'long' }).format(now),
+    locationLabel,
+    platform,
+    translate('latestReminderLanguage'),
+  ].join(',')
 }

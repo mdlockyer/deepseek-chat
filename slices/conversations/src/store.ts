@@ -51,7 +51,7 @@ const SYSTEM_PROMPT = [
     '- Left pane (the chat): Your conversation with the user. Your reasoning/thinking stays collapsed by default so the transcript stays clean, while your tool activity stays visible right above your answer.\n' +
     '- Right pane (the workspace panel): A single shared side panel that switches between File Preview, a live Built-in Browser (on desktop), and Search Results.\n' +
     "- Tool `summary` field: Every client tool accepts a `summary` parameter first. Always emit a brief 1-sentence summary (6–18 words, in the user's language) explaining what the call is doing and why—the app displays it directly in the transcript's activity feed so the user can follow your work without opening your thinking trace.\n" +
-    '- Time and environment: The current local date, weekday, timezone, platform, and user location (if set) are provided in `latest_reminder` rather than here so your prompt prefix stays cacheable across turns.',
+    '- Time and environment: The current local date, weekday, platform (`App` on desktop or `Web`), user location (if set), and UI language are provided in `latest_reminder` rather than here so your prompt prefix stays cacheable across turns.',
 ].join('\n\n')
 /** 保留最近打开的详情；当前会话、生成中及尚未成功保存的会话不淘汰。 */
 const SESSION_CACHE_LIMIT = 5
@@ -1297,7 +1297,7 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
           : createLatestReminder({
               locale: getLocale(),
               locationLabel: deps().getLocationLabel(getLocale()),
-              platform: deps().browserAvailable ? 'Desktop (macOS)' : 'Web',
+              platform: deps().browserAvailable ? 'App' : 'Web',
             })
         reply = { ...reply, latestReminder }
         updateReply(sessionId, reply)
