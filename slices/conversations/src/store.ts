@@ -1345,7 +1345,10 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
           loadFile: db.loadFile,
         })
       }
-      updateResult(call.id, result)
+      updateResult(call.id, {
+        ...result,
+        durationMs: result.durationMs ?? Date.now() - startedAt,
+      })
       persist(sessionId)
     }
 

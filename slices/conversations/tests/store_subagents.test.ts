@@ -982,4 +982,65 @@ describe('conversations subagent runtime (Phase 2 tests 2–19)', () => {
       )
     }
   })
+
+  it('deduplicates repeated source URLs in the wait ledger (preserving verified) and records wait durationMs', async () => {
+    let leadStep = 0
+    env.respondWith(async (req) => {
+      if (isLeadRequest(req)) {
+        leadStep += 1
+        if (leadStep === 1) {
+          return { calls: [{ name: 'spawn_clean', input: { topic: 'dedup-sources' } }] }
+        }
+        if (leadStep === 2) {
+          return { calls: [{ name: WAIT_TOOL_NAME, input: { until: 'all' } }] }
+        }
+        return { text: 'Done [citation:1].' }
+      }
+      await delay(25)
+      return {
+        calls: [
+          {
+            name: 'finish_task',
+            input: {
+              answer: 'Claim A [1] and Claim B [2].',
+              sources: [
+                {
+                  n: 1,
+                  url: 'https://dup.example/article',
+                  title: 'Article (first)',
+                  verification: 'unverified',
+                },
+                {
+                  n: 2,
+                  url: 'https://dup.example/article',
+                  title: 'Article (second)',
+                  verification: 'verified',
+                },
+              ],
+            },
+          },
+        ],
+      }
+    })
+
+    await turn('deduplicate child sources and time wait')
+    const reply = lastReply()
+    const waitCall = reply.blocks.find((b) => b.type === 'tool_use' && b.name === WAIT_TOOL_NAME)
+    assert.ok(waitCall && waitCall.type === 'tool_use')
+    const waitResult = reply.blocks.find(
+      (b) => b.type === 'tool_result' && b.tool_use_id === waitCall.id
+    )
+    assert.ok(waitResult && waitResult.type === 'tool_result')
+    assert.equal(typeof waitResult.durationMs, 'number')
+    assert.ok(
+      (waitResult.durationMs ?? 0) >= 15,
+      `expected wait durationMs >= 15, got ${waitResult.durationMs}`
+    )
+    assert.match(waitResult.content, /Claim A \[citation:1\] and Claim B \[citation:1\]\./)
+    const ledgerLines = waitResult.content
+      .split('\n')
+      .filter((line) => line.startsWith('[citation:1] '))
+    assert.equal(ledgerLines.length, 1, 'duplicate URL appears once in the Sources ledger')
+    assert.match(ledgerLines[0] ?? '', /\(verified\)$/)
+  })
 })

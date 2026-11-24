@@ -94,6 +94,7 @@ export const assignChildCitations = (
     globalN: number
     source: AgentSource
   }> = []
+  const ledgerByGlobalN = new Map<number, number>()
   const searchResults: WebSearchSourceMeta[] = []
   const addedUrls = new Set<string>()
 
@@ -108,7 +109,16 @@ export const assignChildCitations = (
       citedUrls.set(url, globalN)
     }
     localToGlobal.set(source.n, globalN)
-    numberedSources.push({ globalN, source })
+    const existingIdx = ledgerByGlobalN.get(globalN)
+    if (existingIdx === undefined) {
+      ledgerByGlobalN.set(globalN, numberedSources.length)
+      numberedSources.push({ globalN, source })
+    } else if (
+      source.verification === 'verified' &&
+      numberedSources[existingIdx]?.source.verification !== 'verified'
+    ) {
+      numberedSources[existingIdx] = { globalN, source }
+    }
     if (!addedUrls.has(url)) {
       addedUrls.add(url)
       searchResults.push({
