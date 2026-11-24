@@ -1,11 +1,17 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import type { StreamTrace, ToolKind, ToolResult } from '@deepseek-chat/slice-conversations'
+import {
+  buildReplyView,
+  type StreamTrace,
+  type ToolKind,
+  type ToolResult,
+} from '@deepseek-chat/slice-conversations'
 import { createStoreEnv, seeded, type ApiReply, type ApiRequest } from './store_harness.js'
 
 // Tool names unlike the real ones: the store must rely on the gateway alone.
 const KINDS: Record<string, ToolKind> = {
   find_web: 'web_search',
+  read_web: 'web_scrape',
   run_code: 'python',
   make_doc: 'present_file',
   click_page: 'browser',
@@ -255,5 +261,106 @@ describe('conversations store: the tool-call loop', () => {
     assert.equal(seen.activeBefore, true)
     assert.equal(seen.activeAfter, false)
     assert.equal(await (await env.slice.loadFile('file-ctx-1'))?.text(), 'stored bytes')
+  })
+
+  it('normalizes citation numbers in call order across concurrent read tool batches', async () => {
+    // One tool round emits two concurrent web_search calls separated by a web_scrape call,
+    // finishing out of order and with an overlapping URL.
+    env.respondWith((request) =>
+      resultsSent(request).length === 0
+        ? {
+            calls: [
+              { name: 'find_web', input: { query: 'first' } },
+              { name: 'read_web', input: { url: 'https://scraped.example' } },
+              { name: 'find_web', input: { query: 'second' } },
+            ],
+          }
+        : { text: 'Grounded[citation:1][citation:3][citation:4].' }
+    )
+
+    env.runToolsWith(async (call, context) => {
+      if (call.name === 'read_web') {
+        await new Promise((r) => setTimeout(r, 15))
+        return {
+          status: 'ok',
+          content: 'Title: Scraped\nBody',
+          scrapedPage: { url: 'https://scraped.example', title: 'Scraped' },
+        }
+      }
+      const query = (call.input as { query: string }).query
+      // Finish the second search BEFORE the first to exercise concurrent arrival order.
+      if (query === 'first') {
+        await new Promise((r) => setTimeout(r, 30))
+        const sources = [
+          {
+            url: 'https://a.example',
+            title: 'A',
+            snippet: 'sa',
+            siteName: 'a.example',
+            publishedAt: null,
+          },
+          {
+            url: 'https://b.example',
+            title: 'B',
+            snippet: 'sb',
+            siteName: 'b.example',
+            publishedAt: null,
+          },
+        ]
+        // Simulate Firecrawl numbering from context.citedUrls at call start.
+        let n = context.citedUrls.size + 1
+        const text = sources
+          .map((s) => `[${context.citedUrls.get(s.url) ?? n++}] ${s.title}\nURL: ${s.url}`)
+          .join('\n\n')
+        return { status: 'ok', content: text, searchResults: sources }
+      }
+      const sources = [
+        {
+          url: 'https://b.example',
+          title: 'B',
+          snippet: 'sb',
+          siteName: 'b.example',
+          publishedAt: null,
+        },
+        {
+          url: 'https://c.example',
+          title: 'C',
+          snippet: 'sc',
+          siteName: 'c.example',
+          publishedAt: null,
+        },
+      ]
+      let n = context.citedUrls.size + 1
+      const text = sources
+        .map((s) => `[${context.citedUrls.get(s.url) ?? n++}] ${s.title}\nURL: ${s.url}`)
+        .join('\n\n')
+      return { status: 'ok', content: text, searchResults: sources }
+    })
+
+    const requestsBefore = env.requests.length
+    await turn('concurrent citation check')
+    const reply = lastReply()
+    const view = buildReplyView(reply, false)
+
+    // Expected SourceRegistry order: 1=a.example, 2=b.example, 3=scraped.example, 4=c.example.
+    assert.deepEqual(
+      view.sources.map((s) => [s.index, s.url]),
+      [
+        [1, 'https://a.example'],
+        [2, 'https://b.example'],
+        [3, 'https://scraped.example'],
+        [4, 'https://c.example'],
+      ]
+    )
+
+    // The second request sent to the model must carry renumbered, collision-free indices matching view.sources.
+    const followUp = env.requests[requestsBefore + 1]
+    assert.ok(followUp)
+    const sent = resultsSent(followUp)
+    assert.equal(sent.length, 3)
+    assert.match(sent[0]?.[1] ?? '', /^\[1\] A\nURL: https:\/\/a\.example/m)
+    assert.match(sent[0]?.[1] ?? '', /^\[2\] B\nURL: https:\/\/b\.example/m)
+    assert.match(sent[2]?.[1] ?? '', /^\[2\] B\nURL: https:\/\/b\.example/m)
+    assert.match(sent[2]?.[1] ?? '', /^\[4\] C\nURL: https:\/\/c\.example/m)
   })
 })

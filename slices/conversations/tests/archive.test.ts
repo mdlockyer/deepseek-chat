@@ -207,7 +207,7 @@ describe('archive export Firecrawl preservation', () => {
               status: 'ok',
               scrapedPage: { url: 'https://firecrawl.dev', title: 'Firecrawl' },
             },
-            { type: 'text', text: 'Found it[citation:1].' },
+            { type: 'text', text: 'Found it [citation:1]. Also [citation:1] works.' },
           ],
         },
       ],
@@ -217,7 +217,7 @@ describe('archive export Firecrawl preservation', () => {
     const fragments = exported.messages[1].fragments
     assert.equal(fragments[0]?.type, 'TOOL_SEARCH')
     assert.equal(fragments[1]?.type, 'TOOL_OPEN')
-    assert.deepEqual(fragments[2], { type: 'RESPONSE', content: 'Found it.' })
+    assert.deepEqual(fragments[2], { type: 'RESPONSE', content: 'Found it. Also works.' })
   })
 })
 

@@ -59,11 +59,11 @@
   width: calc(var(--message-list-max-width) - var(--message-list-padding-horizontal) * 2);
   max-width: calc(100% - 32px);
   margin: auto auto 0;
+  padding-top: 14px;
   background: linear-gradient(
     to bottom,
     transparent 0%,
-    transparent 30%,
-    var(--dsw-alias-bg-base) 30%,
+    var(--dsw-alias-bg-base) 38%,
     var(--dsw-alias-bg-base) 100%
   );
 }

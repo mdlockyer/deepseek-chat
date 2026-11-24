@@ -24,7 +24,8 @@ spine locale.
 ## Guarantees
 
 1. **Citations.** With `sources`, `[citation:N]` becomes `renderCitation(source N)`; a marker with no
-   matching source is removed. Without `sources` the marker stays as text.
+   matching source is removed along with any orphaned leading space before punctuation, whitespace,
+   or end-of-text. Without `sources` the marker stays as text.
 2. **Links.** Links open in a new tab with `rel="noreferrer"`; `mailto:` links open in place. A URL
    without a scheme gets `https://`. Only `http:`, `https:` and `mailto:` URLs become `href`s; any
    other link keeps its text and gets no `href`. `#anchors` render as plain text. With
@@ -39,6 +40,8 @@ spine locale.
 9. **Code blocks** show the language and a copy button; known languages are highlighted, others are
    escaped plain text. A `mermaid` block shows the diagram with a Diagram/Code toggle.
 10. **Math** renders with KaTeX once loaded; until then, and for a formula that fails while
-    streaming, the source (or the last good rendering) is shown.
+    streaming, the source (or the last good rendering) is shown. Single-dollar inline math obeys
+    currency-safe boundaries (no whitespace inside delimiters, closing `$` not followed by a digit)
+    so dollar amounts in prose never collide with LaTeX.
 11. **Diagrams.** While streaming, a failing diagram keeps the last good drawing; after streaming it
     shows the failure message. An empty diagram says so.

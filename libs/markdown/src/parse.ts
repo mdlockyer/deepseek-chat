@@ -4,8 +4,8 @@ import { fromMarkdown } from 'mdast-util-from-markdown'
 import { gfmFromMarkdown } from 'mdast-util-gfm'
 import { mathFromMarkdown } from 'mdast-util-math'
 import { gfm } from 'micromark-extension-gfm'
-import { math } from 'micromark-extension-llm-math'
 import type { CitationSource } from './context.js'
+import { createCurrencySafeMathExtension } from './mathText.js'
 
 /** 正文里的 [citation:N]，已换成对应来源 */
 export interface CitationNode extends MdAstNode {
@@ -31,6 +31,9 @@ const text = (value: string): Text => ({ type: 'text', value })
  * - disableLink 时链接只保留文字
  * - 删除线保留原样的 ~ 定界符，脚注、引用式链接与定义显示原文
  */
+const MATH_EXTENSION = createCurrencySafeMathExtension()
+const DROP_SPACE_BEFORE = /^[ \t\r\n.,;:!?)\]}，。；：！？）》】]/
+
 export function toMdAst(
   input: string,
   { sources, disableLink }: { sources: readonly CitationSource[] | undefined; disableLink: boolean }
@@ -39,7 +42,7 @@ export function toMdAst(
     extensions: [
       // codeIndented 语法导致有前导空格的列表无法正常渲染
       { ...gfm(), disable: { null: ['codeIndented'] } },
-      math({ singleDollarTextMath: true }),
+      MATH_EXTENSION,
     ],
     mdastExtensions: [gfmFromMarkdown(), mathFromMarkdown()],
   })
@@ -48,10 +51,23 @@ export function toMdAst(
     findAndReplace(
       ast,
       [
-        /\[citation:(\d+)\]/g,
-        (_: string, index: string): CitationNode | '' => {
+        /([ \t]*)\[citation:(\d+)\]/g,
+        (
+          full: string,
+          leadingSpace: string,
+          index: string,
+          match: { index: number; input: string }
+        ): CitationNode | Text | Array<Text | CitationNode> | '' => {
           const source = sourcesByIndex.get(Number(index))
-          return source ? { type: 'citation', source } : ''
+          if (source) {
+            return leadingSpace
+              ? [text(leadingSpace), { type: 'citation', source }]
+              : { type: 'citation', source }
+          }
+          const after = match.input.slice(match.index + full.length)
+          const dropSpace =
+            leadingSpace.length > 0 && (after.length === 0 || DROP_SPACE_BEFORE.test(after))
+          return dropSpace || !leadingSpace ? '' : text(leadingSpace)
         },
       ],
       { ignore: ['linkReference'] }

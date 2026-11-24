@@ -234,6 +234,17 @@ const assistantFragments = (message: AssistantMessage): Fragment[] => {
   const fragments: Fragment[] = []
   let response: { type: 'RESPONSE' | 'TEMPLATE_RESPONSE'; content: string } | undefined
   let separateNextText = false
+  const stripCitations = (value: string) =>
+    value.replace(
+      /([ \t]*)\[citation:\d+\]/g,
+      (full, leadingSpace: string, offset: number, src: string) => {
+        const after = src.slice(offset + full.length)
+        const dropSpace =
+          leadingSpace.length > 0 &&
+          (after.length === 0 || /^[ \t\r\n.,;:!?)\]}，。；：！？）》】]/.test(after))
+        return dropSpace ? '' : leadingSpace
+      }
+    )
   const appendResponse = (chunk: string, separate: boolean) => {
     if (!response || response.type !== 'RESPONSE') {
       response = { type: 'RESPONSE', content: '' }
@@ -245,7 +256,7 @@ const assistantFragments = (message: AssistantMessage): Fragment[] => {
   }
   for (const block of blocks) {
     if (block.type === 'text') {
-      const text = usedWeb ? block.text.replace(/\[citation:\d+\]/g, '') : block.text
+      const text = usedWeb ? stripCitations(block.text) : block.text
       if (block.isTemplate) {
         if (!response || response.type !== 'TEMPLATE_RESPONSE') {
           response = { type: 'TEMPLATE_RESPONSE', content: '' }

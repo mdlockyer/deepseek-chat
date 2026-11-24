@@ -158,3 +158,41 @@ export const assignChildCitations = (
     citedUrls,
   }
 }
+
+/**
+ * Rewrites `[n] <title>\nURL: <url>` headers in a `web_search` tool result so every result carries
+ * its true reply-wide citation index in call order, advancing `citedUrls` in place.
+ * Eliminates colliding numbers when multiple `web_search` / `web_scrape` calls run concurrently.
+ */
+export const renumberSearchResultContent = (
+  content: string,
+  searchResults: readonly WebSearchSourceMeta[],
+  citedUrls: Map<string, number>
+): string => {
+  if (searchResults.length === 0) {
+    return content
+  }
+  const urlToIndex = new Map<string, number>()
+  for (const item of searchResults) {
+    const url = item.url.trim()
+    if (!url) {
+      continue
+    }
+    let index = citedUrls.get(url)
+    if (index === undefined) {
+      index = citedUrls.size + 1
+      citedUrls.set(url, index)
+    }
+    urlToIndex.set(url, index)
+  }
+  if (urlToIndex.size === 0) {
+    return content
+  }
+  return content.replace(
+    /^\[(\d+)\]( [^\n]*\nURL: (\S+))/gm,
+    (match, _old: string, rest: string, url: string) => {
+      const next = urlToIndex.get(url.trim())
+      return next !== undefined ? `[${next}]${rest}` : match
+    }
+  )
+}

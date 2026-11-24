@@ -24,7 +24,7 @@ import {
   prepareDraftMessage,
 } from './drafts.js'
 import { createLatestReminder } from './latestReminder.js'
-import { collectCitedUrls } from './citations.js'
+import { collectCitedUrls, renumberSearchResultContent } from './citations.js'
 import { createStreamTracer } from './streamTrace.js'
 import { createSubagentRuntime } from './subagentRuntime.js'
 import {
@@ -1385,6 +1385,7 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
       }
       const segment = calls.slice(i, end)
       i = end
+      const baseCitedUrls = segment.length > 1 ? collectCitedUrls(reply.blocks) : null
       let cursor = 0
       const workerCount = Math.min(maxParallel, segment.length)
       const worker = async () => {
@@ -1398,6 +1399,39 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
         }
       }
       await Promise.all(Array.from({ length: workerCount }, () => worker()))
+
+      // Reconcile citation numbers across concurrent read results in deterministic call order
+      // so the `[n]` indices the model sees always match `buildReplyView`'s SourceRegistry.
+      if (baseCitedUrls && !controller.signal.aborted) {
+        const runningCited = new Map(baseCitedUrls)
+        let changed = false
+        for (const call of segment) {
+          const block = reply.blocks.find(
+            (b): b is ToolResultPart => b.type === 'tool_result' && b.tool_use_id === call.id
+          )
+          if (!block) {
+            continue
+          }
+          if (block.searchResults && block.searchResults.length > 0) {
+            const rewritten = renumberSearchResultContent(
+              block.content,
+              block.searchResults,
+              runningCited
+            )
+            if (rewritten !== block.content) {
+              updateResult(call.id, { content: rewritten })
+              changed = true
+            }
+          }
+          const scrapedUrl = block.scrapedPage?.url?.trim()
+          if (scrapedUrl && !runningCited.has(scrapedUrl)) {
+            runningCited.set(scrapedUrl, runningCited.size + 1)
+          }
+        }
+        if (changed) {
+          persist(sessionId)
+        }
+      }
     }
   }
   let networkRetries = 0

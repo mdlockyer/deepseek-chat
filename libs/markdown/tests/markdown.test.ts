@@ -40,11 +40,25 @@ describe('markdown: citations', () => {
   const renderCitation = (source: Source) =>
     createElement('sup', { 'data-cite': source.url }, source.index)
 
-  it('renders a known citation through renderCitation and removes unknown ones', () => {
+  it('renders a known citation through renderCitation and removes unknown ones without dangling spaces', () => {
     const html = render('See [citation:1] and [citation:9].', { sources, renderCitation })
     assert.match(html, /<sup data-cite="https:\/\/one\.example\/">1<\/sup>/)
     assert.doesNotMatch(html, /citation:9/)
-    assert.equal(textOf(html), 'See 1 and .')
+    assert.equal(textOf(html), 'See 1 and.')
+
+    // Unmatched citations before punctuation, back-to-back, or between words never leave extra spaces.
+    assert.equal(
+      textOf(render('Total is 1.127 billion shares [citation:9].', { sources, renderCitation })),
+      'Total is 1.127 billion shares.'
+    )
+    assert.equal(
+      textOf(render('Claim [citation:8] [citation:9], next clause.', { sources, renderCitation })),
+      'Claim, next clause.'
+    )
+    assert.equal(
+      textOf(render('Alpha [citation:9] beta.', { sources, renderCitation })),
+      'Alpha beta.'
+    )
   })
 
   it('leaves markers as text when no sources are given', () => {
@@ -174,6 +188,46 @@ describe('markdown: code, math and diagrams', () => {
     const after = render('$x^2$')
     assert.match(after, /class="katex"/)
     assert.doesNotMatch(textOf(after), /\$/)
+  })
+
+  it('keeps currency dollar amounts as prose while still rendering valid inline and display math', async () => {
+    await ensureKatex()
+
+    // Exact regression from multi-currency financial prose with bold spans.
+    const ipo =
+      'Anthropic priced its IPO at **$83 a share** on Nov 18, above its $70–78 roadshow range, ' +
+      'selling 980 million shares and raising roughly **$81 billion**—the largest listing on record. ' +
+      'Shares closed their first day at $97.17, up 17%, putting the company around a ' +
+      '**$1.3 trillion valuation**. A concurrent private placement added about $26 billion.'
+    const ipoHtml = render(ipo)
+    assert.doesNotMatch(ipoHtml, /class="katex"/)
+    assert.match(ipoHtml, /<strong><span>\$83 a share<\/span><\/strong>/)
+    assert.match(ipoHtml, /<strong><span>\$81 billion<\/span><\/strong>/)
+    assert.match(ipoHtml, /<strong><span>\$1\.3 trillion valuation<\/span><\/strong>/)
+    assert.ok(textOf(ipoHtml).includes('$70–78'))
+    assert.ok(textOf(ipoHtml).includes('$97.17'))
+    assert.ok(textOf(ipoHtml).includes('$26 billion'))
+
+    // Compact currency ranges without spaces stay literal prose.
+    const ranges = render('Ranges ($10-$20) and $500–$1,000 stay literal.')
+    assert.doesNotMatch(ranges, /class="katex"/)
+    assert.equal(textOf(ranges), 'Ranges ($10-$20) and $500–$1,000 stay literal.')
+
+    // Currency followed by valid inline math or display math in the same sentence.
+    const mixed = render('The GPU costs $500 and achieves $O(n^2)$ throughput.')
+    assert.match(mixed, /\$500/)
+    assert.match(mixed, /class="katex"/)
+
+    const mixedBlock = render('Costs $50, see $$x^2 + 1$$.')
+    assert.match(mixedBlock, /\$50/)
+    assert.match(mixedBlock, /class="katex"/)
+
+    // Bilingual CJK prose adjacent to single-dollar math and escaped \$ inside math.
+    const cjk = render('设$x=1$，其中$x$为整数。')
+    assert.equal((cjk.match(/class="katex"/g) ?? []).length, 2)
+
+    const escaped = render('$\\$5 + \\$10 = \\$15$')
+    assert.match(escaped, /class="katex"/)
   })
 })
 

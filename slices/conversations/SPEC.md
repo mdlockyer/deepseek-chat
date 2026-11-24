@@ -81,10 +81,12 @@ it, and the header toggle (`visible`, `open`, `toggle`). `panels.browser`: the h
    - Any other call, `wait` included, runs alone after the calls before it have finished.
      While a call runs, its result shows as running (phase `starting` exactly when its kind is
      `python`); afterwards its `tool_result` holds the result. Results are written in call order,
-     each result is saved as soon as its call ends, and the next request sends every result back to
-     the model in call order. When the turn is aborted during a call or concurrent run, no queued call
-     starts and no further request is made; the reply ends stopped. A turn whose model keeps calling
-     tools still ends (after a bounded number of rounds, see Parameters).
+     each result is saved as soon as its call ends, concurrent `read` batches reconcile search
+     citation numbers in call order so they match `buildReplyView`'s source numbering without
+     collisions, and the next request sends every result back to the model in call order. When the
+     turn is aborted during a call or concurrent run, no queued call starts and no further request
+     is made; the reply ends stopped. A turn whose model keeps calling tools still ends (after a
+     bounded number of rounds, see Parameters).
 3. **Prompt.** A turn's system prompt is the assistant identity followed by the gateway's
    instructions for exactly the tools declared that turn, in the gateway's order.
    3a. **Tool context.** A run sees the chat's visible branch with the reply in progress last, knows
