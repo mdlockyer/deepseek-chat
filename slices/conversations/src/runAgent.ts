@@ -43,13 +43,23 @@ export type RunAgentInput = {
   }
 }
 
-export type FinishOutput = { kind: 'given'; value: unknown } | { kind: 'missing' }
+/**
+ * The finish tool's input on an exhausted run: given in the forced-finish round, not given there,
+ * or unknown because that request failed (its error kept so the failure is reported, not hidden).
+ */
+export type FinishOutput =
+  | { kind: 'given'; value: unknown }
+  | { kind: 'missing' }
+  | { kind: 'requestFailed'; error: ApiError }
+
+/** Why a run ended without a proper finish (see `AgentRunState`). */
+export type ExhaustedLimit = 'rounds' | 'toolCalls' | 'noFinishCall'
 
 export type AgentOutcome =
   | { kind: 'finished'; output: unknown; transcript: Transcript<ReplyBlock> }
   | {
       kind: 'exhausted'
-      limit: 'rounds' | 'toolCalls'
+      limit: ExhaustedLimit
       output: FinishOutput
       transcript: Transcript<ReplyBlock>
     }
@@ -197,18 +207,19 @@ export const runAgent = async (input: RunAgentInput): Promise<AgentOutcome> => {
     const toolChoice: CreateMessageRequest['tool_choice'] = input.request.thinking
       ? undefined
       : { type: 'tool', name: input.finishTool }
+    const limit: ExhaustedLimit = mode.kind === 'exhausted' ? mode.limit : 'noFinishCall'
     const round = await streamOneRound(finishMessages, toolChoice)
     if (!round.ok) {
       if (round.outcome.kind === 'stopped') {
         return round.outcome
       }
-      // The child already did its work, so a failed nudge request must not discard it. Report the
-      // finish output as missing so the runtime falls back to the child's last text.
+      // The child already did its work, so a failed nudge request must not discard it: the
+      // runtime falls back to the child's last text and reports the request's error with it.
       input.onStep(transcript, currentRound)
       return {
         kind: 'exhausted',
-        limit: mode.kind === 'exhausted' ? mode.limit : 'rounds',
-        output: { kind: 'missing' },
+        limit,
+        output: { kind: 'requestFailed', error: round.outcome.error },
         transcript,
       }
     }
@@ -242,12 +253,7 @@ export const runAgent = async (input: RunAgentInput): Promise<AgentOutcome> => {
     }
 
     input.onStep(transcript, currentRound)
-    return {
-      kind: 'exhausted',
-      limit: mode.kind === 'exhausted' ? mode.limit : 'rounds',
-      output: { kind: 'missing' },
-      transcript,
-    }
+    return { kind: 'exhausted', limit, output: { kind: 'missing' }, transcript }
   }
 
   const maxRounds = Math.max(1, input.limits.maxRounds)

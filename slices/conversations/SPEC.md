@@ -169,7 +169,9 @@ it, and the header toggle (`visible`, `open`, `toggle`). `panels.browser`: the h
       finish tool in `tool_choice` only when the profile's thinking is off, because DeepSeek
       answers a named `tool_choice` with HTTP 400 in thinking mode; a thinking child gets the
       nudge alone. If that request fails, or the child still doesn't call finish, it ends
-      `exhausted` and delivers its last text with no sources.
+      `exhausted` and delivers its last text with no sources, plus the request's error when it
+      failed. `exhausted.limit` says why: `rounds`, `toolCalls`, or `noFinishCall` (the child
+      ended its turn without calling finish and ignored the nudge).
     - **Network retries:** a child's request that fails with a network error before any content
       block arrived is sent again, with the lead's retry count and backoff, counted per child run.
       A stream that ends after its stop reason but before `message_stop` counts as complete.
@@ -181,7 +183,7 @@ it, and the header toggle (`visible`, `open`, `toggle`). `panels.browser`: the h
       `toolRoundLimit` is reached, which wins and stops running children with reason `roundLimit`.
     - **Stopping & recovery:** stopping the reply aborts every running child (`reason: 'user'`);
       a reply that ends with an API error stops them with `reason: 'interrupted'`. Finished and
-      exhausted children keep their results, saved on `AgentRun.result`. Loading a chat settles any
+      exhausted children keep their results, saved in their `finished` / `exhausted` state. Loading a chat settles any
       `running` child to `stopped` (`reason: 'interrupted'`). Continuing a reply delivers, on the
       lead's first `wait` and without hanging, every ended child whose result no earlier `ok` `wait`
       result carries under its `### Subagent <runId> (` heading.

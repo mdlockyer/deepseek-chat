@@ -4,7 +4,7 @@ import { createMessageBoard, formatBoardDigest } from './board.js'
 import { assignChildCitations, collectCitedUrls } from './citations.js'
 import type { ConversationsParams } from './env.js'
 import { createId } from './id.js'
-import { runAgent, type RunAgentInput } from './runAgent.js'
+import { runAgent, type AgentOutcome, type RunAgentInput } from './runAgent.js'
 import {
   POST_TOOL_NAME,
   WAIT_TOOL_NAME,
@@ -12,9 +12,11 @@ import {
   createChildPostTool,
   ensureSummaryParam,
 } from './subagentTools.js'
-import type { AgentSource, ToolGateway, ToolResult } from './tools.js'
+import type { ToolGateway, ToolResult } from './tools.js'
 import type {
   AgentRun,
+  AgentRunResult,
+  AgentRunState,
   AssistantMessage,
   BoardPost,
   Message,
@@ -24,23 +26,19 @@ import type {
   WebSearchSourceMeta,
 } from './types.js'
 
-type DeliveredOutcome =
-  | {
-      kind: 'completed'
-      outcome: 'finished' | 'exhausted'
-      limit?: 'rounds' | 'toolCalls'
-      content: string
-      sources: AgentSource[]
-    }
-  | { kind: 'failed'; errorKind: string; message: string }
-  | { kind: 'stopped'; reason: 'user' | 'interrupted' | 'roundLimit' }
+type StopReason = Extract<AgentRunState, { status: 'stopped' }>['reason']
+
+const STOP_REASONS: readonly StopReason[] = ['user', 'interrupted', 'roundLimit']
+
+/** `stopAll` aborts a child with its stop reason; any other abort is the user's. */
+const stopReasonOf = (signal: AbortSignal): StopReason =>
+  STOP_REASONS.find((reason) => reason === signal.reason) ?? 'user'
 
 type ManagedRun = {
   run: AgentRun
-  controller?: AbortController
-  promise?: Promise<void>
-  stopReasonOverride?: 'user' | 'interrupted' | 'roundLimit'
-  deliveredOutcome?: DeliveredOutcome
+  /** Present while this runtime drives the child; absent for runs hydrated from a saved reply. */
+  live?: { readonly controller: AbortController; readonly promise: Promise<void> }
+  /** Whether a `wait` result has carried this run's end (its `run.state`) to the lead. */
   reportedToLead: boolean
 }
 
@@ -67,6 +65,8 @@ const trimChildBlocks = (blocks: readonly ReplyBlock[], maxChars: number): Reply
 
 /** Opens each subagent's section in a `wait` result; hydration looks for it to tell what was delivered. */
 const resultHeading = (runId: string) => `### Subagent ${runId} (`
+
+const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error))
 
 const lastTextBlock = (blocks: readonly ReplyBlock[]): string => {
   for (let i = blocks.length - 1; i >= 0; i -= 1) {
@@ -121,7 +121,7 @@ export type SubagentRuntime = {
     signal: AbortSignal,
     options?: { readonly defaultTimeoutS?: number }
   ) => Promise<ToolResult>
-  readonly stopAll: (reason: 'user' | 'interrupted' | 'roundLimit') => Promise<void>
+  readonly stopAll: (reason: StopReason) => Promise<void>
 }
 
 export const createSubagentRuntime = (options: {
@@ -178,41 +178,13 @@ export const createSubagentRuntime = (options: {
   for (const existing of options.initialReply.agents ?? []) {
     // Board digests in a wait result also name the runId, so match the result heading itself.
     const heading = resultHeading(existing.runId)
-    const alreadyReported = priorWaitContents.some((text) => text.includes(heading))
-    const entry: ManagedRun = {
-      run: existing,
-      reportedToLead: alreadyReported,
-    }
-    const { state } = existing
-    if (!alreadyReported && (state.status === 'finished' || state.status === 'exhausted')) {
-      // A result that finished while no wait was collecting it (the lead was stopped or failed
-      // mid-wait). Without a saved result there is nothing to deliver but the fact it was lost.
-      entry.deliveredOutcome = existing.result
-        ? {
-            kind: 'completed',
-            outcome: state.status,
-            ...(state.status === 'exhausted' ? { limit: state.limit } : {}),
-            content: existing.result.content,
-            sources: existing.result.sources,
-          }
-        : {
-            kind: 'failed',
-            errorKind: 'protocol',
-            message: 'The subagent ended, but its result was not saved.',
-          }
-      undeliveredQueue.push(existing.runId)
-    } else if (!alreadyReported && existing.state.status === 'stopped') {
-      entry.deliveredOutcome = { kind: 'stopped', reason: existing.state.reason }
-      undeliveredQueue.push(existing.runId)
-    } else if (!alreadyReported && existing.state.status === 'failed') {
-      entry.deliveredOutcome = {
-        kind: 'failed',
-        errorKind: existing.state.error.kind,
-        message: existing.state.error.message,
-      }
+    const reportedToLead = priorWaitContents.some((text) => text.includes(heading))
+    runs.set(existing.runId, { run: existing, reportedToLead })
+    // Loading a chat settles running children, so every hydrated run has ended. One that no wait
+    // carried (the lead was stopped or failed mid-wait) goes to the lead on its next wait.
+    if (!reportedToLead && existing.state.status !== 'running') {
       undeliveredQueue.push(existing.runId)
     }
-    runs.set(existing.runId, entry)
   }
 
   const activeRunIds = () => {
@@ -300,7 +272,6 @@ export const createSubagentRuntime = (options: {
         state: { status: 'running', round: 1 },
         blocks: [],
       },
-      controller: childController,
       reportedToLead: false,
     }
     runs.set(runId, entry)
@@ -423,7 +394,53 @@ export const createSubagentRuntime = (options: {
       return results
     }
 
-    entry.promise = (async () => {
+    /** The run's end state, with the result the lead will get for a finished or exhausted run. */
+    const endStateOf = async (outcome: AgentOutcome): Promise<AgentRunState> => {
+      switch (outcome.kind) {
+        case 'finished':
+          try {
+            const result = await profile.complete(outcome.output, { runId, outcome: 'finished' })
+            return { status: 'finished', result }
+          } catch (error) {
+            return { status: 'failed', error: { kind: 'protocol', message: messageOf(error) } }
+          }
+        case 'exhausted': {
+          const lastText = lastTextBlock(outcome.transcript.blocks)
+          // Say why sources may be missing rather than handing the lead text that looks complete.
+          const requestNote =
+            outcome.output.kind === 'requestFailed'
+              ? `(The request asking this subagent to finish failed: ${outcome.output.error.message || outcome.output.error.kind}.)`
+              : null
+          const rawOutput =
+            outcome.output.kind === 'given'
+              ? outcome.output.value
+              : { answer: lastText, sources: [] }
+          let result: AgentRunResult
+          try {
+            result = await profile.complete(rawOutput, { runId, outcome: 'exhausted' })
+          } catch (error) {
+            const readNote = `(Its final output could not be read: ${messageOf(error)}.)`
+            result = { content: [lastText, readNote].filter(Boolean).join('\n\n'), sources: [] }
+          }
+          return {
+            status: 'exhausted',
+            limit: outcome.limit,
+            result: requestNote
+              ? { ...result, content: `${result.content}\n\n${requestNote}` }
+              : result,
+          }
+        }
+        case 'failed':
+          return {
+            status: 'failed',
+            error: { kind: outcome.error.kind, message: outcome.error.message },
+          }
+        case 'stopped':
+          return { status: 'stopped', reason: stopReasonOf(childController.signal) }
+      }
+    }
+
+    const promise = (async () => {
       const outcome = await runAgent({
         io: {
           ...createAgentIO(),
@@ -462,108 +479,17 @@ export const createSubagentRuntime = (options: {
         },
       })
 
-      const trimmedBlocks = trimChildBlocks(
-        outcome.transcript.blocks,
-        params.childToolResultDisplayChars
-      )
-
-      if (outcome.kind === 'finished') {
-        try {
-          const completed = await profile.complete(outcome.output, { runId, outcome: 'finished' })
-          entry.run = {
-            ...entry.run,
-            state: { status: 'finished' },
-            blocks: trimmedBlocks,
-            usage: outcome.transcript.usage ?? entry.run.usage,
-            result: { content: completed.content, sources: completed.sources },
-          }
-          entry.deliveredOutcome = {
-            kind: 'completed',
-            outcome: 'finished',
-            content: completed.content,
-            sources: completed.sources,
-          }
-        } catch (error) {
-          const message = error instanceof Error ? error.message : String(error)
-          entry.run = {
-            ...entry.run,
-            state: { status: 'failed', error: { kind: 'protocol', message } },
-            blocks: trimmedBlocks,
-            usage: outcome.transcript.usage ?? entry.run.usage,
-          }
-          entry.deliveredOutcome = { kind: 'failed', errorKind: 'protocol', message }
-        }
-      } else if (outcome.kind === 'exhausted') {
-        const rawOutput =
-          outcome.output.kind === 'given'
-            ? outcome.output.value
-            : { answer: lastTextBlock(outcome.transcript.blocks), sources: [] }
-        try {
-          const completed = await profile.complete(rawOutput, { runId, outcome: 'exhausted' })
-          entry.run = {
-            ...entry.run,
-            state: { status: 'exhausted', limit: outcome.limit },
-            blocks: trimmedBlocks,
-            usage: outcome.transcript.usage ?? entry.run.usage,
-            result: { content: completed.content, sources: completed.sources },
-          }
-          entry.deliveredOutcome = {
-            kind: 'completed',
-            outcome: 'exhausted',
-            limit: outcome.limit,
-            content: completed.content,
-            sources: completed.sources,
-          }
-        } catch (error) {
-          const fallbackText = lastTextBlock(outcome.transcript.blocks)
-          const message =
-            fallbackText ||
-            `Subagent reached its ${outcome.limit} limit without returning structured output (${error instanceof Error ? error.message : String(error)}).`
-          entry.run = {
-            ...entry.run,
-            state: { status: 'exhausted', limit: outcome.limit },
-            blocks: trimmedBlocks,
-            usage: outcome.transcript.usage ?? entry.run.usage,
-            result: { content: message, sources: [] },
-          }
-          entry.deliveredOutcome = {
-            kind: 'completed',
-            outcome: 'exhausted',
-            limit: outcome.limit,
-            content: message,
-            sources: [],
-          }
-        }
-      } else if (outcome.kind === 'failed') {
-        entry.run = {
-          ...entry.run,
-          state: {
-            status: 'failed',
-            error: { kind: outcome.error.kind, message: outcome.error.message },
-          },
-          blocks: trimmedBlocks,
-          usage: outcome.transcript.usage ?? entry.run.usage,
-        }
-        entry.deliveredOutcome = {
-          kind: 'failed',
-          errorKind: outcome.error.kind,
-          message: outcome.error.message,
-        }
-      } else {
-        const reason = entry.stopReasonOverride ?? 'user'
-        entry.run = {
-          ...entry.run,
-          state: { status: 'stopped', reason },
-          blocks: trimmedBlocks,
-          usage: outcome.transcript.usage ?? entry.run.usage,
-        }
-        entry.deliveredOutcome = { kind: 'stopped', reason }
+      entry.run = {
+        ...entry.run,
+        state: await endStateOf(outcome),
+        blocks: trimChildBlocks(outcome.transcript.blocks, params.childToolResultDisplayChars),
+        usage: outcome.transcript.usage ?? entry.run.usage,
       }
-
       undeliveredQueue.push(runId)
       sync(true)
       wakeWaiters()
     })()
+    entry.live = { controller: childController, promise }
 
     return {
       content: `Started subagent "${runId}" (${call.name}). Call \`wait\` to collect its result or board updates.`,
@@ -667,29 +593,40 @@ export const createSubagentRuntime = (options: {
         continue
       }
       entry.reportedToLead = true
-      const outcome = entry.deliveredOutcome
-      if (!outcome) {
-        continue
-      }
-      if (outcome.kind === 'completed') {
-        const numbered = assignChildCitations(outcome.content, outcome.sources, citedUrls)
-        citedUrls = numbered.citedUrls
-        collectedSources.push(...numbered.searchResults)
-        const statusLabel =
-          outcome.outcome === 'finished'
-            ? 'finished'
-            : `exhausted (${outcome.limit ?? 'rounds'} limit)`
-        sections.push(
-          `${resultHeading(runId)}${entry.run.profile}) — ${statusLabel}\n${numbered.content}`
-        )
-      } else if (outcome.kind === 'failed') {
-        sections.push(
-          `${resultHeading(runId)}${entry.run.profile}) — failed (${outcome.errorKind})\n${outcome.message || 'Subagent request failed.'}`
-        )
-      } else {
-        sections.push(
-          `${resultHeading(runId)}${entry.run.profile}) — stopped (${outcome.reason})\nSubagent stopped before finishing (reason: ${outcome.reason}).`
-        )
+      const heading = `${resultHeading(runId)}${entry.run.profile}) —`
+      const { state } = entry.run
+      switch (state.status) {
+        case 'finished':
+        case 'exhausted': {
+          const numbered = assignChildCitations(
+            state.result.content,
+            state.result.sources,
+            citedUrls
+          )
+          citedUrls = numbered.citedUrls
+          collectedSources.push(...numbered.searchResults)
+          const statusLabel =
+            state.status === 'finished'
+              ? 'finished'
+              : state.limit === 'noFinishCall'
+                ? 'exhausted (ended without calling its finish tool)'
+                : `exhausted (${state.limit} limit)`
+          sections.push(`${heading} ${statusLabel}\n${numbered.content}`)
+          break
+        }
+        case 'failed':
+          sections.push(
+            `${heading} failed (${state.error.kind})\n${state.error.message || 'Subagent request failed.'}`
+          )
+          break
+        case 'stopped':
+          sections.push(
+            `${heading} stopped (${state.reason})\nSubagent stopped before finishing (reason: ${state.reason}).`
+          )
+          break
+        case 'running':
+          // Only ended runs are queued (when a live run ends, or when an ended one is hydrated).
+          throw new Error(`Subagent ${runId} was queued for delivery while still running.`)
       }
     }
 
@@ -715,15 +652,13 @@ export const createSubagentRuntime = (options: {
     }
   }
 
-  const stopAll = async (reason: 'user' | 'interrupted' | 'roundLimit') => {
+  const stopAll = async (reason: StopReason) => {
     const pending: Promise<void>[] = []
     for (const entry of runs.values()) {
-      if (entry.run.state.status === 'running' && entry.controller) {
-        entry.stopReasonOverride = reason
-        entry.controller.abort()
-        if (entry.promise) {
-          pending.push(entry.promise)
-        }
+      if (entry.run.state.status === 'running' && entry.live) {
+        // The child reads its stop reason back from the signal (`stopReasonOf`).
+        entry.live.controller.abort(reason)
+        pending.push(entry.live.promise)
       }
     }
     if (pending.length > 0) {

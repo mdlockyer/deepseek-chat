@@ -103,6 +103,9 @@ None consumed or published.
 | `researchMaxRounds`    | `12`    | Max model rounds per `research` subagent run.           |
 | `researchMaxToolCalls` | `16`    | Max tool calls per `research` subagent run.             |
 
+The `research` task message also names a typical workload per `effort` (`EFFORT_GUIDANCE` in
+`researchProfile.ts`): `quick` 2 searches and 2 page reads, `standard` 4 and 4, `thorough` 6 and 6.
+
 ## Ownership notes
 
 - Key storage deliberately duplicates `slices/account`'s rules rather than sharing them through

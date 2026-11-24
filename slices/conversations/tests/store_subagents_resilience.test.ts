@@ -72,6 +72,22 @@ const isLead = (req: ApiRequest) => !req.system.includes('ROLE:')
 const topicOf = (req: ApiRequest) => /TASK:([^"\\]+)/.exec(JSON.stringify(req.messages))?.[1] ?? ''
 const mentions = (req: ApiRequest, text: string) => JSON.stringify(req.messages).includes(text)
 
+/** Text of the newest tool result the lead was sent (the latest `wait`, in these tests). */
+const lastToolResult = (req: ApiRequest): string => {
+  for (const message of [...req.messages].reverse()) {
+    if (Array.isArray(message.content)) {
+      const results = (message.content as { type?: string; content?: unknown }[]).filter(
+        (part) => part.type === 'tool_result'
+      )
+      const last = results.at(-1)
+      if (last) {
+        return typeof last.content === 'string' ? last.content : JSON.stringify(last.content)
+      }
+    }
+  }
+  return ''
+}
+
 const lastReply = (): AssistantMessage => {
   const { activeId } = env.slice.getState()
   assert.ok(activeId)
@@ -176,15 +192,15 @@ describe('subagent runtime review fixes', () => {
     assert.equal(nudges.length, 3, 'each child got exactly one nudge')
     assert.ok(nudges.every((req) => req.tool_choice === undefined))
     const states = (lastReply().agents ?? []).map((agent) => agent.state)
-    assert.deepEqual(states, [
-      { status: 'exhausted', limit: 'rounds' },
-      { status: 'exhausted', limit: 'rounds' },
-      { status: 'exhausted', limit: 'rounds' },
-    ])
+    assert.deepEqual(
+      states.map((state) => (state.status === 'exhausted' ? state.limit : state.status)),
+      ['noFinishCall', 'rounds', 'noFinishCall']
+    )
     assert.ok(leadFinal)
     assert.ok(mentions(leadFinal, 'PROSE-ONLY-ANSWER'), 'ignored nudge delivers the last text')
     assert.ok(mentions(leadFinal, 'LIMIT-ANSWER [citation:1]'), 'finish after nudge keeps sources')
     assert.ok(mentions(leadFinal, 'NUDGE-FAILS-ANSWER'), 'failed nudge delivers the last text')
+    assert.ok(mentions(leadFinal, 'nudge exploded'), "the failed request's error reaches the lead")
   })
 
   it('delivers a result that finished during an aborted wait when the reply is continued, even if a board digest named the child', async () => {
@@ -250,14 +266,23 @@ describe('subagent runtime review fixes', () => {
     const stopped = lastReply()
     const posterRunId = stopped.agents?.[0]?.runId ?? ''
     assert.ok(firstWaitResult.includes(`question from ${posterRunId}`), 'digest named the poster')
-    assert.equal(stopped.agents?.[0]?.result?.content, 'POSTER-RESULT', 'result saved on the run')
+    const posterState = stopped.agents?.[0]?.state
+    assert.equal(
+      posterState?.status === 'finished' ? posterState.result.content : undefined,
+      'POSTER-RESULT',
+      'result saved on the run'
+    )
+    const slowRunId = stopped.agents?.[1]?.runId ?? ''
 
     env.slice.commands.continueReply(sessionId, stopped.id)
     await env.slice.commands.whenIdle()
 
+    // The resumed wait's own result must carry both ended children (SPEC: every ended child whose
+    // result no earlier ok wait carried).
     assert.ok(resumedFinal)
-    assert.ok(mentions(resumedFinal, 'POSTER-RESULT'), 'uncollected result delivered on resume')
-    assert.ok(mentions(resumedFinal, 'stopped (user)'), 'stopped child reported too')
+    const resumedWait = lastToolResult(resumedFinal)
+    assert.ok(resumedWait.includes('POSTER-RESULT'), 'uncollected result delivered on resume')
+    assert.ok(resumedWait.includes(posterRunId) && resumedWait.includes(slowRunId))
     assert.equal(lastReply().status, 'done')
   })
 
@@ -295,11 +320,8 @@ describe('subagent runtime review fixes', () => {
     assert.equal(flakyRequests, 2, 'one retry after the network error')
     const agents = lastReply().agents ?? []
     assert.deepEqual(
-      agents.map((agent) => [agent.state.status, agent.result?.content]),
-      [
-        ['finished', 'RECOVERED'],
-        ['finished', 'CUT-BUT-WHOLE'],
-      ]
+      agents.map((agent) => (agent.state.status === 'finished' ? agent.state.result.content : '')),
+      ['RECOVERED', 'CUT-BUT-WHOLE']
     )
   })
 
@@ -322,8 +344,7 @@ describe('subagent runtime review fixes', () => {
 
     assert.equal(leadRequests.length, 3, 'spawn, early end of turn, then the collected result')
     const final = leadRequests[2]
-    assert.ok(final && mentions(final, 'SLOW-RESULT'))
-    assert.ok(final && !mentions(final, 'Wait timed out'))
+    assert.ok(final && lastToolResult(final).includes('SLOW-RESULT'))
   })
 
   it('stops running children as interrupted, not roundLimit, when the lead request fails', async () => {

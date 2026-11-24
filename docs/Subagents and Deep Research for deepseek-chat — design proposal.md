@@ -23,36 +23,36 @@ The spine is untouched and no new facts are published. Deep research becomes the
 
 ## SSA rules that decide the design
 
-Every placement below follows from one SSA rule. Section numbers refer to *Sealed Slice Architecture (SSA).md* in the `ssa` repo; research citations come from *SSA — Research Foundations.md*.
+Every placement below follows from one SSA rule. Section numbers refer to _Sealed Slice Architecture (SSA).md_ in the `ssa` repo; research citations come from _SSA — Research Foundations.md_.
 
-| SSA rule | What it decides here |
-| --- | --- |
-| **Working Set Radius** (§1): build or regenerate a feature from the spine plus one slice. Grounded in *Context Rot* (Hong et al., 2025). | A future feature adds a subagent by writing a profile in its own slice. It never edits conversations or the engine. |
-| **Zero cross-feature imports** (§2, Tier 2) | Profiles reach conversations through the `ToolGateway` port that the app adapts. No slice imports conversations or another slice. |
-| **Merge Before You Coordinate** (§2, Tier 2): peers that pass coordination facts back and forth or need lockstep rollbacks are one domain. | The subagent runtime lives in conversations. A separate `agents` slice would trade progress, stop and persistence messages with conversations on every step of the same reply. |
-| **No God-Slices; Local Duplication Over Spine Growth** (§6, §1b) | The engine moves into `libs/agent`, not the spine, and conversations gets smaller, not larger. |
-| **Thin App Shell** (§2, Tier 3): zero domain logic; prompt and view formatting stay in slices. | Profile prompts, task building and result shaping live in the owning slice. `app/toolGateway.ts` only maps names. |
-| **Owned Durable Persistence** (§2, Tier 2) | Child transcripts are part of conversations' session record. There is no shared store. |
-| **No Orphan Facts** (§1b) and **no RPC-over-the-Log** (§3.B) | No new facts. Starting a subagent is a top-down call through the gateway, never a `SubagentRequested` / `SubagentCompleted` pair on the log. |
-| **Control plane only** (§3.D) | Child token streams never pass through the `EventLog`. |
-| **Explicit state and provenance** (§4.2) | The run lifecycle, a tool's effect and who called a tool are tagged unions, never `isSubagent` or `parallelSafe` booleans. |
-| **Isolated effect boundary and loud failures** (§4.3) | Pure reducers inside, effects injected at the edge. A failed child or a forbidden call becomes an explicit error result, never a silent fallback. |
-| **SPEC.md separates invariants from parameters** (§4.1) | Limits such as rounds, tool calls and parallel calls go in parameter tables, so tests don't pin them. |
-| **Boundary contracts, spec-derived invariants, two operating modes** (§5). Grounded in *Potemkin Understanding*, *Spec-Driven PBT*, *ImpossibleBench* and Hora & Robbes. | Tests drive the package entrypoint with fake ports and randomized invariants. Phase 0 runs in Locked-Contract Mode. |
+| SSA rule                                                                                                                                                                 | What it decides here                                                                                                                                                           |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Working Set Radius** (§1): build or regenerate a feature from the spine plus one slice. Grounded in _Context Rot_ (Hong et al., 2025).                                 | A future feature adds a subagent by writing a profile in its own slice. It never edits conversations or the engine.                                                            |
+| **Zero cross-feature imports** (§2, Tier 2)                                                                                                                              | Profiles reach conversations through the `ToolGateway` port that the app adapts. No slice imports conversations or another slice.                                              |
+| **Merge Before You Coordinate** (§2, Tier 2): peers that pass coordination facts back and forth or need lockstep rollbacks are one domain.                               | The subagent runtime lives in conversations. A separate `agents` slice would trade progress, stop and persistence messages with conversations on every step of the same reply. |
+| **No God-Slices; Local Duplication Over Spine Growth** (§6, §1b)                                                                                                         | The engine moves into `libs/agent`, not the spine, and conversations gets smaller, not larger.                                                                                 |
+| **Thin App Shell** (§2, Tier 3): zero domain logic; prompt and view formatting stay in slices.                                                                           | Profile prompts, task building and result shaping live in the owning slice. `app/toolGateway.ts` only maps names.                                                              |
+| **Owned Durable Persistence** (§2, Tier 2)                                                                                                                               | Child transcripts are part of conversations' session record. There is no shared store.                                                                                         |
+| **No Orphan Facts** (§1b) and **no RPC-over-the-Log** (§3.B)                                                                                                             | No new facts. Starting a subagent is a top-down call through the gateway, never a `SubagentRequested` / `SubagentCompleted` pair on the log.                                   |
+| **Control plane only** (§3.D)                                                                                                                                            | Child token streams never pass through the `EventLog`.                                                                                                                         |
+| **Explicit state and provenance** (§4.2)                                                                                                                                 | The run lifecycle, a tool's effect and who called a tool are tagged unions, never `isSubagent` or `parallelSafe` booleans.                                                     |
+| **Isolated effect boundary and loud failures** (§4.3)                                                                                                                    | Pure reducers inside, effects injected at the edge. A failed child or a forbidden call becomes an explicit error result, never a silent fallback.                              |
+| **SPEC.md separates invariants from parameters** (§4.1)                                                                                                                  | Limits such as rounds, tool calls and parallel calls go in parameter tables, so tests don't pin them.                                                                          |
+| **Boundary contracts, spec-derived invariants, two operating modes** (§5). Grounded in _Potemkin Understanding_, _Spec-Driven PBT_, _ImpossibleBench_ and Hora & Robbes. | Tests drive the package entrypoint with fake ports and randomized invariants. Phase 0 runs in Locked-Contract Mode.                                                            |
 
 ## What the best systems do
 
 The systems that work share one shape: one agent plans and writes, many read-only agents search in parallel with their own context, and the answer is written once from compressed findings. They differ mainly in how they keep long research inside a context window.
 
-| System | Shape | What to take from it |
-| --- | --- | --- |
-| [Anthropic Research](https://www.anthropic.com/engineering/multi-agent-research-system) | Lead agent spawns 3–5 parallel subagents, then a citation agent | Opus lead with Sonnet subagents beat single-agent Opus 4 by 90.2% on their internal eval. Token usage alone explained 80% of BrowseComp variance. Effort rules in the prompt: 1 agent and 3–10 calls for a fact, 2–4 subagents for a comparison, 10+ for complex research. Each delegation carries an objective, output format, tool guidance and boundaries. Cost: about 15× the tokens of a chat. |
-| [LangChain Open Deep Research](https://www.langchain.com/blog/open-deep-research) | Clarify → research brief → supervisor with researcher sub-agents → one report call | Writing sections in parallel produced disjoint reports, so they moved to one writing pass after research. Each researcher prunes its own raw pages and failed calls before returning. The brief replaces chat history for later phases. |
-| [Cognition, April 2026](https://cognition.com/blog/multi-agents-working) | Single writer with read-only helpers, reviewers and managers | Multi-agent works when writes stay single-threaded. Read-only search subagents are the reliable case. A reviewer with a clean context catches what the author missed. |
-| [Gemini Deep Research](https://gemini.google/overview/deep-research/?hl=en-CA) | Plan shown to the user for editing, then asynchronous execution | The user reviews the plan before the run. A task manager keeps shared state so one failure does not restart the task. |
-| [OpenAI deep research](https://developers.openai.com/api/docs/guides/deep-research) | One long-running agent; asks clarifying questions first | Runs in background mode because tasks take minutes; not meant for simple Q&A. |
-| [Tongyi DeepResearch / IterResearch](https://arxiv.org/html/2511.07327v2) | Rounds that rebuild a compact workspace instead of growing one transcript; “Heavy” mode runs researchers in parallel and synthesizes | One ever-growing context gets worse as it fills; rebuilding the working state each round scales further. |
-| [WebWeaver](https://arxiv.org/abs/2509.13312) and [FS-Researcher](https://arxiv.org/abs/2602.01566) | Evidence stored outside the context; an outline linked to it; report written section by section | Retrieving only the evidence each section cites cut citation hallucination and topped DeepResearch Bench. |
+| System                                                                                              | Shape                                                                                                                                | What to take from it                                                                                                                                                                                                                                                                                                                                                                                |
+| --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [Anthropic Research](https://www.anthropic.com/engineering/multi-agent-research-system)             | Lead agent spawns 3–5 parallel subagents, then a citation agent                                                                      | Opus lead with Sonnet subagents beat single-agent Opus 4 by 90.2% on their internal eval. Token usage alone explained 80% of BrowseComp variance. Effort rules in the prompt: 1 agent and 3–10 calls for a fact, 2–4 subagents for a comparison, 10+ for complex research. Each delegation carries an objective, output format, tool guidance and boundaries. Cost: about 15× the tokens of a chat. |
+| [LangChain Open Deep Research](https://www.langchain.com/blog/open-deep-research)                   | Clarify → research brief → supervisor with researcher sub-agents → one report call                                                   | Writing sections in parallel produced disjoint reports, so they moved to one writing pass after research. Each researcher prunes its own raw pages and failed calls before returning. The brief replaces chat history for later phases.                                                                                                                                                             |
+| [Cognition, April 2026](https://cognition.com/blog/multi-agents-working)                            | Single writer with read-only helpers, reviewers and managers                                                                         | Multi-agent works when writes stay single-threaded. Read-only search subagents are the reliable case. A reviewer with a clean context catches what the author missed.                                                                                                                                                                                                                               |
+| [Gemini Deep Research](https://gemini.google/overview/deep-research/?hl=en-CA)                      | Plan shown to the user for editing, then asynchronous execution                                                                      | The user reviews the plan before the run. A task manager keeps shared state so one failure does not restart the task.                                                                                                                                                                                                                                                                               |
+| [OpenAI deep research](https://developers.openai.com/api/docs/guides/deep-research)                 | One long-running agent; asks clarifying questions first                                                                              | Runs in background mode because tasks take minutes; not meant for simple Q&A.                                                                                                                                                                                                                                                                                                                       |
+| [Tongyi DeepResearch / IterResearch](https://arxiv.org/html/2511.07327v2)                           | Rounds that rebuild a compact workspace instead of growing one transcript; “Heavy” mode runs researchers in parallel and synthesizes | One ever-growing context gets worse as it fills; rebuilding the working state each round scales further.                                                                                                                                                                                                                                                                                            |
+| [WebWeaver](https://arxiv.org/abs/2509.13312) and [FS-Researcher](https://arxiv.org/abs/2602.01566) | Evidence stored outside the context; an outline linked to it; report written section by section                                      | Retrieving only the evidence each section cites cut citation hallucination and topped DeepResearch Bench.                                                                                                                                                                                                                                                                                           |
 
 Five lessons follow from these. The foundation below builds the first four into code, and the fifth into storage and the timeline:
 
@@ -83,13 +83,13 @@ Each tier owns one job. The engine runs a model loop; conversations decides how 
 
 Arrows are imports and composition; no slice points at another. At runtime, a profile reaches conversations through the gateway the app built, and a child's tool calls go back through the same gateway with `caller` set to the agent.
 
-| Tier | Owns | Never owns |
-| --- | --- | --- |
-| `app/` | Registering each profile and tool in `toolGateway.ts`: `declare`, `instructions`, `kindOf`, `effectOf`, `describe`, `agentProfile` | Prompts, result shaping, gating, any rule about agents |
-| `slices/conversations` | The subagent runtime and both agent loops (`streamReply` for the lead, `runAgent` for children): when calls run together, depth, limits, stopping, the board and waiting, storage, archive mapping, the timeline rows | Any profile's prompt or tools |
-| Feature slices (`web-research` first) | Profiles: system prompt, task building, context mode, the finish schema, result shaping, and their tools' effects | Running loops, other slices' tools |
-| `libs/agent` | Protocol types and client, SSE reading, the event reducer: pure parts only | Loops, timers, sessions, storage, UI, policy |
-| `spine/` | Unchanged: `EventLog`, ports, the session facts | Anything agent-specific |
+| Tier                                  | Owns                                                                                                                                                                                                                  | Never owns                                             |
+| ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| `app/`                                | Registering each profile and tool in `toolGateway.ts`: `declare`, `instructions`, `kindOf`, `effectOf`, `describe`, `agentProfile`                                                                                    | Prompts, result shaping, gating, any rule about agents |
+| `slices/conversations`                | The subagent runtime and both agent loops (`streamReply` for the lead, `runAgent` for children): when calls run together, depth, limits, stopping, the board and waiting, storage, archive mapping, the timeline rows | Any profile's prompt or tools                          |
+| Feature slices (`web-research` first) | Profiles: system prompt, task building, context mode, the finish schema, result shaping, and their tools' effects                                                                                                     | Running loops, other slices' tools                     |
+| `libs/agent`                          | Protocol types and client, SSE reading, the event reducer: pure parts only                                                                                                                                            | Loops, timers, sessions, storage, UI, policy           |
+| `spine/`                              | Unchanged: `EventLog`, ports, the session facts                                                                                                                                                                       | Anything agent-specific                                |
 
 ### Runtime rules in conversations
 
@@ -101,6 +101,7 @@ These become behavioural invariants in `slices/conversations/SPEC.md`.
    - Any other call, `wait` included, runs alone after the calls before it have finished.
 
    Results are written in call order, and each result is saved as soon as its call ends.
+
 2. **Children are read-only and one level deep.** When the app assembles the gateway, a profile may list only tools whose effect is `read`, and never another subagent. Every child also gets `post`, which writes only to the run's board. At runtime, a child's call to any other tool becomes an error result; the gateway never runs it.
 3. **Caps on children.** At most {maxRunningChildren} children run at once and at most {maxChildrenPerReply} start in one reply. A `spawn` call beyond either cap gets an error result naming the cap, so the lead can wait or stop starting more.
 4. **Children start from a clean context unless their profile asks for a fork.** A child's requests contain its profile's system prompt, its task message, the current `latest_reminder`, its own transcript, and the board posts delivered to it. With context 'clean' (the default, and what research uses), nothing comes from the lead's chat, following Anthropic's self-contained delegation and Cognition's clean-context reviewer finding. With context 'fork', the child's first request also carries a copy of the lead's messages up to the call that started it. That suits agents that must see the conversation, such as a future reviewer or a stronger model consulted on a hard decision (Cognition's "Smart Friend"). A fork counts against the 3 MB request limit like any other request.
@@ -129,11 +130,11 @@ The highlighted path is the question loop: the researcher never stops, and the a
 
 ### Posts
 
-| Kind | Who posts | What it holds |
-| --- | --- | --- |
-| `finding` | a child | One fact others may need, and its URL. For example: "The 2024 rule was repealed in March 2026." |
-| `question` | a child | A decision it can't make, and the assumption it is continuing on meanwhile |
-| `direction` | the lead | An answer or a change of course, addressed to one child (`runId`) or to all |
+| Kind        | Who posts | What it holds                                                                                   |
+| ----------- | --------- | ----------------------------------------------------------------------------------------------- |
+| `finding`   | a child   | One fact others may need, and its URL. For example: "The 2024 rule was repealed in March 2026." |
+| `question`  | a child   | A decision it can't make, and the assumption it is continuing on meanwhile                      |
+| `direction` | the lead  | An answer or a change of course, addressed to one child (`runId`) or to all                     |
 
 ### Delivery
 
@@ -172,26 +173,41 @@ The library's exports, then the child loop's shape inside conversations (interna
 export type Transcript = { blocks: Block[]; stopReason?: StopReason; usage?: MessageUsage }
 export function applyEvent(t: Transcript, e: MessageStreamEvent, now: number): Transcript // pure
 export type AgentIO = { fetch: HttpFetch; apiOrigin: string; apiKey: () => string | null }
-export function streamMessage(io: AgentIO, body: CreateMessageRequest, signal: AbortSignal): AsyncGenerator<MessageStreamEvent>
+export function streamMessage(
+  io: AgentIO,
+  body: CreateMessageRequest,
+  signal: AbortSignal
+): AsyncGenerator<MessageStreamEvent>
 
 // slices/conversations — the child loop (internal)
 type RunAgentInput = {
   io: AgentIO
   signal: AbortSignal
-  request: { model: ChatModel; system: string; thinking: boolean; tools: ClientTool[]; messages: MessageParam[] }
-  finishTool: string                      // the run ends when the model calls this tool
+  request: {
+    model: ChatModel
+    system: string
+    thinking: boolean
+    tools: ClientTool[]
+    messages: MessageParam[]
+  }
+  finishTool: string // the run ends when the model calls this tool
   limits: { maxRounds: number; maxToolCalls: number }
   runCalls: (calls: ToolUseBlock[], signal: AbortSignal) => Promise<ToolResultBlockParam[]>
-  inbox: () => string | null              // board posts appended to the latest tool result before each request
-  onStep: (t: Transcript) => void        // step boundaries; the runtime saves here
-  onUpdate: (t: Transcript) => void      // every streamed event, for the screen only; never the EventLog
+  inbox: () => string | null // board posts appended to the latest tool result before each request
+  onStep: (t: Transcript) => void // step boundaries; the runtime saves here
+  onUpdate: (t: Transcript) => void // every streamed event, for the screen only; never the EventLog
 }
 
 type FinishOutput = { kind: 'given'; value: unknown } | { kind: 'missing' }
 
 type AgentOutcome =
   | { kind: 'finished'; output: unknown; transcript: Transcript }
-  | { kind: 'exhausted'; limit: 'rounds' | 'toolCalls'; output: FinishOutput; transcript: Transcript }
+  | {
+      kind: 'exhausted'
+      limit: 'rounds' | 'toolCalls'
+      output: FinishOutput
+      transcript: Transcript
+    }
   | { kind: 'failed'; error: ApiError; transcript: Transcript }
   | { kind: 'stopped'; transcript: Transcript }
 
@@ -203,35 +219,44 @@ When a limit is reached, `runAgent` sends one last request asking for the finish
 ### Gateway port additions (`slices/conversations/src/tools.ts`)
 
 ```ts
-export type ToolKind = /* existing kinds */ | 'subagent'
+export type ToolKind /* existing kinds */ = 'subagent'
 
 /** What a call does outside its own result. Decides how it runs (runtime rule 1). */
 export type ToolEffect =
-  | 'read'         // no state outside its result: may run concurrently, may be given to children
-  | 'spawn'        // starts a child and returns at once
-  | 'session'      // changes per-session state (browser, Python)
-  | 'artifact'     // creates something the person sees (files)
-  | 'interactive'  // waits for the person (ask_user)
+  | 'read' // no state outside its result: may run concurrently, may be given to children
+  | 'spawn' // starts a child and returns at once
+  | 'session' // changes per-session state (browser, Python)
+  | 'artifact' // creates something the person sees (files)
+  | 'interactive' // waits for the person (ask_user)
 
 /** Who made the call. Tool slices may refuse callers or word results for them. */
 export type ToolCaller = { kind: 'reply' } | { kind: 'agent'; profile: string; runId: string }
 
 /** One source a child's answer cites as [n]; conversations assigns the final number. */
-export type AgentSource = { n: number; url: string; title: string; verification: 'verified' | 'unverified' }
+export type AgentSource = {
+  n: number
+  url: string
+  title: string
+  verification: 'verified' | 'unverified'
+}
 
 export type AgentProfile = {
   readonly model: ChatModel
   readonly thinking: boolean
-  readonly system: string                  // static per profile, for prompt-cache reuse
-  readonly tools: readonly string[]        // each must have effect 'read'
-  readonly context: 'clean' | 'fork'       // 'fork' adds the lead's messages up to the spawn call
+  readonly system: string // static per profile, for prompt-cache reuse
+  readonly tools: readonly string[] // each must have effect 'read'
+  readonly context: 'clean' | 'fork' // 'fork' adds the lead's messages up to the spawn call
   readonly finish: ClientTool
   readonly limits: { readonly maxRounds: number; readonly maxToolCalls: number }
   /** Builds the child's first user message from the lead's input, or rejects it. */
-  readonly task: (input: unknown) => { kind: 'ok'; message: string } | { kind: 'invalid'; reason: string }
+  readonly task: (
+    input: unknown
+  ) => { kind: 'ok'; message: string } | { kind: 'invalid'; reason: string }
   /** Turns the child's output into an answer with numbered sources. */
-  readonly complete: (output: unknown, run: { runId: string; outcome: 'finished' | 'exhausted' }) =>
-    Promise<{ content: string; sources: AgentSource[] }>
+  readonly complete: (
+    output: unknown,
+    run: { runId: string; outcome: 'finished' | 'exhausted' }
+  ) => Promise<{ content: string; sources: AgentSource[] }>
 }
 
 export type ToolGateway = {
@@ -317,12 +342,12 @@ This extends the voice `docs/prompting-harness.md` already sets for the lead: on
 
 ### Layers of a subagent's prompt
 
-| Layer | Owner | Lifetime | Contents |
-| --- | --- | --- | --- |
-| 1. Subagent orientation | `slices/conversations` (it owns the runtime, so it knows what a child is) | Static | The app, the parent model, no user to ask, read-only tools, the budget and how a run ends, what `summary` is for, who reads the output |
-| 2. Tool sections, agent audience | Each tool's slice | Static per profile | How the profile's tools behave, with the reasons for their limits, written for a caller with no UI |
-| 3. Role | The profile's slice | Static per profile | The job, the standard of work, when to stop, and the output contract with the reason for each part |
-| 4. Task message | The profile's slice, via `task(input)` | Per call (user message) | The parent model's objective, boundaries, return format and effort, with this run's actual budget |
+| Layer                            | Owner                                                                     | Lifetime                | Contents                                                                                                                               |
+| -------------------------------- | ------------------------------------------------------------------------- | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| 1. Subagent orientation          | `slices/conversations` (it owns the runtime, so it knows what a child is) | Static                  | The app, the parent model, no user to ask, read-only tools, the budget and how a run ends, what `summary` is for, who reads the output |
+| 2. Tool sections, agent audience | Each tool's slice                                                         | Static per profile      | How the profile's tools behave, with the reasons for their limits, written for a caller with no UI                                     |
+| 3. Role                          | The profile's slice                                                       | Static per profile      | The job, the standard of work, when to stop, and the output contract with the reason for each part                                     |
+| 4. Task message                  | The profile's slice, via `task(input)`                                    | Per call (user message) | The parent model's objective, boundaries, return format and effort, with this run's actual budget                                      |
 
 Layers 1–3 make up the system prompt and never change between calls, so DeepSeek's prompt cache is reused across every researcher. Layer 4 is the first user message, preceded by the same `latest_reminder` the parent model gets, so the child knows today's date.
 
@@ -373,7 +398,7 @@ finish_research — Hand your findings to the lead and end your task. Call it on
 
 > Here's your part of the research.
 >
-> **Objective:** {objective} **Out of scope** (the lead or other researchers cover these): {boundaries} **What to return:** {return\_format} **Sources:** {source\_guidance, or "Use your judgement."} **Effort:** {effort}. For this level, about {typicalSearches} searches and {typicalScrapes} page reads is typical; your hard limit is {maxToolCalls} tool calls.
+> **Objective:** {objective} **Out of scope** (the lead or other researchers cover these): {boundaries} **What to return:** {return_format} **Sources:** {source_guidance, or "Use your judgement."} **Effort:** {effort}. For this level, about {typicalSearches} searches and {typicalScrapes} page reads is typical; your hard limit is {maxToolCalls} tool calls.
 
 ### Draft: what the lead is told (web-research, declared with `research`)
 
@@ -449,14 +474,14 @@ The plan has four phases. Phase 0 is a refactor against settled behaviour, so it
    - The profile, quote check, page cache and limiter in `slices/web-research`, plus its prompt section.
    - Gate: its boundary tests, then about 20 real queries scored against today's single agent. Also record how often the lead calls `wait`, and how often its directions change a researcher's course.
 
-| File | Change |
-| --- | --- |
+| File                           | Change                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `slices/conversations/SPEC.md` | Invariant 2 rewritten as runtime rule 1 (in two steps, Phases 1 and 2). Rules 2–16 and the board rules added. Invariants 4 and 16 amended for the `subagent` kind and running child rows; invariant 19 keeps one whale per reply and says it sits on the `wait` row while the lead waits. Ports: `effectOf`, `describe`, `agentProfile`, the `audience` argument to `instructions`, `ToolRunContext.caller`. Parameters: parallel calls, children running at once, children per reply, the `wait` default timeout, posts per child (start at 6), post length (start at 400 characters), and the display length for child tool results. |
-| `app/toolGateway.ts` | Registers `effectOf`, `describe` and `agentProfile`; loses the `citedUrls` computation, which moves into conversations. |
-| `slices/web-research/SPEC.md` | The `research` profile (context 'clean') and its finish schema, the quote rule, the page cache's lifetime, the limiter, and tool text worded for an agent caller. Parameters: rate per key mode, credit budget per reply, the profile's limits. |
-| `libs/agent/README.md` | The library contract: protocol, client, SSE and reducer; no loop. Written like `libs/markdown/README.md`. |
-| `AGENTS.md` | Add the `libs/agent` test command next to the existing library command. Nothing else, to avoid Lint Leakage (§ Appendix). |
-| `docs/prompting-harness.md` | A fourth layer, the subagent system prompt: static per profile, owned by the profile's slice; and the `wait` / `post` section owned by conversations. |
+| `app/toolGateway.ts`           | Registers `effectOf`, `describe` and `agentProfile`; loses the `citedUrls` computation, which moves into conversations.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `slices/web-research/SPEC.md`  | The `research` profile (context 'clean') and its finish schema, the quote rule, the page cache's lifetime, the limiter, and tool text worded for an agent caller. Parameters: rate per key mode, credit budget per reply, the profile's limits.                                                                                                                                                                                                                                                                                                                                                                                        |
+| `libs/agent/README.md`         | The library contract: protocol, client, SSE and reducer; no loop. Written like `libs/markdown/README.md`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `AGENTS.md`                    | Add the `libs/agent` test command next to the existing library command. Nothing else, to avoid Lint Leakage (§ Appendix).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `docs/prompting-harness.md`    | A fourth layer, the subagent system prompt: static per profile, owned by the profile's slice; and the `wait` / `post` section owned by conversations.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 
 ## Risks and open questions
 
@@ -473,17 +498,17 @@ The open architecture questions are settled (below). The remaining risks are abo
 
 **Decisions**
 
-| Question | Decision |
-| --- | --- |
-| Where the agent loop lives | `libs/agent` holds pure parts only; `runAgent` lives in conversations, per SSA §4.3. |
-| What context a child starts with | Clean by default; a profile may opt in to `context: 'fork'`. Research stays clean. |
-| How deep subagents go | One level; children never start children (runtime rule 2). |
-| The whale (invariant 19) | One per reply; it sits on the `wait` row while the lead waits, and child rows show a static running indicator. |
-| Board caps | Start at 6 posts per child and 400 characters per post, as tunable parameters. |
+| Question                         | Decision                                                                                                       |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| Where the agent loop lives       | `libs/agent` holds pure parts only; `runAgent` lives in conversations, per SSA §4.3.                           |
+| What context a child starts with | Clean by default; a profile may opt in to `context: 'fork'`. Research stays clean.                             |
+| How deep subagents go            | One level; children never start children (runtime rule 2).                                                     |
+| The whale (invariant 19)         | One per reply; it sits on the `wait` row while the lead waits, and child rows show a static running indicator. |
+| Board caps                       | Start at 6 posts per child and 400 characters per post, as tunable parameters.                                 |
 
 ## Sources
 
-- *Sealed Slice Architecture (SSA).md*, *SSA — Research Foundations.md* and *SSA — Actual-Core-SSA Baseline (Profile 1).md*, in the `ssa` repo at `82b2b22`
+- _Sealed Slice Architecture (SSA).md_, _SSA — Research Foundations.md_ and _SSA — Actual-Core-SSA Baseline (Profile 1).md_, in the `ssa` repo at `82b2b22`
 - [How we built our multi-agent research system](https://www.anthropic.com/engineering/multi-agent-research-system) — Anthropic
 - [Open Deep Research](https://www.langchain.com/blog/open-deep-research) — LangChain
 - [Multi-Agents: What's Actually Working](https://cognition.com/blog/multi-agents-working) — Cognition, April 2026

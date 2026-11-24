@@ -334,7 +334,9 @@ describe('conversations subagent runtime (Phase 2 tests 2–19)', () => {
     assert.equal(childReqs.length, 3, '2 rounds + 1 forced-finish request')
     assert.deepEqual(childReqs[2]?.tool_choice, { type: 'tool', name: 'finish_task' })
     const exhaustedReply = lastReply()
-    assert.deepEqual(exhaustedReply.agents?.[0]?.state, { status: 'exhausted', limit: 'rounds' })
+    const exhaustedState = exhaustedReply.agents?.[0]?.state
+    assert.equal(exhaustedState?.status, 'exhausted')
+    assert.equal(exhaustedState.limit, 'rounds')
 
     // Part B: child ends turn with text only (no finish call) -> gets 1 forced-finish request -> finished ONLY if that call arrives.
     leadStep = 0
@@ -914,7 +916,7 @@ describe('conversations subagent runtime (Phase 2 tests 2–19)', () => {
                   runId: 'agent-finished-1',
                   profile: 'spawn_clean',
                   startedBy: 'call-fin',
-                  state: { status: 'finished' },
+                  state: { status: 'finished', result: { content: 'seeded result', sources: [] } },
                   blocks: [],
                 },
                 {

@@ -150,8 +150,12 @@ export type ReplyBlock = ThinkingPart | TextPart | ServerToolBlock | ToolCallPar
 
 export type AgentRunState =
   | { status: 'running'; round: number }
-  | { status: 'finished' }
-  | { status: 'exhausted'; limit: 'rounds' | 'toolCalls' }
+  | { status: 'finished'; result: AgentRunResult }
+  /**
+   * Ended without a proper finish: a round or tool-call limit, or (`noFinishCall`) the child ended
+   * its turn without calling its finish tool and ignored the one nudge to do so.
+   */
+  | { status: 'exhausted'; limit: 'rounds' | 'toolCalls' | 'noFinishCall'; result: AgentRunResult }
   | { status: 'failed'; error: { kind: ApiErrorKind; message: string } }
   | { status: 'stopped'; reason: 'user' | 'interrupted' | 'roundLimit' }
 
@@ -164,11 +168,6 @@ export type AgentRun = {
   state: AgentRunState
   blocks: ReplyBlock[]
   usage?: MessageUsage
-  /**
-   * What a finished or exhausted child handed back, before reply-wide citation numbering. Saved so
-   * that a reply continued after Stop or an error can still deliver a result no `wait` collected.
-   */
-  result?: AgentRunResult
 }
 
 /** One source a child's answer cites as [n]; conversations assigns the final number. */
@@ -179,6 +178,11 @@ export type AgentSource = {
   verification: 'verified' | 'unverified'
 }
 
+/**
+ * What a finished or exhausted child handed back, before reply-wide citation numbering. Saved on
+ * its state so that a reply continued after Stop or an error can still deliver a result no `wait`
+ * collected.
+ */
 export type AgentRunResult = { content: string; sources: AgentSource[] }
 
 export type PostAuthor = { kind: 'lead' } | { kind: 'agent'; runId: string }
