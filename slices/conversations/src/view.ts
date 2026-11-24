@@ -317,9 +317,23 @@ class SourceRegistry {
   }
 }
 
+const stripPlainCitations = (value: string) =>
+  value.replace(
+    /([ \t]*)((?:\[(?:citation|ref):\d+\][ \t]*)+)/g,
+    (full, leadingSpace: string, run: string, offset: number, src: string) => {
+      const after = src.slice(offset + full.length)
+      const hasTrailingSpace = /[ \t]$/.test(run)
+      if (after.length === 0 || /^[.,;:!?)\]}，。；：！？）》】]/.test(after)) {
+        return ''
+      }
+      return leadingSpace || hasTrailingSpace ? ' ' : ''
+    }
+  )
+
 /**
  * 文本块拼成一份 markdown：服务端在挂过引用的块之后另起新块，引用位置即块尾。
  * 引用之后的空白（含换行）仍留在被引用的块里，所以 [citation:N] 插在块尾空白之前。
+ * 纯文本 `text`（供复制与朗读）会清理客户端 [ref:N] / [citation:N] 标记。
  */
 const joinTextBlocks = (
   blocks: { text: string; citations?: TextCitation[] }[],
@@ -328,7 +342,7 @@ const joinTextBlocks = (
   let markdown = ''
   let text = ''
   for (const block of blocks) {
-    text += block.text
+    text += stripPlainCitations(block.text)
     const indexes = new Set<number>()
     for (const citation of block.citations ?? []) {
       indexes.add(registry.add(citation.url, citation.title, null).index)
@@ -767,7 +781,7 @@ export const buildReplyView = (reply: AssistantMessage, streaming: boolean): Rep
   if (answer?.markdown) {
     const seenCited = new Set<number>()
     const maxIndex = registry.list.length
-    for (const match of answer.markdown.matchAll(/\[citation:(\d+)\]/g)) {
+    for (const match of answer.markdown.matchAll(/\[(?:citation|ref):(\d+)\]/g)) {
       const idx = Number(match[1])
       if (idx >= 1 && idx <= maxIndex && !seenCited.has(idx)) {
         seenCited.add(idx)

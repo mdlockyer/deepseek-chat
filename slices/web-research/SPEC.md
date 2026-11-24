@@ -49,7 +49,7 @@ The key is read on every call, so a key change applies to the next call.
    `highlights`. `siteName` is the hostname without `www.`.
 6. **Citation numbering continues within a reply.** Results are numbered `[n]` for the model. A URL
    already in `citedUrls` keeps its number; new URLs continue from `citedUrls.size + 1`. The text
-   tells the model to cite as `[citation:n]`.
+   tells the model to cite as `[ref:n]`.
 7. **Search limit** is clamped to 1–10 (default `defaultSearchLimit`). No results → `ok` with a
    "No search results found" message and no sources.
 8. **Scrape.** When `localScrape` is provided, `web_scrape` calls `localScrape(url, { signal, timeoutMs })`
@@ -97,7 +97,7 @@ The key is read on every call, so a key change applies to the next call.
     waiting agent's quote cache).
 16. **Audience-aware wording.** For `agent` callers, `instructionsFor('agent')` interpolates the
     slice's live parameters (`defaultSearchLimit`, `maxToolTextChars`, `scrapeTimeoutMs`), search
-    results omit the `[citation:n]` UI footer, and 401/429 errors do not ask the agent to open
+    results omit the `[ref:n]` UI footer, and 401/429 errors do not ask the agent to open
     Settings. Both `reply` and `agent` instructions reflect at slice creation time whether
     `web_scrape` runs locally or through Firecrawl, keeping the system prompt static.
 

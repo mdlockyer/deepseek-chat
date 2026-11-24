@@ -415,7 +415,7 @@ describe('web-research: shared rate limiter, credit budget, and agent wording', 
     )
     assert.equal(searchRes.status, 'ok')
     assert.ok(
-      !searchRes.content.includes('[citation:1]'),
+      !searchRes.content.includes('[ref:1]') && !searchRes.content.includes('[citation:1]'),
       'agent search result omits UI citation footer'
     )
 

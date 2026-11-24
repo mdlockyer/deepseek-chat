@@ -236,13 +236,14 @@ const assistantFragments = (message: AssistantMessage): Fragment[] => {
   let separateNextText = false
   const stripCitations = (value: string) =>
     value.replace(
-      /([ \t]*)\[citation:\d+\]/g,
-      (full, leadingSpace: string, offset: number, src: string) => {
+      /([ \t]*)((?:\[(?:citation|ref):\d+\][ \t]*)+)/g,
+      (full, leadingSpace: string, run: string, offset: number, src: string) => {
         const after = src.slice(offset + full.length)
-        const dropSpace =
-          leadingSpace.length > 0 &&
-          (after.length === 0 || /^[ \t\r\n.,;:!?)\]}，。；：！？）》】]/.test(after))
-        return dropSpace ? '' : leadingSpace
+        const hasTrailingSpace = /[ \t]$/.test(run)
+        if (after.length === 0 || /^[.,;:!?)\]}，。；：！？）》】]/.test(after)) {
+          return ''
+        }
+        return leadingSpace || hasTrailingSpace ? ' ' : ''
       }
     )
   const appendResponse = (chunk: string, separate: boolean) => {

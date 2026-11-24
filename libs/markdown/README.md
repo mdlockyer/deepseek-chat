@@ -23,9 +23,9 @@ spine locale.
 
 ## Guarantees
 
-1. **Citations.** With `sources`, `[citation:N]` becomes `renderCitation(source N)`; a marker with no
-   matching source is removed along with any orphaned leading space before punctuation, whitespace,
-   or end-of-text. Without `sources` the marker stays as text.
+1. **Citations.** With `sources`, `[citation:N]` and `[ref:N]` become `renderCitation(source N)`;
+   markers with no matching source are removed along with any orphaned surrounding spaces before
+   punctuation, whitespace, or end-of-text. Without `sources` the markers stay as text.
 2. **Links.** Links open in a new tab with `rel="noreferrer"`; `mailto:` links open in place. A URL
    without a scheme gets `https://`. Only `http:`, `https:` and `mailto:` URLs become `href`s; any
    other link keeps its text and gets no `href`. `#anchors` render as plain text. With

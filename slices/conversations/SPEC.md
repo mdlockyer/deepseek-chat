@@ -205,7 +205,9 @@ it, and the header toggle (`visible`, `open`, `toggle`). `panels.browser`: the h
       A stream that ends after its stop reason but before `message_stop` counts as complete.
     - **Citation numbering:** conversations assigns reply-wide citation numbers across direct web
       tools and child sources delivered via `wait`, continuing without gaps and rewriting `[n]` to
-      `[citation:M]`. `buildReplyView` registers sources from any `tool_result` that carries them.
+      `[ref:M]` (non-reserved client syntax so DeepSeek's server-side `[citation:N]` filter never
+      strips client citations). `buildReplyView` registers sources from any `tool_result` that
+      carries them.
     - **No orphans & round limit:** if the lead ends its turn while children are running, the
       runtime adds a `wait` with `until: 'all'` (timeout `autoWaitTimeoutS`) and continues — unless
       `toolRoundLimit` is reached, which wins and stops running children with reason `roundLimit`.

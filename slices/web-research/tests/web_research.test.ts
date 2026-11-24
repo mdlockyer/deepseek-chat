@@ -121,7 +121,7 @@ describe('web-research: search', () => {
     assert.equal(result.searchResults?.[1]?.snippet, 'Keyless search is live.')
     assert.match(result.content, /\[1\] Firecrawl/)
     assert.match(result.content, /\[2\] Firecrawl Docs/)
-    assert.match(result.content, /\[citation:1\]/)
+    assert.match(result.content, /\[ref:1\]/)
   })
 
   it('sends the trimmed key as a Bearer token, read on every call', async () => {

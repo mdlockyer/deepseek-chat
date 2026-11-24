@@ -71,7 +71,7 @@ export const collectCitedUrls = (blocks: readonly ReplyBlock[]): Map<string, num
 }
 
 export type NumberedChildResult = {
-  /** Child's answer with `[n]` markers rewritten to `[citation:M]`, followed by a source ledger. */
+  /** Child's answer with `[n]` markers rewritten to `[ref:M]`, followed by a source ledger. */
   content: string
   /** Sources in assigned order, ready to store on `wait`'s `tool_result.searchResults`. */
   searchResults: WebSearchSourceMeta[]
@@ -81,7 +81,7 @@ export type NumberedChildResult = {
 
 /**
  * Assigns reply-wide citation numbers to a child's sources, continuing from `existingCitedUrls`
- * without gaps, and rewrites the child's `[n]` citations to `[citation:M]`.
+ * without gaps, and rewrites the child's `[n]` citations to `[ref:M]`.
  */
 export const assignChildCitations = (
   content: string,
@@ -132,12 +132,13 @@ export const assignChildCitations = (
   }
 
   // Single-pass rewrite so remapped numbers never collide with later source numbers,
-  // and markdown links `[1](url)` stay untouched.
+  // and markdown links `[1](url)` stay untouched. Uses `[ref:M]` so DeepSeek's server-side
+  // `[citation:M]` parser never strips client-side citations from `text_delta`.
   const rewritten =
     localToGlobal.size > 0
-      ? content.replace(/\[(?:citation:)?(\d+)\](?!\()/g, (match, rawNum: string) => {
+      ? content.replace(/\[(?:(?:citation|ref):)?(\d+)\](?!\()/g, (match, rawNum: string) => {
           const mapped = localToGlobal.get(Number(rawNum))
-          return mapped !== undefined ? `[citation:${mapped}]` : match
+          return mapped !== undefined ? `[ref:${mapped}]` : match
         })
       : content
 
@@ -148,7 +149,7 @@ export const assignChildCitations = (
   const ledger = numberedSources
     .map(
       ({ globalN, source }) =>
-        `[citation:${globalN}] ${source.title.trim() || source.url} — ${source.url} (${source.verification})`
+        `[ref:${globalN}] ${source.title.trim() || source.url} — ${source.url} (${source.verification})`
     )
     .join('\n')
 

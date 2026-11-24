@@ -198,7 +198,7 @@ describe('subagent runtime review fixes', () => {
     )
     assert.ok(leadFinal)
     assert.ok(mentions(leadFinal, 'PROSE-ONLY-ANSWER'), 'ignored nudge delivers the last text')
-    assert.ok(mentions(leadFinal, 'LIMIT-ANSWER [citation:1]'), 'finish after nudge keeps sources')
+    assert.ok(mentions(leadFinal, 'LIMIT-ANSWER [ref:1]'), 'finish after nudge keeps sources')
     assert.ok(mentions(leadFinal, 'NUDGE-FAILS-ANSWER'), 'failed nudge delivers the last text')
     assert.ok(mentions(leadFinal, 'nudge exploded'), "the failed request's error reaches the lead")
   })

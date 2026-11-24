@@ -40,24 +40,36 @@ describe('markdown: citations', () => {
   const renderCitation = (source: Source) =>
     createElement('sup', { 'data-cite': source.url }, source.index)
 
-  it('renders a known citation through renderCitation and removes unknown ones without dangling spaces', () => {
+  it('renders [citation:N] and [ref:N] through renderCitation and removes unknown ones without dangling spaces', () => {
     const html = render('See [citation:1] and [citation:9].', { sources, renderCitation })
     assert.match(html, /<sup data-cite="https:\/\/one\.example\/">1<\/sup>/)
     assert.doesNotMatch(html, /citation:9/)
     assert.equal(textOf(html), 'See 1 and.')
 
-    // Unmatched citations before punctuation, back-to-back, or between words never leave extra spaces.
+    const refHtml = render('Closed around $97[ref:1].', { sources, renderCitation })
+    assert.match(refHtml, /<sup data-cite="https:\/\/one\.example\/">1<\/sup>/)
+    assert.equal(textOf(refHtml), 'Closed around $971.')
+
+    // Unmatched citations before punctuation, adjacent without spaces, or between words never leave extra spaces.
     assert.equal(
-      textOf(render('Total is 1.127 billion shares [citation:9].', { sources, renderCitation })),
+      textOf(render('Total is 1.127 billion shares [ref:9].', { sources, renderCitation })),
       'Total is 1.127 billion shares.'
+    )
+    assert.equal(
+      textOf(render('Closed around $97 [ref:8][ref:9].', { sources, renderCitation })),
+      'Closed around $97.'
     )
     assert.equal(
       textOf(render('Claim [citation:8] [citation:9], next clause.', { sources, renderCitation })),
       'Claim, next clause.'
     )
     assert.equal(
-      textOf(render('Alpha [citation:9] beta.', { sources, renderCitation })),
+      textOf(render('Alpha [ref:9][ref:10] beta.', { sources, renderCitation })),
       'Alpha beta.'
+    )
+    assert.equal(
+      textOf(render('Closed around $97[ref:1] .', { sources, renderCitation })),
+      'Closed around $971.'
     )
   })
 

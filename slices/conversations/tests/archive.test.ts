@@ -207,7 +207,7 @@ describe('archive export Firecrawl preservation', () => {
               status: 'ok',
               scrapedPage: { url: 'https://firecrawl.dev', title: 'Firecrawl' },
             },
-            { type: 'text', text: 'Found it [citation:1]. Also [citation:1] works.' },
+            { type: 'text', text: 'Found it [ref:1][ref:2]. Also [citation:1] works.' },
           ],
         },
       ],

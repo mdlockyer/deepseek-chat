@@ -484,7 +484,7 @@ export const createFirecrawlClient = (
     const body =
       audience === 'agent'
         ? lines.join('\n\n')
-        : `${lines.join('\n\n')}\n\nWhen referencing these sources in your answer, cite them inline using [citation:1], [citation:2], etc. matching the numbers above.`
+        : `${lines.join('\n\n')}\n\nWhen referencing these sources in your answer, cite them inline using [ref:1], [ref:2], etc. matching the numbers above, placed directly before punctuation with no leading space (for example: "Revenue grew 40%[ref:1].").`
     const text = truncate(body)
     return { text, sources }
   }

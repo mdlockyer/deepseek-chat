@@ -223,7 +223,7 @@ describe('conversations subagent runtime (Phase 2 tests 2–19)', () => {
     const secondLead = leadRequests[1]
     assert.ok(secondLead)
     const serializedLead = JSON.stringify(secondLead.messages)
-    assert.ok(serializedLead.includes('Alpha finding [citation:1]'))
+    assert.ok(serializedLead.includes('Alpha finding [ref:1]'))
     assert.ok(!serializedLead.includes('finish_task'))
 
     // Test 8: archive round-trip preserves roles and text while omitting child transcripts.
@@ -1041,10 +1041,8 @@ describe('conversations subagent runtime (Phase 2 tests 2–19)', () => {
       (waitResult.durationMs ?? 0) >= 15,
       `expected wait durationMs >= 15, got ${waitResult.durationMs}`
     )
-    assert.match(waitResult.content, /Claim A \[citation:1\] and Claim B \[citation:1\]\./)
-    const ledgerLines = waitResult.content
-      .split('\n')
-      .filter((line) => line.startsWith('[citation:1] '))
+    assert.match(waitResult.content, /Claim A \[ref:1\] and Claim B \[ref:1\]\./)
+    const ledgerLines = waitResult.content.split('\n').filter((line) => line.startsWith('[ref:1] '))
     assert.equal(ledgerLines.length, 1, 'duplicate URL appears once in the Sources ledger')
     assert.match(ledgerLines[0] ?? '', /\(verified\)$/)
   })

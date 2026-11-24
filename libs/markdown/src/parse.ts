@@ -32,7 +32,9 @@ const text = (value: string): Text => ({ type: 'text', value })
  * - 删除线保留原样的 ~ 定界符，脚注、引用式链接与定义显示原文
  */
 const MATH_EXTENSION = createCurrencySafeMathExtension()
-const DROP_SPACE_BEFORE = /^[ \t\r\n.,;:!?)\]}，。；：！？）》】]/
+const CITATION_RUN = /([ \t]*)((?:\[(?:citation|ref):\d+\][ \t]*)+)/g
+const CITATION_TOKEN = /\[(?:citation|ref):(\d+)\]/g
+const PUNCTUATION_AFTER = /^[.,;:!?)\]}，。；：！？）》】]/
 
 export function toMdAst(
   input: string,
@@ -51,23 +53,41 @@ export function toMdAst(
     findAndReplace(
       ast,
       [
-        /([ \t]*)\[citation:(\d+)\]/g,
+        CITATION_RUN,
         (
           full: string,
           leadingSpace: string,
-          index: string,
+          run: string,
           match: { index: number; input: string }
         ): CitationNode | Text | Array<Text | CitationNode> | '' => {
-          const source = sourcesByIndex.get(Number(index))
-          if (source) {
-            return leadingSpace
-              ? [text(leadingSpace), { type: 'citation', source }]
-              : { type: 'citation', source }
+          const matched: CitationNode[] = []
+          for (const token of run.matchAll(CITATION_TOKEN)) {
+            const source = sourcesByIndex.get(Number(token[1]))
+            if (source) {
+              matched.push({ type: 'citation', source })
+            }
           }
+          const hasTrailingSpace = /[ \t]$/.test(run)
           const after = match.input.slice(match.index + full.length)
-          const dropSpace =
-            leadingSpace.length > 0 && (after.length === 0 || DROP_SPACE_BEFORE.test(after))
-          return dropSpace || !leadingSpace ? '' : text(leadingSpace)
+          const beforeStop = after.length === 0 || PUNCTUATION_AFTER.test(after)
+          if (matched.length > 0) {
+            const nodes: Array<Text | CitationNode> = []
+            if (leadingSpace) {
+              nodes.push(text(leadingSpace))
+            }
+            nodes.push(...matched)
+            if (hasTrailingSpace && !beforeStop) {
+              nodes.push(text(' '))
+            }
+            return nodes.length === 1 ? nodes[0] : nodes
+          }
+          if (beforeStop) {
+            return ''
+          }
+          if (leadingSpace || hasTrailingSpace) {
+            return text(' ')
+          }
+          return ''
         },
       ],
       { ignore: ['linkReference'] }

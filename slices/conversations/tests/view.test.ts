@@ -683,12 +683,13 @@ describe('buildActivityTimeline & buildTurnWorkStrip (SPEC invariants 11, 17, 19
             },
           ],
         },
-        { type: 'text', text: 'Confirmed by tracker[citation:2] and CNN[citation:3].' },
+        { type: 'text', text: 'Confirmed by tracker[ref:2] and CNN[ref:3].' },
       ],
       true
     )
 
     const view = buildReplyView(reply, false)
+    assert.equal(view.answer?.text, 'Confirmed by tracker and CNN.')
     const timeline = buildActivityTimeline(view, 10_000)
 
     // Interleaved thinking blocks never fragment consecutive web research into separate rows.
