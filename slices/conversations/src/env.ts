@@ -17,6 +17,11 @@ export type ConversationsParams = {
   readonly maxChildrenPerReply: number
   /** Default timeout in seconds for `wait`. */
   readonly waitDefaultTimeoutS: number
+  /**
+   * Timeout in seconds for the `wait` the app adds itself when the lead ends its turn with children
+   * still running. Children end at their own limits, so this only guards against a stalled stream.
+   */
+  readonly autoWaitTimeoutS: number
   /** Maximum posts a single child may write to the board. */
   readonly maxPostsPerChild: number
   /** Maximum characters per board post. */
@@ -31,6 +36,7 @@ export const DEFAULT_CONVERSATIONS_PARAMS: ConversationsParams = {
   maxRunningChildren: 5,
   maxChildrenPerReply: 12,
   waitDefaultTimeoutS: 60,
+  autoWaitTimeoutS: 600,
   maxPostsPerChild: 6,
   maxPostChars: 400,
   childToolResultDisplayChars: 2000,

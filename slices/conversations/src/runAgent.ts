@@ -33,6 +33,14 @@ export type RunAgentInput = {
   readonly onStep: (t: Transcript<ReplyBlock>, round: number) => void
   /** Called on every streamed event for live UI updates; never persists or emits EventLog facts. */
   readonly onUpdate: (t: Transcript<ReplyBlock>, round: number) => void
+  /**
+   * Network retries for the whole run, matching the lead's policy: a request that fails with a
+   * network error before any content block arrived is sent again after `wait(attempt)`.
+   */
+  readonly retry?: {
+    readonly limit: number
+    readonly wait: (attempt: number, signal: AbortSignal) => Promise<void>
+  }
 }
 
 export type FinishOutput = { kind: 'given'; value: unknown } | { kind: 'missing' }
@@ -103,6 +111,7 @@ export const runAgent = async (input: RunAgentInput): Promise<AgentOutcome> => {
   let messages: MessageParam[] = [...input.request.messages]
   let toolCallsUsed = 0
   let currentRound = 0
+  let networkRetries = 0
 
   const streamOneRound = async (
     roundMessages: MessageParam[],
@@ -111,10 +120,8 @@ export const runAgent = async (input: RunAgentInput): Promise<AgentOutcome> => {
     | { ok: true; roundBlocks: ReplyBlock[] }
     | { ok: false; outcome: Extract<AgentOutcome, { kind: 'stopped' | 'failed' }> }
   > => {
-    if (input.signal.aborted) {
-      return { ok: false, outcome: { kind: 'stopped', transcript } }
-    }
     const startIdx = transcript.blocks.length
+    const before = transcript
     const body: CreateMessageRequest = {
       model: input.request.model,
       system: input.request.system,
@@ -123,22 +130,48 @@ export const runAgent = async (input: RunAgentInput): Promise<AgentOutcome> => {
       tools: input.request.tools,
       ...(toolChoice ? { tool_choice: toolChoice } : {}),
     }
-    try {
-      for await (const event of streamMessage(input.io, body, input.signal)) {
-        transcript = applyEvent(transcript, event, Date.now())
-        input.onUpdate(transcript, currentRound)
-      }
-    } catch (error) {
+    for (;;) {
       if (input.signal.aborted) {
         return { ok: false, outcome: { kind: 'stopped', transcript } }
       }
-      const apiError =
-        error instanceof ApiError
-          ? error
-          : new ApiError('protocol', error instanceof Error ? error.message : String(error))
-      return { ok: false, outcome: { kind: 'failed', error: apiError, transcript } }
+      let receivedContent = false
+      let receivedStopReason = false
+      try {
+        for await (const event of streamMessage(input.io, body, input.signal)) {
+          receivedContent ||= event.type === 'content_block_start'
+          receivedStopReason ||= event.type === 'message_delta' && Boolean(event.delta.stop_reason)
+          transcript = applyEvent(transcript, event, Date.now())
+          input.onUpdate(transcript, currentRound)
+        }
+      } catch (error) {
+        if (input.signal.aborted) {
+          return { ok: false, outcome: { kind: 'stopped', transcript } }
+        }
+        const apiError =
+          error instanceof ApiError
+            ? error
+            : new ApiError('protocol', error instanceof Error ? error.message : String(error))
+        // The stop reason arrived and only the closing message_stop is missing: the round is whole.
+        if (apiError.kind === 'interrupted' && receivedStopReason) {
+          return { ok: true, roundBlocks: transcript.blocks.slice(startIdx) }
+        }
+        // Nothing of the answer arrived (e.g. a reused connection the server had just closed), so
+        // sending the same request again can't duplicate anything.
+        if (
+          apiError.kind === 'network' &&
+          !receivedContent &&
+          input.retry &&
+          networkRetries < input.retry.limit
+        ) {
+          await input.retry.wait(networkRetries, input.signal)
+          networkRetries += 1
+          transcript = before
+          continue
+        }
+        return { ok: false, outcome: { kind: 'failed', error: apiError, transcript } }
+      }
+      return { ok: true, roundBlocks: transcript.blocks.slice(startIdx) }
     }
-    return { ok: true, roundBlocks: transcript.blocks.slice(startIdx) }
   }
 
   const runForcedFinish = async (
@@ -159,23 +192,25 @@ export const runAgent = async (input: RunAgentInput): Promise<AgentOutcome> => {
       finishMessages = [...messages, { role: 'user', content: nudge }]
     }
 
-    const round = await streamOneRound(finishMessages, { type: 'tool', name: input.finishTool })
+    // DeepSeek rejects a named `tool_choice` with HTTP 400 in thinking mode, so a thinking child
+    // gets the nudge alone and keeps `auto` tool choice.
+    const toolChoice: CreateMessageRequest['tool_choice'] = input.request.thinking
+      ? undefined
+      : { type: 'tool', name: input.finishTool }
+    const round = await streamOneRound(finishMessages, toolChoice)
     if (!round.ok) {
       if (round.outcome.kind === 'stopped') {
         return round.outcome
       }
-      if (mode.kind === 'exhausted') {
-        // If DeepSeek rejects forced tool_choice (e.g. with thinking enabled), surface exhausted
-        // with missing finish output rather than masking exhaustion as a hard crash.
-        input.onStep(transcript, currentRound)
-        return {
-          kind: 'exhausted',
-          limit: mode.limit,
-          output: { kind: 'missing' },
-          transcript,
-        }
+      // The child already did its work, so a failed nudge request must not discard it. Report the
+      // finish output as missing so the runtime falls back to the child's last text.
+      input.onStep(transcript, currentRound)
+      return {
+        kind: 'exhausted',
+        limit: mode.kind === 'exhausted' ? mode.limit : 'rounds',
+        output: { kind: 'missing' },
+        transcript,
       }
-      return round.outcome
     }
 
     const finishCall = round.roundBlocks.find(

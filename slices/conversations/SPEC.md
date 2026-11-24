@@ -165,17 +165,26 @@ it, and the header toggle (`visible`, `open`, `toggle`). `panels.browser`: the h
       transcript, and board posts; `'fork'` prepends the lead's messages up to the spawn call.
     - **Outcomes:** every child ends `finished`, `exhausted` (after one forced-finish request when
       hitting round or tool-call limits, or when ending without calling finish), `failed`, or
-      `stopped`. Results arrive on the lead's next `wait`.
+      `stopped`. Results arrive on the lead's next `wait`. The forced-finish request names the
+      finish tool in `tool_choice` only when the profile's thinking is off, because DeepSeek
+      answers a named `tool_choice` with HTTP 400 in thinking mode; a thinking child gets the
+      nudge alone. If that request fails, or the child still doesn't call finish, it ends
+      `exhausted` and delivers its last text with no sources.
+    - **Network retries:** a child's request that fails with a network error before any content
+      block arrived is sent again, with the lead's retry count and backoff, counted per child run.
+      A stream that ends after its stop reason but before `message_stop` counts as complete.
     - **Citation numbering:** conversations assigns reply-wide citation numbers across direct web
       tools and child sources delivered via `wait`, continuing without gaps and rewriting `[n]` to
       `[citation:M]`. `buildReplyView` registers sources from any `tool_result` that carries them.
     - **No orphans & round limit:** if the lead ends its turn while children are running, the
-      runtime waits for all of them and continues — unless `toolRoundLimit` is reached, which wins
-      and stops running children with reason `roundLimit`.
+      runtime adds a `wait` with `until: 'all'` (timeout `autoWaitTimeoutS`) and continues — unless
+      `toolRoundLimit` is reached, which wins and stops running children with reason `roundLimit`.
     - **Stopping & recovery:** stopping the reply aborts every running child (`reason: 'user'`);
-      finished children keep their results. Loading a chat settles any `running` child to
-      `stopped` (`reason: 'interrupted'`), and continuing that reply returns them on the lead's
-      first `wait` without hanging.
+      a reply that ends with an API error stops them with `reason: 'interrupted'`. Finished and
+      exhausted children keep their results, saved on `AgentRun.result`. Loading a chat settles any
+      `running` child to `stopped` (`reason: 'interrupted'`). Continuing a reply delivers, on the
+      lead's first `wait` and without hanging, every ended child whose result no earlier `ok` `wait`
+      result carries under its `### Subagent <runId> (` heading.
     - **Storage, timeline, and archives:** runs (`AssistantMessage.agents`) and board posts
       (`AssistantMessage.board`) persist on the reply at step boundaries; finished child tool
       results are trimmed to `childToolResultDisplayChars` for display. Conversations declares
@@ -200,10 +209,11 @@ it, and the header toggle (`visible`, `open`, `toggle`). `panels.browser`: the h
 | Running subagents per reply              | 5 (`maxRunningChildren`)                    |
 | Subagents started per reply              | 12 (`maxChildrenPerReply`)                  |
 | Default `wait` timeout                   | 60 s (`waitDefaultTimeoutS`)                |
+| Automatic `wait` timeout                 | 600 s (`autoWaitTimeoutS`)                  |
 | Board posts per child                    | 6 (`maxPostsPerChild`)                      |
 | Board post length                        | 400 chars (`maxPostChars`)                  |
 | Stored child tool-result display length  | 2,000 chars (`childToolResultDisplayChars`) |
-| Network retries per turn                 | 2                                           |
+| Network retries per turn and per child   | 2                                           |
 | Re-uploads after the server drops a file | 2 (backoff 1 s × 2ⁿ)                        |
 | Attachments per message                  | 50                                          |
 | Attachment size                          | 64 MB                                       |

@@ -164,7 +164,22 @@ export type AgentRun = {
   state: AgentRunState
   blocks: ReplyBlock[]
   usage?: MessageUsage
+  /**
+   * What a finished or exhausted child handed back, before reply-wide citation numbering. Saved so
+   * that a reply continued after Stop or an error can still deliver a result no `wait` collected.
+   */
+  result?: AgentRunResult
 }
+
+/** One source a child's answer cites as [n]; conversations assigns the final number. */
+export type AgentSource = {
+  n: number
+  url: string
+  title: string
+  verification: 'verified' | 'unverified'
+}
+
+export type AgentRunResult = { content: string; sources: AgentSource[] }
 
 export type PostAuthor = { kind: 'lead' } | { kind: 'agent'; runId: string }
 export type PostAudience = { kind: 'all' } | { kind: 'agent'; runId: string }

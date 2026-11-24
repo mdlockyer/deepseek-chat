@@ -34,13 +34,22 @@ export type ApiRequest = {
   readonly messages: { role: string; content: unknown }[]
   readonly tools: { name: string }[]
   readonly tool_choice?: { type: string; name?: string }
+  readonly thinking?: { type: string }
 }
 
-/** One scripted reply: text, tool calls (each `{ name, input }`), or an HTTP error status. */
+/**
+ * One scripted reply: text, tool calls (each `{ name, input }`), an HTTP error status, or a
+ * connection that fails before any response. `dropMessageStop` ends the stream right after
+ * `message_delta`, as a dropped connection would.
+ */
 export type ApiReply =
-  | { readonly text: string; readonly title?: string }
-  | { readonly calls: readonly { name: string; input: unknown }[] }
+  | { readonly text: string; readonly title?: string; readonly dropMessageStop?: boolean }
+  | {
+      readonly calls: readonly { name: string; input: unknown }[]
+      readonly dropMessageStop?: boolean
+    }
   | { readonly errorStatus: number; readonly errorMessage: string }
+  | { readonly networkError: string }
 
 const usage = {
   input_tokens: 1,
@@ -49,7 +58,10 @@ const usage = {
   output_tokens: 1,
 }
 
-const toEvents = (reply: Exclude<ApiReply, { errorStatus: number }>, callIds: () => string) => {
+const toEvents = (
+  reply: Exclude<ApiReply, { errorStatus: number } | { networkError: string }>,
+  callIds: () => string
+) => {
   const blocks =
     'text' in reply
       ? [{ start: { type: 'text', text: '' }, delta: { type: 'text_delta', text: reply.text } }]
@@ -72,7 +84,7 @@ const toEvents = (reply: Exclude<ApiReply, { errorStatus: number }>, callIds: ()
       },
       usage,
     },
-    { type: 'message_stop' },
+    ...(reply.dropMessageStop ? [] : [{ type: 'message_stop' }]),
   ]
 }
 
@@ -153,6 +165,9 @@ export const createStoreEnv = (
       const body = JSON.parse(String(init.body)) as ApiRequest
       requests.push(body)
       const reply = await respond(body, init.signal ?? undefined)
+      if ('networkError' in reply) {
+        throw new TypeError(reply.networkError)
+      }
       if ('errorStatus' in reply) {
         return new Response(JSON.stringify({ error: { message: reply.errorMessage } }), {
           status: reply.errorStatus,

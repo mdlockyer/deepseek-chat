@@ -4,7 +4,7 @@ import { createMessageBoard, formatBoardDigest } from './board.js'
 import { assignChildCitations, collectCitedUrls } from './citations.js'
 import type { ConversationsParams } from './env.js'
 import { createId } from './id.js'
-import { runAgent } from './runAgent.js'
+import { runAgent, type RunAgentInput } from './runAgent.js'
 import {
   POST_TOOL_NAME,
   WAIT_TOOL_NAME,
@@ -39,7 +39,7 @@ type ManagedRun = {
   run: AgentRun
   controller?: AbortController
   promise?: Promise<void>
-  stopReasonOverride?: 'user' | 'roundLimit'
+  stopReasonOverride?: 'user' | 'interrupted' | 'roundLimit'
   deliveredOutcome?: DeliveredOutcome
   reportedToLead: boolean
 }
@@ -64,6 +64,9 @@ const trimChildBlocks = (blocks: readonly ReplyBlock[], maxChars: number): Reply
       content: `${block.content.slice(0, maxChars)}\n[Truncated for display]`,
     }
   })
+
+/** Opens each subagent's section in a `wait` result; hydration looks for it to tell what was delivered. */
+const resultHeading = (runId: string) => `### Subagent ${runId} (`
 
 const lastTextBlock = (blocks: readonly ReplyBlock[]): string => {
   for (let i = blocks.length - 1; i >= 0; i -= 1) {
@@ -111,12 +114,14 @@ export type SubagentRuntime = {
   readonly runningCount: () => number
   readonly spawn: (call: ToolCallPart, ctx: SpawnContext) => ToolResult
   readonly postFromLead: (input: unknown) => ToolResult
+  /** `defaultTimeoutS` replaces `waitDefaultTimeoutS` when the input names no `timeout_s`. */
   readonly wait: (
     input: unknown,
     replyBlocks: readonly ReplyBlock[],
-    signal: AbortSignal
+    signal: AbortSignal,
+    options?: { readonly defaultTimeoutS?: number }
   ) => Promise<ToolResult>
-  readonly stopAll: (reason: 'user' | 'roundLimit') => Promise<void>
+  readonly stopAll: (reason: 'user' | 'interrupted' | 'roundLimit') => Promise<void>
 }
 
 export const createSubagentRuntime = (options: {
@@ -126,6 +131,8 @@ export const createSubagentRuntime = (options: {
   readonly apiKey: () => string | null
   /** Called on live updates (`persist = false`) and step boundaries (`persist = true`). */
   readonly onSync: (agents: AgentRun[], board: BoardPost[], persist: boolean) => void
+  /** Network retry policy for each child's requests; the store passes the lead's. */
+  readonly retry?: RunAgentInput['retry']
 }): SubagentRuntime => {
   const { tools, params, onSync } = options
   const runs = new Map<string, ManagedRun>()
@@ -169,12 +176,32 @@ export const createSubagentRuntime = (options: {
     .map((b) => b.content)
 
   for (const existing of options.initialReply.agents ?? []) {
-    const alreadyReported = priorWaitContents.some((text) => text.includes(existing.runId))
+    // Board digests in a wait result also name the runId, so match the result heading itself.
+    const heading = resultHeading(existing.runId)
+    const alreadyReported = priorWaitContents.some((text) => text.includes(heading))
     const entry: ManagedRun = {
       run: existing,
       reportedToLead: alreadyReported,
     }
-    if (!alreadyReported && existing.state.status === 'stopped') {
+    const { state } = existing
+    if (!alreadyReported && (state.status === 'finished' || state.status === 'exhausted')) {
+      // A result that finished while no wait was collecting it (the lead was stopped or failed
+      // mid-wait). Without a saved result there is nothing to deliver but the fact it was lost.
+      entry.deliveredOutcome = existing.result
+        ? {
+            kind: 'completed',
+            outcome: state.status,
+            ...(state.status === 'exhausted' ? { limit: state.limit } : {}),
+            content: existing.result.content,
+            sources: existing.result.sources,
+          }
+        : {
+            kind: 'failed',
+            errorKind: 'protocol',
+            message: 'The subagent ended, but its result was not saved.',
+          }
+      undeliveredQueue.push(existing.runId)
+    } else if (!alreadyReported && existing.state.status === 'stopped') {
       entry.deliveredOutcome = { kind: 'stopped', reason: existing.state.reason }
       undeliveredQueue.push(existing.runId)
     } else if (!alreadyReported && existing.state.status === 'failed') {
@@ -412,6 +439,7 @@ export const createSubagentRuntime = (options: {
         },
         finishTool: profile.finish.name,
         limits: profile.limits,
+        ...(options.retry ? { retry: options.retry } : {}),
         runCalls: runChildCalls,
         inbox: () => formatBoardDigest(board.drainForAgent(runId)),
         onUpdate: (t, round) => {
@@ -447,6 +475,7 @@ export const createSubagentRuntime = (options: {
             state: { status: 'finished' },
             blocks: trimmedBlocks,
             usage: outcome.transcript.usage ?? entry.run.usage,
+            result: { content: completed.content, sources: completed.sources },
           }
           entry.deliveredOutcome = {
             kind: 'completed',
@@ -476,6 +505,7 @@ export const createSubagentRuntime = (options: {
             state: { status: 'exhausted', limit: outcome.limit },
             blocks: trimmedBlocks,
             usage: outcome.transcript.usage ?? entry.run.usage,
+            result: { content: completed.content, sources: completed.sources },
           }
           entry.deliveredOutcome = {
             kind: 'completed',
@@ -494,6 +524,7 @@ export const createSubagentRuntime = (options: {
             state: { status: 'exhausted', limit: outcome.limit },
             blocks: trimmedBlocks,
             usage: outcome.transcript.usage ?? entry.run.usage,
+            result: { content: message, sources: [] },
           }
           entry.deliveredOutcome = {
             kind: 'completed',
@@ -558,7 +589,8 @@ export const createSubagentRuntime = (options: {
   const wait = async (
     input: unknown,
     replyBlocks: readonly ReplyBlock[],
-    signal: AbortSignal
+    signal: AbortSignal,
+    waitOptions?: { readonly defaultTimeoutS?: number }
   ): Promise<ToolResult> => {
     const record = input && typeof input === 'object' ? (input as Record<string, unknown>) : {}
     const until: 'any' | 'all' = record.until === 'all' ? 'all' : 'any'
@@ -567,7 +599,7 @@ export const createSubagentRuntime = (options: {
       Number.isFinite(record.timeout_s) &&
       record.timeout_s > 0
         ? record.timeout_s
-        : params.waitDefaultTimeoutS
+        : (waitOptions?.defaultTimeoutS ?? params.waitDefaultTimeoutS)
     const timeoutMs = Math.max(1, Math.round(rawTimeout * 1000))
 
     const shouldWakeNow = () => {
@@ -648,15 +680,15 @@ export const createSubagentRuntime = (options: {
             ? 'finished'
             : `exhausted (${outcome.limit ?? 'rounds'} limit)`
         sections.push(
-          `### Subagent ${runId} (${entry.run.profile}) — ${statusLabel}\n${numbered.content}`
+          `${resultHeading(runId)}${entry.run.profile}) — ${statusLabel}\n${numbered.content}`
         )
       } else if (outcome.kind === 'failed') {
         sections.push(
-          `### Subagent ${runId} (${entry.run.profile}) — failed (${outcome.errorKind})\n${outcome.message || 'Subagent request failed.'}`
+          `${resultHeading(runId)}${entry.run.profile}) — failed (${outcome.errorKind})\n${outcome.message || 'Subagent request failed.'}`
         )
       } else {
         sections.push(
-          `### Subagent ${runId} (${entry.run.profile}) — stopped (${outcome.reason})\nSubagent stopped before finishing (reason: ${outcome.reason}).`
+          `${resultHeading(runId)}${entry.run.profile}) — stopped (${outcome.reason})\nSubagent stopped before finishing (reason: ${outcome.reason}).`
         )
       }
     }
@@ -683,7 +715,7 @@ export const createSubagentRuntime = (options: {
     }
   }
 
-  const stopAll = async (reason: 'user' | 'roundLimit') => {
+  const stopAll = async (reason: 'user' | 'interrupted' | 'roundLimit') => {
     const pending: Promise<void>[] = []
     for (const entry of runs.values()) {
       if (entry.run.state.status === 'running' && entry.controller) {

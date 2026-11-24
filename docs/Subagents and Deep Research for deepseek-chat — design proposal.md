@@ -198,7 +198,7 @@ type AgentOutcome =
 function runAgent(input: RunAgentInput): Promise<AgentOutcome>
 ```
 
-When a limit is reached, `runAgent` sends one last request that names the finish tool in `tool_choice`, so an exhausted child still returns its best output.
+When a limit is reached, `runAgent` sends one last request asking for the finish tool, so an exhausted child still returns its best output. That request names the finish tool in `tool_choice` only when the profile's thinking is off.
 
 ### Gateway port additions (`slices/conversations/src/tools.ts`)
 
@@ -468,7 +468,7 @@ The open architecture questions are settled (below). The remaining risks are abo
 - **Conversations stays large.** Phase 0 moves about 1,000 lines of `api/` plus the reducer, which leaves conversations near 12,000 lines. That is still far past the 1,500-line reference, and the board adds to it. A later split along a real seam (the history archive, or the chat UI) is outside this plan.
 - **How DeepSeek uses `wait`.** Each time `wait` returns costs one more lead request. Cache hits make that cheap, but each adds a few seconds. A lead that wakes too often wastes time; one that never steers gets nothing from the board. Phase 3 measures both.
 - **Injected text on the board.** Posts are written by models that read web pages, so an injected instruction could travel from one researcher to the others. The prompts treat posts as data, and the per-post length cap limits what can travel, but this needs an adversarial test page in the Phase 3 evaluation.
-- **Forced finish depends on DeepSeek.** The `tool_choice` naming of the finish tool has not been verified with thinking enabled on DeepSeek's Anthropic endpoint. If it fails, an exhausted child returns its transcript's last text instead.
+- **Forced finish depends on DeepSeek.** DeepSeek's Anthropic endpoint answers a `tool_choice` that names a tool with HTTP 400 in thinking mode (its compatibility guide says so), so a thinking child gets the nudge without `tool_choice` and may ignore it. If it does, or the request fails, the child returns its transcript's last text with no sources.
 - **Free-key ceiling.** Firecrawl's 1,000 monthly credits allow roughly 9 five-researcher runs. The credit budget should be visible in the UI before users hit HTTP 429.
 
 **Decisions**

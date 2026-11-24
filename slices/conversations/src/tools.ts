@@ -1,5 +1,7 @@
 import type { ChatModel, ClientTool } from '@deepseek-chat/lib-agent'
-import type { Message, ReplyBlock, ToolCallPart, ToolResultPart } from './types.js'
+import type { AgentSource, Message, ReplyBlock, ToolCallPart, ToolResultPart } from './types.js'
+
+export type { AgentSource }
 
 /**
  * What a client tool is, as far as the chat cares: how its steps are shown and archived. The names
@@ -21,14 +23,6 @@ export type ToolEffect = 'read' | 'spawn' | 'session' | 'artifact' | 'interactiv
 
 /** Who made the call. Tool slices may refuse callers or word results for them. */
 export type ToolCaller = { kind: 'reply' } | { kind: 'agent'; profile: string; runId: string }
-
-/** One source a child's answer cites as [n]; conversations assigns the final number. */
-export type AgentSource = {
-  n: number
-  url: string
-  title: string
-  verification: 'verified' | 'unverified'
-}
 
 /** Subagent profile owned by a feature slice and registered in the app's ToolGateway. */
 export type AgentProfile = {

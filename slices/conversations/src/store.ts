@@ -92,6 +92,9 @@ const dataUrlToFile = (dataUrl: string, name: string): File => {
 /** 请求未得到任何响应时的自动重发次数 */
 const NETWORK_RETRY_LIMIT = 2
 
+/** Id prefix of the `wait` the app adds when the lead ends its turn with children still running. */
+const AUTO_WAIT_ID_PREFIX = 'auto-wait-'
+
 /** 一条回复内最多的工具往返次数，防止模型无限调用 */
 const TOOL_ROUND_LIMIT = 50
 
@@ -1195,6 +1198,7 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
     tools: deps().tools,
     params,
     apiKey: () => deps().getApiKey(),
+    retry: { limit: NETWORK_RETRY_LIMIT, wait: waitForRetry },
     onSync: (agents, board, shouldPersist) => {
       reply = {
         ...reply,
@@ -1299,7 +1303,14 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
       if (call.name === POST_TOOL_NAME) {
         result = subagentRuntime.postFromLead(call.input)
       } else if (call.name === WAIT_TOOL_NAME) {
-        result = await subagentRuntime.wait(call.input, reply.blocks, controller.signal)
+        result = await subagentRuntime.wait(
+          call.input,
+          reply.blocks,
+          controller.signal,
+          call.id.startsWith(AUTO_WAIT_ID_PREFIX)
+            ? { defaultTimeoutS: params.autoWaitTimeoutS }
+            : undefined
+        )
       } else if (tools.kindOf(call.name) === 'subagent' || tools.effectOf(call.name) === 'spawn') {
         const spawnIndex = reply.blocks.findIndex(
           (block) => block.type === 'tool_use' && block.id === call.id
@@ -1544,7 +1555,7 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
               ...reply.blocks,
               {
                 type: 'tool_use',
-                id: `auto-wait-${createId()}`,
+                id: `${AUTO_WAIT_ID_PREFIX}${createId()}`,
                 name: WAIT_TOOL_NAME,
                 input: { until: 'all', summary: 'Waiting for running subagents to finish' },
               },
@@ -1622,8 +1633,10 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
       }
     }
   } finally {
+    // Round-limit paths stop children before they get here, so anything still running means the
+    // reply ended some other way (an API error): the user stopped it, or it was interrupted.
     if (subagentRuntime.hasRunning()) {
-      await subagentRuntime.stopAll(controller.signal.aborted ? 'user' : 'roundLimit')
+      await subagentRuntime.stopAll(controller.signal.aborted ? 'user' : 'interrupted')
     }
     titleRequests.delete(controller)
     streamFlushes.delete(sessionId)
