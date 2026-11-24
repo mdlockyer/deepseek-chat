@@ -69,14 +69,23 @@ The key is read on every call, so a key change applies to the next call.
     `context: 'clean'`, and read-only tools `web_search` and `web_scrape`. `task(input)` rejects
     inputs without a non-blank `objective` and interpolates the configured tool-call budget.
 14. **Deterministic quote verification and page cache.** When `web_scrape` succeeds for an `agent`
-    caller, the page's markdown is cached under that caller's `runId`. `complete` marks each source
-    `verified` if and only if its non-empty `quote`, normalized for whitespace, appears in a page
-    scraped under that `runId`, and `unverified` otherwise. The `runId`'s page cache is dropped when
-    `complete` finishes.
-15. **Shared rate limiter and credit budget.** Every Firecrawl search (2 credits per 10 results) and
-    scrape (1 credit) passes through one sliding-window limiter enforcing the per-minute rate for
-    the current key mode, backing off subsequent calls on HTTP 429, and refusing calls once
-    `maxCreditsPerReply` is reached for a reply without sending a request.
+    caller (including hits served from the per-reply scrape cache), the page's title and markdown
+    are cached under that caller's `runId`. `complete` marks each source `verified` if and only if
+    its non-empty `quote` appears verbatim in that cached page—either after whitespace normalization
+    or after stripping inline Markdown formatting (links, images, code ticks, bold/italic), and when
+    joined with `...`/`…` ellipses, with every non-empty span appearing in order—and `unverified`
+    otherwise. The `runId`'s page cache is dropped when `complete` finishes.
+15. **Shared rate limiter, concurrency cap, retries, credit budget, and per-reply scrape cache.**
+    Every Firecrawl search (2 credits per 10 results) and scrape (1 credit) passes through one
+    limiter enforcing the per-minute sliding-window rate for the current key mode, capping
+    simultaneous in-flight requests at `maxConcurrentRequests`, and refusing calls once
+    `maxCreditsPerReply` is reached for a reply without sending a request. In keyed mode, transient
+    HTTP 429 responses (excluding permanent credit/quota exhaustion messages) are automatically
+    retried up to `max429Retries` times using `Retry-After` or exponential backoff from
+    `backoff429Ms` while pausing queued siblings; keyless HTTP 429s fail immediately. Reserved
+    credits are refunded if a call fails or is aborted. Within a given `replyKey`, successful scrapes
+    are cached and concurrent identical-URL scrapes coalesce onto one in-flight request (spending 1
+    credit total and recording into each waiting agent's quote cache).
 16. **Audience-aware wording.** For `agent` callers, `instructionsFor('agent')` interpolates the
     slice's live parameters (`defaultSearchLimit`, `maxToolTextChars`, `scrapeTimeoutMs`), search
     results omit the `[citation:n]` UI footer, and 401/429 errors do not ask the agent to open
@@ -88,20 +97,22 @@ None consumed or published.
 
 ## Tunable parameters
 
-| Parameter              | Default | Meaning                                                 |
-| :--------------------- | :------ | :------------------------------------------------------ |
-| `searchTimeoutMs`      | `30000` | Timeout for `/search`.                                  |
-| `scrapeTimeoutMs`      | `45000` | Timeout for `/scrape`.                                  |
-| `verifyTimeoutMs`      | `15000` | Timeout for key verification.                           |
-| `maxToolTextChars`     | `24000` | Characters of tool text returned to the model.          |
-| `defaultSearchLimit`   | `8`     | Results when the model gives no `limit`.                |
-| `rateWindowMs`         | `60000` | Sliding rate-limiter window length (ms).                |
-| `keylessRatePerMinute` | `10`    | Max requests per window without a Firecrawl API key.    |
-| `keyedRatePerMinute`   | `30`    | Max requests per window with a Firecrawl API key.       |
-| `backoff429Ms`         | `2000`  | Pause applied to subsequent calls after HTTP 429 (ms).  |
-| `maxCreditsPerReply`   | `120`   | Firecrawl credit budget per reply (2/search, 1/scrape). |
-| `researchMaxRounds`    | `12`    | Max model rounds per `research` subagent run.           |
-| `researchMaxToolCalls` | `16`    | Max tool calls per `research` subagent run.             |
+| Parameter               | Default | Meaning                                                 |
+| :---------------------- | :------ | :------------------------------------------------------ |
+| `searchTimeoutMs`       | `30000` | Timeout for `/search`.                                  |
+| `scrapeTimeoutMs`       | `45000` | Timeout for `/scrape`.                                  |
+| `verifyTimeoutMs`       | `15000` | Timeout for key verification.                           |
+| `maxToolTextChars`      | `24000` | Characters of tool text returned to the model.          |
+| `defaultSearchLimit`    | `8`     | Results when the model gives no `limit`.                |
+| `rateWindowMs`          | `60000` | Sliding rate-limiter window length (ms).                |
+| `keylessRatePerMinute`  | `10`    | Max requests per window without a Firecrawl API key.    |
+| `keyedRatePerMinute`    | `20`    | Max requests per window with a Firecrawl API key.       |
+| `maxConcurrentRequests` | `3`     | Max simultaneous in-flight Firecrawl HTTP requests.     |
+| `backoff429Ms`          | `2000`  | Base pause after HTTP 429 (doubles per retry, ms).      |
+| `max429Retries`         | `3`     | Max automatic retries for transient keyed HTTP 429s.    |
+| `maxCreditsPerReply`    | `120`   | Firecrawl credit budget per reply (2/search, 1/scrape). |
+| `researchMaxRounds`     | `12`    | Max model rounds per `research` subagent run.           |
+| `researchMaxToolCalls`  | `16`    | Max tool calls per `research` subagent run.             |
 
 The `research` task message also names a typical workload per `effort` (`EFFORT_GUIDANCE` in
 `researchProfile.ts`): `quick` 2 searches and 2 page reads, `standard` 4 and 4, `thorough` 6 and 6.

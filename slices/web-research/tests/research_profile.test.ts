@@ -177,6 +177,99 @@ describe('web-research: research profile task validation & quote verification', 
       assert.equal(afterDrop.sources[0]?.verification, 'unverified')
     }
   })
+
+  it('verifies quotes against page title, stripped Markdown formatting, and ordered ellipsis spans while rejecting out-of-order or fabricated spans', async () => {
+    const markdown = [
+      'Starlark is inspired by **Python3**, used in [Bazel](https://bazel.build), [Buck](https://buck.build) and [Buck2](https://buck2.build).',
+      'It compiles via `starlark_syntax` into bytecode.',
+      'Finally, execution is deterministic.',
+    ].join('\n\n')
+    const url = 'https://docs.example/starlark'
+    const web = createWebResearchSlice({
+      fetch: async () =>
+        json({
+          success: true,
+          data: {
+            markdown,
+            metadata: {
+              title: 'GitHub - facebook/starlark-rust: Starlark in Rust',
+              sourceURL: url,
+              statusCode: 200,
+            },
+          },
+        }),
+      store: memoryStore(),
+      secret: null,
+      params: { keylessRatePerMinute: 1000, maxCreditsPerReply: 1000 },
+    })
+
+    const runId = 'run-rich-quotes'
+    const scraped = await web.run(
+      'web_scrape',
+      { url },
+      {
+        signal: new AbortController().signal,
+        caller: { kind: 'agent', profile: 'research', runId },
+      }
+    )
+    assert.equal(scraped.status, 'ok')
+
+    const checked = await web.researchProfile.complete(
+      {
+        answer: 'Findings [1] [2] [3] [4] [5] [6] [7]',
+        sources: [
+          {
+            n: 1,
+            url,
+            title: 'Starlark',
+            quote: 'Starlark is inspired by Python3, used in Bazel, Buck and Buck2.',
+          },
+          {
+            n: 2,
+            url,
+            title: 'Starlark',
+            quote: 'GitHub - facebook/starlark-rust: Starlark in Rust',
+          },
+          {
+            n: 3,
+            url,
+            title: 'Starlark',
+            quote: 'Starlark is inspired by Python3 ... Finally, execution is deterministic.',
+          },
+          {
+            n: 4,
+            url,
+            title: 'Starlark',
+            quote: 'It compiles via starlark_syntax … execution is deterministic.',
+          },
+          {
+            n: 5,
+            url,
+            title: 'Starlark',
+            quote: 'Finally, execution is deterministic. ... Starlark is inspired by Python3',
+          },
+          {
+            n: 6,
+            url,
+            title: 'Starlark',
+            quote: 'Starlark is inspired by Python3 ... totally fabricated claim.',
+          },
+          {
+            n: 7,
+            url,
+            title: 'Starlark',
+            quote: '...',
+          },
+        ],
+      },
+      { runId, outcome: 'finished' }
+    )
+
+    assert.deepEqual(
+      checked.sources.map((s) => s.verification),
+      ['verified', 'verified', 'verified', 'verified', 'unverified', 'unverified', 'unverified']
+    )
+  })
 })
 
 describe('web-research: shared rate limiter, credit budget, and agent wording', () => {
@@ -265,7 +358,7 @@ describe('web-research: shared rate limiter, credit budget, and agent wording', 
     )
     const r4 = await web.run(
       'web_scrape',
-      { url: 'https://a.example' },
+      { url: 'https://b.example' },
       { signal: sig, replyKey: 'rep-1' }
     )
 
@@ -340,5 +433,263 @@ describe('web-research: shared rate limiter, credit budget, and agent wording', 
       !errRes.content.includes('Settings'),
       'agent 429 error does not tell child to open Settings'
     )
+  })
+
+  it('caps simultaneous in-flight Firecrawl requests at maxConcurrentRequests', async () => {
+    let inFlight = 0
+    let maxInFlight = 0
+    const web = createWebResearchSlice({
+      fetch: async (_url, init) => {
+        inFlight += 1
+        maxInFlight = Math.max(maxInFlight, inFlight)
+        await new Promise((resolve) => setTimeout(resolve, 15))
+        inFlight -= 1
+        const body = JSON.parse(String(init.body)) as { url: string }
+        return json({
+          success: true,
+          data: {
+            markdown: `Body ${body.url}`,
+            metadata: { sourceURL: body.url, statusCode: 200 },
+          },
+        })
+      },
+      store: memoryStore(),
+      secret: null,
+      params: {
+        keylessRatePerMinute: 1000,
+        maxConcurrentRequests: 2,
+        maxCreditsPerReply: 100,
+      },
+    })
+
+    const results = await Promise.all(
+      Array.from({ length: 6 }, (_, i) =>
+        web.run(
+          'web_scrape',
+          { url: `https://c.example/page-${i}` },
+          { signal: new AbortController().signal, replyKey: 'rep-conc' }
+        )
+      )
+    )
+    assert.ok(results.every((r) => r.status === 'ok'))
+    assert.equal(maxInFlight, 2)
+  })
+
+  it('automatically retries transient keyed HTTP 429s, skips retry on keyless or credit-exhausted 429s, and refunds credits on failures', async () => {
+    // 1. Keyed transient 429 twice then 200 -> succeeds and charges only 1 credit.
+    let transientCalls = 0
+    const keyedTransient = createWebResearchSlice({
+      fetch: async () => {
+        transientCalls += 1
+        if (transientCalls <= 2) {
+          return new Response(JSON.stringify({ error: 'Rate limit exceeded' }), {
+            status: 429,
+            headers: { 'Content-Type': 'application/json', 'Retry-After': '0' },
+          })
+        }
+        return json({
+          success: true,
+          data: {
+            markdown: 'Recovered',
+            metadata: { sourceURL: 'https://r.example/1', statusCode: 200 },
+          },
+        })
+      },
+      store: memoryStore({ 'chat-demo:firecrawl-api-key': 'fc-key' }),
+      secret: null,
+      params: {
+        keyedRatePerMinute: 100,
+        backoff429Ms: 5,
+        max429Retries: 3,
+        maxCreditsPerReply: 1,
+      },
+    })
+
+    const recovered = await keyedTransient.run(
+      'web_scrape',
+      { url: 'https://r.example/1' },
+      { signal: new AbortController().signal, replyKey: 'rep-retry' }
+    )
+    assert.equal(recovered.status, 'ok')
+    assert.equal(transientCalls, 3)
+
+    // 2. Permanent credit exhaustion 429 does NOT retry and refunds its reserved credit.
+    let permCalls = 0
+    let failMode = true
+    const keyedPerm = createWebResearchSlice({
+      fetch: async (_url, init) => {
+        permCalls += 1
+        if (failMode) {
+          return json({ error: 'Insufficient credits for this request' }, 429)
+        }
+        const body = JSON.parse(String(init.body)) as { url: string }
+        return json({
+          success: true,
+          data: { markdown: 'ok', metadata: { sourceURL: body.url, statusCode: 200 } },
+        })
+      },
+      store: memoryStore({ 'chat-demo:firecrawl-api-key': 'fc-key' }),
+      secret: null,
+      params: {
+        keyedRatePerMinute: 100,
+        backoff429Ms: 5,
+        max429Retries: 3,
+        maxCreditsPerReply: 1,
+      },
+    })
+
+    const permErr = await keyedPerm.run(
+      'web_scrape',
+      { url: 'https://r.example/fail' },
+      { signal: new AbortController().signal, replyKey: 'rep-perm' }
+    )
+    assert.equal(permErr.status, 'error')
+    assert.equal(permCalls, 1, 'permanent credit 429 must not retry')
+
+    // Because the failed call refunded its credit, a subsequent call within budget=1 still runs.
+    failMode = false
+    const afterRefund = await keyedPerm.run(
+      'web_scrape',
+      { url: 'https://r.example/ok' },
+      { signal: new AbortController().signal, replyKey: 'rep-perm' }
+    )
+    assert.equal(afterRefund.status, 'ok')
+    assert.equal(permCalls, 2)
+
+    // 3. Keyless 429 does NOT retry.
+    let keylessCalls = 0
+    const keyless = createWebResearchSlice({
+      fetch: async () => {
+        keylessCalls += 1
+        return json({ error: 'Rate limit exceeded' }, 429)
+      },
+      store: memoryStore(),
+      secret: null,
+      params: { backoff429Ms: 5, max429Retries: 3 },
+    })
+    const keylessErr = await keyless.run(
+      'web_search',
+      { query: 'test' },
+      { signal: new AbortController().signal }
+    )
+    assert.equal(keylessErr.status, 'error')
+    assert.equal(keylessCalls, 1)
+  })
+
+  it('caches scrapes and coalesces concurrent identical URLs within a reply while recording quotes for each agent and isolating aborts', async () => {
+    let fetchCount = 0
+    let releaseSlow: () => void = () => undefined
+    const slowGate = new Promise<void>((resolve) => {
+      releaseSlow = resolve
+    })
+    let shouldFailFirst = true
+
+    const web = createWebResearchSlice({
+      fetch: async (_url, init) => {
+        fetchCount += 1
+        const body = JSON.parse(String(init.body)) as { url: string }
+        if (body.url.endsWith('/flaky') && shouldFailFirst) {
+          shouldFailFirst = false
+          return json({ error: 'Temporary failure' }, 500)
+        }
+        if (body.url.endsWith('/shared')) {
+          await slowGate
+        }
+        return json({
+          success: true,
+          data: {
+            markdown: `Verified passage from ${body.url}.`,
+            metadata: { title: 'Doc', sourceURL: body.url, statusCode: 200 },
+          },
+        })
+      },
+      store: memoryStore(),
+      secret: null,
+      params: { keylessRatePerMinute: 100, maxCreditsPerReply: 10 },
+    })
+
+    // Completed cache hit across lead -> agent still records into agent's quote cache.
+    const urlA = 'https://cache.example/a'
+    const leadRes = await web.run(
+      'web_scrape',
+      { url: urlA },
+      { signal: new AbortController().signal, caller: { kind: 'reply' }, replyKey: 'rep-cache' }
+    )
+    const agentRes = await web.run(
+      'web_scrape',
+      { url: urlA },
+      {
+        signal: new AbortController().signal,
+        caller: { kind: 'agent', profile: 'research', runId: 'run-cached' },
+        replyKey: 'rep-cache',
+      }
+    )
+    assert.equal(leadRes.status, 'ok')
+    assert.equal(agentRes.status, 'ok')
+    assert.equal(fetchCount, 1, 'second scrape of same URL in same reply hit cache')
+
+    const verifiedFromCache = await web.researchProfile.complete(
+      {
+        answer: 'Used [1]',
+        sources: [{ n: 1, url: urlA, title: 'Doc', quote: `Verified passage from ${urlA}.` }],
+      },
+      { runId: 'run-cached', outcome: 'finished' }
+    )
+    assert.equal(verifiedFromCache.sources[0]?.verification, 'verified')
+
+    // In-flight coalescing + independent abort of one waiter.
+    const urlShared = 'https://cache.example/shared'
+    const abortOne = new AbortController()
+    const pAbort = web.run(
+      'web_scrape',
+      { url: urlShared },
+      {
+        signal: abortOne.signal,
+        caller: { kind: 'agent', profile: 'research', runId: 'run-aborted' },
+        replyKey: 'rep-cache',
+      }
+    )
+    const pKeep = web.run(
+      'web_scrape',
+      { url: urlShared },
+      {
+        signal: new AbortController().signal,
+        caller: { kind: 'agent', profile: 'research', runId: 'run-kept' },
+        replyKey: 'rep-cache',
+      }
+    )
+    abortOne.abort()
+    releaseSlow()
+    const [rAborted, rKept] = await Promise.all([pAbort, pKeep])
+    assert.equal(rAborted.status, 'aborted')
+    assert.equal(rKept.status, 'ok')
+    assert.equal(fetchCount, 2, 'concurrent waiters coalesced into one fetch')
+
+    const verifiedKept = await web.researchProfile.complete(
+      {
+        answer: 'Used [1]',
+        sources: [
+          { n: 1, url: urlShared, title: 'Doc', quote: `Verified passage from ${urlShared}.` },
+        ],
+      },
+      { runId: 'run-kept', outcome: 'finished' }
+    )
+    assert.equal(verifiedKept.sources[0]?.verification, 'verified')
+
+    // Failed scrape is never cached.
+    const urlFlaky = 'https://cache.example/flaky'
+    const firstFlaky = await web.run(
+      'web_scrape',
+      { url: urlFlaky },
+      { signal: new AbortController().signal, replyKey: 'rep-cache' }
+    )
+    const secondFlaky = await web.run(
+      'web_scrape',
+      { url: urlFlaky },
+      { signal: new AbortController().signal, replyKey: 'rep-cache' }
+    )
+    assert.equal(firstFlaky.status, 'error')
+    assert.equal(secondFlaky.status, 'ok')
+    assert.equal(fetchCount, 4)
   })
 })

@@ -16,8 +16,12 @@ export type FirecrawlParams = {
   keylessRatePerMinute: number
   /** Requests per window when a Firecrawl key is set. */
   keyedRatePerMinute: number
-  /** Backoff applied to subsequent calls after HTTP 429 (ms). */
+  /** Maximum simultaneous in-flight Firecrawl requests across all callers. */
+  maxConcurrentRequests: number
+  /** Base backoff applied after HTTP 429 (ms; doubles on subsequent retries). */
   backoff429Ms: number
+  /** Maximum automatic retries for transient keyed HTTP 429 responses. */
+  max429Retries: number
   /** Maximum Firecrawl credits spent within one reply (0 = unlimited). */
   maxCreditsPerReply: number
   /** Maximum model rounds for a `research` subagent. */
@@ -34,8 +38,10 @@ export const DEFAULT_FIRECRAWL_PARAMS: FirecrawlParams = {
   defaultSearchLimit: 8,
   rateWindowMs: 60_000,
   keylessRatePerMinute: 10,
-  keyedRatePerMinute: 30,
+  keyedRatePerMinute: 20,
+  maxConcurrentRequests: 3,
   backoff429Ms: 2_000,
+  max429Retries: 3,
   maxCreditsPerReply: 120,
   researchMaxRounds: 12,
   researchMaxToolCalls: 16,
@@ -63,7 +69,7 @@ export type KeyVerification =
 
 /** Why a request did not produce a 2xx response. */
 type RequestFailure =
-  | { kind: 'http'; status: number; message: string }
+  | { kind: 'http'; status: number; message: string; retryAfterMs?: number }
   | { kind: 'network'; message: string }
   | { kind: 'timeout'; timeoutMs: number }
 
@@ -79,6 +85,67 @@ class FirecrawlRequestError extends Error {
     this.name = 'FirecrawlRequestError'
     this.failure = failure
   }
+}
+
+const PERMANENT_429_RE =
+  /\b(insufficient\s+credits?|out\s+of\s+credits?|credit\s+limit|credits?\s+exhausted|monthly\s+limit|payment\s+required)\b/i
+
+const parseRetryAfterMs = (header: string | null): number | undefined => {
+  if (!header) {
+    return undefined
+  }
+  const trimmed = header.trim()
+  if (!trimmed) {
+    return undefined
+  }
+  const seconds = Number(trimmed)
+  if (Number.isFinite(seconds) && seconds >= 0) {
+    return Math.round(seconds * 1000)
+  }
+  const dateMs = Date.parse(trimmed)
+  if (Number.isFinite(dateMs)) {
+    return Math.max(0, dateMs - Date.now())
+  }
+  return undefined
+}
+
+const unwrapFirecrawlError = (error: unknown): FirecrawlRequestError | null => {
+  if (error instanceof FirecrawlRequestError) {
+    return error
+  }
+  if (error instanceof Error && error.cause instanceof FirecrawlRequestError) {
+    return error.cause
+  }
+  return null
+}
+
+/**
+ * Returns the backoff delay (ms) if `error` is a transient keyed HTTP 429 worth retrying,
+ * or `null` if the failure should be surfaced immediately (keyless daily cap, exhausted credits,
+ * or non-429 error).
+ */
+export const getRetryable429DelayMs = (
+  error: unknown,
+  hasKey: boolean,
+  attempt: number,
+  params: Pick<FirecrawlParams, 'backoff429Ms' | 'rateWindowMs'>
+): number | null => {
+  if (!hasKey) {
+    return null
+  }
+  const fcError = unwrapFirecrawlError(error)
+  if (!fcError || fcError.failure.kind !== 'http' || fcError.failure.status !== 429) {
+    return null
+  }
+  if (PERMANENT_429_RE.test(fcError.failure.message)) {
+    return null
+  }
+  const cap = Math.max(0, params.rateWindowMs)
+  if (fcError.failure.retryAfterMs !== undefined) {
+    return Math.min(cap, Math.max(0, fcError.failure.retryAfterMs))
+  }
+  const exp = Math.max(0, params.backoff429Ms) * 2 ** Math.max(0, attempt)
+  return Math.min(cap, exp)
 }
 
 type RawSearchItem = {
@@ -197,24 +264,27 @@ const request = async (
   }
   if (!response.ok) {
     const text = await response.text().catch(() => '')
+    const retryAfterMs = parseRetryAfterMs(response.headers.get('retry-after'))
     throw new FirecrawlRequestError({
       kind: 'http',
       status: response.status,
       message: extractErrorMessage(text) ?? (text || response.statusText),
+      ...(retryAfterMs !== undefined ? { retryAfterMs } : {}),
     })
   }
   return response
 }
 
-const describeFailure = (
+export const describeFirecrawlFailure = (
   error: unknown,
   hasKey: boolean,
   audience: WebAudience = 'reply'
 ): string => {
-  if (!(error instanceof FirecrawlRequestError)) {
+  const fcError = unwrapFirecrawlError(error)
+  if (!fcError) {
     return error instanceof Error ? error.message : String(error)
   }
-  const { failure } = error
+  const { failure } = fcError
   if (failure.kind === 'http' && failure.status === 401) {
     return audience === 'agent'
       ? 'Firecrawl authentication failed (HTTP 401). Stop trying Firecrawl and finish with what you already have.'
@@ -223,7 +293,7 @@ const describeFailure = (
   if (failure.kind === 'http' && failure.status === 429) {
     if (audience === 'agent') {
       return hasKey
-        ? 'Firecrawl rate or credit limit reached (HTTP 429). Finish with what you have or wait before trying another source.'
+        ? 'Firecrawl rate or credit limit reached (HTTP 429). Finish with what you have or move on to another source.'
         : 'Firecrawl keyless daily limit reached (HTTP 429). Finish with what you already have.'
     }
     return hasKey
@@ -233,7 +303,7 @@ const describeFailure = (
   if (failure.kind === 'http') {
     return failure.message || `Firecrawl request failed (HTTP ${failure.status})`
   }
-  return error.message || 'Firecrawl request failed (network)'
+  return fcError.message || 'Firecrawl request failed (network)'
 }
 
 const extractSnippet = (item: RawSearchItem): string => {
@@ -364,7 +434,7 @@ export const createFirecrawlClient = (
       ) {
         hooks?.onRateLimited?.()
       }
-      throw new Error(describeFailure(error, hasKey, audience), { cause: error })
+      throw new Error(describeFirecrawlFailure(error, hasKey, audience), { cause: error })
     }
 
     const payload = (await response.json()) as SearchApiResponse
@@ -432,7 +502,7 @@ export const createFirecrawlClient = (
       ) {
         hooks?.onRateLimited?.()
       }
-      throw new Error(describeFailure(error, hasKey, audience), { cause: error })
+      throw new Error(describeFirecrawlFailure(error, hasKey, audience), { cause: error })
     }
 
     const payload = (await response.json()) as ScrapeApiResponse

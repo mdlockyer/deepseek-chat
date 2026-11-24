@@ -3,8 +3,11 @@ import { useSyncExternalStore } from 'react'
 import {
   DEFAULT_FIRECRAWL_PARAMS,
   createFirecrawlClient,
+  describeFirecrawlFailure,
+  getRetryable429DelayMs,
   type FirecrawlParams,
   type KeyVerification,
+  type ScrapeOutcome,
   type WebAudience,
   type WebSearchSource,
 } from './firecrawl.js'
@@ -62,7 +65,7 @@ export type WebRunOptions = {
   readonly citedUrls?: ReadonlyMap<string, number>
   /** Caller provenance: affects result wording and per-run quote cache. */
   readonly caller?: WebCaller
-  /** Identifier for the reply, used to enforce the per-reply Firecrawl credit budget. */
+  /** Identifier for the reply, used to enforce the per-reply Firecrawl credit budget and scrape cache. */
   readonly replyKey?: string
 }
 
@@ -138,7 +141,7 @@ const buildReplyWebInstructions = (includeResearch: boolean): string => {
   const base = [
     'Web Research (`web_search`, `web_scrape`):',
     'You have fast headless web tools powered by Firecrawl. Reach for `web_search` and `web_scrape` when you need current facts, documentation, or clean Markdown from a URL—they are much faster and lighter than driving the built-in browser. Save the built-in browser for interactive flows, logged-in sessions, JavaScript-heavy apps, or visual inspection.',
-    'When citing `web_search` results in your answer, place inline markers like `[citation:1]`, `[citation:2]` matching the 1-based result numbers returned by `web_search`—the app renders them as clickable source links and populates the Search Results panel.',
+    'When citing `web_search` results in your chat reply, place inline markers like `[citation:1]`, `[citation:2]` matching the 1-based result numbers returned by `web_search`—the app renders them as clickable source links and populates the Search Results panel. (Files presented with `present_file` render standalone Markdown and do not resolve `[citation:n]`, so use regular `[title](url)` links inside files and `[citation:n]` in your chat reply.)',
   ].join('\n')
   return includeResearch ? `${base}\n\n${buildLeadResearchInstructions()}` : base
 }
@@ -147,12 +150,47 @@ const containsHttpUrl = (text: string) => /https?:\/\/\S+/i.test(text)
 
 const ABORTED: WebToolResult = { status: 'aborted', content: 'Aborted by user.' }
 
+/** Bound retained per-reply scrape caches so long sessions do not grow unbounded. */
+const MAX_CACHED_REPLIES = 8
+
+type InFlightScrape = {
+  readonly promise: Promise<ScrapeOutcome>
+  readonly controller: AbortController
+  waiters: number
+}
+
+type ReplyScrapeCache = {
+  readonly completed: Map<string, ScrapeOutcome>
+  readonly inFlight: Map<string, InFlightScrape>
+}
+
+const raceAbort = <T>(promise: Promise<T>, signal: AbortSignal): Promise<T> => {
+  if (signal.aborted) {
+    return Promise.reject(signal.reason ?? new DOMException('Aborted', 'AbortError'))
+  }
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(signal.reason ?? new DOMException('Aborted', 'AbortError'))
+    signal.addEventListener('abort', onAbort, { once: true })
+    promise.then(
+      (value) => {
+        signal.removeEventListener('abort', onAbort)
+        resolve(value)
+      },
+      (error) => {
+        signal.removeEventListener('abort', onAbort)
+        reject(error)
+      }
+    )
+  })
+}
+
 export const createWebResearchSlice = (deps: WebResearchDeps): WebResearchSlice => {
   const params: FirecrawlParams = { ...DEFAULT_FIRECRAWL_PARAMS, ...deps.params }
   const limiter = createFirecrawlLimiter({
     rateWindowMs: params.rateWindowMs,
     keylessRatePerMinute: params.keylessRatePerMinute,
     keyedRatePerMinute: params.keyedRatePerMinute,
+    maxConcurrentRequests: params.maxConcurrentRequests,
     backoff429Ms: params.backoff429Ms,
     maxCreditsPerReply: params.maxCreditsPerReply,
   })
@@ -161,6 +199,7 @@ export const createWebResearchSlice = (deps: WebResearchDeps): WebResearchSlice 
   })
   const keys = createKeyStore({ store: deps.store, secret: deps.secret })
   const pageCache = createPageCache()
+  const replyScrapes = new Map<string, ReplyScrapeCache>()
   const searchTool = buildSearchTool(params)
   const toolNames = {
     search: WEB_SEARCH_TOOL_NAME,
@@ -169,15 +208,87 @@ export const createWebResearchSlice = (deps: WebResearchDeps): WebResearchSlice 
   } as const
   const researchProfile = createResearchProfile(params, pageCache, toolNames)
 
+  const getReplyScrapeCache = (replyKey: string): ReplyScrapeCache => {
+    const existing = replyScrapes.get(replyKey)
+    if (existing) {
+      return existing
+    }
+    while (replyScrapes.size >= MAX_CACHED_REPLIES) {
+      const oldest = replyScrapes.keys().next().value
+      if (oldest === undefined) {
+        break
+      }
+      replyScrapes.delete(oldest)
+    }
+    const created: ReplyScrapeCache = { completed: new Map(), inFlight: new Map() }
+    replyScrapes.set(replyKey, created)
+    return created
+  }
+
   const invalidInput = (expected: string, input: unknown, inputJson?: string): WebToolResult => ({
     status: 'error',
     content: `Invalid input: expected ${expected}, got ${inputJson ?? JSON.stringify(input)}`,
   })
 
-  const failed = (error: unknown, signal: AbortSignal): WebToolResult =>
+  const failed = (
+    error: unknown,
+    signal: AbortSignal,
+    hasKey: boolean,
+    audience: WebAudience
+  ): WebToolResult =>
     signal.aborted
       ? ABORTED
-      : { status: 'error', content: error instanceof Error ? error.message : String(error) }
+      : { status: 'error', content: describeFirecrawlFailure(error, hasKey, audience) }
+
+  /**
+   * Reserves per-reply credits once, acquires rate + concurrency slots, and automatically retries
+   * transient keyed HTTP 429s with escalating backoff (refunding credits if the call still fails).
+   */
+  const runWithRateLimitAndRetry = async <T>(opts: {
+    hasKey: boolean
+    credits: number
+    replyKey?: string
+    signal: AbortSignal
+    execute: (signal: AbortSignal) => Promise<T>
+  }): Promise<
+    | { ok: true; value: T }
+    | { ok: false; kind: 'budget'; message: string }
+    | { ok: false; kind: 'error'; error: unknown }
+  > => {
+    const budget = limiter.reserveCredits(opts.replyKey, opts.credits)
+    if (!budget.ok) {
+      return { ok: false, kind: 'budget', message: budget.message }
+    }
+    const maxRetries = Math.max(0, Math.trunc(params.max429Retries))
+    for (let attempt = 0; ; attempt += 1) {
+      let lease: { release(): void }
+      try {
+        lease = await limiter.acquireSlot({ hasKey: opts.hasKey, signal: opts.signal })
+      } catch (error) {
+        budget.reservation.refund()
+        return { ok: false, kind: 'error', error }
+      }
+      try {
+        const value = await opts.execute(opts.signal)
+        return { ok: true, value }
+      } catch (error) {
+        if (opts.signal.aborted) {
+          budget.reservation.refund()
+          return { ok: false, kind: 'error', error }
+        }
+        const retryDelayMs =
+          attempt < maxRetries ? getRetryable429DelayMs(error, opts.hasKey, attempt, params) : null
+        if (retryDelayMs !== null) {
+          limiter.noteRateLimited(retryDelayMs)
+          continue
+        }
+        budget.reservation.refund()
+        return { ok: false, kind: 'error', error }
+      } finally {
+        lease.release()
+      }
+    }
+  }
 
   const runSearch = async (input: unknown, options: WebRunOptions): Promise<WebToolResult> => {
     const raw =
@@ -187,6 +298,7 @@ export const createWebResearchSlice = (deps: WebResearchDeps): WebResearchSlice 
       return invalidInput('{"query": string}', input, options.inputJson)
     }
     const apiKey = keys.getApiKey()
+    const hasKey = Boolean(apiKey?.trim())
     const limit = Math.min(
       Math.max(
         Math.trunc(typeof raw?.limit === 'number' ? raw.limit : params.defaultSearchLimit),
@@ -195,26 +307,35 @@ export const createWebResearchSlice = (deps: WebResearchDeps): WebResearchSlice 
       10
     )
     const audience: WebAudience = options.caller?.kind === 'agent' ? 'agent' : 'reply'
-    try {
-      const slot = await limiter.acquire({
-        hasKey: Boolean(apiKey?.trim()),
-        credits: searchCredits(limit),
-        replyKey: options.replyKey,
-        signal: options.signal,
-      })
-      if (!slot.ok) {
-        return { status: 'error', content: slot.message }
-      }
-      const outcome = await client.search(query, {
-        apiKey,
-        signal: options.signal,
-        limit,
-        audience,
-        ...(audience === 'reply' && options.citedUrls ? { citedUrls: options.citedUrls } : {}),
-      })
-      return { status: 'ok', content: outcome.text, searchResults: outcome.sources }
-    } catch (error) {
-      return failed(error, options.signal)
+    const outcome = await runWithRateLimitAndRetry({
+      hasKey,
+      credits: searchCredits(limit),
+      replyKey: options.replyKey,
+      signal: options.signal,
+      execute: (signal) =>
+        client.search(query, {
+          apiKey,
+          signal,
+          limit,
+          audience,
+          ...(audience === 'reply' && options.citedUrls ? { citedUrls: options.citedUrls } : {}),
+        }),
+    })
+    if (!outcome.ok) {
+      return outcome.kind === 'budget'
+        ? { status: 'error', content: outcome.message }
+        : failed(outcome.error, options.signal, hasKey, audience)
+    }
+    return { status: 'ok', content: outcome.value.text, searchResults: outcome.value.sources }
+  }
+
+  const recordAgentPage = (
+    caller: WebCaller | undefined,
+    requestedUrl: string,
+    outcome: ScrapeOutcome
+  ) => {
+    if (caller?.kind === 'agent') {
+      pageCache.record(caller.runId, [requestedUrl, outcome.url], outcome.markdown, outcome.title)
     }
   }
 
@@ -227,43 +348,110 @@ export const createWebResearchSlice = (deps: WebResearchDeps): WebResearchSlice 
       return invalidInput('{"url": string}', input, options.inputJson)
     }
     const apiKey = keys.getApiKey()
+    const hasKey = Boolean(apiKey?.trim())
     const audience: WebAudience = options.caller?.kind === 'agent' ? 'agent' : 'reply'
+
+    // Validate URL before checking cache or acquiring limiter slot / spending credits.
+    const trimmed = url.trim()
+    let isHttp = false
     try {
-      // Validate URL before acquiring limiter slot / spending credits.
-      const trimmed = url.trim()
-      let isHttp = false
-      try {
-        const proto = new URL(trimmed).protocol
-        isHttp = proto === 'http:' || proto === 'https:'
-      } catch {
-        isHttp = false
+      const proto = new URL(trimmed).protocol
+      isHttp = proto === 'http:' || proto === 'https:'
+    } catch {
+      isHttp = false
+    }
+    if (!isHttp) {
+      return {
+        status: 'error',
+        content: `Invalid URL: ${url}. Only http:// and https:// URLs are supported.`,
       }
-      if (!isHttp) {
-        return {
-          status: 'error',
-          content: `Invalid URL: ${url}. Only http:// and https:// URLs are supported.`,
-        }
-      }
-      const slot = await limiter.acquire({
-        hasKey: Boolean(apiKey?.trim()),
-        credits: SCRAPE_CREDITS,
-        replyKey: options.replyKey,
-        signal: options.signal,
-      })
-      if (!slot.ok) {
-        return { status: 'error', content: slot.message }
-      }
-      const outcome = await client.scrape(url, { apiKey, signal: options.signal, audience })
-      if (options.caller?.kind === 'agent') {
-        pageCache.record(options.caller.runId, [trimmed, outcome.url], outcome.markdown)
-      }
+    }
+
+    const cache = options.replyKey ? getReplyScrapeCache(options.replyKey) : null
+    const cached = cache?.completed.get(trimmed)
+    if (cached) {
+      recordAgentPage(options.caller, trimmed, cached)
       return {
         status: 'ok',
-        content: outcome.text,
-        scrapedPage: { url: outcome.url, title: outcome.title },
+        content: cached.text,
+        scrapedPage: { url: cached.url, title: cached.title },
       }
-    } catch (error) {
-      return failed(error, options.signal)
+    }
+
+    if (cache) {
+      let entry = cache.inFlight.get(trimmed)
+      if (!entry) {
+        const controller = new AbortController()
+        const promise = (async () => {
+          const outcome = await runWithRateLimitAndRetry({
+            hasKey,
+            credits: SCRAPE_CREDITS,
+            replyKey: options.replyKey,
+            signal: controller.signal,
+            execute: (signal) => client.scrape(trimmed, { apiKey, signal, audience }),
+          })
+          if (!outcome.ok) {
+            throw outcome.kind === 'budget' ? new Error(outcome.message) : outcome.error
+          }
+          return outcome.value
+        })()
+        entry = { promise, controller, waiters: 0 }
+        cache.inFlight.set(trimmed, entry)
+        promise.then(
+          (scraped) => {
+            cache.completed.set(trimmed, scraped)
+            cache.completed.set(scraped.url, scraped)
+            if (cache.inFlight.get(trimmed) === entry) {
+              cache.inFlight.delete(trimmed)
+            }
+          },
+          () => {
+            if (cache.inFlight.get(trimmed) === entry) {
+              cache.inFlight.delete(trimmed)
+            }
+          }
+        )
+      }
+
+      entry.waiters += 1
+      try {
+        const scraped = await raceAbort(entry.promise, options.signal)
+        recordAgentPage(options.caller, trimmed, scraped)
+        return {
+          status: 'ok',
+          content: scraped.text,
+          scrapedPage: { url: scraped.url, title: scraped.title },
+        }
+      } catch (error) {
+        if (options.signal.aborted && entry.waiters <= 1) {
+          entry.controller.abort(options.signal.reason)
+        }
+        return failed(error, options.signal, hasKey, audience)
+      } finally {
+        entry.waiters = Math.max(0, entry.waiters - 1)
+        if (entry.waiters === 0 && options.signal.aborted) {
+          entry.controller.abort(options.signal.reason)
+        }
+      }
+    }
+
+    const outcome = await runWithRateLimitAndRetry({
+      hasKey,
+      credits: SCRAPE_CREDITS,
+      replyKey: options.replyKey,
+      signal: options.signal,
+      execute: (signal) => client.scrape(trimmed, { apiKey, signal, audience }),
+    })
+    if (!outcome.ok) {
+      return outcome.kind === 'budget'
+        ? { status: 'error', content: outcome.message }
+        : failed(outcome.error, options.signal, hasKey, audience)
+    }
+    recordAgentPage(options.caller, trimmed, outcome.value)
+    return {
+      status: 'ok',
+      content: outcome.value.text,
+      scrapedPage: { url: outcome.value.url, title: outcome.value.title },
     }
   }
 

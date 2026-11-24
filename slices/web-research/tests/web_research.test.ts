@@ -228,7 +228,7 @@ describe('web-research: failures', () => {
   it('distinguishes keyless 429 limit from keyed 429 limit', async () => {
     const respond = () => json({ success: false, error: 'Rate limit exceeded' }, 429)
     const keyless = setup(respond).web
-    const withKey = setup(respond, keyed('fc-test-123')).web
+    const withKey = setup(respond, { ...keyed('fc-test-123'), params: { backoff429Ms: 0 } }).web
 
     const a = await keyless.run('web_search', { query: 'hello' }, { signal: signal() })
     const b = await withKey.run('web_search', { query: 'hello' }, { signal: signal() })

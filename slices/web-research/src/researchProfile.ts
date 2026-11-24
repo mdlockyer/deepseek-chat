@@ -49,7 +49,8 @@ export const RESEARCH_TOOL: ResearchToolDefinition = {
       },
       boundaries: {
         type: 'string',
-        description: 'What is out of scope because you or other researchers are covering it.',
+        description:
+          'What is out of scope because you or other researchers are covering it. Always fill this in when starting multiple researchers so they do not overlap.',
       },
       return_format: {
         type: 'string',
@@ -83,7 +84,8 @@ const FINISH_RESEARCH_TOOL: ResearchToolDefinition = {
       },
       sources: {
         type: 'array',
-        description: 'Each page you cite, with a verbatim quote from the scraped page.',
+        description:
+          'Each unique page you cite (list each URL once), with a verbatim quote from the scraped page.',
         items: {
           type: 'object',
           required: ['n', 'url', 'title', 'quote'],
@@ -94,7 +96,7 @@ const FINISH_RESEARCH_TOOL: ResearchToolDefinition = {
             quote: {
               type: 'string',
               description:
-                'One or two sentences copied verbatim from that scraped page that support the claim.',
+                'One or two contiguous sentences copied verbatim from that scraped page that support the claim (avoid joining distant passages with "...").',
             },
           },
         },
@@ -106,7 +108,7 @@ const FINISH_RESEARCH_TOOL: ResearchToolDefinition = {
 const RESEARCH_ROLE_PROMPT = [
   "You're a web researcher. The lead split a bigger question into parts and gave you one; other researchers may be working on neighbouring parts right now, which is why your task names boundaries. Stay inside them. If you notice something important outside them, mention it in one line at the end rather than researching it.",
   'Work like a careful person with a limited budget. Start with a short, broad search to see what exists, then narrow. Prefer primary sources (official documentation, the organisation’s own pages, papers, filings, data) over aggregators and SEO content, and prefer recent sources when the question is about how things are now. When sources disagree, report the disagreement instead of quietly picking one. Stop once you can answer the objective well, because more searching after that spends the person’s credits without improving your answer.',
-  "Your result goes through code before the lead sees it. For each source you cite, the app checks that your quote appears, word for word, in a page you fetched with `web_scrape` during this task, and marks any source whose quote it can't find as unverified. So scrape the pages you rely on, copy one or two sentences that actually support the claim, and don't cite a page from its search snippet alone: the check can't see snippets.",
+  "Your result goes through code before the lead sees it. For each source you cite, the app checks that your quote appears verbatim in a page you fetched with `web_scrape` during this task, and marks any source whose quote it can't find as unverified. So scrape the pages you rely on, copy one or two contiguous sentences verbatim (don't stitch distant passages together with `...`), list each URL only once in `sources`, and don't cite a page from its search snippet alone: the check can't see snippets.",
 ].join('\n\n')
 
 export const buildAgentWebInstructions = (params: FirecrawlParams): string =>
@@ -114,45 +116,106 @@ export const buildAgentWebInstructions = (params: FirecrawlParams): string =>
     '**Web Research (`web_search`, `web_scrape`).** Both tools go through Firecrawl, a hosted search-and-scrape service, using the person’s Firecrawl key or its keyless free tier.',
     `\`web_search\` returns up to \`limit\` results (1–10, default ${params.defaultSearchLimit}), each with a title, URL, site name and snippet. Web results come before news, only http(s) links appear, and duplicates are removed. A snippet is the search engine's summary, not the page's text.`,
     `\`web_scrape\` fetches one http(s) page and returns its main content as Markdown, with navigation, footers and ads stripped. It cuts off after ${params.maxToolTextChars.toLocaleString('en-US')} characters and says so. If what you need is past the cut, look for a more specific page rather than scraping the same URL again.`,
-    `Both cost the person money or free quota: a search uses 2 credits per 10 results, a scrape uses 1, and a free account gets 1,000 credits a month. That's why you have a budget. It's also why every researcher's calls share one rate limiter: when you hit it, your call waits rather than fails. A call can still fail (a page that blocks scraping, a ${Math.round(params.scrapeTimeoutMs / 1000)}-second timeout, or the person's monthly limit), and the error says which. Don't retry a URL that failed; try another source.`,
+    `Both cost the person money or free quota: a search uses 2 credits per 10 results, a scrape uses 1, and a free account gets 1,000 credits a month. That's why you have a budget. Every researcher's calls share one rate limiter, concurrency cap, and per-reply scrape cache: if you hit the rate limit or a transient HTTP 429, the app waits and retries for you automatically, and pages already scraped in this reply return from cache without spending extra credits. A call only comes back as an error when it couldn't recover (a page that blocks scraping, a ${Math.round(params.scrapeTimeoutMs / 1000)}-second timeout, or an exhausted quota), and the error says which. Don't retry a URL that failed and don't use \`post\` to stall—move on to another source or finish with what you have.`,
   ].join('\n\n')
 
 export const buildLeadResearchInstructions = (): string =>
   [
     '**Research subagents (`research`).** When a question needs many sources across separate threads, you can start researchers with `research`. Each one is another DeepSeek model with a fresh context and only the web tools. `research` returns as soon as the researcher has started. Start all the researchers you want in one response so they run at the same time, then call `wait`.',
-    'Use one researcher for a narrow question, two to four for a comparison, and more only for a broad survey, because each one spends the person’s search credits (a typical researcher uses about 20). For a single fact, search yourself.',
-    'A researcher can’t see this conversation, so write each task as you would for a capable colleague who just walked in: the full objective, what the person cares about, what the other researchers are covering, and the shape you want back. Results arrive with their sources already numbered to continue this reply’s citations, so cite them with `[citation:n]` like your own search results. Board findings are hints; they aren’t checked, so cite only sources from results. A source marked unverified had a quote the app couldn’t find on its page; be careful with claims that rest on it. Researchers only read: you write the answer, the files and anything else the person sees.',
+    'Use one researcher for a narrow question, two to four for a comparison, and more only for a broad survey, because each one spends the person’s search credits (a typical researcher uses about 20). For a single fact, search yourself. Once researchers are running, let them handle the searching and scraping rather than fetching the same URLs yourself in parallel—you and your researchers share one Firecrawl rate limit and credit budget, so redundant calls compete for the same slots.',
+    'A researcher can’t see this conversation, so write each task as you would for a capable colleague who just walked in: the full objective, what the person cares about, explicit `boundaries` naming what the other researchers are covering so nobody duplicates work, and the shape you want back. Results arrive with their sources already numbered to continue this reply’s citations, so cite them inline with `[citation:n]` in your chat reply (including the summary alongside any `present_file` report). Inside a `present_file` Markdown document, use regular Markdown links (`[title](url)`) instead, because the File Preview pane renders standalone Markdown without resolving `[citation:n]`. Board findings are hints; they aren’t checked, so cite only sources from results. A source marked unverified had a quote the app couldn’t find on its page; be careful with claims that rest on it. Researchers only read: you write the answer, the files and anything else the person sees.',
   ].join('\n\n')
 
 /** Normalizes any whitespace sequence to a single space and trims ends for deterministic quote checks. */
 export const normalizeWhitespace = (text: string): string => text.replace(/\s+/g, ' ').trim()
 
+/**
+ * Strips inline Markdown syntax (images, links, code ticks, bold/italic wrappers) while keeping
+ * visible prose and snake_case identifiers intact, so rendered-prose quotes still match Markdown.
+ */
+const stripMarkdownInline = (text: string): string =>
+  normalizeWhitespace(
+    text
+      .replace(/!\[([^\]]*)\]\([^)\s]+(?:\s+"[^"]*")?\)/g, '$1')
+      .replace(/\[([^\]]+)\]\([^)\s]+(?:\s+"[^"]*")?\)/g, '$1')
+      .replace(/`([^`]+)`/g, '$1')
+      .replace(/\*\*([^*]+)\*\*/g, '$1')
+      .replace(/__([^_]+)__/g, '$1')
+      .replace(/(^|[\s([{"'])\*([^*\n]+)\*(?=[\s)\]}"'.,;:!?]|$)/g, '$1$2')
+  )
+
+const ELLIPSIS_SPLIT_RE = /\s*(?:\.\.\.|…)\s*/
+
+/**
+ * Matches `needle` directly against `haystack`, or—when the model joined excerpts with `...`/`…`—
+ * checks that every non-empty span appears verbatim in order inside `haystack`.
+ */
+const matchesOrderedSpans = (haystack: string, needle: string): boolean => {
+  if (!needle) {
+    return false
+  }
+  if (haystack.includes(needle)) {
+    return true
+  }
+  if (!needle.includes('...') && !needle.includes('…')) {
+    return false
+  }
+  const spans = needle.split(ELLIPSIS_SPLIT_RE).filter((span) => span.length > 0)
+  if (spans.length === 0) {
+    return false
+  }
+  let cursor = 0
+  for (const span of spans) {
+    const idx = haystack.indexOf(span, cursor)
+    if (idx === -1) {
+      return false
+    }
+    cursor = idx + span.length
+  }
+  return true
+}
+
+type CachedPage = {
+  readonly raw: string
+  readonly plain: string
+}
+
 const normalizeUrlKey = (url: string): string => url.trim()
 
 export type PageCache = {
-  record(runId: string, urls: readonly string[], markdown: string): void
-  take(runId: string): Map<string, string> | undefined
+  record(runId: string, urls: readonly string[], markdown: string, title?: string | null): void
+  take(runId: string): Map<string, CachedPage> | undefined
 }
 
 export const createPageCache = (): PageCache => {
-  const byRun = new Map<string, Map<string, string>>()
+  const byRun = new Map<string, Map<string, CachedPage>>()
 
-  const record = (runId: string, urls: readonly string[], markdown: string) => {
+  const record = (
+    runId: string,
+    urls: readonly string[],
+    markdown: string,
+    title?: string | null
+  ) => {
     let pages = byRun.get(runId)
     if (!pages) {
-      pages = new Map<string, string>()
+      pages = new Map<string, CachedPage>()
       byRun.set(runId, pages)
     }
-    const normalized = normalizeWhitespace(markdown)
+    const trimmedTitle = title?.trim()
+    const combined = trimmedTitle ? `${trimmedTitle}\n\n${markdown}` : markdown
+    const entry: CachedPage = {
+      raw: normalizeWhitespace(combined),
+      plain: stripMarkdownInline(combined),
+    }
     for (const rawUrl of urls) {
       const key = normalizeUrlKey(rawUrl)
       if (key) {
-        pages.set(key, normalized)
+        pages.set(key, entry)
       }
     }
   }
 
-  const take = (runId: string): Map<string, string> | undefined => {
+  const take = (runId: string): Map<string, CachedPage> | undefined => {
     const pages = byRun.get(runId)
     byRun.delete(runId)
     return pages
@@ -246,9 +309,13 @@ export const createResearchProfile = (
       }
       const n = typeof item.n === 'number' && Number.isFinite(item.n) ? item.n : sources.length + 1
       const title = typeof item.title === 'string' && item.title.trim() ? item.title.trim() : url
-      const quote = typeof item.quote === 'string' ? normalizeWhitespace(item.quote) : ''
-      const scrapedText = pages?.get(normalizeUrlKey(url))
-      const verified = Boolean(quote && scrapedText && scrapedText.includes(quote))
+      const rawQuote = typeof item.quote === 'string' ? normalizeWhitespace(item.quote) : ''
+      const plainQuote = typeof item.quote === 'string' ? stripMarkdownInline(item.quote) : ''
+      const page = pages?.get(normalizeUrlKey(url))
+      const verified = Boolean(
+        page &&
+        (matchesOrderedSpans(page.raw, rawQuote) || matchesOrderedSpans(page.plain, plainQuote))
+      )
       sources.push({
         n,
         url,

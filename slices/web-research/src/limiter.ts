@@ -1,7 +1,8 @@
 /**
- * Shared Firecrawl rate limiter and per-reply credit tracker.
- * Enforces a sliding-window per-minute request cap by key mode, backs off on HTTP 429,
- * and enforces a per-reply credit budget (search: 2 credits per 10 results, scrape: 1 credit).
+ * Shared Firecrawl rate limiter, concurrency gate, and per-reply credit tracker.
+ * Enforces a sliding-window per-minute request cap by key mode, caps simultaneous in-flight
+ * requests, pauses queued callers on HTTP 429 backoff, and enforces a per-reply credit budget
+ * (search: 2 credits per 10 results, scrape: 1 credit) with refunds on failed or aborted calls.
  */
 
 export type LimiterConfig = {
@@ -11,7 +12,9 @@ export type LimiterConfig = {
   readonly keylessRatePerMinute: number
   /** Requests allowed per window when a Firecrawl API key is set. */
   readonly keyedRatePerMinute: number
-  /** Pause applied to subsequent queued calls after an HTTP 429 response (ms). */
+  /** Maximum simultaneous in-flight Firecrawl requests across all callers. */
+  readonly maxConcurrentRequests: number
+  /** Base pause applied to subsequent queued calls after an HTTP 429 response (ms). */
   readonly backoff429Ms: number
   /** Maximum Firecrawl credits spent within one reply (0 or negative = unlimited). */
   readonly maxCreditsPerReply: number
@@ -41,21 +44,36 @@ export const sleepAbortable = (ms: number, signal: AbortSignal): Promise<void> =
 export const searchCredits = (limit: number): number => Math.max(1, Math.ceil(limit / 10)) * 2
 export const SCRAPE_CREDITS = 1
 
+export type CreditReservation = {
+  /** Refund the reserved credits (idempotent). Call when the request fails or is aborted. */
+  refund(): void
+}
+
+export type SlotLease = {
+  /** Release the in-flight concurrency slot (idempotent). Always call in a `finally` block. */
+  release(): void
+}
+
 export type FirecrawlLimiter = {
   /**
-   * Reserves credit budget (if `replyKey` is given) and waits for a rate-limit slot.
-   * Returns `{ ok: false, message }` if the per-reply credit budget would be exceeded.
-   * Throws on caller abort.
+   * Reserves credit budget for `replyKey` before sending any request.
+   * Returns `{ ok: false, message }` if the per-reply budget would be exceeded.
    */
-  acquire(options: {
-    hasKey: boolean
+  reserveCredits(
+    replyKey: string | undefined,
     credits: number
-    replyKey?: string
-    signal: AbortSignal
-  }): Promise<{ ok: true } | { ok: false; message: string }>
-  /** Records an HTTP 429 so subsequent calls pause before hitting Firecrawl again. */
-  noteRateLimited(): void
-  /** Credits recorded for a given replyKey (for diagnostics / tests). */
+  ): { ok: true; reservation: CreditReservation } | { ok: false; message: string }
+  /**
+   * Waits for both a rate-limit window slot and an in-flight concurrency slot.
+   * Throws on caller abort. Caller must call `lease.release()` when the HTTP request settles.
+   */
+  acquireSlot(options: { hasKey: boolean; signal: AbortSignal }): Promise<SlotLease>
+  /**
+   * Records an HTTP 429 so subsequent queued callers pause before hitting Firecrawl again.
+   * When `delayMs` is omitted, defaults to `config.backoff429Ms`.
+   */
+  noteRateLimited(delayMs?: number): void
+  /** Credits currently charged for a given replyKey (for diagnostics / tests). */
   creditsUsed(replyKey: string): number
 }
 
@@ -65,8 +83,11 @@ export const createFirecrawlLimiter = (
 ): FirecrawlLimiter => {
   const timestamps: number[] = []
   const replyCredits = new Map<string, number>()
+  const maxConcurrent = Math.max(1, Math.trunc(config.maxConcurrentRequests))
+  let inFlight = 0
+  let concurrencyWaiters: Array<() => void> = []
   let backoffUntil = 0
-  // Serialize slot acquisition so concurrent bursts strictly respect the window cap.
+  // Serialize slot acquisition so concurrent bursts strictly respect window and concurrency caps.
   let gate: Promise<void> = Promise.resolve()
 
   const prune = (now: number) => {
@@ -76,11 +97,52 @@ export const createFirecrawlLimiter = (
     }
   }
 
-  const acquireSlot = async (hasKey: boolean, signal: AbortSignal): Promise<void> => {
+  const waitForConcurrencySlot = (signal: AbortSignal): Promise<void> => {
+    if (inFlight < maxConcurrent) {
+      return Promise.resolve()
+    }
+    return new Promise<void>((resolve, reject) => {
+      if (signal.aborted) {
+        reject(signal.reason ?? new DOMException('Aborted', 'AbortError'))
+        return
+      }
+      const wake = () => {
+        signal.removeEventListener('abort', onAbort)
+        resolve()
+      }
+      const onAbort = () => {
+        concurrencyWaiters = concurrencyWaiters.filter((entry) => entry !== wake)
+        reject(signal.reason ?? new DOMException('Aborted', 'AbortError'))
+      }
+      concurrencyWaiters.push(wake)
+      signal.addEventListener('abort', onAbort, { once: true })
+    })
+  }
+
+  const makeLease = (): SlotLease => {
+    let released = false
+    return {
+      release: () => {
+        if (released) {
+          return
+        }
+        released = true
+        inFlight = Math.max(0, inFlight - 1)
+        const next = concurrencyWaiters.shift()
+        next?.()
+      },
+    }
+  }
+
+  const acquireUnderGate = async (hasKey: boolean, signal: AbortSignal): Promise<SlotLease> => {
     const rate = Math.max(1, hasKey ? config.keyedRatePerMinute : config.keylessRatePerMinute)
     for (;;) {
       if (signal.aborted) {
         throw signal.reason ?? new DOMException('Aborted', 'AbortError')
+      }
+      if (inFlight >= maxConcurrent) {
+        await waitForConcurrencySlot(signal)
+        continue
       }
       const now = clock()
       prune(now)
@@ -90,53 +152,63 @@ export const createFirecrawlLimiter = (
       const waitMs = Math.max(waitForBackoff, waitForWindow)
       if (waitMs === 0) {
         timestamps.push(now)
-        return
+        inFlight += 1
+        return makeLease()
       }
       await sleepAbortable(waitMs, signal)
     }
   }
 
-  const acquire: FirecrawlLimiter['acquire'] = async ({ hasKey, credits, replyKey, signal }) => {
-    // Check and reserve credit budget atomically before waiting on the rate limiter.
-    if (replyKey && config.maxCreditsPerReply > 0) {
-      const used = replyCredits.get(replyKey) ?? 0
-      if (used + credits > config.maxCreditsPerReply) {
-        return {
-          ok: false,
-          message: `Firecrawl per-reply credit budget reached (${used}/${config.maxCreditsPerReply} credits used; this call needs ${credits}). Finish with the information already gathered.`,
-        }
-      }
-      replyCredits.set(replyKey, used + credits)
+  const reserveCredits: FirecrawlLimiter['reserveCredits'] = (replyKey, credits) => {
+    if (!replyKey || config.maxCreditsPerReply <= 0) {
+      return { ok: true, reservation: { refund: () => undefined } }
     }
-
-    const previous = gate
-    let release!: () => void
-    gate = new Promise<void>((resolve) => {
-      release = resolve
-    })
-    try {
-      await previous
-      await acquireSlot(hasKey, signal)
-      return { ok: true }
-    } catch (error) {
-      // Refund reserved credits if aborted while waiting for a rate slot.
-      if (replyKey && config.maxCreditsPerReply > 0) {
-        const current = replyCredits.get(replyKey) ?? 0
-        replyCredits.set(replyKey, Math.max(0, current - credits))
+    const used = replyCredits.get(replyKey) ?? 0
+    if (used + credits > config.maxCreditsPerReply) {
+      return {
+        ok: false,
+        message: `Firecrawl per-reply credit budget reached (${used}/${config.maxCreditsPerReply} credits used; this call needs ${credits}). Finish with the information already gathered.`,
       }
-      throw error
-    } finally {
-      release()
+    }
+    replyCredits.set(replyKey, used + credits)
+    let refunded = false
+    return {
+      ok: true,
+      reservation: {
+        refund: () => {
+          if (refunded) {
+            return
+          }
+          refunded = true
+          const current = replyCredits.get(replyKey) ?? 0
+          replyCredits.set(replyKey, Math.max(0, current - credits))
+        },
+      },
     }
   }
 
-  const noteRateLimited = () => {
-    if (config.backoff429Ms > 0) {
-      backoffUntil = Math.max(backoffUntil, clock() + config.backoff429Ms)
+  const acquireSlot: FirecrawlLimiter['acquireSlot'] = async ({ hasKey, signal }) => {
+    const previous = gate
+    let releaseGate!: () => void
+    gate = new Promise<void>((resolve) => {
+      releaseGate = resolve
+    })
+    try {
+      await previous
+      return await acquireUnderGate(hasKey, signal)
+    } finally {
+      releaseGate()
+    }
+  }
+
+  const noteRateLimited = (delayMs?: number) => {
+    const pause = delayMs ?? config.backoff429Ms
+    if (pause > 0) {
+      backoffUntil = Math.max(backoffUntil, clock() + pause)
     }
   }
 
   const creditsUsed = (replyKey: string) => replyCredits.get(replyKey) ?? 0
 
-  return { acquire, noteRateLimited, creditsUsed }
+  return { reserveCredits, acquireSlot, noteRateLimited, creditsUsed }
 }
