@@ -45,7 +45,15 @@ export {
   type AnchoredPosition,
   type Side,
 } from './anchored.js'
-export { PANEL_DURATION_MS, usePresence } from './usePresence.js'
+export {
+  MOBILE_BREAKPOINT_PX,
+  PANEL_DURATION_MS,
+  THEME_ATTR,
+  applyDocumentTheme,
+  type ThemeMode,
+  type ThemeRoot,
+} from './theme.js'
+export { usePresence } from './usePresence.js'
 export { useIsMobile } from './viewport.js'
 export { acquireOverlay, isOverlayOpen, onOverlayChange } from './overlay.js'
 export {

@@ -1,8 +1,9 @@
+import { applyDocumentTheme, type ThemeMode } from '@deepseek-chat/spine/design'
 import { useSyncExternalStore } from 'react'
 import type { ThemePreference } from '@deepseek-chat/slice-preferences'
 import { preferences } from './composition.js'
 
-export type Theme = 'light' | 'dark'
+export type Theme = ThemeMode
 
 const query = window.matchMedia('(prefers-color-scheme: dark)')
 
@@ -36,12 +37,13 @@ const applyTheme = (theme: Theme) => {
   body.classList.add('change-theme')
   body.classList.toggle('dark', theme === 'dark')
   body.classList.toggle('light', theme === 'light')
+  applyDocumentTheme(document.documentElement, theme)
+  // Transitional hooks kept until Phase 6 finishes removing legacy selectors from slices.
   if (theme === 'dark') {
     body.setAttribute('data-ds-dark-theme', 'dark')
   } else {
     body.removeAttribute('data-ds-dark-theme')
   }
-  document.documentElement.style.colorScheme = theme
   // 首次背景色同步在样式表加载完成后执行，适配 WebKit 的 defer 脚本执行顺序。
   if (document.readyState === 'complete') {
     syncPageBackground()

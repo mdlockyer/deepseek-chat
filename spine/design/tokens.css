@@ -1,0 +1,415 @@
+@layer reset, tokens, base, components, slice;
+
+@layer tokens {
+  :root {
+    color-scheme: light;
+
+    /* ==========================================================================
+     * Layer 1 — Private Primitives (internal to tokens.css; banned in slices)
+     * Neutral-bluish ramp & DeepSeek brand/status hues in sRGB-safe values.
+     * ========================================================================== */
+    --_p-neutral-00: #ffffff;
+    --_p-neutral-50: #f9fafb;
+    --_p-neutral-60: #f5f6f7;
+    --_p-neutral-75: #f1f3f5;
+    --_p-neutral-100: #ebeef2;
+    --_p-neutral-150: #e9ecf2;
+    --_p-neutral-200: #e1e5ee;
+    --_p-neutral-300: #cfd3d6;
+    --_p-neutral-400: #adb2b8;
+    --_p-neutral-550: #65676b;
+    --_p-neutral-600: #81858c;
+    --_p-neutral-700: #61666b;
+    --_p-neutral-750: #43454a;
+    --_p-neutral-800: #353638;
+    --_p-neutral-850: #2c2c2e;
+    --_p-neutral-900: #1b1b1c;
+    --_p-neutral-950: #151517;
+    --_p-neutral-1000: #0f1115;
+
+    --_p-blue-50: #edf3fe;
+    --_p-blue-100: #e4edfd;
+    --_p-blue-200: #d3e2ff;
+    --_p-blue-300: #b7c8fe;
+    --_p-blue-400: #679efe;
+    --_p-blue-450: #5686fe;
+    --_p-blue-500: #3964fe;
+    --_p-blue-550: #2d55e4;
+    --_p-blue-600: #4868b2;
+    --_p-blue-800: #34415b;
+    --_p-blue-900: #283142;
+
+    --_p-red-50: #fef2f2;
+    --_p-red-300: #ff8a8a;
+    --_p-red-400: #f25a5a;
+    --_p-red-600: #dc2626;
+    --_p-red-700: #b91c1c;
+    --_p-red-900: #3f1d20;
+
+    --_p-green-100: #e6faed;
+    --_p-green-300: #6ee79b;
+    --_p-green-400: #4ed17e;
+    --_p-green-500: #22c55e;
+    --_p-green-600: #16803d;
+    --_p-green-900: #233c2c;
+
+    --_p-amber-100: #fef5e7;
+    --_p-amber-400: #f7ad31;
+    --_p-amber-500: #f59e0b;
+    --_p-amber-700: #a15c07;
+    --_p-amber-900: #362a18;
+
+    --_p-purple-500: #8b76f6;
+    --_p-orange-500: #fb8e34;
+    --_p-teal-500: #3fb67f;
+    --_p-coral-500: #ee5138;
+    --_p-azure-500: #418cff;
+
+    /* ==========================================================================
+     * Layer 2 — Semantic Color Aliases (Light Theme)
+     * Every foreground/background pair meets WCAG 2.2 AA (>= 4.5:1 text, >= 3:1 UI).
+     * ========================================================================== */
+
+    /* Surfaces */
+    --ui-surface-canvas: var(--_p-neutral-00);
+    --ui-surface-sunken: var(--_p-neutral-50);
+    --ui-surface-elevated: var(--_p-neutral-00);
+    --ui-surface-popover: var(--_p-neutral-00);
+    --ui-surface-control: var(--_p-neutral-75);
+    --ui-surface-input: var(--_p-neutral-00);
+    --ui-surface-input-subtle: var(--_p-neutral-50);
+    --ui-surface-rail: var(--_p-neutral-50);
+    --ui-surface-rail-hover: var(--_p-neutral-75);
+    --ui-surface-rail-active: var(--_p-blue-100);
+    --ui-surface-tint: var(--_p-blue-50);
+    --ui-surface-code: var(--_p-neutral-50);
+    --ui-surface-code-header: var(--_p-neutral-60);
+    --ui-surface-code-inline: var(--_p-neutral-100);
+    --ui-surface-tag: var(--_p-neutral-75);
+    --ui-surface-tag-hover: var(--_p-neutral-100);
+    --ui-surface-skeleton: rgba(15, 17, 21, 0.04);
+    --ui-surface-scrim: rgba(15, 17, 21, 0.36);
+    --ui-surface-scrim-soft: rgba(15, 17, 21, 0.24);
+    --ui-surface-scrim-strong: rgba(15, 17, 21, 0.48);
+    --ui-surface-tooltip: var(--_p-neutral-850);
+    --ui-surface-toast: var(--_p-neutral-800);
+    --ui-surface-paper: var(--_p-neutral-00);
+    --ui-surface-contrast: var(--_p-neutral-700);
+    --ui-surface-switch-off: rgba(15, 17, 21, 0.44);
+
+    /* Interactive fills */
+    --ui-interactive-hover: rgba(38, 49, 72, 0.06);
+    --ui-interactive-active: rgba(38, 49, 72, 0.1);
+    --ui-interactive-hover-strong: rgba(38, 49, 72, 0.14);
+    --ui-interactive-danger-hover: rgba(220, 38, 38, 0.07);
+
+    /* Text & foreground */
+    --ui-text-primary: var(--_p-neutral-1000);
+    --ui-text-secondary: var(--_p-neutral-700);
+    --ui-text-muted: var(--_p-neutral-550);
+    --ui-text-placeholder: var(--_p-neutral-550);
+    --ui-text-disabled: var(--_p-neutral-400);
+    --ui-text-subtle-decoration: var(--_p-neutral-200);
+    --ui-text-on-accent: var(--_p-neutral-00);
+    --ui-text-on-danger: var(--_p-neutral-00);
+    --ui-text-on-inverse: var(--_p-neutral-00);
+    --ui-text-on-toast: var(--_p-neutral-50);
+    --ui-text-on-toast-link: var(--_p-blue-300);
+    --ui-text-accent: var(--_p-blue-550);
+    --ui-text-danger: var(--_p-red-600);
+    --ui-text-success: var(--_p-green-600);
+    --ui-text-warning: var(--_p-amber-700);
+
+    /* Borders */
+    --ui-border-subtle: rgba(15, 17, 21, 0.06);
+    --ui-border-default: rgba(15, 17, 21, 0.12);
+    --ui-border-strong: rgba(15, 17, 21, 0.22);
+    --ui-border-hairline: rgba(15, 17, 21, 0.1);
+    --ui-border-inverse: rgba(15, 17, 21, 0);
+    --ui-border-hover-neutral: var(--_p-neutral-300);
+    --ui-border-focus-neutral: var(--_p-neutral-600);
+    --ui-border-accent: var(--_p-blue-300);
+    --ui-border-danger: var(--_p-red-600);
+
+    /* Brand & Accent */
+    --ui-accent-fill: var(--_p-blue-500);
+    --ui-accent-hover: var(--_p-blue-550);
+    --ui-accent-soft: var(--_p-blue-50);
+    --ui-accent-soft-hover: var(--_p-blue-100);
+    --ui-accent-invert: var(--_p-blue-500);
+
+    /* Status */
+    --ui-danger-fill: var(--_p-red-600);
+    --ui-danger-hover: var(--_p-red-700);
+    --ui-danger-soft: var(--_p-red-50);
+    --ui-success-fill: var(--_p-green-500);
+    --ui-success-soft: var(--_p-green-100);
+    --ui-success-on-soft: var(--_p-green-900);
+    --ui-warning-fill: var(--_p-amber-500);
+    --ui-warning-soft: var(--_p-amber-100);
+    --ui-warning-on-soft: var(--_p-amber-700);
+
+    /* Focus rings */
+    --ui-focus-ring: var(--_p-blue-500);
+    --ui-focus-ring-danger: var(--_p-red-600);
+    --ui-focus-halo-neutral: rgba(129, 133, 140, 0.18);
+
+    /* Non-text indicators & handles */
+    --ui-handle-fill: var(--_p-neutral-600);
+    --ui-bar-muted: var(--_p-neutral-300);
+    --ui-switch-thumb: var(--_p-neutral-00);
+
+    /* File-category glyphs (semantic visual accents) */
+    --ui-glyph-doc: var(--_p-azure-500);
+    --ui-glyph-pdf: var(--_p-coral-500);
+    --ui-glyph-sheet: var(--_p-teal-500);
+    --ui-glyph-slide: var(--_p-orange-500);
+    --ui-glyph-media: var(--_p-purple-500);
+
+    /* Scrollbars */
+    --ui-scrollbar-thumb: rgba(15, 17, 21, 0.14);
+    --ui-scrollbar-thumb-hover: rgba(15, 17, 21, 0.26);
+
+    /* Elevation & Shadows */
+    --ui-shadow-sm: 0 1px 2px rgba(15, 17, 21, 0.06);
+    --ui-shadow-md: 0 4px 10px rgba(15, 17, 21, 0.03), 0 2px 4px rgba(15, 17, 21, 0.05);
+    --ui-shadow-composer:
+      0 4px 12px 0 rgba(15, 17, 21, 0.02), 0 2px 2px 0 rgba(72, 104, 178, 0.02),
+      0 30px 60px 0 rgba(72, 104, 178, 0.04);
+    --ui-shadow-composer-focus:
+      0 0 0 4px var(--ui-focus-halo-neutral), 0 6px 16px rgba(15, 17, 21, 0.06),
+      0 2px 4px rgba(15, 17, 21, 0.04);
+    --ui-shadow-popover: 0 0 1px rgba(15, 17, 21, 0.14), 0 12px 32px rgba(15, 17, 21, 0.12);
+    --ui-shadow-dialog:
+      inset 0 0 0 1px var(--ui-border-inverse), 0 0 1px 0 rgba(15, 17, 21, 0.2),
+      0 0 4px 0 rgba(15, 17, 21, 0.02), 0 12px 32px 0 rgba(15, 17, 21, 0.08);
+    --ui-shadow-toast: 0 0 4px 2px rgba(15, 17, 21, 0.04), 0 4px 16px 0 rgba(15, 17, 21, 0.12);
+    --ui-shadow-tooltip: 0 4px 14px rgba(15, 17, 21, 0.16);
+    --ui-shadow-stage: 0 0 0 1px var(--ui-border-strong), 0 4px 16px rgba(15, 17, 21, 0.1);
+
+    /* ==========================================================================
+     * Typography (Semantic / Functional styles on a 4px leading rhythm)
+     * ========================================================================== */
+    --ui-font-sans:
+      'Google Sans Flex Variable', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+      Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+    --ui-font-mono:
+      Menlo, Monaco, Consolas, 'Cascadia Mono', 'Ubuntu Mono', 'DejaVu Sans Mono',
+      'Liberation Mono', 'JetBrains Mono', 'Fira Code', Cousine, 'Roboto Mono', 'Courier New',
+      Courier, monospace;
+
+    --ui-font-size-xs: 12px;
+    --ui-font-size-sm: 13px;
+    --ui-font-size-md: 14px;
+    --ui-font-size-lg: 16px;
+    --ui-font-size-xl: 20px;
+    --ui-font-size-2xl: 24px;
+
+    --ui-type-h1: 700 24px/34px var(--ui-font-sans);
+    --ui-type-h2: 700 22px/32px var(--ui-font-sans);
+    --ui-type-h3: 700 20px/30px var(--ui-font-sans);
+    --ui-type-h4: 600 16px/28px var(--ui-font-sans);
+    --ui-type-body: 400 16px/28px var(--ui-font-sans);
+    --ui-type-body-strong: 600 16px/28px var(--ui-font-sans);
+    --ui-type-table: 400 15px/25px var(--ui-font-sans);
+    --ui-type-table-head: 500 15px/25px var(--ui-font-sans);
+    --ui-type-label: 400 14px/22px var(--ui-font-sans);
+    --ui-type-label-strong: 500 14px/22px var(--ui-font-sans);
+    --ui-type-small: 400 14px/24px var(--ui-font-sans);
+    --ui-type-small-strong: 600 14px/24px var(--ui-font-sans);
+    --ui-type-caption: 400 13px/20px var(--ui-font-sans);
+    --ui-type-caption-strong: 500 13px/20px var(--ui-font-sans);
+    --ui-type-micro: 500 12px/16px var(--ui-font-sans);
+    --ui-type-code-inline: 400 14px/22px var(--ui-font-mono);
+    --ui-type-code-block: 400 13px/22px var(--ui-font-mono);
+
+    /* ==========================================================================
+     * Spacing Scale (4px base grid)
+     * ========================================================================== */
+    --ui-space-0: 0px;
+    --ui-space-0-5: 2px;
+    --ui-space-1: 4px;
+    --ui-space-1-5: 6px;
+    --ui-space-2: 8px;
+    --ui-space-2-5: 10px;
+    --ui-space-3: 12px;
+    --ui-space-4: 16px;
+    --ui-space-5: 20px;
+    --ui-space-6: 24px;
+    --ui-space-8: 32px;
+    --ui-space-10: 40px;
+    --ui-space-12: 48px;
+
+    /* ==========================================================================
+     * Radii Scale (6 disciplined steps)
+     * ========================================================================== */
+    --ui-radius-xs: 4px;
+    --ui-radius-sm: 8px;
+    --ui-radius-md: 12px;
+    --ui-radius-lg: 16px;
+    --ui-radius-xl: 24px;
+    --ui-radius-pill: 9999px;
+
+    /* ==========================================================================
+     * Control Heights & Layout Dimensions
+     * ========================================================================== */
+    --ui-control-xs: 28px;
+    --ui-control-sm: 32px;
+    --ui-control-md: 36px;
+    --ui-control-lg: 40px;
+    --ui-control-xl: 44px;
+
+    --ui-panel-header-height: 52px;
+
+    /* ==========================================================================
+     * Z-Index Scale
+     * ========================================================================== */
+    --ui-z-base: 1;
+    --ui-z-sticky: 10;
+    --ui-z-panel: 20;
+    --ui-z-panel-handle: 30;
+    --ui-z-chrome: 40;
+    --ui-z-drawer-backdrop: 700;
+    --ui-z-drawer: 800;
+    --ui-z-popover: 900;
+    --ui-z-hovercard: 950;
+    --ui-z-modal: 1000;
+    --ui-z-select: 1050;
+    --ui-z-toast: 2000;
+    --ui-z-tooltip: 2100;
+
+    /* ==========================================================================
+     * Motion Scale
+     * ========================================================================== */
+    --ui-duration-fast: 120ms;
+    --ui-duration-normal: 180ms;
+    --ui-duration-panel: 280ms;
+    --ui-duration-slow: 300ms;
+    --ui-ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+    --ui-ease-panel: cubic-bezier(0.32, 0.72, 0, 1);
+
+    accent-color: var(--ui-accent-fill);
+    font-variant-ligatures: no-contextual;
+  }
+
+  /* ============================================================================
+   * Dark Theme — Semantic Value Swap Under Identical Token Names
+   * ============================================================================ */
+  :root[data-theme='dark'] {
+    color-scheme: dark;
+
+    /* Surfaces */
+    --ui-surface-canvas: var(--_p-neutral-950);
+    --ui-surface-sunken: var(--_p-neutral-900);
+    --ui-surface-elevated: var(--_p-neutral-850);
+    --ui-surface-popover: var(--_p-neutral-800);
+    --ui-surface-control: var(--_p-neutral-750);
+    --ui-surface-input: var(--_p-neutral-850);
+    --ui-surface-input-subtle: var(--_p-neutral-900);
+    --ui-surface-rail: var(--_p-neutral-900);
+    --ui-surface-rail-hover: var(--_p-neutral-850);
+    --ui-surface-rail-active: var(--_p-neutral-800);
+    --ui-surface-tint: var(--_p-neutral-850);
+    --ui-surface-code: var(--_p-neutral-900);
+    --ui-surface-code-header: var(--_p-neutral-850);
+    --ui-surface-code-inline: var(--_p-neutral-850);
+    --ui-surface-tag: var(--_p-neutral-850);
+    --ui-surface-tag-hover: var(--_p-neutral-800);
+    --ui-surface-skeleton: rgba(255, 255, 255, 0.08);
+    --ui-surface-scrim: rgba(0, 0, 0, 0.6);
+    --ui-surface-scrim-soft: rgba(0, 0, 0, 0.42);
+    --ui-surface-scrim-strong: rgba(0, 0, 0, 0.64);
+    --ui-surface-tooltip: var(--_p-neutral-750);
+    --ui-surface-toast: var(--_p-neutral-750);
+    --ui-surface-paper: var(--_p-neutral-00);
+    --ui-surface-contrast: var(--_p-neutral-50);
+    --ui-surface-switch-off: rgba(255, 255, 255, 0.36);
+
+    /* Interactive fills */
+    --ui-interactive-hover: rgba(255, 255, 255, 0.08);
+    --ui-interactive-active: rgba(255, 255, 255, 0.14);
+    --ui-interactive-hover-strong: rgba(255, 255, 255, 0.22);
+    --ui-interactive-danger-hover: rgba(242, 90, 90, 0.15);
+
+    /* Text & foreground */
+    --ui-text-primary: var(--_p-neutral-50);
+    --ui-text-secondary: var(--_p-neutral-300);
+    --ui-text-muted: var(--_p-neutral-400);
+    --ui-text-placeholder: var(--_p-neutral-400);
+    --ui-text-disabled: var(--_p-neutral-600);
+    --ui-text-subtle-decoration: var(--_p-neutral-750);
+    --ui-text-on-accent: var(--_p-neutral-00);
+    --ui-text-on-danger: var(--_p-neutral-00);
+    --ui-text-on-inverse: var(--_p-neutral-800);
+    --ui-text-on-toast: var(--_p-neutral-50);
+    --ui-text-on-toast-link: var(--_p-blue-300);
+    --ui-text-accent: var(--_p-blue-400);
+    --ui-text-danger: var(--_p-red-300);
+    --ui-text-success: var(--_p-green-300);
+    --ui-text-warning: var(--_p-amber-400);
+
+    /* Borders */
+    --ui-border-subtle: rgba(255, 255, 255, 0.06);
+    --ui-border-default: rgba(255, 255, 255, 0.12);
+    --ui-border-strong: rgba(255, 255, 255, 0.18);
+    --ui-border-hairline: rgba(255, 255, 255, 0.08);
+    --ui-border-inverse: rgba(255, 255, 255, 0.06);
+    --ui-border-hover-neutral: var(--_p-neutral-700);
+    --ui-border-focus-neutral: var(--_p-neutral-600);
+    --ui-border-accent: var(--_p-blue-600);
+    --ui-border-danger: var(--_p-red-400);
+
+    /* Brand & Accent */
+    --ui-accent-fill: var(--_p-blue-500);
+    --ui-accent-hover: var(--_p-blue-550);
+    --ui-accent-soft: var(--_p-blue-900);
+    --ui-accent-soft-hover: var(--_p-blue-800);
+    --ui-accent-invert: var(--_p-neutral-00);
+
+    /* Status */
+    --ui-danger-fill: var(--_p-red-600);
+    --ui-danger-hover: var(--_p-red-700);
+    --ui-danger-soft: var(--_p-red-900);
+    --ui-success-fill: var(--_p-green-400);
+    --ui-success-soft: var(--_p-green-900);
+    --ui-success-on-soft: var(--_p-green-100);
+    --ui-warning-fill: var(--_p-amber-400);
+    --ui-warning-soft: var(--_p-amber-900);
+    --ui-warning-on-soft: var(--_p-amber-100);
+
+    /* Focus rings */
+    --ui-focus-ring: var(--_p-blue-400);
+    --ui-focus-ring-danger: var(--_p-red-400);
+    --ui-focus-halo-neutral: rgba(129, 133, 140, 0.26);
+
+    /* Non-text indicators & handles */
+    --ui-handle-fill: var(--_p-neutral-600);
+    --ui-bar-muted: var(--_p-neutral-550);
+    --ui-switch-thumb: var(--_p-neutral-00);
+
+    /* Scrollbars */
+    --ui-scrollbar-thumb: rgba(255, 255, 255, 0.16);
+    --ui-scrollbar-thumb-hover: rgba(255, 255, 255, 0.28);
+
+    /* Elevation & Shadows */
+    --ui-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.24);
+    --ui-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.28);
+    --ui-shadow-composer: none;
+    --ui-shadow-composer-focus:
+      0 0 0 4px var(--ui-focus-halo-neutral), 0 6px 16px rgba(0, 0, 0, 0.32);
+    --ui-shadow-popover: inset 0 0 0 1px var(--ui-border-inverse), 0 12px 32px rgba(0, 0, 0, 0.36);
+    --ui-shadow-dialog: inset 0 0 0 1px var(--ui-border-inverse), 0 12px 32px rgba(0, 0, 0, 0.44);
+    --ui-shadow-toast: inset 0 0 0 1px var(--ui-border-inverse), 0 6px 20px rgba(0, 0, 0, 0.36);
+    --ui-shadow-tooltip: 0 6px 16px rgba(0, 0, 0, 0.28), 0 3px 6px -4px rgba(0, 0, 0, 0.36);
+    --ui-shadow-stage: 0 0 0 1px var(--ui-border-strong), 0 4px 16px rgba(0, 0, 0, 0.36);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --ui-duration-fast: 1ms;
+    --ui-duration-normal: 1ms;
+    --ui-duration-panel: 1ms;
+    --ui-duration-slow: 1ms;
+  }
+}

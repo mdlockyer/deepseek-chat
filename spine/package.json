@@ -8,6 +8,7 @@
     "./ports": "./ports/index.ts",
     "./i18n": "./design/i18n.ts",
     "./design": "./design/index.ts",
+    "./tokens.css": "./design/tokens.css",
     "./facts/session": "./facts/session_facts.ts"
   },
   "dependencies": {
