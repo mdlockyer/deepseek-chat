@@ -19,41 +19,6 @@
   }
 }
 
-.waiting {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  height: 34px;
-}
-
-.waitingDot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background-color: var(--dsw-alias-label-dimmed);
-  animation: fading 0.9s linear infinite;
-
-  &:nth-child(2) {
-    animation-delay: 0.1s;
-  }
-
-  &:nth-child(3) {
-    animation-delay: 0.2s;
-  }
-}
-
-@keyframes fading {
-  0%,
-  100% {
-    opacity: 0.3;
-  }
-
-  33%,
-  66% {
-    opacity: 1;
-  }
-}
-
 .notice {
   display: flex;
   align-items: flex-start;
@@ -147,12 +112,24 @@
 }
 
 /* 生成中长时间没有新内容（如服务端整块输出工具调用）：与步骤行一致的扫光文字 */
-.working {
+/* 与原等待点同高，换上鲸鱼后回复区不跳动 */
+.waiting {
   display: flex;
   align-items: center;
   height: 34px;
+}
+
+.working {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
   font-size: 14px;
   line-height: 22px;
+}
+
+/* 微光把文字设为透明，只加在文字上，鲸鱼保持可见 */
+.workingText {
   color: transparent;
   background: linear-gradient(
       90deg,

@@ -112,7 +112,7 @@ it, and the header toggle (`visible`, `open`, `toggle`). `panels.browser`: the h
     A trace never contains message, tool-input or reply content.
 16. **Still working.** While a reply streams and nothing new has arrived for the stall delay (see
     Parameters), a "Working…" line shows at the end of the reply, until the next content arrives.
-    It does not show while the reply has nothing yet (the waiting dots or the thinking title show
+    It does not show while the reply has nothing yet (the waiting whale or the thinking title show
     instead), or while its last step is a tool that already shows it is running (a tool without its
     result, a running Python call). An open thinking block does not count: during a stall it
     receives nothing, and it may stay open until the held-back tool call arrives. The server may
@@ -134,6 +134,14 @@ it, and the header toggle (`visible`, `open`, `toggle`). `panels.browser`: the h
     executes tools, never blocks the next turn, and never bumps `updatedAt`. Any new send, edit,
     regenerate, branch switch, manual rename, delete or history replacement cancels an in-flight
     title refresh. Clearing a title manually unlocks auto-titling again.
+19. **One activity whale.** While a reply streams, the animated whale marks that the model is
+    working, and at most one whale shows per reply. Before any content arrives it stands alone as
+    the waiting indicator. Once there is a thinking title and no answer yet, it sits on the title.
+    Otherwise it sits on the last tool row that shows it is running, or, with none running, on the
+    "Working…" line. A clarifying question waiting for the user keeps its pulsing dot, because the
+    user, not the model, has the next move. When the reply stops streaming, the title's whale stays
+    in place as the still logo (grey if the reply was stopped); everywhere else the whale gives way
+    to that spot's static icon.
 
 ## Parameters
 

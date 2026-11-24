@@ -770,7 +770,7 @@ export const getAreaTitle = (
  * 该步骤自身已显示进行中（工具行的进行态），无需另行提示仍在处理。
  * 思考不算：停顿时思考块可能仍未结束（签名随后才到），但并没有新内容在输出。
  */
-const showsRunning = (step: Step): boolean => {
+export const showsRunning = (step: Step): boolean => {
   switch (step.type) {
     case 'search':
     case 'browser':

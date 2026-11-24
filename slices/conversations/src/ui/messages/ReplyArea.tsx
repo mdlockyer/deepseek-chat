@@ -35,12 +35,14 @@ import {
   type SearchStep,
   type Source,
   type Step,
+  showsRunning,
 } from '../../view.js'
 import { Tooltip } from '@deepseek-chat/spine/design'
 import { FileCard } from '../files/FileCard.js'
 import { ChatMarkdown as Markdown } from './ChatMarkdown.js'
 import { SiteThumbnails } from '../search/SiteLogo.js'
 import { toggleSearchPanel, useSearchPanel } from '../search/searchPanelState.js'
+import { WhaleLoader } from './WhaleLoader.js'
 import styles from './ReplyArea.module.css'
 import './thinking.markdown.css'
 
@@ -57,29 +59,27 @@ const useTicker = (active: boolean, interval: number) => {
   return tick
 }
 
-const getAreaTitleIcon = (view: ReplyView, active: boolean): ReactNode => {
-  if (!active) {
-    return <IconThinkOutline16 />
-  }
-  const last = view.steps.at(-1)
-  if (last?.type === 'search' && last.status === 'wip') {
-    return <IconSearchOutline16 />
-  }
-  if (
-    (last?.type === 'open' && last.pages.some((page) => page.status === 'wip')) ||
-    (last?.type === 'find' && last.patterns.some((item) => item.status === 'wip')) ||
-    (last?.type === 'file' && last.status === 'wip')
-  ) {
-    return <IconBrowseOutline16 />
-  }
-  if (last?.type === 'browser' && last.status === 'wip') {
-    return <IconBrowserOutline14 />
-  }
-  if (last?.type === 'read_link' && last.links.some((link) => link.status === 'wip')) {
-    return <IconLinkOutline16 />
-  }
-  return <IconThinkOutline16 />
-}
+/**
+ * 一条回复同一时刻只有一只鲸鱼，放在最概括的进行中位置：开着深度思考时在标题上
+ * （标题已随最后一步改为「正在搜索 / 正在运行 Python」等），否则在运行中的工具行上。
+ * 等待用户回答的澄清提问不算模型在工作，仍用脉冲点。
+ */
+export const showsLiveTitle = (
+  message: AssistantMessage,
+  view: ReplyView,
+  streaming: boolean,
+  hasResponse: boolean
+) =>
+  streaming &&
+  !hasResponse &&
+  (message.thinking ?? view.steps.some((step) => step.type === 'thinking'))
+
+/** 运行中的工具行（模型在工作）；等待用户回答的澄清提问不算 */
+export const runsTool = (step: Step) => step.type !== 'ask' && showsRunning(step)
+
+/** 工具行图标：这一行拿到本条回复的鲸鱼时换成鲸鱼，否则用静态图标 */
+const toolIcon = (whale: boolean, icon: ReactNode): ReactNode =>
+  whale ? <WhaleLoader width={14} /> : icon
 
 /**
  * 思考与工具步骤的时间线：
@@ -120,12 +120,17 @@ export const ReplyArea = memo(function ReplyArea({
           }
           return true
         })
+  // 没有进行中的思考标题时，鲸鱼给最后一个运行中的工具行（并行工具也只给一只）
+  const whaleIndex =
+    streaming && !showsLiveTitle(message, view, streaming, hasResponse)
+      ? visibleSteps.findLastIndex(runsTool)
+      : -1
   return (
     <div className={styles.area}>
       {title ? (
         <div className={styles.title} onClick={() => setOpen((value) => !value)}>
           <span className={clsx(styles.titleIcon, stopped && styles.stoppedIcon)}>
-            {getAreaTitleIcon(view, titleActive)}
+            <WhaleLoader width={16} still={!titleActive} />
           </span>
           <span className={clsx(styles.titleText, titleActive && styles.shimmer)}>{title}</span>
           {open ? <IconChevronDownOutline14 /> : <IconChevronRightOutline14 />}
@@ -140,6 +145,7 @@ export const ReplyArea = memo(function ReplyArea({
               message={message}
               sources={view.sources}
               streaming={streaming}
+              whale={index === whaleIndex}
               isLast={index === visibleSteps.length - 1}
             />
           ))}
@@ -165,12 +171,15 @@ const StepItem = ({
   message,
   sources,
   streaming,
+  whale,
   isLast,
 }: {
   step: Step
   message: AssistantMessage
   sources: Source[]
   streaming: boolean
+  /** 本条回复的鲸鱼由运行中的工具行显示（没有进行中的思考标题时） */
+  whale: boolean
   isLast: boolean
 }) => {
   switch (step.type) {
@@ -202,19 +211,35 @@ const StepItem = ({
         </ContentItem>
       )
     case 'search':
-      return <SearchRow step={step} message={message} streaming={streaming} isLast={isLast} />
+      return (
+        <SearchRow
+          step={step}
+          message={message}
+          streaming={streaming}
+          whale={whale}
+          isLast={isLast}
+        />
+      )
     case 'open':
-      return <OpenRow step={step} sources={sources} isLast={isLast} />
+      return <OpenRow step={step} sources={sources} whale={whale} isLast={isLast} />
     case 'find':
-      return <FindRow step={step} isLast={isLast} />
+      return <FindRow step={step} whale={whale} isLast={isLast} />
     case 'read_link':
-      return <ReadLinkRow step={step} isLast={isLast} />
+      return <ReadLinkRow step={step} whale={whale} isLast={isLast} />
     case 'python':
-      return <PythonRow step={step} message={message} streaming={streaming} isLast={isLast} />
+      return (
+        <PythonRow
+          step={step}
+          message={message}
+          streaming={streaming}
+          whale={whale}
+          isLast={isLast}
+        />
+      )
     case 'browser':
-      return <BrowserRow step={step} isLast={isLast} />
+      return <BrowserRow step={step} whale={whale} isLast={isLast} />
     case 'file':
-      return <FileRow step={step} isLast={isLast} />
+      return <FileRow step={step} whale={whale} isLast={isLast} />
     case 'ask':
       return <AskRow step={step} isLast={isLast} />
     default:
@@ -245,11 +270,13 @@ const SearchRow = ({
   step,
   message,
   streaming,
+  whale,
   isLast,
 }: {
   step: SearchStep
   message: AssistantMessage
   streaming: boolean
+  whale: boolean
   isLast: boolean
 }) => {
   const t = useTranslate()
@@ -314,7 +341,7 @@ const SearchRow = ({
         onClick={clickable ? () => toggleSearchPanel(panelEntry, step.results) : undefined}
       >
         <span className={styles.rowIcon}>
-          {failed ? <IconSearchWarningOutline16 /> : <IconSearchOutline16 />}
+          {toolIcon(whale, failed ? <IconSearchWarningOutline16 /> : <IconSearchOutline16 />)}
         </span>
         {body}
       </div>
@@ -362,10 +389,12 @@ const PageLink = ({ page, failedTip }: { page: PageItem; failedTip?: string }) =
 const OpenRow = ({
   step,
   sources,
+  whale,
   isLast,
 }: {
   step: OpenStep
   sources: Source[]
+  whale: boolean
   isLast: boolean
 }) => {
   const t = useTranslate()
@@ -376,7 +405,7 @@ const OpenRow = ({
   const summary = [...step.pages].reverse().find((page) => page.summary)?.summary
   return (
     <ToolRow
-      icon={allFailed ? <IconBrowseWarningOutline16 /> : <IconBrowseOutline16 />}
+      icon={toolIcon(whale, allFailed ? <IconBrowseWarningOutline16 /> : <IconBrowseOutline16 />)}
       isLast={isLast}
     >
       {allFailed ? (
@@ -408,12 +437,12 @@ const OpenRow = ({
 }
 
 /** 边想边搜的页内查找：「查找关键词」+ 关键词标签 */
-const FindRow = ({ step, isLast }: { step: FindStep; isLast: boolean }) => {
+const FindRow = ({ step, whale, isLast }: { step: FindStep; whale: boolean; isLast: boolean }) => {
   const t = useTranslate()
   const allFailed = step.patterns.every((item) => item.status === 'failed')
   return (
     <ToolRow
-      icon={allFailed ? <IconBrowseWarningOutline16 /> : <IconBrowseOutline16 />}
+      icon={toolIcon(whale, allFailed ? <IconBrowseWarningOutline16 /> : <IconBrowseOutline16 />)}
       isLast={isLast}
     >
       {allFailed ? (
@@ -443,10 +472,18 @@ const FindRow = ({ step, isLast }: { step: FindStep; isLast: boolean }) => {
 }
 
 /** 阅读用户消息中的链接：视图只保留仍在读取的链接。 */
-const ReadLinkRow = ({ step, isLast }: { step: ReadLinkStep; isLast: boolean }) => {
+const ReadLinkRow = ({
+  step,
+  whale,
+  isLast,
+}: {
+  step: ReadLinkStep
+  whale: boolean
+  isLast: boolean
+}) => {
   const t = useTranslate()
   return (
-    <ToolRow icon={<IconLinkOutline16 />} isLast={isLast}>
+    <ToolRow icon={toolIcon(whale, <IconLinkOutline16 />)} isLast={isLast}>
       <span className={clsx(styles.intro, styles.shimmer)}>{t('readingLink')}</span>
       {step.links.map((link) => (
         <PageLink key={link.id} page={link} />
@@ -463,7 +500,15 @@ const fence = (lang: string, body: string) => {
 }
 
 /** 内置浏览器操作时间线：折叠展示步数与状态，展开显示动作记录、页面链接与截图 */
-const BrowserRow = ({ step, isLast }: { step: BrowserStep; isLast: boolean }) => {
+const BrowserRow = ({
+  step,
+  whale,
+  isLast,
+}: {
+  step: BrowserStep
+  whale: boolean
+  isLast: boolean
+}) => {
   const t = useTranslate()
   const [open, setOpen] = useState(false)
   const running = step.status === 'wip'
@@ -478,7 +523,7 @@ const BrowserRow = ({ step, isLast }: { step: BrowserStep; isLast: boolean }) =>
   const screenshots = step.actions.flatMap((action) => action.images ?? [])
 
   return (
-    <ToolRow icon={<IconBrowserOutline14 />} isLast={isLast}>
+    <ToolRow icon={toolIcon(whale, <IconBrowserOutline14 />)} isLast={isLast}>
       <div style={{ width: '100%', minWidth: 0 }}>
         <span
           className={styles.intro}
@@ -571,7 +616,7 @@ const BrowserRow = ({ step, isLast }: { step: BrowserStep; isLast: boolean }) =>
 }
 
 /** 文件呈现与编辑步骤：只展示状态与错误；产出的文件卡片随正文展示（ReplyView.files） */
-const FileRow = ({ step, isLast }: { step: FileStep; isLast: boolean }) => {
+const FileRow = ({ step, whale, isLast }: { step: FileStep; whale: boolean; isLast: boolean }) => {
   const t = useTranslate()
   const [open, setOpen] = useState(false)
   const running = step.status === 'wip'
@@ -604,7 +649,7 @@ const FileRow = ({ step, isLast }: { step: FileStep; isLast: boolean }) => {
   const summaryLabel = lastAction ? describeItem(lastAction) : t('previewPanelTitle')
 
   return (
-    <ToolRow icon={<IconBrowseOutline16 />} isLast={isLast}>
+    <ToolRow icon={toolIcon(whale, <IconBrowseOutline16 />)} isLast={isLast}>
       <div style={{ width: '100%', minWidth: 0 }}>
         {step.actions.length > 1 ? (
           <span
@@ -650,11 +695,13 @@ const PythonRow = ({
   step,
   message,
   streaming,
+  whale,
   isLast,
 }: {
   step: PythonStep
   message: AssistantMessage
   streaming: boolean
+  whale: boolean
   isLast: boolean
 }) => {
   const t = useTranslate()
@@ -689,7 +736,7 @@ const PythonRow = ({
     : label
   const images = step.result?.images ?? []
   return (
-    <ToolRow icon={<IconThinkOutline16 />} isLast={isLast}>
+    <ToolRow icon={toolIcon(whale, <IconThinkOutline16 />)} isLast={isLast}>
       <div style={{ width: '100%', minWidth: 0 }}>
         <span
           className={styles.intro}

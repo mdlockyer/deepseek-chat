@@ -25,6 +25,7 @@
 }
 
 .stoppedIcon {
+  --whale-color: var(--dsw-alias-label-tertiary);
   color: var(--dsw-alias-label-tertiary);
 }
 
@@ -103,10 +104,9 @@
   height: 5px;
   border-radius: 50%;
   background: var(--dsw-alias-brand-primary);
-  animation: pulse 1.5s linear infinite;
 
+  /* 进行中的思考只标蓝点，动画交给标题上的鲸鱼 */
   &.inactive {
-    animation: none;
     background-color: var(--dsw-alias-label-tertiary);
   }
 }
@@ -264,6 +264,11 @@
   justify-content: center;
   width: 14px;
   height: 14px;
+
+  /* 等待用户回答不是模型在工作，保留脉冲点而不用鲸鱼 */
+  .dotInner {
+    animation: pulse 1.5s linear infinite;
+  }
 }
 
 .askSummary {

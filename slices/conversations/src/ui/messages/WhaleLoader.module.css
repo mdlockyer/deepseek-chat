@@ -1,0 +1,107 @@
+/*
+ * 字号 = 标志高度（由组件按宽度换算），下面的尺寸与位移都用 em，大小两种场景共用一套动画。
+ * 默认 16px 高、22px 宽。
+ */
+.loader {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+  /* 宿主可用 --whale-color 换色（如已停止的标题用三级灰） */
+  color: var(--whale-color, var(--dsw-alias-brand-primary));
+  font-size: 16px;
+  line-height: 1;
+}
+
+/* 用两级类名压过宿主的 `svg { width: 14px }` 一类图标规则 */
+.loader .whale {
+  display: block;
+  width: 1.3733em;
+  height: 1em;
+  overflow: visible;
+  transform-origin: 50% 60%;
+  animation: whale-swim 2.4s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+
+/* 静止：回复结束后的标题图标 */
+.still .whale,
+.still .tail {
+  animation: none;
+}
+
+/* 尾鳍绕颈部摆动，频率是起伏的两倍 */
+.tail {
+  transform-origin: 44.5px 15px;
+  animation: whale-tail 1.2s cubic-bezier(0.45, 0, 0.55, 1) infinite alternate;
+}
+
+@keyframes whale-swim {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0);
+  }
+
+  25% {
+    transform: translateY(-0.094em) rotate(-5deg);
+  }
+
+  75% {
+    transform: translateY(0.0625em) rotate(3deg);
+  }
+}
+
+@keyframes whale-tail {
+  from {
+    transform: rotate(-9deg);
+  }
+
+  to {
+    transform: rotate(11deg);
+  }
+}
+
+/* 三个气泡从头顶依次升起 */
+.bubble {
+  position: absolute;
+  top: -0.125em;
+  left: 0.3125em;
+  width: 0.25em;
+  height: 0.25em;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 max(1px, 0.078em) currentColor;
+  opacity: 0;
+  animation: whale-bubble 2.4s cubic-bezier(0.3, 0, 0.6, 1) infinite;
+
+  &:nth-child(2) {
+    left: 0.375em;
+    width: 0.1875em;
+    height: 0.1875em;
+    animation-delay: 0.8s;
+  }
+
+  &:nth-child(3) {
+    left: 0.25em;
+    width: 0.3125em;
+    height: 0.3125em;
+    animation-delay: 1.6s;
+  }
+}
+
+@keyframes whale-bubble {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0) scale(0.4);
+  }
+
+  20% {
+    opacity: 0.9;
+  }
+
+  60% {
+    transform: translate(-0.19em, -0.31em) scale(1);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate(-0.06em, -0.56em) scale(1.1);
+  }
+}

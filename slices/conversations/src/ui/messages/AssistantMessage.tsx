@@ -13,9 +13,10 @@ import { ChatMarkdown as Markdown } from './ChatMarkdown.js'
 import { SiteThumbnails } from '../search/SiteLogo.js'
 import { toggleSearchPanel, useSearchPanel } from '../search/searchPanelState.js'
 import { CopyButton } from './CopyButton.js'
-import { PresentedFileCard, ReplyArea } from './ReplyArea.js'
+import { PresentedFileCard, ReplyArea, runsTool, showsLiveTitle } from './ReplyArea.js'
 import { needsWorkingIndicator } from '../../view.js'
 import { useReplyView } from './useReplyView.js'
+import { WhaleLoader } from './WhaleLoader.js'
 import {
   BranchSwitcher,
   type MessageVersions,
@@ -76,6 +77,9 @@ export const AssistantMessage = memo(function AssistantMessage({
   const waiting = streaming && view.steps.length === 0 && !view.answer && !message.thinking
   const stalled = useStalled(message, streaming, STALL_DELAY_MS)
   const working = stalled && !waiting && !refused && needsWorkingIndicator(view)
+  // 一条回复只出现一只鲸鱼：思考标题或运行中的工具行已有鲸鱼时，「正在处理…」只留文字
+  const workingWhale =
+    !showsLiveTitle(message, view, streaming, !!responseText) && !view.steps.some(runsTool)
   const summaryEntry = `${message.id}-summary`
   return (
     <div className={styles.message}>
@@ -106,14 +110,13 @@ export const AssistantMessage = memo(function AssistantMessage({
       ) : null}
       {waiting ? (
         <div className={styles.waiting}>
-          {[0, 1, 2].map((index) => (
-            <span key={index} className={styles.waitingDot} />
-          ))}
+          <WhaleLoader label={t('replyWaiting')} />
         </div>
       ) : null}
       {working ? (
         <div className={styles.working} role="status">
-          {t('replyWorking')}
+          {workingWhale ? <WhaleLoader width={16} /> : null}
+          <span className={styles.workingText}>{t('replyWorking')}</span>
         </div>
       ) : null}
       {notice?.presentation === 'response' ? (
