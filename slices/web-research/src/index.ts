@@ -84,7 +84,7 @@ export type LocalScrapeResult = {
   /** Main page content as Markdown. */
   readonly markdown: string
   /** How the page was fetched/extracted. */
-  readonly source: 'markdown-negotiated' | 'http' | 'webview'
+  readonly source: 'markdown-negotiated' | 'http' | 'pdf' | 'webview'
 }
 
 export type LocalScraper = (
@@ -152,7 +152,7 @@ const buildSearchTool = (params: FirecrawlParams): WebToolDefinition => ({
 const buildScrapeTool = (hasLocalScrape: boolean): WebToolDefinition => ({
   name: WEB_SCRAPE_TOOL_NAME,
   description: hasLocalScrape
-    ? 'Fetch and extract clean Markdown content from a specific public http:// or https:// webpage URL locally on this machine.'
+    ? 'Fetch and extract clean Markdown content from a specific public http:// or https:// webpage or text-based PDF URL locally on this machine.'
     : 'Fetch and extract clean markdown content from a specific http:// or https:// webpage URL using Firecrawl.',
   input_schema: {
     type: 'object',
@@ -167,7 +167,7 @@ const buildReplyWebInstructions = (includeResearch: boolean, hasLocalScrape: boo
   const base = [
     'Web Research (`web_search`, `web_scrape`):',
     hasLocalScrape
-      ? 'You have fast headless web tools: `web_search` searches the live web via Firecrawl, while `web_scrape` fetches and converts public webpages into clean Markdown locally on this machine (using no Firecrawl credits, with an isolated offscreen render fallback for JavaScript-heavy pages; private, localhost, and link-local/metadata network addresses are blocked by design for SSRF safety). Reach for `web_search` and `web_scrape` when you need current facts, documentation, or clean Markdown from a URL—they are much faster and lighter than driving the built-in browser. Save the built-in browser for interactive flows, logged-in sessions, localhost apps, or visual inspection.'
+      ? 'You have fast headless web tools: `web_search` searches the live web via Firecrawl, while `web_scrape` fetches and converts public webpages and text-based PDFs into clean Markdown locally on this machine (using no Firecrawl credits, with an isolated offscreen render fallback for JavaScript-heavy pages; private, localhost, and link-local/metadata network addresses are blocked by design for SSRF safety). Reach for `web_search` and `web_scrape` when you need current facts, documentation, papers, or clean Markdown from a URL—they are much faster and lighter than driving the built-in browser. Save the built-in browser for interactive flows, logged-in sessions, localhost apps, or visual inspection.'
       : 'You have fast headless web tools powered by Firecrawl. Reach for `web_search` and `web_scrape` when you need current facts, documentation, or clean Markdown from a URL—they are much faster and lighter than driving the built-in browser. Save the built-in browser for interactive flows, logged-in sessions, JavaScript-heavy apps, or visual inspection.',
     'When citing `web_search` results in your chat reply, place inline markers like `[citation:1]`, `[citation:2]` matching the 1-based result numbers returned by `web_search`—the app renders them as clickable source links and populates the Search Results panel. (Files presented with `present_file` render standalone Markdown and do not resolve `[citation:n]`, so use regular `[title](url)` links inside files and `[citation:n]` in your chat reply.)',
   ].join('\n')

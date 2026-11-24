@@ -36,7 +36,7 @@ export type DesktopScrapeResponse = {
   url: string
   title: string | null
   markdown: string
-  source: 'markdown-negotiated' | 'http' | 'webview'
+  source: 'markdown-negotiated' | 'http' | 'pdf' | 'webview'
 }
 
 let nextScrapeRequestId = 0

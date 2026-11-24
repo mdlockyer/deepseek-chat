@@ -282,4 +282,64 @@ describe('web-research: localScrape port', () => {
     const localReplyPrompt = localWeb.instructionsFor('reply')
     assert.match(localReplyPrompt, /locally/i)
   })
+
+  it('supports local PDF scrapes with caching, quote verification, and accurate PDF prompt wording', async () => {
+    let calls = 0
+    const localScrape: LocalScraper = async (url) => {
+      calls += 1
+      return {
+        url,
+        title: 'Attention Is All You Need',
+        markdown:
+          'The dominant sequence transduction models are based on complex recurrent or convolutional neural networks.',
+        source: 'pdf',
+      }
+    }
+
+    const web = createWebResearchSlice({
+      fetch: async () => json({}),
+      store: memoryStore(),
+      secret: null,
+      localScrape,
+    })
+
+    const pdfUrl = 'https://arxiv.org/pdf/1706.03762'
+    const res = await web.run(
+      'web_scrape',
+      { url: pdfUrl },
+      {
+        signal: new AbortController().signal,
+        caller: { kind: 'agent', profile: 'research', runId: 'run-pdf' },
+        replyKey: 'rep-pdf',
+      }
+    )
+    assert.equal(res.status, 'ok')
+    assert.equal(calls, 1)
+    assert.deepEqual(res.scrapedPage, { url: pdfUrl, title: 'Attention Is All You Need' })
+
+    const checked = await web.researchProfile.complete(
+      {
+        answer: 'Transformers [1]',
+        sources: [
+          {
+            n: 1,
+            url: pdfUrl,
+            title: 'Attention Is All You Need',
+            quote:
+              'The dominant sequence transduction models are based on complex recurrent or convolutional neural networks.',
+          },
+        ],
+      },
+      { runId: 'run-pdf', outcome: 'finished' }
+    )
+    assert.equal(checked.sources[0]?.verification, 'verified')
+
+    const agentPrompt = web.instructionsFor('agent')
+    assert.ok(
+      !/PDFs are not extracted locally/i.test(agentPrompt),
+      'agent prompt must not say PDFs are unsupported locally'
+    )
+    assert.match(agentPrompt, /text-based PDF/i)
+    assert.match(web.instructionsFor('reply'), /PDF/i)
+  })
 })

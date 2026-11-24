@@ -54,11 +54,12 @@ The key is read on every call, so a key change applies to the next call.
    "No search results found" message and no sources.
 8. **Scrape.** When `localScrape` is provided, `web_scrape` calls `localScrape(url, { signal, timeoutMs })`
    (gated only by `maxLocalScrapeConcurrency`, spending zero Firecrawl credits and bypassing the
-   Firecrawl rate limiter) and formats the returned `url`, `title`, and `markdown`. When
-   `localScrape` is omitted or `null`, `web_scrape` calls Firecrawl `/v2/scrape` through the shared
-   Firecrawl limiter and returns the final URL (`metadata.sourceURL` when it is http(s), else the
-   requested URL) and title; a page with no markdown and `statusCode >= 400` is an `error`.
-   In both modes, an empty markdown body renders `[No readable text content extracted from this page.]`.
+   Firecrawl rate limiter) and formats the returned `url`, `title`, and `markdown` (supporting
+   `source` kinds `'markdown-negotiated' | 'http' | 'pdf' | 'webview'`). When `localScrape` is
+   omitted or `null`, `web_scrape` calls Firecrawl `/v2/scrape` through the shared Firecrawl
+   limiter and returns the final URL (`metadata.sourceURL` when it is http(s), else the requested
+   URL) and title; a page with no markdown and `statusCode >= 400` is an `error`. In both modes,
+   an empty markdown body renders `[No readable text content extracted from this page.]`.
 9. **Text limit.** Tool text longer than `maxToolTextChars` is cut and ends with
    `[Truncated after N characters]` (N formatted `en-US`, e.g. `24,000`).
 10. **Key verification** uses an endpoint that spends no credits. 401 → `invalid`; no response

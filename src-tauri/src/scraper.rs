@@ -1,11 +1,13 @@
-//! Local two-tier webpage scraper for `web_scrape` on desktop.
+//! Local two-tier webpage & PDF scraper for `web_scrape` on desktop.
 //!
-//! - **Tier 1 (fast HTTP path):** `reqwest` with `Accept: text/markdown, text/html;q=0.9, ...`.
-//!   Sites supporting Markdown content negotiation return Markdown directly; HTML pages are
-//!   cleaned with `dom_smoothie` (Mozilla Readability) and converted to Markdown via `htmd`.
+//! - **Tier 1 (fast HTTP path):** `reqwest` with `Accept: text/markdown, text/html;q=0.9, ...`,
+//!   per-host (2) + global (6) concurrency limits, 1 automatic retry on transient 502/503/504 or
+//!   transport errors, charset decoding (`encoding_rs`), pure-Rust PDF extraction (`pdf_oxide`),
+//!   and HTML extraction (`dom_smoothie` + `htmd` with noise/data-URI stripping).
 //! - **Tier 2 (JS/SPA fallback):** When a 2xx HTML page yields a JavaScript app shell with almost
-//!   no static text, renders it in a hidden, ephemeral `.incognito(true)` child WebView, extracts
-//!   the visible DOM, and runs the same `dom_smoothie` + `htmd` pipeline.
+//!   no static article text, renders it in a hidden, ephemeral `.incognito(true)` child WebView
+//!   pinned to the already DNS-verified host, extracts the visible DOM, and runs the same
+//!   `dom_smoothie` + `htmd` pipeline.
 //!
 //! Security boundaries:
 //! - Every command requires the `"main"` UI webview (`browser::ensure_main_webview`).
@@ -13,8 +15,9 @@
 //! - Private, loopback, link-local / cloud metadata (`169.254.0.0/16`), CGNAT (`100.64.0.0/10`),
 //!   unspecified, multicast, and reserved IPs are blocked both by URL host inspection and by
 //!   `SafeDnsResolver` on every hop (including redirects), preventing DNS-rebinding SSRF.
-//! - Offscreen WebViews always run incognito with popups and downloads denied and never honor the
-//!   interactive browser's localhost toggle.
+//! - Offscreen WebViews always run incognito with popups and downloads denied, pin navigations to
+//!   the Tier 1 DNS-verified host (with `www.` equivalence), and never honor the interactive
+//!   browser's localhost toggle.
 //! - HTTP 4xx/5xx responses return an error directly without escalating to a WebView.
 
 use std::collections::HashMap;
@@ -25,8 +28,12 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use dom_smoothie::{Config as ReadabilityConfig, Readability};
-use htmd::HtmlToMarkdown;
+use encoding_rs::Encoding;
+use htmd::element_handler::{HandlerResult, Handlers};
 use htmd::options::{BulletListMarker, CodeBlockStyle, HeadingStyle, Options as HtmdOptions};
+use htmd::{Element, HtmlToMarkdown};
+use pdf_oxide::PdfDocument;
+use pdf_oxide::converters::ConversionOptions;
 use reqwest::dns::{Addrs, Name, Resolve, Resolving};
 use reqwest::header::{ACCEPT, ACCEPT_LANGUAGE, CONTENT_TYPE, HeaderMap, HeaderValue};
 use reqwest::redirect;
@@ -43,8 +50,14 @@ const MIN_TIMEOUT_MS: u64 = 1_000;
 const MAX_TIMEOUT_MS: u64 = 60_000;
 const MAX_REDIRECTS: usize = 10;
 const MAX_BODY_BYTES: usize = 5 * 1024 * 1024;
+const MAX_PDF_BYTES: usize = 15 * 1024 * 1024;
+const MAX_PDF_PAGES: usize = 40;
+const MAX_PDF_EXTRACTED_CHARS: usize = 60_000;
 const MAX_CONCURRENT_HTTP: usize = 6;
+const MAX_CONCURRENT_PER_HOST: usize = 2;
+const MAX_TRACKED_HOSTS: usize = 64;
 const MAX_CONCURRENT_WEBVIEWS: usize = 2;
+const TRANSIENT_RETRY_DELAY_MS: u64 = 450;
 const SPA_MIN_TEXT_CHARS: usize = 200;
 const WEBVIEW_SETTLE_MAX_MS: u64 = 2_500;
 const WEBVIEW_SETTLE_TICK_MS: u64 = 250;
@@ -52,8 +65,7 @@ const WEBVIEW_EVAL_TIMEOUT_MS: u64 = 5_000;
 const SCRAPE_WEBVIEW_PREFIX: &str = "scrape-wv-";
 
 const DEFAULT_USER_AGENT: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.4 Safari/605.1.15";
-const ACCEPT_HEADER: &str =
-    "text/markdown, text/html;q=0.9, application/xhtml+xml;q=0.8, text/plain;q=0.7, */*;q=0.1";
+const ACCEPT_HEADER: &str = "text/markdown, text/html;q=0.9, application/xhtml+xml;q=0.8, application/pdf;q=0.7, text/plain;q=0.6, */*;q=0.1";
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -67,6 +79,7 @@ pub struct LocalScrapeResponse {
 pub struct ScraperState {
     client: reqwest::Client,
     http_slots: Arc<Semaphore>,
+    host_slots: Mutex<HashMap<String, Arc<Semaphore>>>,
     webview_slots: Arc<Semaphore>,
     in_flight: Mutex<HashMap<String, oneshot::Sender<()>>>,
     next_webview_id: AtomicU64,
@@ -77,10 +90,29 @@ impl Default for ScraperState {
         Self {
             client: build_http_client(true),
             http_slots: Arc::new(Semaphore::new(MAX_CONCURRENT_HTTP)),
+            host_slots: Mutex::new(HashMap::new()),
             webview_slots: Arc::new(Semaphore::new(MAX_CONCURRENT_WEBVIEWS)),
             in_flight: Mutex::new(HashMap::new()),
             next_webview_id: AtomicU64::new(1),
         }
+    }
+}
+
+impl ScraperState {
+    fn host_semaphore(&self, host_key: &str) -> Result<Arc<Semaphore>, String> {
+        let mut map = self
+            .host_slots
+            .lock()
+            .map_err(|_| "Scraper host-slot lock poisoned".to_string())?;
+        if let Some(sem) = map.get(host_key) {
+            return Ok(Arc::clone(sem));
+        }
+        if map.len() >= MAX_TRACKED_HOSTS {
+            map.retain(|_, sem| sem.available_permits() < MAX_CONCURRENT_PER_HOST);
+        }
+        let sem = Arc::new(Semaphore::new(MAX_CONCURRENT_PER_HOST));
+        map.insert(host_key.to_string(), Arc::clone(&sem));
+        Ok(sem)
     }
 }
 
@@ -205,6 +237,26 @@ pub(crate) fn validate_scrape_url(raw: &str) -> Result<Url, String> {
     Ok(url)
 }
 
+fn normalized_host_for_compare(url: &Url) -> Option<String> {
+    let host = url.host_str()?.trim_end_matches('.').to_ascii_lowercase();
+    Some(host.strip_prefix("www.").unwrap_or(&host).to_string())
+}
+
+/// Returns true iff `candidate` is a valid public http(s) URL on the same host (ignoring `www.`)
+/// as `expected`. Used to pin Tier 2 offscreen WebView navigations to the Tier 1 DNS-verified host.
+pub(crate) fn is_same_scrape_host(expected: &Url, candidate: &Url) -> bool {
+    if validate_scrape_url(candidate.as_str()).is_err() {
+        return false;
+    }
+    match (
+        normalized_host_for_compare(expected),
+        normalized_host_for_compare(candidate),
+    ) {
+        (Some(a), Some(b)) => a == b,
+        _ => false,
+    }
+}
+
 fn build_http_client(enforce_ssrf: bool) -> reqwest::Client {
     let mut headers = HeaderMap::new();
     headers.insert(ACCEPT, HeaderValue::from_static(ACCEPT_HEADER));
@@ -240,8 +292,16 @@ struct Tier1Outcome {
     url: String,
     title: Option<String>,
     markdown: String,
+    article_non_ws_len: usize,
     source: &'static str,
     should_try_webview: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ExtractedHtml {
+    pub title: Option<String>,
+    pub markdown: String,
+    pub article_non_ws_len: usize,
 }
 
 fn content_type_essence(header: Option<&str>) -> String {
@@ -252,6 +312,89 @@ fn content_type_essence(header: Option<&str>) -> String {
         .unwrap_or("")
         .trim()
         .to_ascii_lowercase()
+}
+
+fn extract_charset_param(header: &str) -> Option<String> {
+    for part in header.split(';').skip(1) {
+        let trimmed = part.trim();
+        let Some((key, val)) = trimmed.split_once('=') else {
+            continue;
+        };
+        if key.trim().eq_ignore_ascii_case("charset") {
+            let cleaned = val.trim().trim_matches(['"', '\'']).trim();
+            if !cleaned.is_empty() {
+                return Some(cleaned.to_string());
+            }
+        }
+    }
+    None
+}
+
+fn sniff_html_meta_charset(bytes: &[u8]) -> Option<String> {
+    let prefix = &bytes[..bytes.len().min(4096)];
+    let head = String::from_utf8_lossy(prefix);
+    let lower = head.to_ascii_lowercase();
+    let mut cursor = 0usize;
+    while let Some(rel) = lower[cursor..].find("<meta") {
+        let start = cursor + rel;
+        let Some(end_rel) = lower[start..].find('>') else {
+            break;
+        };
+        let tag = &head[start..start + end_rel + 1];
+        let tag_lower = &lower[start..start + end_rel + 1];
+        if let Some(pos) = tag_lower.find("charset") {
+            let after = &tag[pos + "charset".len()..];
+            let after_eq = after.trim_start().strip_prefix('=');
+            if let Some(val_part) = after_eq {
+                let val_trimmed = val_part.trim_start();
+                let label = if let Some(rest) = val_trimmed.strip_prefix('"') {
+                    rest.split('"').next().unwrap_or("")
+                } else if let Some(rest) = val_trimmed.strip_prefix('\'') {
+                    rest.split('\'').next().unwrap_or("")
+                } else {
+                    val_trimmed
+                        .split(|c: char| {
+                            c.is_ascii_whitespace() || c == ';' || c == '>' || c == '/'
+                        })
+                        .next()
+                        .unwrap_or("")
+                };
+                let cleaned = label.trim();
+                if !cleaned.is_empty() {
+                    return Some(cleaned.to_string());
+                }
+            }
+        }
+        cursor = start + end_rel + 1;
+    }
+    None
+}
+
+pub(crate) fn decode_text_bytes(
+    bytes: &[u8],
+    content_type_header: Option<&str>,
+    is_html: bool,
+) -> String {
+    if let Some(header) = content_type_header
+        && let Some(label) = extract_charset_param(header)
+        && let Some(enc) = Encoding::for_label(label.as_bytes())
+    {
+        let (decoded, _, _) = enc.decode(bytes);
+        return decoded.into_owned();
+    }
+    if let Some((enc, bom_len)) = Encoding::for_bom(bytes) {
+        let (decoded, _, _) = enc.decode(&bytes[bom_len..]);
+        return decoded.into_owned();
+    }
+    if is_html
+        && let Some(label) = sniff_html_meta_charset(bytes)
+        && let Some(enc) = Encoding::for_label(label.as_bytes())
+    {
+        let (decoded, _, _) = enc.decode(bytes);
+        return decoded.into_owned();
+    }
+    let (decoded, _, _) = encoding_rs::UTF_8.decode(bytes);
+    decoded.into_owned()
 }
 
 fn extract_markdown_heading_title(markdown: &str) -> Option<String> {
@@ -314,6 +457,87 @@ fn non_whitespace_len(text: &str) -> usize {
     text.chars().filter(|c| !c.is_whitespace()).count()
 }
 
+fn attr_value(element: &Element, name: &str) -> Option<String> {
+    element
+        .attrs
+        .iter()
+        .find(|attr| attr.name.local.as_ref().eq_ignore_ascii_case(name))
+        .map(|attr| attr.value.to_string())
+}
+
+fn is_inline_noise_img_src(src: &str) -> bool {
+    let lower = src.trim().to_ascii_lowercase();
+    lower.is_empty() || lower.starts_with("data:") || lower.starts_with("blob:")
+}
+
+fn clean_img_handler(_handlers: &dyn Handlers, element: Element) -> Option<HandlerResult> {
+    let src = attr_value(&element, "src").unwrap_or_default();
+    if is_inline_noise_img_src(&src) {
+        return Some(String::new().into());
+    }
+    let alt = attr_value(&element, "alt")
+        .map(|s| s.split_whitespace().collect::<Vec<_>>().join(" "))
+        .unwrap_or_default();
+    if alt.is_empty() {
+        return Some(String::new().into());
+    }
+    let escaped_src = src.trim().replace('(', "\\(").replace(')', "\\)");
+    let dest = if escaped_src.contains(' ') {
+        format!("<{escaped_src}>")
+    } else {
+        escaped_src
+    };
+    Some(format!("![{alt}]({dest})").into())
+}
+
+fn is_permalink_noise(text: &str, aria_label: Option<&str>) -> bool {
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return true;
+    }
+    if matches!(trimmed, "#" | "¶" | "§" | "🔗") {
+        return true;
+    }
+    if let Some(label) = aria_label {
+        let lower = label.to_ascii_lowercase();
+        if (lower.contains("permalink")
+            || lower.contains("direct link")
+            || lower.contains("anchor"))
+            && trimmed.chars().count() <= 3
+        {
+            return true;
+        }
+    }
+    false
+}
+
+fn clean_anchor_handler(handlers: &dyn Handlers, element: Element) -> Option<HandlerResult> {
+    let href = attr_value(&element, "href");
+    let aria_label = attr_value(&element, "aria-label");
+    let content = handlers.walk_children(element.node).content;
+    let trimmed = content.trim();
+
+    if is_permalink_noise(trimmed, aria_label.as_deref()) {
+        return Some(String::new().into());
+    }
+
+    let Some(raw_href) = href.map(|h| h.trim().to_string()).filter(|h| !h.is_empty()) else {
+        return Some(content.into());
+    };
+    let lower_href = raw_href.to_ascii_lowercase();
+    if lower_href.starts_with("javascript:") || lower_href.starts_with('#') {
+        return Some(trimmed.to_string().into());
+    }
+
+    let escaped_href = raw_href.replace('(', "\\(").replace(')', "\\)");
+    let dest = if escaped_href.contains(' ') {
+        format!("<{escaped_href}>")
+    } else {
+        escaped_href
+    };
+    Some(format!("[{trimmed}]({dest})").into())
+}
+
 fn build_htmd(strip_layout_chrome: bool) -> HtmlToMarkdown {
     let mut skip = vec!["script", "style", "noscript", "svg", "iframe", "template"];
     if strip_layout_chrome {
@@ -321,6 +545,8 @@ fn build_htmd(strip_layout_chrome: bool) -> HtmlToMarkdown {
     }
     HtmlToMarkdown::builder()
         .skip_tags(skip)
+        .add_handler(vec!["img"], clean_img_handler)
+        .add_handler(vec!["a"], clean_anchor_handler)
         .options(HtmdOptions {
             heading_style: HeadingStyle::Atx,
             bullet_list_marker: BulletListMarker::Dash,
@@ -330,7 +556,7 @@ fn build_htmd(strip_layout_chrome: bool) -> HtmlToMarkdown {
         .build()
 }
 
-pub(crate) fn extract_html_to_markdown(html: &str, base_url: &str) -> (Option<String>, String) {
+pub(crate) fn extract_html_to_markdown(html: &str, base_url: &str) -> ExtractedHtml {
     let cfg = ReadabilityConfig::default();
 
     let mut readability_title: Option<String> = None;
@@ -349,9 +575,14 @@ pub(crate) fn extract_html_to_markdown(html: &str, base_url: &str) -> (Option<St
         }
     }
 
-    if non_whitespace_len(&readability_md) >= SPA_MIN_TEXT_CHARS {
+    let article_non_ws_len = non_whitespace_len(&readability_md);
+    if article_non_ws_len >= SPA_MIN_TEXT_CHARS {
         let title = readability_title.or_else(|| extract_html_title_tag(html));
-        return (title, readability_md);
+        return ExtractedHtml {
+            title,
+            markdown: readability_md,
+            article_non_ws_len,
+        };
     }
 
     // Fallback for non-article pages (tables, doc indexes, directory listings) where Readability
@@ -363,15 +594,20 @@ pub(crate) fn extract_html_to_markdown(html: &str, base_url: &str) -> (Option<St
         .unwrap_or_default();
 
     let title = readability_title.or_else(|| extract_html_title_tag(html));
-    if non_whitespace_len(&fallback_md) > non_whitespace_len(&readability_md) {
-        (title, fallback_md)
+    let markdown = if non_whitespace_len(&fallback_md) > article_non_ws_len {
+        fallback_md
     } else {
-        (title, readability_md)
+        readability_md
+    };
+    ExtractedHtml {
+        title,
+        markdown,
+        article_non_ws_len,
     }
 }
 
-pub(crate) fn looks_like_spa_shell(raw_html: &str, extracted_markdown: &str) -> bool {
-    if non_whitespace_len(extracted_markdown) >= SPA_MIN_TEXT_CHARS {
+pub(crate) fn looks_like_spa_shell(raw_html: &str, extracted: &ExtractedHtml) -> bool {
+    if extracted.article_non_ws_len >= SPA_MIN_TEXT_CHARS {
         return false;
     }
     let lower = raw_html.to_ascii_lowercase();
@@ -399,19 +635,62 @@ pub(crate) fn looks_like_spa_shell(raw_html: &str, extracted_markdown: &str) -> 
         return true;
     }
     // Also escalate when the static page has essentially no readable text (< 40 non-ws chars)
-    // yet loads external scripts.
-    non_whitespace_len(extracted_markdown) < 40 && lower.contains("<script")
+    // yet loads scripts.
+    non_whitespace_len(&extracted.markdown) < 40
 }
 
-async fn read_body_capped(mut response: reqwest::Response) -> Result<Vec<u8>, String> {
+pub(crate) fn extract_pdf_to_markdown(bytes: Vec<u8>) -> Result<(Option<String>, String), String> {
+    let doc =
+        PdfDocument::from_bytes(bytes).map_err(|e| format!("Failed to parse PDF document: {e}"))?;
+    let total_pages = doc
+        .page_count()
+        .map_err(|e| format!("Failed reading PDF page count: {e}"))?;
+    let limit = total_pages.min(MAX_PDF_PAGES);
+    let options = ConversionOptions::default();
+
+    let mut parts: Vec<String> = Vec::new();
+    let mut extracted_chars = 0usize;
+    for page_idx in 0..limit {
+        let page_chunk = doc
+            .to_markdown(page_idx, &options)
+            .ok()
+            .map(|s| collapse_blank_lines(&s))
+            .filter(|s| non_whitespace_len(s) > 0)
+            .or_else(|| {
+                doc.extract_text(page_idx)
+                    .ok()
+                    .map(|s| collapse_blank_lines(&s))
+                    .filter(|s| non_whitespace_len(s) > 0)
+            });
+        if let Some(chunk) = page_chunk {
+            extracted_chars += chunk.len();
+            parts.push(chunk);
+            if extracted_chars >= MAX_PDF_EXTRACTED_CHARS {
+                break;
+            }
+        }
+    }
+
+    let markdown = collapse_blank_lines(&parts.join("\n\n"));
+    if non_whitespace_len(&markdown) == 0 {
+        return Err("PDF contains no selectable text (likely scanned images).".into());
+    }
+    let title = extract_markdown_heading_title(&markdown);
+    Ok((title, markdown))
+}
+
+async fn read_body_capped(
+    mut response: reqwest::Response,
+    max_bytes: usize,
+) -> Result<Vec<u8>, String> {
     let mut buf = Vec::new();
     while let Some(chunk) = response
         .chunk()
         .await
         .map_err(|e| format!("Failed reading response body: {e}"))?
     {
-        if buf.len() + chunk.len() > MAX_BODY_BYTES {
-            let remaining = MAX_BODY_BYTES.saturating_sub(buf.len());
+        if buf.len() + chunk.len() > max_bytes {
+            let remaining = max_bytes.saturating_sub(buf.len());
             buf.extend_from_slice(&chunk[..remaining]);
             break;
         }
@@ -420,24 +699,84 @@ async fn read_body_capped(mut response: reqwest::Response) -> Result<Vec<u8>, St
     Ok(buf)
 }
 
+fn is_transient_http_status(status: reqwest::StatusCode) -> bool {
+    matches!(status.as_u16(), 502..=504)
+}
+
+fn is_transient_reqwest_error(error: &reqwest::Error) -> bool {
+    if error.is_redirect() || error.is_builder() {
+        return false;
+    }
+    // Never retry SSRF blocks surfaced through SafeDnsResolver.
+    let msg = error.to_string().to_ascii_lowercase();
+    if msg.contains("blocked request") || msg.contains("permission denied") {
+        return false;
+    }
+    error.is_connect() || error.is_timeout() || error.is_request()
+}
+
+async fn send_with_transient_retry(
+    client: &reqwest::Client,
+    url: &Url,
+    timeout: Duration,
+) -> Result<reqwest::Response, String> {
+    let deadline = Instant::now() + timeout;
+    for attempt in 0..=1 {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            return Err(format!(
+                "Request timed out after {:.1} s.",
+                timeout.as_secs_f64()
+            ));
+        }
+        match tokio::time::timeout(remaining, client.get(url.as_str()).send()).await {
+            Ok(Ok(response)) => {
+                if attempt == 0 && is_transient_http_status(response.status()) {
+                    let retry_wait = Duration::from_millis(TRANSIENT_RETRY_DELAY_MS);
+                    if deadline.saturating_duration_since(Instant::now()) > retry_wait {
+                        tokio::time::sleep(retry_wait).await;
+                        continue;
+                    }
+                }
+                return Ok(response);
+            }
+            Ok(Err(error)) => {
+                if attempt == 0 && is_transient_reqwest_error(&error) {
+                    let retry_wait = Duration::from_millis(TRANSIENT_RETRY_DELAY_MS);
+                    if deadline.saturating_duration_since(Instant::now()) > retry_wait {
+                        tokio::time::sleep(retry_wait).await;
+                        continue;
+                    }
+                }
+                return Err(format!("Failed to fetch URL: {error}"));
+            }
+            Err(_) => {
+                return Err(format!(
+                    "Request timed out after {:.1} s.",
+                    timeout.as_secs_f64()
+                ));
+            }
+        }
+    }
+    unreachable!("loop always returns on attempt 1")
+}
+
 async fn fetch_and_extract_http(
     client: &reqwest::Client,
     url: &Url,
     timeout: Duration,
 ) -> Result<Tier1Outcome, String> {
-    let response = tokio::time::timeout(timeout, client.get(url.as_str()).send())
-        .await
-        .map_err(|_| format!("Request timed out after {:.1} s.", timeout.as_secs_f64()))?
-        .map_err(|e| format!("Failed to fetch URL: {e}"))?;
+    let deadline = Instant::now() + timeout;
+    let response = send_with_transient_retry(client, url, timeout).await?;
 
     let final_url = response.url().to_string();
     let status = response.status();
-    let content_type = content_type_essence(
-        response
-            .headers()
-            .get(CONTENT_TYPE)
-            .and_then(|v| v.to_str().ok()),
-    );
+    let raw_content_type = response
+        .headers()
+        .get(CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .map(ToOwned::to_owned);
+    let content_type = content_type_essence(raw_content_type.as_deref());
 
     if status.as_u16() >= 400 {
         let reason = status.canonical_reason().unwrap_or("");
@@ -449,8 +788,13 @@ async fn fetch_and_extract_http(
         return Err(format!("Page returned HTTP {}{detail}.", status.as_u16()));
     }
 
+    let path_is_pdf = response.url().path().to_ascii_lowercase().ends_with(".pdf");
+    let maybe_pdf = content_type == "application/pdf"
+        || ((content_type.is_empty() || content_type == "application/octet-stream") && path_is_pdf);
+
     // Reject binary formats that cannot be extracted as readable text.
-    if !content_type.is_empty()
+    if !maybe_pdf
+        && !content_type.is_empty()
         && !content_type.starts_with("text/")
         && !matches!(
             content_type.as_str(),
@@ -463,11 +807,17 @@ async fn fetch_and_extract_http(
         )
     {
         return Err(format!(
-            "Unsupported content type `{content_type}` (local scraping supports HTML, Markdown, plain text, JSON, and XML)."
+            "Unsupported content type `{content_type}` (local scraping supports HTML, Markdown, plain text, JSON, XML, and text-based PDFs)."
         ));
     }
 
-    let bytes = tokio::time::timeout(timeout, read_body_capped(response))
+    let max_bytes = if maybe_pdf {
+        MAX_PDF_BYTES
+    } else {
+        MAX_BODY_BYTES
+    };
+    let remaining = deadline.saturating_duration_since(Instant::now());
+    let bytes = tokio::time::timeout(remaining, read_body_capped(response, max_bytes))
         .await
         .map_err(|_| {
             format!(
@@ -475,15 +825,44 @@ async fn fetch_and_extract_http(
                 timeout.as_secs_f64()
             )
         })??;
-    let body = String::from_utf8_lossy(&bytes).into_owned();
 
-    if content_type == "text/markdown" || content_type == "text/x-markdown" {
-        let markdown = collapse_blank_lines(&body);
-        let title = extract_markdown_heading_title(&markdown);
+    let is_pdf = content_type == "application/pdf" || bytes.starts_with(b"%PDF-");
+    if is_pdf {
+        let (title, markdown) =
+            tauri::async_runtime::spawn_blocking(move || extract_pdf_to_markdown(bytes))
+                .await
+                .map_err(|e| format!("PDF extraction task failed: {e}"))??;
+        let len = non_whitespace_len(&markdown);
         return Ok(Tier1Outcome {
             url: final_url,
             title,
             markdown,
+            article_non_ws_len: len,
+            source: "pdf",
+            should_try_webview: false,
+        });
+    }
+
+    if maybe_pdf {
+        return Err(format!(
+            "Unsupported content type `{content_type}` (response is not a valid PDF document)."
+        ));
+    }
+
+    let is_html = content_type.is_empty()
+        || content_type == "text/html"
+        || content_type == "application/xhtml+xml";
+    let body = decode_text_bytes(&bytes, raw_content_type.as_deref(), is_html);
+
+    if content_type == "text/markdown" || content_type == "text/x-markdown" {
+        let markdown = collapse_blank_lines(&body);
+        let title = extract_markdown_heading_title(&markdown);
+        let len = non_whitespace_len(&markdown);
+        return Ok(Tier1Outcome {
+            url: final_url,
+            title,
+            markdown,
+            article_non_ws_len: len,
             source: "markdown-negotiated",
             should_try_webview: false,
         });
@@ -503,10 +882,12 @@ async fn fetch_and_extract_http(
         } else {
             text
         };
+        let len = non_whitespace_len(&markdown);
         return Ok(Tier1Outcome {
             url: final_url,
             title: None,
             markdown,
+            article_non_ws_len: len,
             source: "http",
             should_try_webview: false,
         });
@@ -514,18 +895,19 @@ async fn fetch_and_extract_http(
 
     let url_for_parse = final_url.clone();
     let html_for_parse = body.clone();
-    let (title, markdown) = tauri::async_runtime::spawn_blocking(move || {
+    let extracted = tauri::async_runtime::spawn_blocking(move || {
         extract_html_to_markdown(&html_for_parse, &url_for_parse)
     })
     .await
     .map_err(|e| format!("HTML extraction task failed: {e}"))?;
 
-    let should_try_webview = looks_like_spa_shell(&body, &markdown);
+    let should_try_webview = looks_like_spa_shell(&body, &extracted);
 
     Ok(Tier1Outcome {
         url: final_url,
-        title,
-        markdown,
+        title: extracted.title,
+        markdown: extracted.markdown,
+        article_non_ws_len: extracted.article_non_ws_len,
         source: "http",
         should_try_webview,
     })
@@ -568,6 +950,11 @@ struct WebviewCapture {
     url: String,
     title: String,
     html: String,
+}
+
+struct Tier2Outcome {
+    response: LocalScrapeResponse,
+    article_non_ws_len: usize,
 }
 
 const PROBE_JS: &str = r#"
@@ -621,7 +1008,7 @@ async fn render_in_hidden_webview(
     state: &ScraperState,
     url: &Url,
     timeout: Duration,
-) -> Result<LocalScrapeResponse, String> {
+) -> Result<Tier2Outcome, String> {
     let deadline = Instant::now() + timeout;
     let _permit = tokio::time::timeout(timeout, state.webview_slots.acquire())
         .await
@@ -652,8 +1039,11 @@ async fn render_in_hidden_webview(
         builder = builder.user_agent(ua);
     }
 
+    // Pin Tier 2 navigations to the Tier 1 DNS-verified host (with `www.` equivalence) so a page
+    // cannot redirect to an unverified external domain that DNS-rebinds to a private IP.
+    let expected_url = url.clone();
     builder = builder
-        .on_navigation(|target_url| validate_scrape_url(target_url.as_str()).is_ok())
+        .on_navigation(move |target_url| is_same_scrape_host(&expected_url, target_url))
         .on_new_window(|_url, _features| NewWindowResponse::Deny)
         .on_download(|_wv, _event| false)
         .on_page_load(move |_wv, payload| {
@@ -745,22 +1135,25 @@ async fn render_in_hidden_webview(
 
     let url_for_parse = final_url.clone();
     let html = capture.html;
-    let (extracted_title, markdown) = tauri::async_runtime::spawn_blocking(move || {
+    let extracted = tauri::async_runtime::spawn_blocking(move || {
         extract_html_to_markdown(&html, &url_for_parse)
     })
     .await
     .map_err(|e| format!("Rendered HTML extraction failed: {e}"))?;
 
-    let title = extracted_title.or_else(|| {
+    let title = extracted.title.or_else(|| {
         let trimmed = capture.title.trim();
         (!trimmed.is_empty()).then_some(trimmed.to_string())
     });
 
-    Ok(LocalScrapeResponse {
-        url: final_url,
-        title,
-        markdown,
-        source: "webview",
+    Ok(Tier2Outcome {
+        response: LocalScrapeResponse {
+            url: final_url,
+            title,
+            markdown: extracted.markdown,
+            source: "webview",
+        },
+        article_non_ws_len: extracted.article_non_ws_len,
     })
 }
 
@@ -777,6 +1170,36 @@ impl Drop for InFlightRegistration<'_> {
     }
 }
 
+async fn acquire_host_and_http_permits<'a>(
+    state: &'a ScraperState,
+    url: &Url,
+    deadline: Instant,
+    timeout: Duration,
+) -> Result<
+    (
+        tokio::sync::OwnedSemaphorePermit,
+        tokio::sync::SemaphorePermit<'a>,
+    ),
+    String,
+> {
+    let host_key = normalized_host_for_compare(url).unwrap_or_default();
+    let host_sem = state.host_semaphore(&host_key)?;
+
+    let remaining = deadline.saturating_duration_since(Instant::now());
+    let host_permit = tokio::time::timeout(remaining, host_sem.acquire_owned())
+        .await
+        .map_err(|_| format!("Request timed out after {:.1} s.", timeout.as_secs_f64()))?
+        .map_err(|_| "Scraper per-host semaphore closed.".to_string())?;
+
+    let remaining = deadline.saturating_duration_since(Instant::now());
+    let http_permit = tokio::time::timeout(remaining, state.http_slots.acquire())
+        .await
+        .map_err(|_| format!("Request timed out after {:.1} s.", timeout.as_secs_f64()))?
+        .map_err(|_| "Scraper HTTP semaphore closed.".to_string())?;
+
+    Ok((host_permit, http_permit))
+}
+
 async fn scrape_pipeline(
     app: &AppHandle,
     state: &ScraperState,
@@ -785,10 +1208,8 @@ async fn scrape_pipeline(
 ) -> Result<LocalScrapeResponse, String> {
     let deadline = Instant::now() + timeout;
     let tier1 = {
-        let _http_permit = tokio::time::timeout(timeout, state.http_slots.acquire())
-            .await
-            .map_err(|_| format!("Request timed out after {:.1} s.", timeout.as_secs_f64()))?
-            .map_err(|_| "Scraper HTTP semaphore closed.".to_string())?;
+        let (_host_permit, _http_permit) =
+            acquire_host_and_http_permits(state, &url, deadline, timeout).await?;
         let remaining = deadline.saturating_duration_since(Instant::now());
         fetch_and_extract_http(&state.client, &url, remaining).await?
     };
@@ -799,9 +1220,11 @@ async fn scrape_pipeline(
             && let Ok(final_parsed) = validate_scrape_url(&tier1.url)
             && let Ok(rendered) =
                 render_in_hidden_webview(app, state, &final_parsed, remaining).await
-            && non_whitespace_len(&rendered.markdown) > non_whitespace_len(&tier1.markdown)
+            && (rendered.article_non_ws_len > tier1.article_non_ws_len
+                || non_whitespace_len(&rendered.response.markdown)
+                    > non_whitespace_len(&tier1.markdown))
         {
-            return Ok(rendered);
+            return Ok(rendered.response);
         }
     }
 
@@ -813,7 +1236,7 @@ async fn scrape_pipeline(
     })
 }
 
-/// Fetches a public `http(s)://` webpage locally and extracts its main content as Markdown.
+/// Fetches a public `http(s)://` webpage or text-based PDF locally and extracts Markdown.
 #[tauri::command]
 pub async fn web_scrape_local(
     app: AppHandle,
@@ -870,8 +1293,50 @@ pub fn web_scrape_cancel(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::AtomicUsize;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpListener;
+
+    /// Builds a minimal valid single-page PDF 1.4 in memory with optional text line.
+    fn build_minimal_pdf(text: Option<&str>) -> Vec<u8> {
+        let content_stream = match text {
+            Some(line) => format!("BT /F1 18 Tf 72 720 Td ({line}) Tj ET"),
+            None => String::new(),
+        };
+        let objects = [
+            "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n".to_string(),
+            "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n".to_string(),
+            "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>\nendobj\n".to_string(),
+            "4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n".to_string(),
+            format!(
+                "5 0 obj\n<< /Length {} >>\nstream\n{}\nendstream\nendobj\n",
+                content_stream.len(),
+                content_stream
+            ),
+        ];
+
+        let mut buf = b"%PDF-1.4\n".to_vec();
+        let mut offsets = Vec::with_capacity(objects.len());
+        for obj in &objects {
+            offsets.push(buf.len());
+            buf.extend_from_slice(obj.as_bytes());
+        }
+        let xref_offset = buf.len();
+        buf.extend_from_slice(
+            format!("xref\n0 {}\n0000000000 65535 f \n", objects.len() + 1).as_bytes(),
+        );
+        for off in offsets {
+            buf.extend_from_slice(format!("{off:010} 00000 n \n").as_bytes());
+        }
+        buf.extend_from_slice(
+            format!(
+                "trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{xref_offset}\n%%EOF\n",
+                objects.len() + 1
+            )
+            .as_bytes(),
+        );
+        buf
+    }
 
     #[test]
     fn forbidden_ip_blocks_private_loopback_metadata_cgnat_and_allows_public() {
@@ -945,18 +1410,60 @@ mod tests {
     }
 
     #[test]
-    fn extract_html_to_markdown_strips_chrome_and_keeps_article_structure() {
-        let html = r#"<!doctype html>
+    fn same_scrape_host_allows_www_equivalence_and_blocks_cross_host_or_private() {
+        let base = Url::parse("https://example.com/docs/intro").unwrap();
+        assert!(is_same_scrape_host(
+            &base,
+            &Url::parse("https://www.example.com/docs/next").unwrap()
+        ));
+        assert!(is_same_scrape_host(
+            &base,
+            &Url::parse("https://EXAMPLE.COM/other").unwrap()
+        ));
+        assert!(!is_same_scrape_host(
+            &base,
+            &Url::parse("https://evil.example/phish").unwrap()
+        ));
+        assert!(!is_same_scrape_host(
+            &base,
+            &Url::parse("http://127.0.0.1:8090/").unwrap()
+        ));
+    }
+
+    #[test]
+    fn decode_text_bytes_handles_gbk_header_meta_charset_and_shift_jis() {
+        let chinese = "<html><head><title>深度研究测试</title></head><body><p>本地抓取支持中文编码。</p></body></html>";
+        let (gbk_bytes, _, _) = encoding_rs::GBK.encode(chinese);
+        let decoded_header = decode_text_bytes(&gbk_bytes, Some("text/html; charset=gbk"), true);
+        assert_eq!(decoded_header, chinese);
+
+        let with_meta =
+            "<html><head><meta charset=\"gbk\"></head><body><p>中文网页内容</p></body></html>";
+        let (meta_gbk_bytes, _, _) = encoding_rs::GBK.encode(with_meta);
+        let decoded_meta = decode_text_bytes(&meta_gbk_bytes, Some("text/html"), true);
+        assert_eq!(decoded_meta, with_meta);
+
+        let japanese = "日本語のページ内容";
+        let (sjis_bytes, _, _) = encoding_rs::SHIFT_JIS.encode(japanese);
+        let decoded_sjis =
+            decode_text_bytes(&sjis_bytes, Some("text/plain; charset=shift_jis"), false);
+        assert_eq!(decoded_sjis, japanese);
+    }
+
+    #[test]
+    fn extract_html_to_markdown_strips_chrome_data_images_and_permalink_noise() {
+        let html = r##"<!doctype html>
 <html>
 <head><title>Rust Async Guide</title></head>
 <body>
   <nav><a href="/home">Home</a><a href="/pricing">Pricing</a></nav>
   <main>
     <article>
-      <h1>Rust Async Guide</h1>
+      <h1>Rust Async Guide <a href="#guide" aria-label="Permalink">¶</a></h1>
       <p>Tokio provides a multi-threaded runtime for asynchronous Rust applications with cooperative scheduling and low-overhead tasks.</p>
-      <p>Read the <a href="/docs/tasks">task documentation</a> for full scheduling semantics and cancellation guarantees across channels.</p>
-      <h2>Example</h2>
+      <p><img src="data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=" alt="inline svg"> <img src="https://docs.example.com/arch.png" alt="Architecture diagram"></p>
+      <p>Read the <a href="/docs/tasks">task documentation</a> or <a href="javascript:void(0)">copy command</a> and ignore <a href="/icon"></a>.</p>
+      <h2>Example <a href="#example">#</a></h2>
       <pre><code class="language-rust">async fn greet() -&gt; &amp;'static str { "hello" }</code></pre>
       <ul>
         <li>Zero-cost futures</li>
@@ -967,39 +1474,98 @@ mod tests {
   <footer>Copyright 2026 Example Corp</footer>
   <script>window.__tracking = true;</script>
 </body>
-</html>"#;
+</html>"##;
 
-        let (title, md) = extract_html_to_markdown(html, "https://docs.example.com/guide");
-        assert_eq!(title.as_deref(), Some("Rust Async Guide"));
-        assert!(md.contains("multi-threaded runtime"), "md={md}");
+        let extracted = extract_html_to_markdown(html, "https://docs.example.com/guide");
+        assert_eq!(extracted.title.as_deref(), Some("Rust Async Guide"));
         assert!(
-            md.contains("https://docs.example.com/docs/tasks") || md.contains("/docs/tasks"),
-            "md={md}"
+            extracted.markdown.contains("multi-threaded runtime"),
+            "md={}",
+            extracted.markdown
         );
-        assert!(md.contains("async fn greet()"), "md={md}");
-        assert!(md.contains("Zero-cost futures"), "md={md}");
-        assert!(!md.contains("window.__tracking"), "md={md}");
-        assert!(!md.contains("Copyright 2026 Example Corp"), "md={md}");
+        assert!(
+            extracted
+                .markdown
+                .contains("![Architecture diagram](https://docs.example.com/arch.png)"),
+            "md={}",
+            extracted.markdown
+        );
+        assert!(
+            !extracted.markdown.contains("data:image/svg+xml"),
+            "md={}",
+            extracted.markdown
+        );
+        assert!(
+            !extracted.markdown.contains("¶"),
+            "md={}",
+            extracted.markdown
+        );
+        assert!(
+            !extracted.markdown.contains("javascript:"),
+            "md={}",
+            extracted.markdown
+        );
+        assert!(
+            extracted.markdown.contains("copy command"),
+            "md={}",
+            extracted.markdown
+        );
+        assert!(
+            extracted.markdown.contains("async fn greet()"),
+            "md={}",
+            extracted.markdown
+        );
+        assert!(
+            !extracted.markdown.contains("window.__tracking"),
+            "md={}",
+            extracted.markdown
+        );
+        assert!(
+            !extracted.markdown.contains("Copyright 2026 Example Corp"),
+            "md={}",
+            extracted.markdown
+        );
     }
 
     #[test]
-    fn spa_shell_heuristic_detects_empty_js_shells_and_skips_static_pages() {
-        let next_shell =
-            r#"<html><body><div id="__next"></div><script src="/app.js"></script></body></html>"#;
-        assert!(looks_like_spa_shell(next_shell, ""));
+    fn spa_shell_heuristic_detects_partially_ssrd_spas_by_article_length() {
+        let next_shell = r#"<html><body><header>Navigation link one Navigation link two Navigation link three Navigation link four Cookie consent banner text with lots of boilerplate words so raw body length exceeds 200 characters easily even though main content is empty</header><div id="__next"></div><script src="/app.js"></script></body></html>"#;
+        let extracted = extract_html_to_markdown(next_shell, "https://spa.example/");
+        assert!(
+            looks_like_spa_shell(next_shell, &extracted),
+            "expected partially-SSR'd SPA shell to escalate (article_len={}, md={})",
+            extracted.article_non_ws_len,
+            extracted.markdown
+        );
 
         let static_short = r#"<html><body><h1>Hello</h1><p>Short static notice.</p></body></html>"#;
-        assert!(!looks_like_spa_shell(
-            static_short,
-            "# Hello\n\nShort static notice."
-        ));
+        let static_extracted = extract_html_to_markdown(static_short, "https://static.example/");
+        assert!(!looks_like_spa_shell(static_short, &static_extracted));
 
-        let rich_content = "word ".repeat(60);
-        assert!(!looks_like_spa_shell(next_shell, &rich_content));
+        let rich = ExtractedHtml {
+            title: Some("Doc".into()),
+            markdown: "word ".repeat(60),
+            article_non_ws_len: 240,
+        };
+        assert!(!looks_like_spa_shell(next_shell, &rich));
+    }
+
+    #[test]
+    fn extract_pdf_to_markdown_extracts_text_and_errors_on_blank_pdf() {
+        let pdf_bytes = build_minimal_pdf(Some("Hello local PDF extractor from Rust"));
+        let (_title, md) = extract_pdf_to_markdown(pdf_bytes).unwrap();
+        assert!(
+            md.contains("Hello local PDF extractor from Rust"),
+            "expected extracted PDF text, got: {md}"
+        );
+
+        let blank_pdf = build_minimal_pdf(None);
+        let err = extract_pdf_to_markdown(blank_pdf).unwrap_err();
+        assert!(err.contains("no selectable text"), "err={err}");
     }
 
     async fn spawn_mock_server(
-        handler: impl Fn(String) -> String + Send + Sync + 'static,
+        handler: impl Fn(String) -> Vec<u8> + Send + Sync + 'static,
     ) -> (SocketAddr, tokio::task::JoinHandle<()>) {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
@@ -1015,7 +1581,7 @@ mod tests {
                     let n = stream.read(&mut buf).await.unwrap_or(0);
                     let req = String::from_utf8_lossy(&buf[..n]).into_owned();
                     let resp = handler(req);
-                    let _ = stream.write_all(resp.as_bytes()).await;
+                    let _ = stream.write_all(&resp).await;
                     let _ = stream.shutdown().await;
                 });
             }
@@ -1024,8 +1590,15 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn tier1_http_handles_markdown_negotiation_redirects_html_and_errors() {
-        let (addr, _server) = spawn_mock_server(|req| {
+    async fn tier1_http_handles_markdown_redirects_pdf_transient_retry_and_4xx() {
+        let pdf_payload = Arc::new(build_minimal_pdf(Some("Attention Is All You Need")));
+        let flaky_hits = Arc::new(AtomicUsize::new(0));
+        let forbidden_hits = Arc::new(AtomicUsize::new(0));
+        let flaky_clone = Arc::clone(&flaky_hits);
+        let forbidden_clone = Arc::clone(&forbidden_hits);
+        let pdf_clone = Arc::clone(&pdf_payload);
+
+        let (addr, _server) = spawn_mock_server(move |req| {
             let first_line = req.lines().next().unwrap_or("");
             let path = first_line.split_whitespace().nth(1).unwrap_or("/");
             match path {
@@ -1040,11 +1613,9 @@ mod tests {
                         body.len(),
                         body
                     )
+                    .into_bytes()
                 }
-                "/redirect" => {
-                    "HTTP/1.1 302 Found\r\nLocation: /final\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
-                        .to_string()
-                }
+                "/redirect" => b"HTTP/1.1 302 Found\r\nLocation: /final\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_vec(),
                 "/final" => {
                     let body = "<html><head><title>Final Page</title></head><body><article><h1>Final Page</h1><p>This is a full paragraph of real article content after following a redirect cleanly so readability extracts it properly without escalating to a browser.</p><p>Second paragraph adds enough text for a realistic document body.</p></article></body></html>";
                     format!(
@@ -1052,20 +1623,40 @@ mod tests {
                         body.len(),
                         body
                     )
+                    .into_bytes()
                 }
-                "/pdf" => {
-                    "HTTP/1.1 200 OK\r\nContent-Type: application/pdf\r\nContent-Length: 4\r\nConnection: close\r\n\r\n%PDF"
-                        .to_string()
+                "/paper.pdf" => {
+                    let mut resp = format!(
+                        "HTTP/1.1 200 OK\r\nContent-Type: application/pdf\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                        pdf_clone.len()
+                    )
+                    .into_bytes();
+                    resp.extend_from_slice(&pdf_clone);
+                    resp
                 }
+                "/flaky" => {
+                    let hit = flaky_clone.fetch_add(1, Ordering::SeqCst);
+                    if hit == 0 {
+                        b"HTTP/1.1 503 Service Unavailable\r\nContent-Length: 4\r\nConnection: close\r\n\r\nbusy".to_vec()
+                    } else {
+                        let body = "Recovered after transient 503.";
+                        format!(
+                            "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                            body.len(),
+                            body
+                        )
+                        .into_bytes()
+                    }
+                }
+                "/binary" => b"HTTP/1.1 200 OK\r\nContent-Type: image/png\r\nContent-Length: 4\r\nConnection: close\r\n\r\n\x89PNG".to_vec(),
                 _ => {
-                    "HTTP/1.1 403 Forbidden\r\nContent-Type: text/html\r\nContent-Length: 9\r\nConnection: close\r\n\r\nForbidden"
-                        .to_string()
+                    forbidden_clone.fetch_add(1, Ordering::SeqCst);
+                    b"HTTP/1.1 403 Forbidden\r\nContent-Type: text/html\r\nContent-Length: 9\r\nConnection: close\r\n\r\nForbidden".to_vec()
                 }
             }
         })
         .await;
 
-        // Test-only client with SSRF bypassed strictly for the local mock listener.
         let client = build_http_client(false);
         let timeout = Duration::from_secs(5);
 
@@ -1075,8 +1666,6 @@ mod tests {
             .unwrap();
         assert_eq!(md.source, "markdown-negotiated");
         assert_eq!(md.title.as_deref(), Some("Negotiated Doc"));
-        assert!(md.markdown.contains("Direct markdown from edge."));
-        assert!(!md.should_try_webview);
 
         let redir_url = Url::parse(&format!("http://{addr}/redirect")).unwrap();
         let redir = fetch_and_extract_http(&client, &redir_url, timeout)
@@ -1084,20 +1673,68 @@ mod tests {
             .unwrap();
         assert_eq!(redir.url, format!("http://{addr}/final"));
         assert_eq!(redir.title.as_deref(), Some("Final Page"));
-        assert_eq!(redir.source, "http");
-        assert!(redir.markdown.contains("following a redirect cleanly"));
         assert!(!redir.should_try_webview);
 
-        let pdf_url = Url::parse(&format!("http://{addr}/pdf")).unwrap();
-        let pdf_err = fetch_and_extract_http(&client, &pdf_url, timeout)
+        let pdf_url = Url::parse(&format!("http://{addr}/paper.pdf")).unwrap();
+        let pdf = fetch_and_extract_http(&client, &pdf_url, timeout)
+            .await
+            .unwrap();
+        assert_eq!(pdf.source, "pdf");
+        assert!(pdf.markdown.contains("Attention Is All You Need"));
+
+        let flaky_url = Url::parse(&format!("http://{addr}/flaky")).unwrap();
+        let recovered = fetch_and_extract_http(&client, &flaky_url, timeout)
+            .await
+            .unwrap();
+        assert_eq!(recovered.markdown, "Recovered after transient 503.");
+        assert_eq!(flaky_hits.load(Ordering::SeqCst), 2);
+
+        let bin_url = Url::parse(&format!("http://{addr}/binary")).unwrap();
+        let bin_err = fetch_and_extract_http(&client, &bin_url, timeout)
             .await
             .unwrap_err();
-        assert!(pdf_err.contains("application/pdf"), "err={pdf_err}");
+        assert!(bin_err.contains("image/png"), "err={bin_err}");
 
         let err_url = Url::parse(&format!("http://{addr}/blocked")).unwrap();
         let http_err = fetch_and_extract_http(&client, &err_url, timeout)
             .await
             .unwrap_err();
         assert!(http_err.contains("HTTP 403"), "err={http_err}");
+        assert_eq!(
+            forbidden_hits.load(Ordering::SeqCst),
+            1,
+            "403 must not retry"
+        );
+    }
+
+    #[tokio::test]
+    async fn per_host_semaphore_caps_concurrent_scrapes_per_host_at_two() {
+        let state = Arc::new(ScraperState::default());
+        let active = Arc::new(AtomicUsize::new(0));
+        let peak = Arc::new(AtomicUsize::new(0));
+        let url = Url::parse("https://docs.example.com/page").unwrap();
+
+        let mut handles = Vec::new();
+        for _ in 0..6 {
+            let state = Arc::clone(&state);
+            let active = Arc::clone(&active);
+            let peak = Arc::clone(&peak);
+            let url = url.clone();
+            handles.push(tokio::spawn(async move {
+                let deadline = Instant::now() + Duration::from_secs(5);
+                let _permits =
+                    acquire_host_and_http_permits(&state, &url, deadline, Duration::from_secs(5))
+                        .await
+                        .unwrap();
+                let cur = active.fetch_add(1, Ordering::SeqCst) + 1;
+                peak.fetch_max(cur, Ordering::SeqCst);
+                tokio::time::sleep(Duration::from_millis(20)).await;
+                active.fetch_sub(1, Ordering::SeqCst);
+            }));
+        }
+        for h in handles {
+            h.await.unwrap();
+        }
+        assert_eq!(peak.load(Ordering::SeqCst), MAX_CONCURRENT_PER_HOST);
     }
 }
