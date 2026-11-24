@@ -1,5 +1,4 @@
-import { translate, type TranslationMessage } from '../messages.js'
-import { deps } from '../env.js'
+import type { HttpFetch } from '@deepseek-chat/spine/ports'
 import { readMessageEvent } from './parseEvent.js'
 import { readServerSentEvents } from './sse.js'
 import type {
@@ -10,40 +9,35 @@ import type {
   MessageStreamEvent,
 } from './types.js'
 
-/** Anthropic 兼容接口的前缀（API 地址由应用在创建 slice 时给出） */
-const anthropicBaseUrl = () => `${deps().apiOrigin}/anthropic/v1`
-/** 引用 Files API 上传的图片、调用 Anthropic 兼容 Files API 时必须携带 */
 const FILES_BETA = 'files-api-2025-04-14'
-/** 请求体上限（字节）：超过约 3–4 MB 时接口网关直接断开，浏览器只能看到网络错误 */
-const MAX_REQUEST_BYTES = 3_000_000
-/** 普通 REST 接口默认超时（毫秒）；流式对话不设总时长上限 */
+export const MAX_REQUEST_BYTES = 3_000_000
 export const DEFAULT_REST_TIMEOUT_MS = 15_000
-/** 文件上传与解析接口默认超时（毫秒） */
 export const UPLOAD_TIMEOUT_MS = 60_000
 
-export type ApiErrorKind =
-  /** 非 2xx 响应 */
-  | 'http'
-  /** 流中返回的错误帧（如等待生成超时），随后连接关闭 */
-  | 'stream'
-  /** 请求没有到达服务端（断网、跨域被拦截等） */
-  | 'network'
-  /** 流在 message_stop 之前结束 */
-  | 'interrupted'
-  /** 响应不符合协议（如非 SSE 响应） */
-  | 'protocol'
+export type AgentIO = {
+  readonly fetch: HttpFetch
+  readonly apiOrigin: string
+  readonly apiKey: () => string | null
+}
+
+export type ApiErrorKind = 'http' | 'stream' | 'network' | 'interrupted' | 'protocol'
 
 export class ApiError extends Error {
   readonly kind: ApiErrorKind
   readonly status?: number
-  readonly localMessage?: TranslationMessage
+  readonly timedOut?: boolean
 
-  constructor(kind: ApiErrorKind, message: string | TranslationMessage, status?: number) {
-    super(typeof message === 'string' ? message : translate(message.key, message.params))
+  constructor(
+    kind: ApiErrorKind,
+    message: string,
+    status?: number,
+    options?: { timedOut?: boolean }
+  ) {
+    super(message)
     this.name = 'ApiError'
     this.kind = kind
     this.status = status
-    this.localMessage = typeof message === 'string' ? undefined : message
+    this.timedOut = options?.timedOut
   }
 }
 
@@ -84,12 +78,13 @@ const readErrorResponse = async (
       message = extracted
     }
   } catch {
-    // 非 JSON 响应体直接展示原文
+    // Non-JSON response body: surface raw text.
   }
   return new ApiError(kind, message, response.status)
 }
 
 export const request = async (
+  fetchFn: HttpFetch,
   url: string,
   init: RequestInit,
   timeoutMs?: number
@@ -122,10 +117,10 @@ export const request = async (
 
   let response: Response
   try {
-    response = await deps().fetch(url, requestInit)
+    response = await fetchFn(url, requestInit)
   } catch (error) {
     if (timedOut) {
-      throw new ApiError('network', { key: 'requestTimedOut' })
+      throw new ApiError('network', 'Request timed out.', undefined, { timedOut: true })
     }
     if (init.signal?.aborted) {
       throw error
@@ -145,30 +140,28 @@ export const request = async (
   return response
 }
 
+const anthropicBaseUrl = (apiOrigin: string) => `${apiOrigin}/anthropic/v1`
+
 const anthropicHeaders = (apiKey: string, beta: boolean): Record<string, string> => ({
-  // DeepSeek 兼容接口的鉴权方式，也可使用 Authorization: Bearer。
   'x-api-key': apiKey,
-  // Files API 和通过 file_id 引用图片时必传；纯文本聊天无需携带。
   ...(beta ? { 'anthropic-beta': FILES_BETA } : {}),
 })
 
-/**
- * POST /anthropic/v1/files 上传附件（不设过期时间，会话里的历史附件一直可用）。
- * purpose 为 null 时不传该字段（图片）；purpose 必须排在 file 之前。
- */
 export const uploadFile = async (
-  apiKey: string,
+  io: AgentIO,
   file: File,
   purpose: FilePurpose | null,
   signal?: AbortSignal
 ): Promise<FileObject> => {
+  const apiKey = io.apiKey() ?? ''
   const form = new FormData()
   if (purpose) {
     form.append('purpose', purpose)
   }
   form.append('file', file)
   const response = await request(
-    `${anthropicBaseUrl()}/files`,
+    io.fetch,
+    `${anthropicBaseUrl(io.apiOrigin)}/files`,
     {
       method: 'POST',
       headers: anthropicHeaders(apiKey, true),
@@ -180,10 +173,11 @@ export const uploadFile = async (
   return (await response.json()) as FileObject
 }
 
-/** DELETE /anthropic/v1/files/{file_id} */
-export const deleteFile = async (apiKey: string, fileId: string): Promise<void> => {
+export const deleteFile = async (io: AgentIO, fileId: string): Promise<void> => {
+  const apiKey = io.apiKey() ?? ''
   await request(
-    `${anthropicBaseUrl()}/files/${encodeURIComponent(fileId)}`,
+    io.fetch,
+    `${anthropicBaseUrl(io.apiOrigin)}/files/${encodeURIComponent(fileId)}`,
     {
       method: 'DELETE',
       headers: anthropicHeaders(apiKey, true),
@@ -200,24 +194,25 @@ const hasFile = (body: CreateMessageRequest) =>
   )
 
 /**
- * POST /anthropic/v1/messages（stream: true），逐个产出流式事件，收到 message_stop 时结束。
- * ping、保活注释与无法解析的内容不产出；中止请求时抛出 signal 的 AbortError。
+ * POST /anthropic/v1/messages (stream: true). Yields validated MessageStreamEvents and ends on
+ * `message_stop`. Throws ApiError on HTTP, protocol, stream, network, or premature-EOF errors,
+ * and propagates the caller's AbortError on abort.
  */
 export async function* streamMessage(
-  apiKey: string,
+  io: AgentIO,
   body: CreateMessageRequest,
   signal: AbortSignal
 ): AsyncGenerator<MessageStreamEvent> {
   const json = JSON.stringify({ ...body, stream: true })
   const bytes = new TextEncoder().encode(json).length
-  // 实测 3 MB 的请求体正常到达接口，4 MB 的在网关被拒且没有 CORS 头，浏览器只报网络错误。
   if (bytes > MAX_REQUEST_BYTES) {
     throw new ApiError(
       'protocol',
       `This request is ${(bytes / 1e6).toFixed(1)} MB, above the API's limit of about 3 MB. Start a new chat or edit an earlier message to shorten the conversation.`
     )
   }
-  const response = await request(`${anthropicBaseUrl()}/messages`, {
+  const apiKey = io.apiKey() ?? ''
+  const response = await request(io.fetch, `${anthropicBaseUrl(io.apiOrigin)}/messages`, {
     method: 'POST',
     headers: {
       ...anthropicHeaders(apiKey, hasFile(body)),
@@ -255,6 +250,5 @@ export async function* streamMessage(
       return
     }
   }
-  // 服务端没有提供错误内容时保持为空，不推测断流原因。
   throw new ApiError('interrupted', '')
 }

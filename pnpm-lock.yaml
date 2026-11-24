@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@deepseek-chat/lib-agent':
+        specifier: workspace:*
+        version: link:libs/agent
       '@deepseek-chat/lib-markdown':
         specifier: workspace:*
         version: link:libs/markdown
@@ -100,6 +103,12 @@ importers:
         specifier: 7.0.2
         version: 7.0.2
 
+  libs/agent:
+    dependencies:
+      '@deepseek-chat/spine':
+        specifier: workspace:*
+        version: link:../../spine
+
   libs/markdown:
     dependencies:
       '@deepseek-chat/spine':
@@ -177,6 +186,9 @@ importers:
 
   slices/conversations:
     dependencies:
+      '@deepseek-chat/lib-agent':
+        specifier: workspace:*
+        version: link:../../libs/agent
       '@deepseek-chat/spine':
         specifier: workspace:*
         version: link:../../spine

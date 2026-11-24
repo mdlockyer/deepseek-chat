@@ -1,12 +1,17 @@
 import { getLocale } from '@deepseek-chat/spine/i18n'
 import { create } from 'zustand'
 import { createId } from './id.js'
-import { ApiError, streamMessage, uploadFile } from './api/client.js'
+import {
+  extractFileIds,
+  getFileErrorCode,
+  isRetryableApiError,
+  type ChatModel,
+  type CreateMessageRequest,
+} from '@deepseek-chat/lib-agent'
+import { ApiError, streamMessage, uploadFile } from './apiClient.js'
 import { buildAutoTitleRequest, parseAutoTitleResponse } from './autoTitle.js'
 import type { SessionDeleted, SessionHistoryReplaced } from '@deepseek-chat/spine/facts/session'
-import { deps } from './env.js'
-import type { ChatModel, CreateMessageRequest } from './api/types.js'
-import { extractFileIds, getFileErrorCode, isRetryableApiError } from './api/errors.js'
+import { deps, runtimeParams } from './env.js'
 import { cancelUpload, describeUploadError, uploadAttachment, useUploads } from './attachments.js'
 import { useComposerOptions } from './composerOptions.js'
 import { appendBranch, getVisibleMessages, normalizeSession, selectVersion } from './branches.js'
@@ -19,7 +24,16 @@ import {
   prepareDraftMessage,
 } from './drafts.js'
 import { createLatestReminder } from './latestReminder.js'
+import { collectCitedUrls } from './citations.js'
 import { createStreamTracer } from './streamTrace.js'
+import { createSubagentRuntime } from './subagentRuntime.js'
+import {
+  POST_TOOL_NAME,
+  WAIT_TOOL_NAME,
+  buildLeadSubagentInstructions,
+  createLeadPostTool,
+  createWaitTool,
+} from './subagentTools.js'
 import {
   applyEvent,
   canContinueReply,
@@ -30,6 +44,7 @@ import {
   settleReply,
   toRequestMessages,
 } from './reply.js'
+import type { ToolResult } from './tools.js'
 import {
   toSessionSummary,
   type AssistantMessage,
@@ -322,22 +337,32 @@ const createReply = (): AssistantMessage => {
   }
 }
 
-/** 仍在生成中的回复（页面关闭或导出时未结束）按「已停止」处理 */
+/** 仍在生成中的回复或子代理（页面关闭或导出时未结束）按「已停止」处理 */
 const settleInterrupted = (session: Session): Session => {
-  if (
-    !session.messages.some(
-      (m) => m.role === 'assistant' && (m.status === 'pending' || m.status === 'streaming')
-    )
-  ) {
+  const needsSettle = (m: Message): m is AssistantMessage =>
+    m.role === 'assistant' &&
+    (m.status === 'pending' ||
+      m.status === 'streaming' ||
+      (m.agents?.some((agent) => agent.state.status === 'running') ?? false))
+  if (!session.messages.some(needsSettle)) {
     return session
   }
   return {
     ...session,
-    messages: session.messages.map((m) =>
-      m.role === 'assistant' && (m.status === 'pending' || m.status === 'streaming')
-        ? settleReply(m, 'stopped', session.updatedAt)
-        : m
-    ),
+    messages: session.messages.map((m) => {
+      if (!needsSettle(m)) {
+        return m
+      }
+      const agents = m.agents?.map((agent) =>
+        agent.state.status === 'running'
+          ? { ...agent, state: { status: 'stopped' as const, reason: 'interrupted' as const } }
+          : agent
+      )
+      const base = agents ? { ...m, agents } : m
+      return m.status === 'pending' || m.status === 'streaming'
+        ? settleReply(base, 'stopped', session.updatedAt)
+        : base
+    }),
   }
 }
 
@@ -1163,6 +1188,30 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
   }
   streamFlushes.set(sessionId, flush)
 
+  const params = runtimeParams()
+  const toolRoundLimit = Math.max(1, params.toolRoundLimit || TOOL_ROUND_LIMIT)
+  const subagentRuntime = createSubagentRuntime({
+    initialReply: initial,
+    tools: deps().tools,
+    params,
+    apiKey: () => deps().getApiKey(),
+    onSync: (agents, board, shouldPersist) => {
+      reply = {
+        ...reply,
+        ...(agents.length > 0 ? { agents } : {}),
+        ...(board.length > 0 ? { board } : {}),
+      }
+      if (shouldPersist) {
+        flush()
+        persist(sessionId)
+      } else if (document.visibilityState === 'hidden') {
+        flush()
+      } else {
+        frame ||= requestAnimationFrame(flush)
+      }
+    },
+  })
+
   // 续接中断的工具往返时，本轮已有的调用与结果直接接在提问之后。
   let toolRound = initial.blocks.some((block) => block.type === 'tool_use') ? 1 : 0
 
@@ -1202,9 +1251,15 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
     }
   }
 
-  /** 依次执行工具调用（由应用提供的工具网关执行），把结果追加到回复；中止时停在当前调用 */
+  /**
+   * Executes one response's tool calls according to their effect: consecutive `read` calls run
+   * concurrently up to `maxParallelReadCalls`; `spawn` calls start their child and return at once;
+   * other calls (`wait`, `post`, `session`, `artifact`, `interactive`) run alone in order.
+   * Results are always written in call order and saved as soon as each call ends.
+   */
   const runToolCalls = async (calls: ToolCallPart[]) => {
     const { tools } = deps()
+    const maxParallel = Math.max(1, params.maxParallelReadCalls)
     const updateResult = (callId: string, patch: Partial<ToolResultPart>) => {
       reply = {
         ...reply,
@@ -1216,7 +1271,13 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
       }
       flush()
     }
-    for (const call of calls) {
+    const getVisibleForCall = () => {
+      const currentSession = getSession(sessionId)
+      return currentSession
+        ? getVisibleMessages(currentSession).map((msg) => (msg.id === reply.id ? reply : msg))
+        : [...request.history, request.question, reply]
+    }
+    const executeCall = async (call: ToolCallPart) => {
       const startedAt = Date.now()
       reply = {
         ...reply,
@@ -1234,25 +1295,95 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
       }
       flush()
 
-      const currentSession = getSession(sessionId)
-      const messages = currentSession
-        ? getVisibleMessages(currentSession).map((msg) => (msg.id === reply.id ? reply : msg))
-        : [...request.history, request.question, reply]
-      const result = await tools.run(call, {
-        sessionId,
-        signal: controller.signal,
-        ...(call.inputJson !== undefined ? { inputJson: call.inputJson } : {}),
-        replyBlocks: reply.blocks,
-        messages,
-        isActive: () => get().activeId === sessionId,
-        onPhase: (phase) => updateResult(call.id, { phase }),
-        saveFiles: (files) => db.saveFiles([...files]),
-        loadFile: db.loadFile,
-      })
+      let result: ToolResult
+      if (call.name === POST_TOOL_NAME) {
+        result = subagentRuntime.postFromLead(call.input)
+      } else if (call.name === WAIT_TOOL_NAME) {
+        result = await subagentRuntime.wait(call.input, reply.blocks, controller.signal)
+      } else if (tools.kindOf(call.name) === 'subagent' || tools.effectOf(call.name) === 'spawn') {
+        const spawnIndex = reply.blocks.findIndex(
+          (block) => block.type === 'tool_use' && block.id === call.id
+        )
+        const replyBeforeSpawn: AssistantMessage = {
+          ...reply,
+          blocks: spawnIndex >= 0 ? reply.blocks.slice(0, spawnIndex) : reply.blocks,
+        }
+        result = subagentRuntime.spawn(call, {
+          sessionId,
+          latestReminder: reply.latestReminder,
+          forkPrefixMessages: () =>
+            toRequestMessages(
+              lastTurnContext?.history ?? request.history,
+              lastTurnContext?.question ?? request.question,
+              undefined,
+              initial.thinking ?? false,
+              reply.latestReminder,
+              replyBeforeSpawn.blocks.length > 0 ? replyBeforeSpawn : undefined,
+              lastTurnContext?.declaredClientNames ?? true
+            ),
+          getMessages: getVisibleForCall,
+          isActive: () => get().activeId === sessionId,
+          saveFiles: (files) => db.saveFiles([...files]),
+          loadFile: db.loadFile,
+        })
+      } else {
+        const messages = getVisibleForCall()
+        result = await tools.run(call, {
+          sessionId,
+          signal: controller.signal,
+          caller: { kind: 'reply' },
+          ...(call.inputJson !== undefined ? { inputJson: call.inputJson } : {}),
+          replyBlocks: reply.blocks,
+          citedUrls: collectCitedUrls(reply.blocks),
+          messages,
+          isActive: () => get().activeId === sessionId,
+          onPhase: (phase) => updateResult(call.id, { phase }),
+          saveFiles: (files) => db.saveFiles([...files]),
+          loadFile: db.loadFile,
+        })
+      }
       updateResult(call.id, result)
+      persist(sessionId)
+    }
+
+    const isConcurrentRead = (call: ToolCallPart) =>
+      call.name !== POST_TOOL_NAME &&
+      call.name !== WAIT_TOOL_NAME &&
+      tools.kindOf(call.name) !== 'subagent' &&
+      tools.effectOf(call.name) === 'read'
+
+    for (let i = 0; i < calls.length; ) {
       if (controller.signal.aborted) {
         return
       }
+      const first = calls[i]
+      if (!first) {
+        break
+      }
+      if (!isConcurrentRead(first)) {
+        await executeCall(first)
+        i += 1
+        continue
+      }
+      let end = i + 1
+      while (end < calls.length && isConcurrentRead(calls[end])) {
+        end += 1
+      }
+      const segment = calls.slice(i, end)
+      i = end
+      let cursor = 0
+      const workerCount = Math.min(maxParallel, segment.length)
+      const worker = async () => {
+        while (!controller.signal.aborted) {
+          const nextIndex = cursor
+          if (nextIndex >= segment.length) {
+            return
+          }
+          cursor += 1
+          await executeCall(segment[nextIndex])
+        }
+      }
+      await Promise.all(Array.from({ length: workerCount }, () => worker()))
     }
   }
   let networkRetries = 0
@@ -1272,16 +1403,18 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
         // 先执行还没有结果的工具调用：上一个请求刚返回的，或续接中断回复时留下的。
         const calls = pendingToolCalls(reply)
         if (calls.length > 0) {
-          if (toolRound >= TOOL_ROUND_LIMIT) {
+          if (toolRound >= toolRoundLimit) {
+            await subagentRuntime.stopAll('roundLimit')
             reply = settleReply(reply, 'error', Date.now(), {
               kind: 'protocol',
-              message: `Stopped after ${TOOL_ROUND_LIMIT} rounds of tool calls in one reply.`,
+              message: `Stopped after ${toolRoundLimit} rounds of tool calls in one reply.`,
             })
             break
           }
           toolRound += 1
           await runToolCalls(calls)
           if (controller.signal.aborted) {
+            await subagentRuntime.stopAll('user')
             reply = settleReply(reply, 'stopped', Date.now())
             break
           }
@@ -1307,16 +1440,26 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
         }
         const pythonEnabled = initial.python ?? initial.thinking ?? false
         const browserEnabled = initial.browser ?? false
-        const tools: CreateMessageRequest['tools'] = deps().tools.declare({
+        const gatewayTools = deps().tools.declare({
           search: initial.search ?? false,
           python: pythonEnabled,
           browser: browserEnabled,
           questionText: prepared.question.content,
         })
+        const hasSubagentTool = gatewayTools.some(
+          (tool) => !('type' in tool) && deps().tools.kindOf(tool.name) === 'subagent'
+        )
+        const tools: CreateMessageRequest['tools'] = hasSubagentTool
+          ? [...gatewayTools, createWaitTool(params), createLeadPostTool(params)]
+          : gatewayTools
         const declaredClientNames = new Set(
           tools.flatMap((tool) => ('type' in tool ? [] : [tool.name]))
         )
-        const systemParts = [SYSTEM_PROMPT, ...deps().tools.instructions(declaredClientNames)]
+        const systemParts = [
+          SYSTEM_PROMPT,
+          ...deps().tools.instructions(declaredClientNames, 'reply'),
+          ...(hasSubagentTool ? [buildLeadSubagentInstructions()] : []),
+        ]
         // 工具往返中的后续请求不再带续写前缀，本轮内容整体接在提问之后。
         const messages = toRequestMessages(
           prepared.history,
@@ -1384,11 +1527,39 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
           attempt = -1
           continue
         }
+        // Runtime rule 7: the lead can't leave running children behind. Rule 8 (round limit) wins.
+        if (reply.stopReason !== 'refusal' && subagentRuntime.hasRunning()) {
+          if (toolRound >= toolRoundLimit) {
+            await subagentRuntime.stopAll('roundLimit')
+            reply = settleReply(reply, 'error', Date.now(), {
+              kind: 'protocol',
+              message: `Stopped after ${toolRoundLimit} rounds of tool calls in one reply.`,
+            })
+            break
+          }
+          reply = {
+            ...reply,
+            prefix: false,
+            blocks: [
+              ...reply.blocks,
+              {
+                type: 'tool_use',
+                id: `auto-wait-${createId()}`,
+                name: WAIT_TOOL_NAME,
+                input: { until: 'all', summary: 'Waiting for running subagents to finish' },
+              },
+            ],
+          }
+          flush()
+          attempt = -1
+          continue
+        }
         reply = settleReply(reply, 'done', Date.now())
         break
       } catch (error) {
         finishTrace(error)
         if (controller.signal.aborted) {
+          await subagentRuntime.stopAll('user')
           reply = settleReply(reply, 'stopped', Date.now())
           break
         }
@@ -1451,6 +1622,9 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
       }
     }
   } finally {
+    if (subagentRuntime.hasRunning()) {
+      await subagentRuntime.stopAll(controller.signal.aborted ? 'user' : 'roundLimit')
+    }
     titleRequests.delete(controller)
     streamFlushes.delete(sessionId)
     cancelAnimationFrame(frame)

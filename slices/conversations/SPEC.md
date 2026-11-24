@@ -47,13 +47,17 @@ file (the test runner gives each file its own process).
 | `onStreamTrace` (optional)  | Diagnostics: each streamed request's timing when it ends.         |
 
 **Tool gateway.** `declare({ search, python, browser, questionText })` returns the client tools for
-a turn; `instructions(declaredNames)` the system-prompt sections for them, in order;
-`kindOf(name)` one of `web_search`, `web_scrape`, `browser`, `present_file`, `edit_file`,
-`read_file`, `python`, or `null`; `fenceLanguage(path)` the Markdown fence language for a presented
-file; `run(call, context)` runs one call and always resolves to the result written into the call's
-`tool_result` block. The context gives the session, abort signal, the reply's blocks so far, the
-visible branch with the reply last, whether the chat is on screen, a phase callback, and the file
-store (save/load).
+a turn; `instructions(declaredNames, audience)` the system-prompt sections for them, worded for
+`reply` or `agent`, in order; `describe(name, audience)` one tool's schema with `summary` injected
+and worded for the audience; `kindOf(name)` one of `web_search`, `web_scrape`, `browser`,
+`present_file`, `edit_file`, `read_file`, `python`, `ask_user`, `subagent`, or `null`;
+`effectOf(name)` one of `read`, `spawn`, `session`, `artifact`, or `interactive`;
+`agentProfile(name)` returns the profile when `kindOf(name) === 'subagent'` (and `null` otherwise);
+`fenceLanguage(path)` the Markdown fence language for a presented file; `run(call, context)` runs
+one call and always resolves to the result written into the call's `tool_result` block. The context
+gives the session, abort signal, `caller` (`reply` or `{ kind: 'agent', profile, runId }`),
+`citedUrls`, the reply's blocks so far, the visible branch with the reply last, whether the chat is
+on screen, a phase callback, and the file store (save/load).
 
 **View ports (`ui`).** `voice`: the voice input hook, voice button, spectrum, read-aloud button
 and stop. `panels.files`: whether the file panel shows a given file (`presented` or `upload`), open
@@ -67,18 +71,26 @@ it, and the header toggle (`visible`, `open`, `toggle`). `panels.browser`: the h
    once, and removes it from the list; other chats are untouched. After the whole history is
    replaced (import, clear) it publishes `SessionHistoryReplaced`, once. Neither is published when
    the change fails, and a failed import leaves every chat as it was.
-2. **Tool calls.** Every call the model makes runs through the gateway exactly once, in the order
-   the model made it. While it runs, its result shows as running (phase `starting` exactly when its
-   kind is `python`); afterwards its `tool_result` holds the gateway's result. The next request
-   sends every result back to the model, in call order. When the turn is aborted during a call, no
-   later call runs and no further request is made; the reply ends stopped. A turn whose model keeps
-   calling tools still ends (after a bounded number of rounds, see Parameters).
+2. **Tool calls.** Every call the model makes runs through the gateway (or conversations' own
+   subagent runtime for `subagent`, `post`, and `wait`) exactly once, starting in the order the
+   model made it, and each call's effect (`effectOf(name)`) decides how it runs:
+   - `read` calls in a consecutive run go concurrently, up to the parallel-call parameter.
+   - A `spawn` call (starting a child) returns as soon as the child has started, with its `runId`,
+     and never waits.
+   - Any other call, `wait` included, runs alone after the calls before it have finished.
+     While a call runs, its result shows as running (phase `starting` exactly when its kind is
+     `python`); afterwards its `tool_result` holds the result. Results are written in call order,
+     each result is saved as soon as its call ends, and the next request sends every result back to
+     the model in call order. When the turn is aborted during a call or concurrent run, no queued call
+     starts and no further request is made; the reply ends stopped. A turn whose model keeps calling
+     tools still ends (after a bounded number of rounds, see Parameters).
 3. **Prompt.** A turn's system prompt is the assistant identity followed by the gateway's
    instructions for exactly the tools declared that turn, in the gateway's order.
    3a. **Tool context.** A run sees the chat's visible branch with the reply in progress last, knows
    whether that chat is on screen, and files it saves can be read back through `loadFile`.
 4. **Tool steps by kind.** How a call is shown (search, opened page, browser actions, file actions,
-   code) and archived depends only on `kindOf(name)`; anything unclassified is shown as code.
+   clarifying questions, subagents, wait/board, code) and archived depends only on `kindOf(name)`
+   (plus conversations' own `post` and `wait` tools); anything unclassified is shown as code.
 5. **Composer toggles** (DeepThink, Search, Run code, Browser) load from and save to the store under
    `chat-demo:thinking`, `chat-demo:search`, `chat-demo:python`, `chat-demo:browser` as `'true'` /
    `'false'`.
@@ -114,10 +126,10 @@ it, and the header toggle (`visible`, `open`, `toggle`). `panels.browser`: the h
     Parameters), a "Working…" line shows at the end of the reply, until the next content arrives.
     It does not show while the reply has nothing yet (the waiting whale or the thinking title show
     instead), or while its last step is a tool that already shows it is running (a tool without its
-    result, a running Python call). An open thinking block does not count: during a stall it
-    receives nothing, and it may stay open until the held-back tool call arrives. The server may
-    hold a whole tool call back until its input (e.g. a file) is written, so this gap can last tens
-    of seconds.
+    result, a running Python call, a running `wait` call, or a running child row). An open thinking
+    block does not count: during a stall it receives nothing, and it may stay open until the
+    held-back tool call arrives. The server may hold a whole tool call back until its input (e.g. a
+    file) is written, so this gap can last tens of seconds.
 17. **Files with the answer.** The files a reply produced (from any tool result: presented or
     edited files, files from Python) show as cards with the answer, not inside the thinking and
     tools timeline, so they stay visible when the timeline is collapsed. There is one card per file
@@ -137,18 +149,60 @@ it, and the header toggle (`visible`, `open`, `toggle`). `panels.browser`: the h
 19. **One activity whale.** While a reply streams, the animated whale marks that the model is
     working, and at most one whale shows per reply. Before any content arrives it stands alone as
     the waiting indicator. Once there is a thinking title and no answer yet, it sits on the title.
-    Otherwise it sits on the last tool row that shows it is running, or, with none running, on the
-    "Working…" line. A clarifying question waiting for the user keeps its pulsing dot, because the
-    user, not the model, has the next move. When the reply stops streaming, the title's whale stays
-    in place as the still logo (grey if the reply was stopped); everywhere else the whale gives way
-    to that spot's static icon.
+    Otherwise it sits on the last tool row that shows it is running (while the lead waits, the whale
+    sits on the `wait` row, and running child rows show a static running indicator), or, with none
+    running, on the "Working…" line. A clarifying question waiting for the user keeps its pulsing
+    dot, because the user, not the model, has the next move. When the reply stops streaming, the
+    title's whale stays in place as the still logo (grey if the reply was stopped); everywhere else
+    the whale gives way to that spot's static icon.
+20. **Subagents (runtime rules 2–16).**
+    - **Read-only and depth 1:** a child receives only `read` tools from its profile (never another
+      subagent), `post`, and its profile's `finish` tool. Any call to another tool gets an error
+      result without invoking the gateway.
+    - **Caps:** at most `maxRunningChildren` run concurrently and at most `maxChildrenPerReply` start
+      in one reply; a `spawn` beyond either cap gets an error naming the cap and starts no child.
+    - **Context:** `'clean'` isolates the child to its profile prompt, task, `latest_reminder`, own
+      transcript, and board posts; `'fork'` prepends the lead's messages up to the spawn call.
+    - **Outcomes:** every child ends `finished`, `exhausted` (after one forced-finish request when
+      hitting round or tool-call limits, or when ending without calling finish), `failed`, or
+      `stopped`. Results arrive on the lead's next `wait`.
+    - **Citation numbering:** conversations assigns reply-wide citation numbers across direct web
+      tools and child sources delivered via `wait`, continuing without gaps and rewriting `[n]` to
+      `[citation:M]`. `buildReplyView` registers sources from any `tool_result` that carries them.
+    - **No orphans & round limit:** if the lead ends its turn while children are running, the
+      runtime waits for all of them and continues — unless `toolRoundLimit` is reached, which wins
+      and stops running children with reason `roundLimit`.
+    - **Stopping & recovery:** stopping the reply aborts every running child (`reason: 'user'`);
+      finished children keep their results. Loading a chat settles any `running` child to
+      `stopped` (`reason: 'interrupted'`), and continuing that reply returns them on the lead's
+      first `wait` without hanging.
+    - **Storage, timeline, and archives:** runs (`AssistantMessage.agents`) and board posts
+      (`AssistantMessage.board`) persist on the reply at step boundaries; finished child tool
+      results are trimmed to `childToolResultDisplayChars` for display. Conversations declares
+      `post` and `wait` (with their prompt section) whenever any declared tool has kind `subagent`.
+      Archives keep tool result text (including `wait` results and board posts) and omit child
+      transcripts.
+21. **Shared board and `wait`.** Children post `finding` (`text`, `url`) or `question` (`question`,
+    `assumption`) up to `maxPostsPerChild` and `maxPostChars` each; the lead posts `direction` to
+    `all` or one running `runId` (a direction to an ended child gets an error result). Unseen posts
+    are appended under `"On the board since your last step"` before each agent's next request, in
+    posting order, never to their author. Nothing blocks on a question. `wait` wakes on a finished
+    child, a child `question`, or timeout (never on a `finding` alone); `until: 'all'` returns only
+    once no child is running.
 
 ## Parameters
 
 | Name                                     | Value                                       |
 | :--------------------------------------- | :------------------------------------------ |
 | Loaded chat details kept in memory       | 5 (plus active, streaming and unsaved ones) |
-| Tool rounds per turn                     | 50                                          |
+| Tool rounds per turn                     | 50 (`toolRoundLimit`)                       |
+| Concurrent `read` calls per batch        | 6 (`maxParallelReadCalls`)                  |
+| Running subagents per reply              | 5 (`maxRunningChildren`)                    |
+| Subagents started per reply              | 12 (`maxChildrenPerReply`)                  |
+| Default `wait` timeout                   | 60 s (`waitDefaultTimeoutS`)                |
+| Board posts per child                    | 6 (`maxPostsPerChild`)                      |
+| Board post length                        | 400 chars (`maxPostChars`)                  |
+| Stored child tool-result display length  | 2,000 chars (`childToolResultDisplayChars`) |
 | Network retries per turn                 | 2                                           |
 | Re-uploads after the server drops a file | 2 (backoff 1 s × 2ⁿ)                        |
 | Attachments per message                  | 50                                          |

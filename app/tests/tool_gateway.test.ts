@@ -21,7 +21,9 @@ const declaredNames = (toggles: { search: boolean; python: boolean }) =>
 const context = (): ToolRunContext => ({
   sessionId: 'wiring',
   signal: new AbortController().signal,
+  caller: { kind: 'reply' },
   replyBlocks: [],
+  citedUrls: new Map(),
   messages: [],
   isActive: () => false,
   onPhase: () => undefined,
@@ -45,10 +47,23 @@ describe('app wiring: tool gateway', () => {
         'present_file',
         'python',
         'read_file',
+        'subagent',
         'web_scrape',
         'web_search',
       ].sort()
     )
+    // Effect classification matches each tool's side-effect class.
+    assert.equal(toolGateway.effectOf('web_search'), 'read')
+    assert.equal(toolGateway.effectOf('web_scrape'), 'read')
+    assert.equal(toolGateway.effectOf('research'), 'spawn')
+    assert.ok(toolGateway.agentProfile('research'))
+    assert.equal(toolGateway.effectOf('read_file'), 'read')
+    assert.equal(toolGateway.effectOf('present_file'), 'artifact')
+    assert.equal(toolGateway.effectOf('edit_file'), 'artifact')
+    assert.equal(toolGateway.effectOf('python'), 'session')
+    assert.equal(toolGateway.effectOf('ask_user'), 'interactive')
+    assert.equal(toolGateway.effectOf('browser_click'), 'session')
+    assert.equal(toolGateway.effectOf('unknown_tool'), 'session')
   })
 
   it('runs ask_user through submit, skip, and abort cleanly', async () => {
@@ -146,10 +161,39 @@ describe('app wiring: tool gateway', () => {
 
   it('gives instructions for the declared tools only, and none for no tools', () => {
     const names = new Set(declaredNames({ search: true, python: true }))
-    const all = toolGateway.instructions(names)
+    const all = toolGateway.instructions(names, 'reply')
     assert.ok(all.length > 0 && all.every((section) => section.trim().length > 0))
     assert.equal(new Set(all).size, all.length, 'no section repeats')
-    assert.deepEqual(toolGateway.instructions(new Set()), [])
+    assert.deepEqual(toolGateway.instructions(new Set(), 'reply'), [])
+  })
+
+  it('enforces subagent profile wiring invariants across all registered profiles', () => {
+    const names = declaredNames({ search: true, python: true })
+    for (const name of names) {
+      const profile = toolGateway.agentProfile(name)
+      const isSubagent = toolGateway.kindOf(name) === 'subagent'
+      assert.equal(
+        profile !== null,
+        isSubagent,
+        `${name}: agentProfile matches kindOf === subagent`
+      )
+      if (profile) {
+        assert.equal(toolGateway.effectOf(name), 'spawn', `${name} has effect spawn`)
+        for (const toolName of profile.tools) {
+          assert.ok(toolGateway.describe(toolName, 'agent'), `${name}: tool ${toolName} exists`)
+          assert.equal(
+            toolGateway.effectOf(toolName),
+            'read',
+            `${name}: tool ${toolName} has effect read`
+          )
+          assert.notEqual(
+            toolGateway.kindOf(toolName),
+            'subagent',
+            `${name}: tool ${toolName} is not a subagent`
+          )
+        }
+      }
+    }
   })
 
   it(

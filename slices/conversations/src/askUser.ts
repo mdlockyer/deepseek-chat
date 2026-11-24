@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { ClientTool } from './api/types.js'
+import type { ClientTool } from '@deepseek-chat/lib-agent'
 import type { AskActionItem, AskActionMeta } from './types.js'
 import type { ToolResult } from './tools.js'
 

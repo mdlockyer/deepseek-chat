@@ -378,3 +378,73 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.agentRunningDot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+}
+
+.agentToggle {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-width: 100%;
+  cursor: pointer;
+  color: var(--dsw-alias-label-secondary);
+  font: var(--dsw-font-markdown-small);
+  border-radius: 4px;
+  transition: color 0.2s;
+
+  &:hover {
+    color: var(--dsw-alias-label-primary);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--dsw-alias-brand-primary);
+    outline-offset: 2px;
+  }
+}
+
+.agentLabel {
+  font-weight: 500;
+  color: var(--dsw-alias-label-primary);
+}
+
+.agentMeta {
+  color: var(--dsw-alias-label-tertiary);
+  font: var(--dsw-font-xs-13);
+}
+
+.agentBody {
+  width: 100%;
+  margin-top: 6px;
+  padding-left: 12px;
+  border-left: 1px solid var(--dsw-alias-border-l2);
+}
+
+.boardList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  margin-top: 4px;
+  font: var(--dsw-font-xs-13);
+  line-height: 18px;
+}
+
+.boardItem {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.boardKind {
+  color: var(--dsw-alias-label-tertiary);
+  font-weight: 500;
+}

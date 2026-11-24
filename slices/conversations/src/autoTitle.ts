@@ -1,4 +1,4 @@
-import type { ChatModel, CreateMessageRequest } from './api/types.js'
+import type { ChatModel, CreateMessageRequest } from '@deepseek-chat/lib-agent'
 import { toRequestMessages } from './reply.js'
 import type { AssistantMessage, Message, UserMessage } from './types.js'
 

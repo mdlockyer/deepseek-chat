@@ -5,6 +5,37 @@ import type { StreamTrace } from './streamTrace.js'
 import type { ToolGateway } from './tools.js'
 import type { ConversationsViewDeps } from './views.js'
 
+/** Tunable runtime parameters for the conversations slice (see SPEC.md Parameters). */
+export type ConversationsParams = {
+  /** Maximum concurrent `read` tool calls in flight at once. */
+  readonly maxParallelReadCalls: number
+  /** Maximum tool rounds per lead reply (including returns from `wait`). */
+  readonly toolRoundLimit: number
+  /** Maximum children running concurrently in one reply. */
+  readonly maxRunningChildren: number
+  /** Maximum children started across one reply. */
+  readonly maxChildrenPerReply: number
+  /** Default timeout in seconds for `wait`. */
+  readonly waitDefaultTimeoutS: number
+  /** Maximum posts a single child may write to the board. */
+  readonly maxPostsPerChild: number
+  /** Maximum characters per board post. */
+  readonly maxPostChars: number
+  /** Maximum characters retained in a finished child's stored tool_result blocks for display. */
+  readonly childToolResultDisplayChars: number
+}
+
+export const DEFAULT_CONVERSATIONS_PARAMS: ConversationsParams = {
+  maxParallelReadCalls: 6,
+  toolRoundLimit: 50,
+  maxRunningChildren: 5,
+  maxChildrenPerReply: 12,
+  waitDefaultTimeoutS: 60,
+  maxPostsPerChild: 6,
+  maxPostChars: 400,
+  childToolResultDisplayChars: 2000,
+}
+
 /** The ports the conversations slice runs on, given once at startup. */
 export type ConversationsDeps = {
   readonly log: EventLog
@@ -28,6 +59,8 @@ export type ConversationsDeps = {
   readonly onStreamTrace?: (trace: StreamTrace) => void
   /** Whether to run the detached cache-riding turn-end title refresh hook (default true). */
   readonly autoTitle?: boolean
+  /** Optional overrides for tunable runtime parameters. */
+  readonly params?: Partial<ConversationsParams>
   /** Ports for the chat's views. */
   readonly ui: ConversationsViewDeps
 }
@@ -57,3 +90,9 @@ export const deps = (): ConversationsDeps => {
   }
   return current
 }
+
+/** Resolved tunable parameters for the installed slice. */
+export const runtimeParams = (): ConversationsParams => ({
+  ...DEFAULT_CONVERSATIONS_PARAMS,
+  ...deps().params,
+})

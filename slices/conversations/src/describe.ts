@@ -1,5 +1,5 @@
 import { isTranslationKey, translate } from './messages.js'
-import { classifyStatus } from './api/errors.js'
+import { classifyStatus } from '@deepseek-chat/lib-agent'
 import type { AssistantMessage } from './types.js'
 
 export type Notice = {

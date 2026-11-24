@@ -13,6 +13,7 @@ import { translate } from './messages.js'
 import { getChatMessages, useChatMessages, useHistoryState } from './sessionAccess.js'
 import { setDraftText } from './drafts.js'
 import {
+  continueReply,
   editMessage,
   initChat,
   newChat,
@@ -41,9 +42,22 @@ import {
 import { CollapsedSider } from './ui/sider/CollapsedSider.js'
 import { MobileSider, Sider } from './ui/sider/Sider.js'
 
-export type { ConversationsDeps } from './env.js'
+export {
+  DEFAULT_CONVERSATIONS_PARAMS,
+  type ConversationsDeps,
+  type ConversationsParams,
+} from './env.js'
 export type { StreamTrace, StreamTraceBlock } from './streamTrace.js'
-export type { ToolGateway, ToolKind, ToolResult, ToolRunContext } from './tools.js'
+export type {
+  AgentProfile,
+  AgentSource,
+  ToolCaller,
+  ToolEffect,
+  ToolGateway,
+  ToolKind,
+  ToolResult,
+  ToolRunContext,
+} from './tools.js'
 export type {
   ChatFile,
   ChatPanels,
@@ -51,13 +65,18 @@ export type {
   SettingsSection,
   VoiceViews,
 } from './views.js'
-export type { ClientTool } from './api/types.js'
+export type { ClientTool } from '@deepseek-chat/lib-agent'
 export type {
+  AgentRun,
+  AgentRunState,
   AskActionItem,
   AskActionMeta,
   AssistantMessage,
+  BoardPost,
   FileAttachment,
   Message,
+  PostAudience,
+  PostAuthor,
   PresentedFileRef,
   ReplyBlock,
   Session,
@@ -93,6 +112,8 @@ export const createConversationsSlice = (deps: ConversationsDeps) => {
       /** Sends the chat's draft; `false` when nothing was sent. */
       send: sendMessage,
       regenerate: regenerateReply,
+      /** Continues a stopped or interrupted reply (resuming tool loops when applicable). */
+      continueReply,
       /** Edits a question into a new version and replies to it; `false` when refused. */
       edit: editMessage,
       selectVersion: selectMessageVersion,
@@ -140,7 +161,7 @@ export type ConversationsSlice = ReturnType<typeof createConversationsSlice>
 
 // ---------- Pure model functions (also the boundary tests' surface) ----------
 
-export { ApiError, request } from './api/client.js'
+export { ApiError, request } from './apiClient.js'
 export {
   ASK_USER_INSTRUCTIONS,
   ASK_USER_TOOL,
@@ -158,7 +179,7 @@ export {
   buildAutoTitleRequest,
   parseAutoTitleResponse,
 } from './autoTitle.js'
-export { ServerSentEventDecoder, readServerSentEvents } from './api/sse.js'
+export { ServerSentEventDecoder, readServerSentEvents } from '@deepseek-chat/lib-agent'
 export { appendBranch, getVisibleMessages, normalizeSession, selectVersion } from './branches.js'
 export { setBrowser, setThinking, useComposerOptions } from './composerOptions.js'
 export {
@@ -168,6 +189,8 @@ export {
   settleReply,
   toRequestMessages,
 } from './reply.js'
+export { POST_TOOL_NAME, WAIT_TOOL_NAME } from './subagentTools.js'
+export { assignChildCitations, collectCitedUrls } from './citations.js'
 export { buildReplyView, getAreaTitle, needsWorkingIndicator } from './view.js'
 
 /** History archive codec (pure): the v3 export format's sessions and its ZIP container. */

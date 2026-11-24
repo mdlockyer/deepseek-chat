@@ -55,10 +55,11 @@ describe('web-research: declaring tools', () => {
   const { web } = setup(() => json({}))
   const names = (tools: { name: string }[]) => tools.map((tool) => tool.name)
 
-  it('declares search and scrape when search is enabled', () => {
+  it('declares search, scrape, and research when search is enabled', () => {
     assert.deepEqual(names(web.declareTools({ searchEnabled: true, questionText: 'hi' })), [
       'web_search',
       'web_scrape',
+      'research',
     ])
   })
 

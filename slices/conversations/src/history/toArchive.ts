@@ -1,5 +1,6 @@
-import type { ServerToolUseBlock } from '../api/types.js'
+import type { ServerToolUseBlock } from '@deepseek-chat/lib-agent'
 import { deps } from '../env.js'
+import { POST_TOOL_NAME, WAIT_TOOL_NAME } from '../subagentTools.js'
 import type { ToolKind } from '../tools.js'
 import { getVisibleMessages, normalizeSession } from '../branches.js'
 import { describeReply } from '../describe.js'
@@ -224,7 +225,12 @@ const assistantFragments = (message: AssistantMessage): Fragment[] => {
       }
     }
   }
-  const usedWeb = blocks.some((block) => block.type === 'server_tool_use') || webToolIds.size > 0
+  const usedWeb =
+    blocks.some(
+      (block) =>
+        block.type === 'server_tool_use' ||
+        (block.type === 'tool_result' && (block.searchResults?.length ?? 0) > 0)
+    ) || webToolIds.size > 0
   const fragments: Fragment[] = []
   let response: { type: 'RESPONSE' | 'TEMPLATE_RESPONSE'; content: string } | undefined
   let separateNextText = false
@@ -329,6 +335,11 @@ const assistantFragments = (message: AssistantMessage): Fragment[] => {
           appendResponse(fence('text', '[Skipped clarifying questions]'), true)
           separateNextText = true
         }
+        continue
+      }
+      if (kind === 'subagent' || block.name === WAIT_TOOL_NAME || block.name === POST_TOOL_NAME) {
+        // Exports keep every tool call's result text (including wait results and board posts)
+        // via the tool_result branch below, and leave child transcripts out (SPEC runtime rule 16).
         continue
       }
       const input = block.input as { code?: unknown } | null

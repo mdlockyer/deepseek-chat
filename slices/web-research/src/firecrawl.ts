@@ -10,6 +10,20 @@ export type FirecrawlParams = {
   verifyTimeoutMs: number
   maxToolTextChars: number
   defaultSearchLimit: number
+  /** Sliding window length for rate limiting (ms). */
+  rateWindowMs: number
+  /** Requests per window when running keyless. */
+  keylessRatePerMinute: number
+  /** Requests per window when a Firecrawl key is set. */
+  keyedRatePerMinute: number
+  /** Backoff applied to subsequent calls after HTTP 429 (ms). */
+  backoff429Ms: number
+  /** Maximum Firecrawl credits spent within one reply (0 = unlimited). */
+  maxCreditsPerReply: number
+  /** Maximum model rounds for a `research` subagent. */
+  researchMaxRounds: number
+  /** Maximum tool calls for a `research` subagent. */
+  researchMaxToolCalls: number
 }
 
 export const DEFAULT_FIRECRAWL_PARAMS: FirecrawlParams = {
@@ -18,7 +32,16 @@ export const DEFAULT_FIRECRAWL_PARAMS: FirecrawlParams = {
   verifyTimeoutMs: 15_000,
   maxToolTextChars: 24_000,
   defaultSearchLimit: 8,
+  rateWindowMs: 60_000,
+  keylessRatePerMinute: 10,
+  keyedRatePerMinute: 30,
+  backoff429Ms: 2_000,
+  maxCreditsPerReply: 120,
+  researchMaxRounds: 12,
+  researchMaxToolCalls: 16,
 }
+
+export type WebAudience = 'reply' | 'agent'
 
 export type WebSearchSource = {
   url: string
@@ -30,7 +53,7 @@ export type WebSearchSource = {
 
 export type SearchOutcome = { text: string; sources: WebSearchSource[] }
 
-export type ScrapeOutcome = { url: string; title: string | null; text: string }
+export type ScrapeOutcome = { url: string; title: string | null; text: string; markdown: string }
 
 export type KeyVerification =
   | { kind: 'valid' }
@@ -183,15 +206,26 @@ const request = async (
   return response
 }
 
-const describeFailure = (error: unknown, hasKey: boolean): string => {
+const describeFailure = (
+  error: unknown,
+  hasKey: boolean,
+  audience: WebAudience = 'reply'
+): string => {
   if (!(error instanceof FirecrawlRequestError)) {
     return error instanceof Error ? error.message : String(error)
   }
   const { failure } = error
   if (failure.kind === 'http' && failure.status === 401) {
-    return 'Firecrawl API key is invalid (HTTP 401). Update or remove it in Settings → API key.'
+    return audience === 'agent'
+      ? 'Firecrawl authentication failed (HTTP 401). Stop trying Firecrawl and finish with what you already have.'
+      : 'Firecrawl API key is invalid (HTTP 401). Update or remove it in Settings → API key.'
   }
   if (failure.kind === 'http' && failure.status === 429) {
+    if (audience === 'agent') {
+      return hasKey
+        ? 'Firecrawl rate or credit limit reached (HTTP 429). Finish with what you have or wait before trying another source.'
+        : 'Firecrawl keyless daily limit reached (HTTP 429). Finish with what you already have.'
+    }
     return hasKey
       ? 'Firecrawl rate or credit limit reached (HTTP 429). Please retry shortly or check your Firecrawl quota.'
       : 'Firecrawl keyless daily limit reached (HTTP 429). Add a free Firecrawl API key in Settings → API key for higher limits.'
@@ -247,7 +281,11 @@ const normalizeSearchItems = (payload: SearchApiResponse): WebSearchSource[] => 
   return sources
 }
 
-export const createFirecrawlClient = (fetch: HttpFetch, params: FirecrawlParams) => {
+export const createFirecrawlClient = (
+  fetch: HttpFetch,
+  params: FirecrawlParams,
+  hooks?: { onRateLimited?: () => void }
+) => {
   const headers = (apiKey: string | null): Record<string, string> => {
     const key = apiKey?.trim()
     return {
@@ -295,8 +333,10 @@ export const createFirecrawlClient = (fetch: HttpFetch, params: FirecrawlParams)
       limit?: number
       signal: AbortSignal
       citedUrls?: ReadonlyMap<string, number>
+      audience?: WebAudience
     }
   ): Promise<SearchOutcome> => {
+    const audience = options.audience ?? 'reply'
     const trimmedQuery = query.trim()
     const hasKey = Boolean(options.apiKey?.trim())
     const limit = Math.min(Math.max(Math.trunc(options.limit ?? params.defaultSearchLimit), 1), 10)
@@ -317,7 +357,14 @@ export const createFirecrawlClient = (fetch: HttpFetch, params: FirecrawlParams)
       if (options.signal.aborted) {
         throw error
       }
-      throw new Error(describeFailure(error, hasKey), { cause: error })
+      if (
+        error instanceof FirecrawlRequestError &&
+        error.failure.kind === 'http' &&
+        error.failure.status === 429
+      ) {
+        hooks?.onRateLimited?.()
+      }
+      throw new Error(describeFailure(error, hasKey, audience), { cause: error })
     }
 
     const payload = (await response.json()) as SearchApiResponse
@@ -343,16 +390,19 @@ export const createFirecrawlClient = (fetch: HttpFetch, params: FirecrawlParams)
       }
       return parts.join('\n')
     })
-    const text = truncate(
-      `${lines.join('\n\n')}\n\nWhen referencing these sources in your answer, cite them inline using [citation:1], [citation:2], etc. matching the numbers above.`
-    )
+    const body =
+      audience === 'agent'
+        ? lines.join('\n\n')
+        : `${lines.join('\n\n')}\n\nWhen referencing these sources in your answer, cite them inline using [citation:1], [citation:2], etc. matching the numbers above.`
+    const text = truncate(body)
     return { text, sources }
   }
 
   const scrape = async (
     url: string,
-    options: { apiKey: string | null; signal: AbortSignal }
+    options: { apiKey: string | null; signal: AbortSignal; audience?: WebAudience }
   ): Promise<ScrapeOutcome> => {
+    const audience = options.audience ?? 'reply'
     const trimmedUrl = url.trim()
     if (!isHttpUrl(trimmedUrl)) {
       throw new Error(`Invalid URL: ${url}. Only http:// and https:// URLs are supported.`)
@@ -375,7 +425,14 @@ export const createFirecrawlClient = (fetch: HttpFetch, params: FirecrawlParams)
       if (options.signal.aborted) {
         throw error
       }
-      throw new Error(describeFailure(error, hasKey), { cause: error })
+      if (
+        error instanceof FirecrawlRequestError &&
+        error.failure.kind === 'http' &&
+        error.failure.status === 429
+      ) {
+        hooks?.onRateLimited?.()
+      }
+      throw new Error(describeFailure(error, hasKey, audience), { cause: error })
     }
 
     const payload = (await response.json()) as ScrapeApiResponse
@@ -405,7 +462,7 @@ export const createFirecrawlClient = (fetch: HttpFetch, params: FirecrawlParams)
 
     const header = [title ? `Title: ${title}` : null, `URL: ${finalUrl}`].filter(Boolean).join('\n')
     const body = markdown || '[No readable text content extracted from this page.]'
-    return { url: finalUrl, title, text: truncate(`${header}\n\n${body}`) }
+    return { url: finalUrl, title, text: truncate(`${header}\n\n${body}`), markdown }
   }
 
   return { verifyKey, search, scrape }

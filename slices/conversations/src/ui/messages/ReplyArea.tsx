@@ -20,10 +20,13 @@ import { loadFile } from '../../db.js'
 import { type AssistantMessage, type PresentedFileRef } from '../../types.js'
 import { deps } from '../../env.js'
 import {
+  buildReplyView,
   getAreaTitle,
   isDeepSearchKind,
   isImageSearchKind,
+  type AgentStep,
   type AskStep,
+  type BoardStep,
   type BrowserStep,
   type FileStep,
   type FindStep,
@@ -35,6 +38,7 @@ import {
   type SearchStep,
   type Source,
   type Step,
+  type WaitStep,
   showsRunning,
 } from '../../view.js'
 import { Tooltip } from '@deepseek-chat/spine/design'
@@ -74,8 +78,9 @@ export const showsLiveTitle = (
   !hasResponse &&
   (message.thinking ?? view.steps.some((step) => step.type === 'thinking'))
 
-/** 运行中的工具行（模型在工作）；等待用户回答的澄清提问不算 */
-export const runsTool = (step: Step) => step.type !== 'ask' && showsRunning(step)
+/** 运行中的工具行（模型在工作）；等待用户回答的澄清提问与子代理行（用静态指示灯，鲸鱼留给 wait 行）不算 */
+export const runsTool = (step: Step) =>
+  step.type !== 'ask' && step.type !== 'agent' && showsRunning(step)
 
 /** 工具行图标：这一行拿到本条回复的鲸鱼时换成鲸鱼，否则用静态图标 */
 const toolIcon = (whale: boolean, icon: ReactNode): ReactNode =>
@@ -162,7 +167,10 @@ const stepKey = (step: Step, index: number) =>
   step.type === 'python' ||
   step.type === 'browser' ||
   step.type === 'file' ||
-  step.type === 'ask'
+  step.type === 'ask' ||
+  step.type === 'agent' ||
+  step.type === 'wait' ||
+  step.type === 'board'
     ? step.key
     : `${step.type}-${index}`
 
@@ -242,6 +250,12 @@ const StepItem = ({
       return <FileRow step={step} whale={whale} isLast={isLast} />
     case 'ask':
       return <AskRow step={step} isLast={isLast} />
+    case 'agent':
+      return <AgentRow step={step} message={message} isLast={isLast} />
+    case 'wait':
+      return <WaitRow step={step} whale={whale} isLast={isLast} />
+    case 'board':
+      return <BoardRow step={step} isLast={isLast} />
     default:
       return null
   }
@@ -822,6 +836,146 @@ const AskRow = ({ step, isLast }: { step: AskStep; isLast: boolean }) => {
             ))}
           </div>
         ) : null}
+      </div>
+    </ToolRow>
+  )
+}
+
+/** Subagent row: shows profile label, summary, latest step, and static running indicator; expands to render child blocks via buildReplyView. */
+const AgentRow = ({
+  step,
+  message,
+  isLast,
+}: {
+  step: AgentStep
+  message: AssistantMessage
+  isLast: boolean
+}) => {
+  const t = useTranslate()
+  const [open, setOpen] = useState(false)
+  const running = step.state.status === 'running'
+  const statusLabel = (() => {
+    switch (step.state.status) {
+      case 'running':
+        return t('agentRunning')
+      case 'finished':
+        return t('agentFinished')
+      case 'exhausted':
+        return t('agentExhausted')
+      case 'failed':
+        return t('agentFailed')
+      case 'stopped':
+        return t('agentStopped')
+    }
+  })()
+
+  const icon = running ? (
+    <span className={styles.agentRunningDot} aria-label={statusLabel}>
+      <span className={styles.dotInner} />
+    </span>
+  ) : step.state.status === 'failed' || step.state.status === 'stopped' ? (
+    <IconCloseFill14 />
+  ) : (
+    <IconCheckedOutline14 />
+  )
+
+  const childView = open
+    ? buildReplyView(
+        {
+          ...message,
+          id: `${message.id}-${step.runId}`,
+          blocks: step.blocks,
+          agents: undefined,
+          board: undefined,
+        },
+        running
+      )
+    : null
+
+  return (
+    <ToolRow icon={icon} isLast={isLast}>
+      <div style={{ width: '100%', minWidth: 0 }}>
+        <button
+          type="button"
+          className={styles.agentToggle}
+          aria-expanded={open}
+          onClick={() => setOpen((value) => !value)}
+        >
+          <span className={styles.agentLabel}>{step.label}</span>
+          <span className={clsx(styles.agentMeta, running && styles.shimmer)}>{statusLabel}</span>
+          {step.latestStep && running ? (
+            <span className={styles.agentMeta}>· {step.latestStep}</span>
+          ) : null}
+          {open ? <IconChevronDownOutline14 /> : <IconChevronRightOutline14 />}
+        </button>
+        {step.summary ? <div className={styles.stepSummary}>{step.summary}</div> : null}
+        {open && childView ? (
+          <div className={styles.agentBody}>
+            {childView.steps.map((childStep, index) => (
+              <StepItem
+                key={stepKey(childStep, index)}
+                step={childStep}
+                message={message}
+                sources={childView.sources}
+                streaming={running}
+                whale={false}
+                isLast={index === childView.steps.length - 1}
+              />
+            ))}
+          </div>
+        ) : null}
+      </div>
+    </ToolRow>
+  )
+}
+
+/** Lead wait row: hosts the reply's single whale while waiting on running subagents. */
+const WaitRow = ({ step, whale, isLast }: { step: WaitStep; whale: boolean; isLast: boolean }) => {
+  const t = useTranslate()
+  const running = step.status === 'wip'
+  const label = running ? step.summary || t('agentWaiting') : step.summary || t('agentWaitDone')
+
+  return (
+    <ToolRow
+      icon={toolIcon(whale, running ? <IconThinkOutline16 /> : <IconCheckedOutline14 />)}
+      isLast={isLast}
+    >
+      <span className={clsx(styles.intro, running && styles.shimmer)}>{label}</span>
+    </ToolRow>
+  )
+}
+
+/** Shared board posts for this reply (findings, questions with assumptions, lead directions). */
+const BoardRow = ({ step, isLast }: { step: BoardStep; isLast: boolean }) => {
+  const t = useTranslate()
+  return (
+    <ToolRow icon={<IconBrowseOutline16 />} isLast={isLast}>
+      <div style={{ width: '100%', minWidth: 0 }}>
+        <span className={styles.intro}>{t('agentBoardTitle')}</span>
+        <div className={styles.boardList}>
+          {step.posts.map((post) => (
+            <div key={post.id} className={styles.boardItem}>
+              {post.kind === 'finding' ? (
+                <>
+                  <span className={styles.boardKind}>{t('agentBoardFinding')}:</span>
+                  <span>{post.text}</span>
+                </>
+              ) : post.kind === 'question' ? (
+                <>
+                  <span className={styles.boardKind}>{t('agentBoardQuestion')}:</span>
+                  <span>
+                    {post.question} ({t('agentBoardAssuming', { assumption: post.assumption })})
+                  </span>
+                </>
+              ) : (
+                <>
+                  <span className={styles.boardKind}>{t('agentBoardDirection')}:</span>
+                  <span>{post.text}</span>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
       </div>
     </ToolRow>
   )

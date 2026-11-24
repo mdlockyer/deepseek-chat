@@ -1,13 +1,13 @@
 import type { TranslationMessage } from './messages.js'
-import type { ApiErrorKind } from './api/client.js'
 import type {
+  ApiErrorKind,
   ChatModel,
   MessageUsage,
   ServerToolBlock,
   StopDetails,
   StopReason,
   TextCitation,
-} from './api/types.js'
+} from '@deepseek-chat/lib-agent'
 
 /**
  * 消息附件。id 是本地标识（IndexedDB files 表的主键，原件按它存储，所有引用同一 id 的消息共用一份），
@@ -148,6 +148,32 @@ export type ToolResultPart = {
 /** 服务端工具调用与结果块按协议原样保存；历史请求只回传 read_link 调用与结果 */
 export type ReplyBlock = ThinkingPart | TextPart | ServerToolBlock | ToolCallPart | ToolResultPart
 
+export type AgentRunState =
+  | { status: 'running'; round: number }
+  | { status: 'finished' }
+  | { status: 'exhausted'; limit: 'rounds' | 'toolCalls' }
+  | { status: 'failed'; error: { kind: ApiErrorKind; message: string } }
+  | { status: 'stopped'; reason: 'user' | 'interrupted' | 'roundLimit' }
+
+export type AgentRun = {
+  runId: string
+  profile: string
+  label?: string
+  startedBy: string
+  summary?: string
+  state: AgentRunState
+  blocks: ReplyBlock[]
+  usage?: MessageUsage
+}
+
+export type PostAuthor = { kind: 'lead' } | { kind: 'agent'; runId: string }
+export type PostAudience = { kind: 'all' } | { kind: 'agent'; runId: string }
+
+export type BoardPost =
+  | { kind: 'finding'; id: string; author: PostAuthor; text: string; url: string }
+  | { kind: 'question'; id: string; author: PostAuthor; question: string; assumption: string }
+  | { kind: 'direction'; id: string; author: { kind: 'lead' }; to: PostAudience; text: string }
+
 /**
  * pending：已发出请求，还没收到事件；streaming：正在接收；
  * done：收到 message_stop；stopped：用户停止或页面关闭；error：请求或流出错
@@ -175,6 +201,10 @@ export type AssistantMessage = MessageBranch & {
   status: ReplyStatus
   /** 可识别的内容块按接收顺序排列；续写产生的块追加在已有块之后 */
   blocks: ReplyBlock[]
+  /** Child subagent runs spawned during this reply, persisted alongside the reply. */
+  agents?: AgentRun[]
+  /** Shared message board posts for this reply, persisted alongside the reply. */
+  board?: BoardPost[]
   stopReason?: StopReason
   stopDetails?: StopDetails
   /** 最近一次请求的用量，续写后更新 */

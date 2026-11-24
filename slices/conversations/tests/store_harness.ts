@@ -6,8 +6,12 @@ import 'fake-indexeddb/auto'
 import { memoryStore } from '@deepseek-chat/spine/ports'
 import { EventLog } from '@deepseek-chat/spine/runtime'
 import type {
+  AgentProfile,
+  ConversationsParams,
   StreamTrace,
   ToolCallPart,
+  ToolCaller,
+  ToolEffect,
   ToolKind,
   ToolResult,
   ToolRunContext,
@@ -25,15 +29,18 @@ Object.assign(globalThis, {
 
 /** What a request asked for, as the API sees it. */
 export type ApiRequest = {
+  readonly model: string
   readonly system: string
   readonly messages: { role: string; content: unknown }[]
   readonly tools: { name: string }[]
+  readonly tool_choice?: { type: string; name?: string }
 }
 
-/** One scripted reply: text, or tool calls (each `{ name, input }`). */
+/** One scripted reply: text, tool calls (each `{ name, input }`), or an HTTP error status. */
 export type ApiReply =
   | { readonly text: string; readonly title?: string }
   | { readonly calls: readonly { name: string; input: unknown }[] }
+  | { readonly errorStatus: number; readonly errorMessage: string }
 
 const usage = {
   input_tokens: 1,
@@ -42,7 +49,7 @@ const usage = {
   output_tokens: 1,
 }
 
-const toEvents = (reply: ApiReply, callIds: () => string) => {
+const toEvents = (reply: Exclude<ApiReply, { errorStatus: number }>, callIds: () => string) => {
   const blocks =
     'text' in reply
       ? [{ start: { type: 'text', text: '' }, delta: { type: 'text_delta', text: reply.text } }]
@@ -86,11 +93,32 @@ export type GatewayRun = {
   readonly context: ToolRunContext
 }
 
+const effectForKind = (kind: ToolKind | null): ToolEffect => {
+  switch (kind) {
+    case 'web_search':
+    case 'web_scrape':
+    case 'read_file':
+      return 'read'
+    case 'subagent':
+      return 'spawn'
+    case 'present_file':
+    case 'edit_file':
+      return 'artifact'
+    case 'ask_user':
+      return 'interactive'
+    default:
+      return 'session'
+  }
+}
+
 export const createStoreEnv = (
   options: {
     kinds?: Record<string, ToolKind>
-    instructions?: (names: ReadonlySet<string>) => string[]
+    effects?: Record<string, ToolEffect>
+    profiles?: Record<string, AgentProfile>
+    instructions?: (names: ReadonlySet<string>, audience: ToolCaller['kind']) => string[]
     autoTitle?: boolean
+    params?: Partial<ConversationsParams>
   } = {}
 ) => {
   const requests: ApiRequest[] = []
@@ -107,11 +135,14 @@ export const createStoreEnv = (
   ) => ({ content: `ran ${call.name}`, status: 'ok' })
   const log = new EventLog()
   const kinds = options.kinds ?? {}
+  const effects = options.effects ?? {}
+  const profiles = options.profiles ?? {}
   const traces: StreamTrace[] = []
 
   const slice = installTestSlice({
     log,
     autoTitle: options.autoTitle ?? false,
+    params: options.params,
     onStreamTrace: (trace) => {
       traces.push(trace)
     },
@@ -122,6 +153,12 @@ export const createStoreEnv = (
       const body = JSON.parse(String(init.body)) as ApiRequest
       requests.push(body)
       const reply = await respond(body, init.signal ?? undefined)
+      if ('errorStatus' in reply) {
+        return new Response(JSON.stringify({ error: { message: reply.errorMessage } }), {
+          status: reply.errorStatus,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
       return sseResponse(toEvents(reply, () => `call${++callCounter}`))
     },
     store: memoryStore(),
@@ -129,7 +166,11 @@ export const createStoreEnv = (
       declare: () =>
         Object.keys(kinds).map((name) => ({ name, description: name, input_schema: {} })),
       instructions: options.instructions ?? (() => []),
+      describe: (name) =>
+        Object.hasOwn(kinds, name) ? { name, description: name, input_schema: {} } : null,
       kindOf: (name) => kinds[name] ?? null,
+      effectOf: (name) => effects[name] ?? effectForKind(kinds[name] ?? null),
+      agentProfile: (name) => (Object.hasOwn(profiles, name) ? profiles[name] : null),
       fenceLanguage: () => 'text',
       run: (call, context) => {
         const running = context.replyBlocks.find(

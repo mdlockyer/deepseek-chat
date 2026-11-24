@@ -1,4 +1,8 @@
-import type { ServerToolUseBlock, WebFetchResult, WebFetchToolResultBlock } from '../api/types.js'
+import type {
+  ServerToolUseBlock,
+  WebFetchResult,
+  WebFetchToolResultBlock,
+} from '@deepseek-chat/lib-agent'
 import type {
   AssistantMessage,
   FileAttachment,

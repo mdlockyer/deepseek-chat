@@ -1,4 +1,4 @@
-import type { MessageStreamEvent } from './api/types.js'
+import type { MessageStreamEvent } from '@deepseek-chat/lib-agent'
 
 /**
  * Timing of one streamed request, for diagnosing gaps in what the user sees. Times are ms after

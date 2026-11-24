@@ -8,13 +8,20 @@ import {
   ASK_USER_TOOL,
   ASK_USER_TOOL_NAME,
   runAskUser,
+  type AgentProfile,
+  type ClientTool,
   type Message,
   type PresentedFileRef,
+  type ToolEffect,
   type ToolGateway,
   type ToolKind,
   type ToolResult,
 } from '@deepseek-chat/slice-conversations'
-import { WEB_SCRAPE_TOOL_NAME, WEB_SEARCH_TOOL_NAME } from '@deepseek-chat/slice-web-research'
+import {
+  RESEARCH_TOOL_NAME,
+  WEB_SCRAPE_TOOL_NAME,
+  WEB_SEARCH_TOOL_NAME,
+} from '@deepseek-chat/slice-web-research'
 import {
   EDIT_FILE_TOOL_NAME,
   PRESENT_FILE_TOOL_NAME,
@@ -66,6 +73,8 @@ const kindOf = (name: string): ToolKind | null => {
       return 'web_search'
     case WEB_SCRAPE_TOOL_NAME:
       return 'web_scrape'
+    case RESEARCH_TOOL_NAME:
+      return 'subagent'
     case PRESENT_FILE_TOOL_NAME:
       return 'present_file'
     case EDIT_FILE_TOOL_NAME:
@@ -78,6 +87,26 @@ const kindOf = (name: string): ToolKind | null => {
       return 'ask_user'
     default:
       return BROWSER_TOOL_NAMES.has(name) ? 'browser' : null
+  }
+}
+
+const effectOf = (name: string): ToolEffect => {
+  switch (name) {
+    case WEB_SEARCH_TOOL_NAME:
+    case WEB_SCRAPE_TOOL_NAME:
+    case READ_FILE_TOOL_NAME:
+      return 'read'
+    case RESEARCH_TOOL_NAME:
+      return 'spawn'
+    case PRESENT_FILE_TOOL_NAME:
+    case EDIT_FILE_TOOL_NAME:
+      return 'artifact'
+    case ASK_USER_TOOL_NAME:
+      return 'interactive'
+    case python.toolName:
+      return 'session'
+    default:
+      return 'session'
   }
 }
 
@@ -116,6 +145,21 @@ const withSummaryParam = (tool: DeclaredTool): DeclaredTool => {
   }
 }
 
+const describe = (name: string): ClientTool | null => {
+  const candidates: ClientTool[] = [
+    ...workspaceFiles.declareTools(),
+    ASK_USER_TOOL,
+    ...webResearch.declareTools({ searchEnabled: true, questionText: '' }),
+    python.tool,
+    ...browser.declareTools({ enabled: true }),
+  ]
+  const found = candidates.find((tool) => tool.name === name)
+  return found ? withSummaryParam(found) : null
+}
+
+const agentProfile = (name: string): AgentProfile | null =>
+  name === RESEARCH_TOOL_NAME ? webResearch.researchProfile : null
+
 export const toolGateway: ToolGateway = {
   declare: ({ search, python: pythonEnabled, browser: browserEnabled, questionText }) =>
     [
@@ -126,18 +170,25 @@ export const toolGateway: ToolGateway = {
       ...browser.declareTools({ enabled: browserEnabled }),
     ].map(withSummaryParam),
 
-  instructions: (names) => {
+  instructions: (names, audience) => {
     const has = (handles: (name: string) => boolean) => [...names].some(handles)
+    const hasWeb = has(webResearch.handles) || names.has(RESEARCH_TOOL_NAME)
     return [
       ...(has(workspaceFiles.handles) ? [workspaceFiles.instructions] : []),
       ...(names.has(ASK_USER_TOOL_NAME) ? [ASK_USER_INSTRUCTIONS] : []),
-      ...(has(webResearch.handles) ? [webResearch.instructions] : []),
+      ...(hasWeb ? [webResearch.instructionsFor(audience, names)] : []),
       ...(names.has(python.toolName) ? [python.instructions] : []),
       ...(has(browser.handles) ? [browser.instructions] : []),
     ]
   },
 
+  describe,
+
   kindOf,
+
+  effectOf,
+
+  agentProfile,
 
   fenceLanguage: (path) => getCodeLanguage(path, ''),
 
@@ -152,25 +203,13 @@ export const toolGateway: ToolGateway = {
     }
 
     if (webResearch.handles(call.name)) {
-      // 同一回复内已编号的来源 URL → 编号，保证多次搜索时 [citation:N] 与前端编号一致
-      const citedUrls = new Map<string, number>()
-      for (const block of context.replyBlocks) {
-        if (block.type !== 'tool_result') {
-          continue
-        }
-        for (const item of block.searchResults ?? []) {
-          if (!citedUrls.has(item.url)) {
-            citedUrls.set(item.url, citedUrls.size + 1)
-          }
-        }
-        if (block.scrapedPage && !citedUrls.has(block.scrapedPage.url)) {
-          citedUrls.set(block.scrapedPage.url, citedUrls.size + 1)
-        }
-      }
+      const replyId = context.messages.at(-1)?.id ?? ''
       const outcome = await webResearch.run(call.name, call.input, {
         signal: context.signal,
         inputJson: context.inputJson,
-        citedUrls,
+        citedUrls: context.caller.kind === 'reply' ? context.citedUrls : undefined,
+        caller: context.caller,
+        replyKey: replyId ? `${context.sessionId}:${replyId}` : context.sessionId,
       })
       return {
         content: outcome.content,

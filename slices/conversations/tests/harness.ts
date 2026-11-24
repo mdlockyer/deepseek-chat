@@ -4,6 +4,7 @@ import { EventLog } from '@deepseek-chat/spine/runtime'
 import {
   createConversationsSlice,
   type ConversationsDeps,
+  type ToolEffect,
   type ToolKind,
 } from '@deepseek-chat/slice-conversations'
 
@@ -46,6 +47,22 @@ const KINDS: Record<string, ToolKind> = {
   ask_user: 'ask_user',
 }
 
+const defaultEffectForKind = (kind: ToolKind | null): ToolEffect => {
+  switch (kind) {
+    case 'web_search':
+    case 'web_scrape':
+    case 'read_file':
+      return 'read'
+    case 'present_file':
+    case 'edit_file':
+      return 'artifact'
+    case 'ask_user':
+      return 'interactive'
+    default:
+      return 'session'
+  }
+}
+
 /**
  * Creates the slice once for this test file (one instance per process, like the app) with
  * offline ports. `fetch` defers to `globalThis.fetch` so tests can replace it.
@@ -59,7 +76,11 @@ export const installTestSlice = (overrides: Partial<ConversationsDeps> = {}) =>
     tools: {
       declare: () => [],
       instructions: () => [],
+      describe: () => null,
       kindOf: (name) => KINDS[name] ?? (name.startsWith('browser_') ? 'browser' : null),
+      effectOf: (name) =>
+        defaultEffectForKind(KINDS[name] ?? (name.startsWith('browser_') ? 'browser' : null)),
+      agentProfile: () => null,
       // Only the extensions these tests use.
       fenceLanguage: (path) => (path.endsWith('.html') ? 'html' : 'text'),
       run: async (call) => ({ content: `Unknown tool: ${call.name}`, status: 'error' }),

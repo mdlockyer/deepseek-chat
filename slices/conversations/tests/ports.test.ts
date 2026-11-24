@@ -27,7 +27,10 @@ const slice = installTestSlice({
   tools: {
     declare: () => [],
     instructions: () => [],
+    describe: () => null,
     kindOf: (name) => KINDS[name] ?? null,
+    effectOf: (name) => (KINDS[name] === 'web_search' ? 'read' : 'session'),
+    agentProfile: () => null,
     fenceLanguage: (path) => (path.endsWith('.lisp') ? 'lisp' : 'text'),
     run: async () => ({ content: '', status: 'ok' }),
   },

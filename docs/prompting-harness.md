@@ -11,15 +11,17 @@ Write the harness prompt **in the voice of a human engineer explaining the app t
 3. **One voice across slices.** Even though Sealed Slice Architecture (SSA) isolates each tool slice's code (`workspace-files`, `web-research`, `python`, `browser`), all prompt sections read as one continuous document when joined. Never bolt on a new slice with a jarring register shift (e.g., all-caps imperatives or robotic bullet soup).
 4. **Keep tool schemas crisp.** Put the architectural "why" and cross-tool guidance in the system prompt section; keep each tool's `description` focused on what that specific tool does, when to pick it over a sibling tool, and its input/output contract.
 
-## 3-Layer Prompt Architecture
+## 4-Layer Prompt Architecture
 
-The harness splits context into three layers so the model gets complete situational awareness **without breaking KV-cache prefix reuse**:
+The harness splits context into four layers so both the lead model and child subagents get complete
+situational awareness **without breaking KV-cache prefix reuse**:
 
-| Layer                               | Location                                                                      | Lifecycle                                              | Contents                                                                                                                                                                 |
-| :---------------------------------- | :---------------------------------------------------------------------------- | :----------------------------------------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **1. Core Harness Orientation**     | `SYSTEM_PROMPT` in `slices/conversations/src/store.ts`                        | Static across every turn                               | Identity, split-pane UI layout, collapsed thinking + visible tool activity, universal `summary` parameter contract, pointer to `latest_reminder`.                        |
-| **2. Conditional Tool Sections**    | `instructions` exported by each tool slice, assembled in `app/toolGateway.ts` | Static per active tool-toggle set                      | Only the sections for tools declared on the current turn (`workspace-files`, `web-research`, `python`, `browser`). Prevents the model from hallucinating disabled tools. |
-| **3. Dynamic Environment Snapshot** | `createLatestReminder` in `slices/conversations/src/latestReminder.ts`        | Emitted in `latest_reminder` message only when changed | DeepSeek server-validated 5-field CSV: `<YYYY-MM-DD>,<weekday>,<location>,<App\|Web>,<language>`.                                                                        |
+| Layer                               | Location                                                                                                                                                                                                                    | Lifecycle                                              | Contents                                                                                                                                                                                                       |
+| :---------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :----------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **1. Core Harness Orientation**     | `SYSTEM_PROMPT` in `slices/conversations/src/store.ts`                                                                                                                                                                      | Static across every turn                               | Identity, split-pane UI layout, collapsed thinking + visible tool activity, universal `summary` parameter contract, pointer to `latest_reminder`.                                                              |
+| **2. Conditional Tool Sections**    | `instructions` exported by each tool slice, assembled in `app/toolGateway.ts` (+ `wait`/`post` section in `slices/conversations/src/subagentTools.ts` when any subagent tool is declared)                                   | Static per active tool-toggle set                      | Only the sections for tools declared on the current turn (`workspace-files`, `web-research`, `python`, `browser`, plus subagent coordination when active).                                                     |
+| **3. Dynamic Environment Snapshot** | `createLatestReminder` in `slices/conversations/src/latestReminder.ts`                                                                                                                                                      | Emitted in `latest_reminder` message only when changed | DeepSeek server-validated 5-field CSV: `<YYYY-MM-DD>,<weekday>,<location>,<App\|Web>,<language>`.                                                                                                              |
+| **4. Subagent System Prompt**       | Orientation in `slices/conversations/src/subagentTools.ts` + agent-audience tool sections (`instructions(names, 'agent')`) + profile role prompt (`AgentProfile.system`, e.g. `slices/web-research/src/researchProfile.ts`) | Static per profile                                     | Briefs child subagents (app, lead, read-only tools, shared board & `post`, hard budget & finish tool) without UI-only claims. Per-call objectives go in the first user message via `AgentProfile.task(input)`. |
 
 ### KV-Cache Stability Rules
 
@@ -30,16 +32,17 @@ The harness splits context into three layers so the model gets complete situatio
 
 ## Where Every Prompt Piece Lives
 
-| Concern                                                 | Source of Truth                                                      |
-| :------------------------------------------------------ | :------------------------------------------------------------------- |
-| Core orientation (`SYSTEM_PROMPT`)                      | `slices/conversations/src/store.ts`                                  |
-| Dynamic context (`latest_reminder`)                     | `slices/conversations/src/latestReminder.ts`                         |
-| Tool aggregation, `summary` injection, section order    | `app/toolGateway.ts`                                                 |
-| File Preview (`present_file`, `edit_file`, `read_file`) | `PREVIEW_TOOL_INSTRUCTIONS` in `slices/workspace-files/src/tools.ts` |
-| Clarifying Questions (`ask_user`)                       | `ASK_USER_INSTRUCTIONS` in `slices/conversations/src/askUser.ts`     |
-| Web Research (`web_search`, `web_scrape`)               | `INSTRUCTIONS` in `slices/web-research/src/index.ts`                 |
-| Python (`python`, native vs. web)                       | `buildPythonInstructions` in `slices/python/src/tool.ts`             |
-| Built-in Browser (`browser_*`)                          | `BROWSER_TOOL_INSTRUCTIONS` in `slices/browser/src/tools.ts`         |
+| Concern                                                 | Source of Truth                                                                                            |
+| :------------------------------------------------------ | :--------------------------------------------------------------------------------------------------------- |
+| Core orientation (`SYSTEM_PROMPT`)                      | `slices/conversations/src/store.ts`                                                                        |
+| Dynamic context (`latest_reminder`)                     | `slices/conversations/src/latestReminder.ts`                                                               |
+| Tool aggregation, `summary` injection, section order    | `app/toolGateway.ts`                                                                                       |
+| File Preview (`present_file`, `edit_file`, `read_file`) | `PREVIEW_TOOL_INSTRUCTIONS` in `slices/workspace-files/src/tools.ts`                                       |
+| Clarifying Questions (`ask_user`)                       | `ASK_USER_INSTRUCTIONS` in `slices/conversations/src/askUser.ts`                                           |
+| Subagent Coordination (`wait`, `post`) & Orientation    | `buildLeadSubagentInstructions`, `buildSubagentOrientation` in `slices/conversations/src/subagentTools.ts` |
+| Web Research (`web_search`, `web_scrape`, `research`)   | `instructionsFor` & `createResearchProfile` in `slices/web-research/src/index.ts` and `researchProfile.ts` |
+| Python (`python`, native vs. web)                       | `buildPythonInstructions` in `slices/python/src/tool.ts`                                                   |
+| Built-in Browser (`browser_*`)                          | `BROWSER_TOOL_INSTRUCTIONS` in `slices/browser/src/tools.ts`                                               |
 
 ## Maintenance Checklist (Preventing Drift & Regression)
 

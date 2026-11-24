@@ -1,8 +1,12 @@
 import { create } from 'zustand'
 import type { LinkedMessage, TranslationMessage } from './messages.js'
-import { uploadFile } from './api/client.js'
-import { classifyApiError, getUploadErrorInfo, isRetryableApiError } from './api/errors.js'
-import type { FilePurpose } from './api/types.js'
+import {
+  classifyApiError,
+  getUploadErrorInfo,
+  isRetryableApiError,
+  type FilePurpose,
+} from '@deepseek-chat/lib-agent'
+import { uploadFile } from './apiClient.js'
 import { ACCEPT_FILE_EXTS } from './uploadExts.js'
 
 /** 允许上传的扩展名，按扩展名白名单过滤，清单见 uploadExts.ts */

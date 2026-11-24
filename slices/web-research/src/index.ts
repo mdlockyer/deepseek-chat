@@ -5,17 +5,37 @@ import {
   createFirecrawlClient,
   type FirecrawlParams,
   type KeyVerification,
+  type WebAudience,
   type WebSearchSource,
 } from './firecrawl.js'
 import { createKeyStore, type FirecrawlKeyState } from './key.js'
 import { KeySettings, createUseKeyEditor, type KeyEditor } from './KeySettings.js'
+import { SCRAPE_CREDITS, createFirecrawlLimiter, searchCredits } from './limiter.js'
+import {
+  RESEARCH_TOOL,
+  RESEARCH_TOOL_NAME,
+  buildAgentWebInstructions,
+  buildLeadResearchInstructions,
+  createPageCache,
+  createResearchProfile,
+  type ResearchProfile,
+} from './researchProfile.js'
 
-export type { FirecrawlParams, KeyVerification, WebSearchSource } from './firecrawl.js'
+export type { FirecrawlParams, KeyVerification, WebAudience, WebSearchSource } from './firecrawl.js'
 export type { FirecrawlKeyState } from './key.js'
 export type { KeyEditor } from './KeySettings.js'
+export {
+  FINISH_RESEARCH_TOOL_NAME,
+  RESEARCH_TOOL_NAME,
+  type ResearchProfile,
+  type ResearchSource,
+} from './researchProfile.js'
 
 export const WEB_SEARCH_TOOL_NAME = 'web_search'
 export const WEB_SCRAPE_TOOL_NAME = 'web_scrape'
+
+/** Who invoked a web tool call: the lead reply or a child subagent. */
+export type WebCaller = { kind: 'reply' } | { kind: 'agent'; profile: string; runId: string }
 
 /** Model-visible client tool definition (client tools carry no `type` field). */
 export type WebToolDefinition = {
@@ -40,6 +60,10 @@ export type WebRunOptions = {
   readonly inputJson?: string
   /** URL → citation number already used earlier in the same reply. */
   readonly citedUrls?: ReadonlyMap<string, number>
+  /** Caller provenance: affects result wording and per-run quote cache. */
+  readonly caller?: WebCaller
+  /** Identifier for the reply, used to enforce the per-reply Firecrawl credit budget. */
+  readonly replyKey?: string
 }
 
 export type WebResearchDeps = {
@@ -52,8 +76,17 @@ export type WebResearchDeps = {
 }
 
 export type WebResearchSlice = {
-  readonly toolNames: { readonly search: string; readonly scrape: string }
+  readonly toolNames: {
+    readonly search: string
+    readonly scrape: string
+    readonly research: string
+  }
+  /** Default lead-audience prompt section (for backwards compatibility). */
   readonly instructions: string
+  /** Prompt section worded for `audience` (`reply` or `agent`) and the declared tool names. */
+  instructionsFor(audience: WebAudience, declaredNames?: ReadonlySet<string>): string
+  /** Deep research subagent profile owned by this slice. */
+  readonly researchProfile: ResearchProfile
   declareTools(turn: { searchEnabled: boolean; questionText: string }): WebToolDefinition[]
   handles(toolName: string): boolean
   run(toolName: string, input: unknown, options: WebRunOptions): Promise<WebToolResult>
@@ -70,10 +103,9 @@ export type WebResearchSlice = {
   KeySettings: typeof KeySettings
 }
 
-const SEARCH_TOOL: WebToolDefinition = {
+const buildSearchTool = (params: FirecrawlParams): WebToolDefinition => ({
   name: WEB_SEARCH_TOOL_NAME,
-  description:
-    'Search the live web using Firecrawl and return ranked results with titles, URLs, and snippets. Follow up with web_scrape on promising URLs when full page details are needed.',
+  description: `Search the live web using Firecrawl and return ranked results with titles, URLs, and snippets. Follow up with web_scrape on promising URLs when full page details are needed.`,
   input_schema: {
     type: 'object',
     required: ['query'],
@@ -83,11 +115,11 @@ const SEARCH_TOOL: WebToolDefinition = {
         type: 'integer',
         minimum: 1,
         maximum: 10,
-        description: 'Maximum number of results to return (default 8).',
+        description: `Maximum number of results to return (default ${params.defaultSearchLimit}).`,
       },
     },
   },
-}
+})
 
 const SCRAPE_TOOL: WebToolDefinition = {
   name: WEB_SCRAPE_TOOL_NAME,
@@ -102,19 +134,40 @@ const SCRAPE_TOOL: WebToolDefinition = {
   },
 }
 
-const INSTRUCTIONS = [
-  'Web Research (`web_search`, `web_scrape`):',
-  'You have fast headless web tools powered by Firecrawl. Reach for `web_search` and `web_scrape` when you need current facts, documentation, or clean Markdown from a URL—they are much faster and lighter than driving the built-in browser. Save the built-in browser for interactive flows, logged-in sessions, JavaScript-heavy apps, or visual inspection.',
-  'When citing `web_search` results in your answer, place inline markers like `[citation:1]`, `[citation:2]` matching the 1-based result numbers returned by `web_search`—the app renders them as clickable source links and populates the Search Results panel.',
-].join('\n')
+const buildReplyWebInstructions = (includeResearch: boolean): string => {
+  const base = [
+    'Web Research (`web_search`, `web_scrape`):',
+    'You have fast headless web tools powered by Firecrawl. Reach for `web_search` and `web_scrape` when you need current facts, documentation, or clean Markdown from a URL—they are much faster and lighter than driving the built-in browser. Save the built-in browser for interactive flows, logged-in sessions, JavaScript-heavy apps, or visual inspection.',
+    'When citing `web_search` results in your answer, place inline markers like `[citation:1]`, `[citation:2]` matching the 1-based result numbers returned by `web_search`—the app renders them as clickable source links and populates the Search Results panel.',
+  ].join('\n')
+  return includeResearch ? `${base}\n\n${buildLeadResearchInstructions()}` : base
+}
 
 const containsHttpUrl = (text: string) => /https?:\/\/\S+/i.test(text)
 
 const ABORTED: WebToolResult = { status: 'aborted', content: 'Aborted by user.' }
 
 export const createWebResearchSlice = (deps: WebResearchDeps): WebResearchSlice => {
-  const client = createFirecrawlClient(deps.fetch, { ...DEFAULT_FIRECRAWL_PARAMS, ...deps.params })
+  const params: FirecrawlParams = { ...DEFAULT_FIRECRAWL_PARAMS, ...deps.params }
+  const limiter = createFirecrawlLimiter({
+    rateWindowMs: params.rateWindowMs,
+    keylessRatePerMinute: params.keylessRatePerMinute,
+    keyedRatePerMinute: params.keyedRatePerMinute,
+    backoff429Ms: params.backoff429Ms,
+    maxCreditsPerReply: params.maxCreditsPerReply,
+  })
+  const client = createFirecrawlClient(deps.fetch, params, {
+    onRateLimited: () => limiter.noteRateLimited(),
+  })
   const keys = createKeyStore({ store: deps.store, secret: deps.secret })
+  const pageCache = createPageCache()
+  const searchTool = buildSearchTool(params)
+  const toolNames = {
+    search: WEB_SEARCH_TOOL_NAME,
+    scrape: WEB_SCRAPE_TOOL_NAME,
+    research: RESEARCH_TOOL_NAME,
+  } as const
+  const researchProfile = createResearchProfile(params, pageCache, toolNames)
 
   const invalidInput = (expected: string, input: unknown, inputJson?: string): WebToolResult => ({
     status: 'error',
@@ -133,12 +186,31 @@ export const createWebResearchSlice = (deps: WebResearchDeps): WebResearchSlice 
     if (!query.trim()) {
       return invalidInput('{"query": string}', input, options.inputJson)
     }
+    const apiKey = keys.getApiKey()
+    const limit = Math.min(
+      Math.max(
+        Math.trunc(typeof raw?.limit === 'number' ? raw.limit : params.defaultSearchLimit),
+        1
+      ),
+      10
+    )
+    const audience: WebAudience = options.caller?.kind === 'agent' ? 'agent' : 'reply'
     try {
-      const outcome = await client.search(query, {
-        apiKey: keys.getApiKey(),
+      const slot = await limiter.acquire({
+        hasKey: Boolean(apiKey?.trim()),
+        credits: searchCredits(limit),
+        replyKey: options.replyKey,
         signal: options.signal,
-        ...(typeof raw?.limit === 'number' ? { limit: raw.limit } : {}),
-        ...(options.citedUrls ? { citedUrls: options.citedUrls } : {}),
+      })
+      if (!slot.ok) {
+        return { status: 'error', content: slot.message }
+      }
+      const outcome = await client.search(query, {
+        apiKey,
+        signal: options.signal,
+        limit,
+        audience,
+        ...(audience === 'reply' && options.citedUrls ? { citedUrls: options.citedUrls } : {}),
       })
       return { status: 'ok', content: outcome.text, searchResults: outcome.sources }
     } catch (error) {
@@ -154,8 +226,37 @@ export const createWebResearchSlice = (deps: WebResearchDeps): WebResearchSlice 
     if (url === null || !url.trim()) {
       return invalidInput('{"url": string}', input, options.inputJson)
     }
+    const apiKey = keys.getApiKey()
+    const audience: WebAudience = options.caller?.kind === 'agent' ? 'agent' : 'reply'
     try {
-      const outcome = await client.scrape(url, { apiKey: keys.getApiKey(), signal: options.signal })
+      // Validate URL before acquiring limiter slot / spending credits.
+      const trimmed = url.trim()
+      let isHttp = false
+      try {
+        const proto = new URL(trimmed).protocol
+        isHttp = proto === 'http:' || proto === 'https:'
+      } catch {
+        isHttp = false
+      }
+      if (!isHttp) {
+        return {
+          status: 'error',
+          content: `Invalid URL: ${url}. Only http:// and https:// URLs are supported.`,
+        }
+      }
+      const slot = await limiter.acquire({
+        hasKey: Boolean(apiKey?.trim()),
+        credits: SCRAPE_CREDITS,
+        replyKey: options.replyKey,
+        signal: options.signal,
+      })
+      if (!slot.ok) {
+        return { status: 'error', content: slot.message }
+      }
+      const outcome = await client.scrape(url, { apiKey, signal: options.signal, audience })
+      if (options.caller?.kind === 'agent') {
+        pageCache.record(options.caller.runId, [trimmed, outcome.url], outcome.markdown)
+      }
       return {
         status: 'ok',
         content: outcome.text,
@@ -166,12 +267,22 @@ export const createWebResearchSlice = (deps: WebResearchDeps): WebResearchSlice 
     }
   }
 
+  const instructionsFor = (audience: WebAudience, declaredNames?: ReadonlySet<string>): string => {
+    if (audience === 'agent') {
+      return buildAgentWebInstructions(params)
+    }
+    const includeResearch = declaredNames ? declaredNames.has(RESEARCH_TOOL_NAME) : true
+    return buildReplyWebInstructions(includeResearch)
+  }
+
   return {
-    toolNames: { search: WEB_SEARCH_TOOL_NAME, scrape: WEB_SCRAPE_TOOL_NAME },
-    instructions: INSTRUCTIONS,
+    toolNames,
+    instructions: buildReplyWebInstructions(true),
+    instructionsFor,
+    researchProfile,
     declareTools: ({ searchEnabled, questionText }) =>
       searchEnabled
-        ? [SEARCH_TOOL, SCRAPE_TOOL]
+        ? [searchTool, SCRAPE_TOOL, RESEARCH_TOOL]
         : containsHttpUrl(questionText)
           ? [SCRAPE_TOOL]
           : [],

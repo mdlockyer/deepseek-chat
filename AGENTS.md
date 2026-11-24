@@ -7,6 +7,7 @@ Tiers, top to bottom: `app/` → `slices/*` → `libs/*` → `spine/`. `src-taur
 
 - Test one slice: `node --import ./scripts/test-loader.mjs --test 'slices/<target>/tests/**/*.test.ts'`
 - Test one library: `node --import ./scripts/test-loader.mjs --test 'libs/<target>/tests/**/*.test.ts'`
+- Test `libs/agent`: `node --import ./scripts/test-loader.mjs --test 'libs/agent/tests/**/*.test.ts'`
 - Test the spine: `node --import ./scripts/test-loader.mjs --test 'spine/tests/**/*.test.ts'`
 - Test app wiring: `node --import ./scripts/test-loader.mjs --test 'app/tests/**/*.test.ts'`
 - Verify the DAG and slice anatomy: `pnpm check:dag`

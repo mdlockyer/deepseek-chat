@@ -6,11 +6,16 @@ import type {
   WebFetchToolResultBlock,
   WebSearchResult,
   WebSearchToolResultBlock,
-} from './api/types.js'
+} from '@deepseek-chat/lib-agent'
+import { POST_TOOL_NAME, WAIT_TOOL_NAME } from './subagentTools.js'
 import type {
+  AgentRun,
+  AgentRunState,
   AskActionMeta,
   AssistantMessage,
+  BoardPost,
   PresentedFileRef,
+  ReplyBlock,
   ThinkingPart,
   ToolResultPart,
 } from './types.js'
@@ -131,6 +136,32 @@ export type AskStep = {
   askAction?: AskActionMeta
 }
 
+export type AgentStep = {
+  type: 'agent'
+  key: string
+  runId: string
+  profile: string
+  label: string
+  summary?: string
+  state: AgentRunState
+  latestStep?: string
+  blocks: ReplyBlock[]
+}
+
+export type WaitStep = {
+  type: 'wait'
+  key: string
+  summary?: string
+  until?: 'any' | 'all'
+  status: ToolStatus
+}
+
+export type BoardStep = {
+  type: 'board'
+  key: string
+  posts: BoardPost[]
+}
+
 export type Step =
   | SearchStep
   | OpenStep
@@ -142,6 +173,9 @@ export type Step =
   | BrowserStep
   | FileStep
   | AskStep
+  | AgentStep
+  | WaitStep
+  | BoardStep
 
 export type ReplyView = {
   steps: Step[]
@@ -325,12 +359,16 @@ export const buildReplyView = (reply: AssistantMessage, streaming: boolean): Rep
 
   const { kindOf } = deps().tools
 
-  // 来源编号按搜索结果、打开的网页在回复中出现的顺序，与正文引用无关
+  const agentByCall = new Map<string, AgentRun>()
+  for (const agent of reply.agents ?? []) {
+    agentByCall.set(agent.startedBy, agent)
+  }
+
+  // 来源编号按搜索结果、打开的网页在回复中出现的顺序，与正文引用无关（不限于 web_search，包括 wait 等工具）
   for (const block of reply.blocks) {
     if (block.type === 'tool_use') {
       const result = toolResults.get(block.id)
-      const kind = kindOf(block.name)
-      if (kind === 'web_search' && result?.searchResults) {
+      if (result?.searchResults) {
         for (const item of result.searchResults) {
           const source = registry.add(item.url, item.title, item.publishedAt, {
             snippet: item.snippet,
@@ -341,7 +379,8 @@ export const buildReplyView = (reply: AssistantMessage, streaming: boolean): Rep
             searchResults.push(source)
           }
         }
-      } else if (kind === 'web_scrape' && result?.scrapedPage) {
+      }
+      if (result?.scrapedPage) {
         registry.add(result.scrapedPage.url, result.scrapedPage.title, null)
       }
       continue
@@ -563,6 +602,46 @@ export const buildReplyView = (reply: AssistantMessage, streaming: boolean): Rep
         })
         return
       }
+      if (block.name === WAIT_TOOL_NAME) {
+        const status = getClientToolStatus(toolResult, streaming)
+        const untilRaw = getPartialStringField(block.input, block.inputJson, 'until')
+        steps.push({
+          type: 'wait',
+          key: block.id,
+          ...(toolSummary ? { summary: toolSummary } : {}),
+          ...(untilRaw === 'any' || untilRaw === 'all' ? { until: untilRaw } : {}),
+          status,
+        })
+        return
+      }
+      if (block.name === POST_TOOL_NAME) {
+        // Board posts are shown in the shared board step; keep lead post calls out of Python fallback.
+        return
+      }
+      if (toolKind === 'subagent') {
+        const run = agentByCall.get(block.id)
+        const state: AgentRunState = run
+          ? run.state
+          : toolResult?.status === 'error'
+            ? { status: 'failed', error: { kind: 'protocol', message: toolResult.content } }
+            : streaming
+              ? { status: 'running', round: 1 }
+              : { status: 'stopped', reason: 'interrupted' }
+        const childBlocks = run?.blocks ?? []
+        const latestStep = summarizeChildLatestStep(childBlocks, state.status === 'running')
+        steps.push({
+          type: 'agent',
+          key: block.id,
+          runId: run?.runId ?? block.id,
+          profile: run?.profile ?? block.name,
+          label: run?.label ?? block.name,
+          ...(toolSummary || run?.summary ? { summary: toolSummary ?? run?.summary } : {}),
+          state,
+          ...(latestStep ? { latestStep } : {}),
+          blocks: childBlocks,
+        })
+        return
+      }
       const input = block.input as { code?: unknown } | null
       steps.push({
         type: 'python',
@@ -664,6 +743,21 @@ export const buildReplyView = (reply: AssistantMessage, streaming: boolean): Rep
     }
   })
 
+  if (reply.board && reply.board.length > 0) {
+    // Insert the board timeline right after the last subagent/wait step (or at the end of steps).
+    const insertAt = steps.findLastIndex((s) => s.type === 'agent' || s.type === 'wait')
+    const boardStep: BoardStep = {
+      type: 'board',
+      key: `board-${reply.board.length}`,
+      posts: reply.board,
+    }
+    if (insertAt >= 0) {
+      steps.splice(insertAt + 1, 0, boardStep)
+    } else {
+      steps.push(boardStep)
+    }
+  }
+
   const answer = pendingText.length > 0 ? joinTextBlocks(pendingText, registry) : null
   const files = new Map<string, PresentedFileRef>()
   for (const block of reply.blocks) {
@@ -763,7 +857,38 @@ export const getAreaTitle = (
   if (last?.type === 'ask' && last.status === 'wip') {
     return last.summary || translate('askWaiting')
   }
+  if (last?.type === 'wait' && last.status === 'wip') {
+    return last.summary || translate('agentWaiting')
+  }
+  if (last?.type === 'agent' && last.state.status === 'running') {
+    return last.latestStep || last.summary || translate('agentRunning')
+  }
   return translate('messageThinking')
+}
+
+const summarizeChildLatestStep = (
+  blocks: readonly ReplyBlock[],
+  running: boolean
+): string | undefined => {
+  for (let i = blocks.length - 1; i >= 0; i -= 1) {
+    const block = blocks[i]
+    if (block.type === 'tool_use') {
+      const summary = getToolSummary(block.input, block.inputJson)
+      if (summary) {
+        return summary
+      }
+      const query = getPartialStringField(block.input, block.inputJson, 'query')
+      if (query) {
+        return query
+      }
+      const url = getPartialStringField(block.input, block.inputJson, 'url')
+      if (url) {
+        return url
+      }
+      return block.name
+    }
+  }
+  return running ? translate('messageThinking') : undefined
 }
 
 /**
@@ -776,7 +901,10 @@ export const showsRunning = (step: Step): boolean => {
     case 'browser':
     case 'file':
     case 'ask':
+    case 'wait':
       return step.status === 'wip'
+    case 'agent':
+      return step.state.status === 'running'
     case 'open':
       return step.pages.some((page) => page.status === 'wip')
     case 'read_link':
@@ -787,6 +915,7 @@ export const showsRunning = (step: Step): boolean => {
       return step.result === null || step.result.status === 'running'
     case 'thinking':
     case 'text':
+    case 'board':
       return false
   }
 }

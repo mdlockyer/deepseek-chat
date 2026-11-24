@@ -1,12 +1,12 @@
-import type {
-  AssistantBlockParam,
-  FileBlockParam,
-  MessageParam,
-  MessageStreamEvent,
-  OutputBlockStart,
-  TextBlockParam,
-  ToolResultBlockParam,
-} from './api/types.js'
+import {
+  applyEvent as applyAgentEvent,
+  type AssistantBlockParam,
+  type FileBlockParam,
+  type MessageParam,
+  type MessageStreamEvent,
+  type TextBlockParam,
+  type ToolResultBlockParam,
+} from '@deepseek-chat/lib-agent'
 import type {
   AssistantMessage,
   FileAttachment,
@@ -32,42 +32,6 @@ const toFileBlocks = (files: FileAttachment[]): FileBlockParam[] =>
       : []
   )
 
-const toReplyBlock = (block: OutputBlockStart, now: number): ReplyBlock | null => {
-  switch (block.type) {
-    case 'text':
-      return { type: 'text', text: block.text, citations: block.citations ?? [] }
-    case 'thinking':
-      return {
-        type: 'thinking',
-        thinking: block.thinking,
-        signature: block.signature,
-        startedAt: now,
-      }
-    case 'server_tool_use':
-    case 'web_search_tool_result':
-    case 'web_fetch_tool_result':
-      return block
-    case 'tool_use':
-      return { type: 'tool_use', id: block.id, name: block.name, input: {}, inputJson: '' }
-    default:
-      return null
-  }
-}
-
-const updateBlock = (
-  reply: AssistantMessage,
-  index: number,
-  update: (block: ReplyBlock) => ReplyBlock
-): AssistantMessage => {
-  const block = reply.blocks[index]
-  if (!block) {
-    return reply
-  }
-  const blocks = [...reply.blocks]
-  blocks[index] = update(block)
-  return { ...reply, blocks }
-}
-
 /**
  * 把一个流式事件合并进回复：只追加可识别的内容块，用本次请求的临时索引映射处理增量。
  * 跳过的块不占位；续写直接追加到已有内容之后，message_delta 更新结束原因与累计用量。
@@ -78,85 +42,39 @@ export const applyEvent = (
   now: number,
   blockIndexes: Map<number, number>
 ): AssistantMessage => {
-  const next: AssistantMessage =
-    reply.status === 'streaming' ? reply : { ...reply, status: 'streaming' }
-  switch (event.type) {
-    case 'message_start':
-      return { ...next, usage: event.message.usage ?? next.usage }
-    case 'content_block_start': {
-      blockIndexes.delete(event.index)
-      const block = toReplyBlock(event.content_block, now)
-      if (!block) {
-        return next
-      }
-      blockIndexes.set(event.index, next.blocks.length)
-      // 含客户端工具往返的回复不作为续写前缀。
-      return {
-        ...next,
-        ...(block.type === 'tool_use' ? { prefix: false } : {}),
-        blocks: [...next.blocks, block],
-      }
+  const activeBlocks: Record<number, number> = {}
+  for (const [streamIdx, blockIdx] of blockIndexes) {
+    activeBlocks[streamIdx] = blockIdx
+  }
+  const nextTranscript = applyAgentEvent(
+    {
+      blocks: reply.blocks,
+      stopReason: reply.stopReason,
+      stopDetails: reply.stopDetails,
+      usage: reply.usage,
+      activeBlocks,
+    },
+    event,
+    now
+  )
+  blockIndexes.clear()
+  if (nextTranscript.activeBlocks) {
+    for (const [streamIdx, blockIdx] of Object.entries(nextTranscript.activeBlocks)) {
+      blockIndexes.set(Number(streamIdx), blockIdx)
     }
-    case 'content_block_delta': {
-      const index = blockIndexes.get(event.index)
-      if (index === undefined) {
-        return next
-      }
-      const { delta } = event
-      return updateBlock(next, index, (block) => {
-        if (block.type === 'text' && delta.type === 'text_delta') {
-          return { ...block, text: block.text + delta.text }
-        }
-        if (block.type === 'thinking' && delta.type === 'thinking_delta') {
-          return { ...block, thinking: block.thinking + delta.thinking }
-        }
-        if (block.type === 'thinking' && delta.type === 'signature_delta') {
-          return { ...block, signature: (block.signature ?? '') + delta.signature }
-        }
-        if (block.type === 'text' && delta.type === 'citations_delta') {
-          return { ...block, citations: [...(block.citations ?? []), delta.citation] }
-        }
-        if (block.type === 'tool_use' && delta.type === 'input_json_delta') {
-          return { ...block, inputJson: (block.inputJson ?? '') + delta.partial_json }
-        }
-        return block
-      })
-    }
-    case 'content_block_stop': {
-      const index = blockIndexes.get(event.index)
-      if (index === undefined) {
-        return next
-      }
-      blockIndexes.delete(event.index)
-      return updateBlock(next, index, (block) => {
-        if (block.type === 'tool_use') {
-          const { inputJson, ...rest } = block
-          if (!inputJson?.trim()) {
-            return rest
-          }
-          try {
-            return { ...rest, input: JSON.parse(inputJson) as unknown }
-          } catch {
-            // 解析失败时保留原文，执行时作为错误回传给模型。
-            return block
-          }
-        }
-        return block.type === 'thinking' &&
-          block.startedAt !== undefined &&
-          block.endedAt === undefined
-          ? { ...block, endedAt: now }
-          : block
-      })
-    }
-    case 'message_delta':
-      return {
-        ...next,
-        stopReason: event.delta.stop_reason,
-        stopDetails: event.delta.stop_details,
-        usage: event.usage ?? next.usage,
-      }
-    default:
-      return next
+  }
+  const addedToolUse =
+    event.type === 'content_block_start' &&
+    event.content_block.type === 'tool_use' &&
+    nextTranscript.blocks.length > reply.blocks.length
+  return {
+    ...reply,
+    status: 'streaming',
+    ...(addedToolUse ? { prefix: false } : {}),
+    blocks: nextTranscript.blocks,
+    stopReason: nextTranscript.stopReason,
+    stopDetails: nextTranscript.stopDetails,
+    usage: nextTranscript.usage,
   }
 }
 

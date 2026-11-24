@@ -19,7 +19,6 @@ const isCitation = (value: unknown): value is TextCitation =>
   isString(value.url) &&
   isNullableString(value.title)
 
-/** 只检查消费内容所需的字段，签名及服务端附带的信息保持原样。 */
 const readBlock = (value: unknown): OutputBlockStart | null => {
   if (!isRecord(value)) {
     return null
@@ -175,7 +174,7 @@ const isUsage = (value: unknown) =>
     (key) => typeof value[key] === 'number' && Number.isFinite(value[key])
   )
 
-/** 未识别或无法安全消费的事件静默丢弃，不影响后续有效内容与正常结束。 */
+/** Drops unrecognised or malformed events cleanly without interrupting the stream. */
 export const readMessageEvent = (value: unknown): MessageStreamEvent | null => {
   if (!isRecord(value)) {
     return null

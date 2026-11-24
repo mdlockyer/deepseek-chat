@@ -41,5 +41,13 @@ declare const styles: {
   readonly chipFailed: string
   readonly chipIcon: string
   readonly chipText: string
+  readonly agentRunningDot: string
+  readonly agentToggle: string
+  readonly agentLabel: string
+  readonly agentMeta: string
+  readonly agentBody: string
+  readonly boardList: string
+  readonly boardItem: string
+  readonly boardKind: string
 }
 export = styles
