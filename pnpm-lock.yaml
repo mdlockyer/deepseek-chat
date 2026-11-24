@@ -14,6 +14,9 @@ importers:
       '@deepseek-chat/lib-markdown':
         specifier: workspace:*
         version: link:libs/markdown
+      '@deepseek-chat/lib-stage':
+        specifier: workspace:*
+        version: link:libs/stage
       '@deepseek-chat/lib-ui':
         specifier: workspace:*
         version: link:libs/ui
@@ -160,6 +163,24 @@ importers:
         specifier: 18.3.1
         version: 18.3.1
 
+  libs/stage:
+    dependencies:
+      '@deepseek-chat/lib-ui':
+        specifier: workspace:*
+        version: link:../ui
+      '@deepseek-chat/spine':
+        specifier: workspace:*
+        version: link:../../spine
+      clsx:
+        specifier: 2.1.1
+        version: 2.1.1
+      react:
+        specifier: 18.3.1
+        version: 18.3.1
+      react-dom:
+        specifier: 18.3.1
+        version: 18.3.1(react@18.3.1)
+
   libs/ui:
     dependencies:
       '@deepseek-chat/spine':
@@ -189,6 +210,9 @@ importers:
 
   slices/browser:
     dependencies:
+      '@deepseek-chat/lib-stage':
+        specifier: workspace:*
+        version: link:../../libs/stage
       '@deepseek-chat/spine':
         specifier: workspace:*
         version: link:../../spine

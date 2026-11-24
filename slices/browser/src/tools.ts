@@ -1,4 +1,4 @@
-import { resolveViewportRequest } from '@deepseek-chat/spine/design'
+import { resolveViewportRequest } from './viewportRequest.js'
 import {
   buildClickScript,
   buildHideSomBadgesScript,

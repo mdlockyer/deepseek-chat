@@ -572,4 +572,63 @@ describe('browser: tool runs', () => {
     assert.equal(b?.viewport, null)
     assert.equal(b?.zoom, 1)
   })
+
+  it('resolves browser_set_viewport tool requests across presets, aspect ratios, clamps, auto, and errors', async () => {
+    const env = await withVisiblePage()
+    env.browser.setStageSize({ width: 520, height: 660 })
+
+    const mobile = await env.browser.run(
+      'browser_set_viewport',
+      { preset: 'mobile' },
+      { signal: signal(), sessionId: 's1' }
+    )
+    assert.equal(mobile.status, 'ok')
+    assert.deepEqual(env.browser.getSession('s1').tabs[0]?.viewport, {
+      width: 390,
+      height: 844,
+      preset: 'mobile',
+      aspectRatio: null,
+    })
+
+    const ratio = await env.browser.run(
+      'browser_set_viewport',
+      { aspect_ratio: '4:3', width: 800 },
+      { signal: signal(), sessionId: 's1' }
+    )
+    assert.equal(ratio.status, 'ok')
+    assert.deepEqual(env.browser.getSession('s1').tabs[0]?.viewport, {
+      width: 800,
+      height: 600,
+      preset: null,
+      aspectRatio: '4:3',
+    })
+
+    const clamped = await env.browser.run(
+      'browser_set_viewport',
+      { width: 100, height: 4000 },
+      { signal: signal(), sessionId: 's1' }
+    )
+    assert.equal(clamped.status, 'ok')
+    assert.deepEqual(env.browser.getSession('s1').tabs[0]?.viewport, {
+      width: 320,
+      height: 2560,
+      preset: null,
+      aspectRatio: null,
+    })
+
+    const reset = await env.browser.run(
+      'browser_set_viewport',
+      { preset: 'auto' },
+      { signal: signal(), sessionId: 's1' }
+    )
+    assert.equal(reset.status, 'ok')
+    assert.equal(env.browser.getSession('s1').tabs[0]?.viewport, null)
+
+    const invalid = await env.browser.run(
+      'browser_set_viewport',
+      { aspect_ratio: 'wide' },
+      { signal: signal(), sessionId: 's1' }
+    )
+    assert.equal(invalid.status, 'error')
+  })
 })
