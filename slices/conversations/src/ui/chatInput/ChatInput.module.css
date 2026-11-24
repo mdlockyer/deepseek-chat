@@ -1,6 +1,10 @@
 .wrapper {
   --line-height: 24px;
   --input-padding-top: 12px;
+  /* 悬停与焦点用中性灰，不用品牌蓝；焦点描边与输入底色对比 ≥ 3:1（WCAG 1.4.11），两种主题都满足 */
+  --composer-border-hover: var(--dsw-static-neutral-bluish-300);
+  --composer-focus: var(--dsw-static-neutral-bluish-600);
+  --composer-halo: color-mix(in srgb, var(--composer-focus) 16%, transparent);
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
@@ -12,14 +16,17 @@
   border: 1px solid var(--dsw-alias-border-l3);
   background: var(--dsw-specific-input-major);
   overflow: hidden;
-  /* 边框颜色滑动；焦点环保持即时，满足焦点可见 */
-  transition: border-color var(--ds-transition-duration) var(--ds-ease-in-out);
+  transition:
+    border-color var(--ds-transition-duration) var(--ds-ease-in-out),
+    box-shadow var(--ds-transition-duration) var(--ds-ease-in-out);
 
-  /* 输入框没有可见标签，焦点必须由容器给出 */
-  &:focus-within {
-    border-color: var(--dsw-alias-brand-primary);
-    outline: 2px solid var(--dsw-alias-button-primary-fill);
-    outline-offset: 0;
+  &:hover {
+    border-color: var(--composer-border-hover);
+  }
+
+  [data-ds-dark-theme] & {
+    --composer-border-hover: var(--dsw-static-neutral-bluish-700);
+    --composer-halo: color-mix(in srgb, var(--composer-focus) 24%, transparent);
   }
 }
 
@@ -38,6 +45,18 @@
   [data-ds-dark-theme] & {
     box-shadow: none;
   }
+}
+
+/*
+ * 焦点：灰色描边 + 4px 柔和光晕 + 轻微抬升。输入框没有可见标签，焦点由容器给出。
+ * 写在 .session / .home 之后，覆盖它们的阴影（含深色主题下首页的 none）。
+ */
+.wrapper:focus-within {
+  border-color: var(--composer-focus);
+  box-shadow:
+    0 0 0 4px var(--composer-halo),
+    0 6px 16px rgba(0, 0, 0, 0.06),
+    0 2px 4px rgba(0, 0, 0, 0.04);
 }
 
 .attachments {
