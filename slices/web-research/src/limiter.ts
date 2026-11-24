@@ -212,3 +212,57 @@ export const createFirecrawlLimiter = (
 
   return { reserveCredits, acquireSlot, noteRateLimited, creditsUsed }
 }
+
+export type ConcurrencyGate = {
+  acquire(signal: AbortSignal): Promise<SlotLease>
+}
+
+/** Simple FIFO concurrency cap with abortable waiting (used for local desktop scrapes). */
+export const createConcurrencyGate = (maxConcurrentRequests: number): ConcurrencyGate => {
+  const maxConcurrent = Math.max(1, Math.trunc(maxConcurrentRequests))
+  let inFlight = 0
+  let waiters: Array<() => void> = []
+
+  const makeLease = (): SlotLease => {
+    let released = false
+    return {
+      release: () => {
+        if (released) {
+          return
+        }
+        released = true
+        inFlight = Math.max(0, inFlight - 1)
+        const next = waiters.shift()
+        next?.()
+      },
+    }
+  }
+
+  const acquire = async (signal: AbortSignal): Promise<SlotLease> => {
+    if (signal.aborted) {
+      throw signal.reason ?? new DOMException('Aborted', 'AbortError')
+    }
+    while (inFlight >= maxConcurrent) {
+      await new Promise<void>((resolve, reject) => {
+        if (signal.aborted) {
+          reject(signal.reason ?? new DOMException('Aborted', 'AbortError'))
+          return
+        }
+        const wake = () => {
+          signal.removeEventListener('abort', onAbort)
+          resolve()
+        }
+        const onAbort = () => {
+          waiters = waiters.filter((entry) => entry !== wake)
+          reject(signal.reason ?? new DOMException('Aborted', 'AbortError'))
+        }
+        waiters.push(wake)
+        signal.addEventListener('abort', onAbort, { once: true })
+      })
+    }
+    inFlight += 1
+    return makeLease()
+  }
+
+  return { acquire }
+}

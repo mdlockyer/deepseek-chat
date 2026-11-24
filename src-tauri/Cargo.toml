@@ -29,10 +29,18 @@ percent-encoding = "2"
 tauri-plugin-http = "2"
 tauri-plugin-opener = "2"
 url = "2"
-tokio = { version = "1", features = ["sync", "time"] }
+tokio = { version = "1", features = ["net", "sync", "time"] }
 base64 = "0.22"
-reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls"] }
+reqwest = { version = "0.12", default-features = false, features = [
+  "blocking",
+  "rustls-tls",
+  "gzip",
+  "brotli",
+  "deflate",
+] }
 sha2 = "0.10"
+dom_smoothie = "0.18"
+htmd = "0.5"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
@@ -62,3 +70,6 @@ objc2-web-kit = { version = "0.3.2", default-features = false, features = [
   "WKSnapshotConfiguration",
   "WKWebView",
 ] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "io-util"] }

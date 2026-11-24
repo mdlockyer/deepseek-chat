@@ -18,6 +18,8 @@ export type FirecrawlParams = {
   keyedRatePerMinute: number
   /** Maximum simultaneous in-flight Firecrawl requests across all callers. */
   maxConcurrentRequests: number
+  /** Maximum simultaneous in-flight local `web_scrape` calls across all callers. */
+  maxLocalScrapeConcurrency: number
   /** Base backoff applied after HTTP 429 (ms; doubles on subsequent retries). */
   backoff429Ms: number
   /** Maximum automatic retries for transient keyed HTTP 429 responses. */
@@ -40,6 +42,7 @@ export const DEFAULT_FIRECRAWL_PARAMS: FirecrawlParams = {
   keylessRatePerMinute: 10,
   keyedRatePerMinute: 20,
   maxConcurrentRequests: 3,
+  maxLocalScrapeConcurrency: 6,
   backoff429Ms: 2_000,
   max429Retries: 3,
   maxCreditsPerReply: 120,
@@ -351,6 +354,29 @@ const normalizeSearchItems = (payload: SearchApiResponse): WebSearchSource[] => 
   return sources
 }
 
+export const truncateToolText = (text: string, limit: number): string =>
+  text.length <= limit
+    ? text
+    : `${text.slice(0, limit)}\n\n[Truncated after ${limit.toLocaleString('en-US')} characters]`
+
+export const formatScrapeOutcome = (input: {
+  url: string
+  title: string | null
+  markdown: string
+  maxToolTextChars: number
+}): ScrapeOutcome => {
+  const title = input.title?.trim() ? input.title.trim() : null
+  const markdown = input.markdown.trim()
+  const header = [title ? `Title: ${title}` : null, `URL: ${input.url}`].filter(Boolean).join('\n')
+  const body = markdown || '[No readable text content extracted from this page.]'
+  return {
+    url: input.url,
+    title,
+    text: truncateToolText(`${header}\n\n${body}`, input.maxToolTextChars),
+    markdown,
+  }
+}
+
 export const createFirecrawlClient = (
   fetch: HttpFetch,
   params: FirecrawlParams,
@@ -364,12 +390,7 @@ export const createFirecrawlClient = (
     }
   }
 
-  const truncate = (text: string): string => {
-    const limit = params.maxToolTextChars
-    return text.length <= limit
-      ? text
-      : `${text.slice(0, limit)}\n\n[Truncated after ${limit.toLocaleString('en-US')} characters]`
-  }
+  const truncate = (text: string): string => truncateToolText(text, params.maxToolTextChars)
 
   /** GET /v2/team/credit-usage spends no credits. */
   const verifyKey = async (apiKey: string, signal?: AbortSignal): Promise<KeyVerification> => {
@@ -530,9 +551,12 @@ export const createFirecrawlClient = (
       throw new Error(`Page returned HTTP ${statusCode}${detail}.`)
     }
 
-    const header = [title ? `Title: ${title}` : null, `URL: ${finalUrl}`].filter(Boolean).join('\n')
-    const body = markdown || '[No readable text content extracted from this page.]'
-    return { url: finalUrl, title, text: truncate(`${header}\n\n${body}`), markdown }
+    return formatScrapeOutcome({
+      url: finalUrl,
+      title,
+      markdown,
+      maxToolTextChars: params.maxToolTextChars,
+    })
   }
 
   return { verifyKey, search, scrape }

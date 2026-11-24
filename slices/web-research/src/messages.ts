@@ -5,6 +5,8 @@ export const webResearchMessages = defineMessages({
     firecrawlKeyLabel: 'Firecrawl 密钥（可选）',
     firecrawlKeyDescription:
       '用于联网搜索与读取网页。留空时默认使用 Firecrawl 无密钥免费额度，填写密钥可获得更高限额。',
+    firecrawlKeyDescriptionDesktop:
+      '用于联网搜索（桌面端读取网页正文在本地完成，不消耗额度）。留空时默认使用 Firecrawl 无密钥免费额度，填写密钥可获得更高限额。',
     firecrawlKeyKeylessStatus: '当前使用免费无密钥额度（按 IP 限流）',
     firecrawlKeyPlaceholder: '请输入 Firecrawl API Key（fc-...）',
     firecrawlKeyAdd: '添加密钥',
@@ -29,6 +31,8 @@ export const webResearchMessages = defineMessages({
     firecrawlKeyLabel: 'Firecrawl API key (optional)',
     firecrawlKeyDescription:
       'Powers web search and page reading. Leave empty to use Firecrawl’s keyless free tier, or add a key for higher limits.',
+    firecrawlKeyDescriptionDesktop:
+      'Powers web search (page reading runs locally on desktop and uses no credits). Leave empty to use Firecrawl’s keyless free tier, or add a key for higher limits.',
     firecrawlKeyKeylessStatus: 'Using keyless free tier (daily IP limit)',
     firecrawlKeyPlaceholder: 'Enter Firecrawl API key (fc-...)',
     firecrawlKeyAdd: 'Add key',

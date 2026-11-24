@@ -46,7 +46,7 @@ pnpm desktop:build
 
 在桌面版中，API 请求通过 `tauri-plugin-http` 发出以绕过 webview 的 CORS 限制，外部链接在系统默认浏览器中打开，macOS 下可通过 `Cmd+,` 打开设置，API Key 保存在 `~/Library/Application Support/com.mlockyer.deepseekchat/api-key`（`0600` 权限）而非 `localStorage`。
 
-联网搜索与网页读取由 [Firecrawl](https://www.firecrawl.dev/) 提供（`web_search` 与 `web_scrape`）。默认使用 Firecrawl 的无密钥免费每日额度即可开箱使用，也可在设置中添加可选的 Firecrawl API Key 以获得更高限额（桌面端同样保存在 `~/Library/Application Support/com.mlockyer.deepseekchat/` 中）。
+联网搜索（`web_search`）由 [Firecrawl](https://www.firecrawl.dev/) 提供，默认使用无密钥免费每日额度即可开箱使用，也可在设置中添加可选的 Firecrawl API Key 以获得更高限额（桌面端同样保存在 `~/Library/Application Support/com.mlockyer.deepseekchat/` 中）。桌面端的网页读取（`web_scrape`）完全在本地完成（Rust 原生 HTTP + Markdown 协商与 Readability 正文提取，遇到纯前端 JS 渲染页面时回退到隔离的隐身子 WebView，并内置 SSRF 内网地址拦截），不消耗 Firecrawl 额度；网页版继续通过 Firecrawl 读取页面。
 
 其余功能与上游一致：多分支对话、附件上传、语音输入、朗读、KaTeX、Mermaid 图表、浅色/深色主题、中英文界面以及 ZIP 历史导出导入。
 

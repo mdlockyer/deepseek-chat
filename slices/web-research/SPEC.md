@@ -2,14 +2,15 @@
 
 ## Purpose
 
-Gives the model two client tools backed by Firecrawl v2 — `web_search` (ranked results with
-snippets) and `web_scrape` (one page as markdown) — plus the `research` deep-research subagent
-profile. Works keyless (Firecrawl's free tier, limited per IP per day) or with the user's Firecrawl
-API key, with one shared rate limiter and per-reply credit budget.
+Gives the model two client tools — `web_search` (ranked results with snippets, backed by Firecrawl
+v2) and `web_scrape` (one page as markdown, run through an injected local scraper on desktop or
+Firecrawl v2 on web) — plus the `research` deep-research subagent profile. Firecrawl calls work
+keyless (Firecrawl's free tier, limited per IP per day) or with the user's Firecrawl API key, with
+one shared rate limiter and per-reply credit budget.
 
 ## Public entrypoint
 
-`createWebResearchSlice({ fetch, store, secret, params? })` returns:
+`createWebResearchSlice({ fetch, store, secret, localScrape?, params? })` returns:
 
 | Member                                                                     | Meaning                                                                                                         |
 | :------------------------------------------------------------------------- | :-------------------------------------------------------------------------------------------------------------- |
@@ -51,8 +52,13 @@ The key is read on every call, so a key change applies to the next call.
    tells the model to cite as `[citation:n]`.
 7. **Search limit** is clamped to 1–10 (default `defaultSearchLimit`). No results → `ok` with a
    "No search results found" message and no sources.
-8. **Scrape.** Returns the final URL (`metadata.sourceURL` when it is http(s), else the requested
-   URL) and title. A page with no markdown and `statusCode >= 400` is an `error`.
+8. **Scrape.** When `localScrape` is provided, `web_scrape` calls `localScrape(url, { signal, timeoutMs })`
+   (gated only by `maxLocalScrapeConcurrency`, spending zero Firecrawl credits and bypassing the
+   Firecrawl rate limiter) and formats the returned `url`, `title`, and `markdown`. When
+   `localScrape` is omitted or `null`, `web_scrape` calls Firecrawl `/v2/scrape` through the shared
+   Firecrawl limiter and returns the final URL (`metadata.sourceURL` when it is http(s), else the
+   requested URL) and title; a page with no markdown and `statusCode >= 400` is an `error`.
+   In both modes, an empty markdown body renders `[No readable text content extracted from this page.]`.
 9. **Text limit.** Tool text longer than `maxToolTextChars` is cut and ends with
    `[Truncated after N characters]` (N formatted `en-US`, e.g. `24,000`).
 10. **Key verification** uses an endpoint that spends no credits. 401 → `invalid`; no response
@@ -76,20 +82,23 @@ The key is read on every call, so a key change applies to the next call.
     joined with `...`/`…` ellipses, with every non-empty span appearing in order—and `unverified`
     otherwise. The `runId`'s page cache is dropped when `complete` finishes.
 15. **Shared rate limiter, concurrency cap, retries, credit budget, and per-reply scrape cache.**
-    Every Firecrawl search (2 credits per 10 results) and scrape (1 credit) passes through one
-    limiter enforcing the per-minute sliding-window rate for the current key mode, capping
-    simultaneous in-flight requests at `maxConcurrentRequests`, and refusing calls once
-    `maxCreditsPerReply` is reached for a reply without sending a request. In keyed mode, transient
-    HTTP 429 responses (excluding permanent credit/quota exhaustion messages) are automatically
-    retried up to `max429Retries` times using `Retry-After` or exponential backoff from
-    `backoff429Ms` while pausing queued siblings; keyless HTTP 429s fail immediately. Reserved
-    credits are refunded if a call fails or is aborted. Within a given `replyKey`, successful scrapes
-    are cached and concurrent identical-URL scrapes coalesce onto one in-flight request (spending 1
-    credit total and recording into each waiting agent's quote cache).
+    Every Firecrawl call (`web_search` at 2 credits per 10 results, and `web_scrape` at 1 credit
+    when `localScrape` is not provided) passes through one limiter enforcing the per-minute
+    sliding-window rate for the current key mode, capping simultaneous in-flight requests at
+    `maxConcurrentRequests`, and refusing calls once `maxCreditsPerReply` is reached for a reply
+    without sending a request. In keyed mode, transient HTTP 429 responses (excluding permanent
+    credit/quota exhaustion messages) are automatically retried up to `max429Retries` times using
+    `Retry-After` or exponential backoff from `backoff429Ms` while pausing queued siblings; keyless
+    HTTP 429s fail immediately. Reserved credits are refunded if a call fails or is aborted. When
+    `localScrape` is provided, scrapes use their own concurrency cap (`maxLocalScrapeConcurrency`)
+    and spend 0 Firecrawl credits. Within a given `replyKey`, successful scrapes are cached and
+    concurrent identical-URL scrapes coalesce onto one in-flight request (recording into each
+    waiting agent's quote cache).
 16. **Audience-aware wording.** For `agent` callers, `instructionsFor('agent')` interpolates the
     slice's live parameters (`defaultSearchLimit`, `maxToolTextChars`, `scrapeTimeoutMs`), search
     results omit the `[citation:n]` UI footer, and 401/429 errors do not ask the agent to open
-    Settings.
+    Settings. Both `reply` and `agent` instructions reflect at slice creation time whether
+    `web_scrape` runs locally or through Firecrawl, keeping the system prompt static.
 
 ## Facts
 
@@ -97,22 +106,23 @@ None consumed or published.
 
 ## Tunable parameters
 
-| Parameter               | Default | Meaning                                                 |
-| :---------------------- | :------ | :------------------------------------------------------ |
-| `searchTimeoutMs`       | `30000` | Timeout for `/search`.                                  |
-| `scrapeTimeoutMs`       | `45000` | Timeout for `/scrape`.                                  |
-| `verifyTimeoutMs`       | `15000` | Timeout for key verification.                           |
-| `maxToolTextChars`      | `24000` | Characters of tool text returned to the model.          |
-| `defaultSearchLimit`    | `8`     | Results when the model gives no `limit`.                |
-| `rateWindowMs`          | `60000` | Sliding rate-limiter window length (ms).                |
-| `keylessRatePerMinute`  | `10`    | Max requests per window without a Firecrawl API key.    |
-| `keyedRatePerMinute`    | `20`    | Max requests per window with a Firecrawl API key.       |
-| `maxConcurrentRequests` | `3`     | Max simultaneous in-flight Firecrawl HTTP requests.     |
-| `backoff429Ms`          | `2000`  | Base pause after HTTP 429 (doubles per retry, ms).      |
-| `max429Retries`         | `3`     | Max automatic retries for transient keyed HTTP 429s.    |
-| `maxCreditsPerReply`    | `120`   | Firecrawl credit budget per reply (2/search, 1/scrape). |
-| `researchMaxRounds`     | `12`    | Max model rounds per `research` subagent run.           |
-| `researchMaxToolCalls`  | `16`    | Max tool calls per `research` subagent run.             |
+| Parameter                   | Default | Meaning                                                 |
+| :-------------------------- | :------ | :------------------------------------------------------ |
+| `searchTimeoutMs`           | `30000` | Timeout for `/search`.                                  |
+| `scrapeTimeoutMs`           | `45000` | Timeout for `/scrape`.                                  |
+| `verifyTimeoutMs`           | `15000` | Timeout for key verification.                           |
+| `maxToolTextChars`          | `24000` | Characters of tool text returned to the model.          |
+| `defaultSearchLimit`        | `8`     | Results when the model gives no `limit`.                |
+| `rateWindowMs`              | `60000` | Sliding rate-limiter window length (ms).                |
+| `keylessRatePerMinute`      | `10`    | Max requests per window without a Firecrawl API key.    |
+| `keyedRatePerMinute`        | `20`    | Max requests per window with a Firecrawl API key.       |
+| `maxConcurrentRequests`     | `3`     | Max simultaneous in-flight Firecrawl HTTP requests.     |
+| `maxLocalScrapeConcurrency` | `6`     | Max simultaneous in-flight local `web_scrape` calls.    |
+| `backoff429Ms`              | `2000`  | Base pause after HTTP 429 (doubles per retry, ms).      |
+| `max429Retries`             | `3`     | Max automatic retries for transient keyed HTTP 429s.    |
+| `maxCreditsPerReply`        | `120`   | Firecrawl credit budget per reply (2/search, 1/scrape). |
+| `researchMaxRounds`         | `12`    | Max model rounds per `research` subagent run.           |
+| `researchMaxToolCalls`      | `16`    | Max tool calls per `research` subagent run.             |
 
 The `research` task message also names a typical workload per `effort` (`EFFORT_GUIDANCE` in
 `researchProfile.ts`): `quick` 2 searches and 2 page reads, `standard` 4 and 4, `thorough` 6 and 6.

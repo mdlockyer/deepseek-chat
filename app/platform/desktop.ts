@@ -32,6 +32,54 @@ export const loadFirecrawlApiKey = (): Promise<string | null> =>
 export const saveFirecrawlApiKey = (key: string | null): Promise<void> =>
   invoke<null>('set_firecrawl_api_key', { key }).then(() => undefined)
 
+export type DesktopScrapeResponse = {
+  url: string
+  title: string | null
+  markdown: string
+  source: 'markdown-negotiated' | 'http' | 'webview'
+}
+
+let nextScrapeRequestId = 0
+
+/**
+ * 桌面端本地网页抓取：Rust 侧先通过 reqwest（含 Markdown 协商与 Readability）提取正文，
+ * 对纯 JS 渲染页面回退到隔离的隐身子 WebView；支持通过 AbortSignal 取消在途抓取。
+ */
+export const desktopScrape = (
+  url: string,
+  options: { signal: AbortSignal; timeoutMs: number }
+): Promise<DesktopScrapeResponse> => {
+  if (options.signal.aborted) {
+    return Promise.reject(options.signal.reason ?? new DOMException('Aborted', 'AbortError'))
+  }
+  const requestId = `scrape-${Date.now()}-${++nextScrapeRequestId}`
+  return new Promise<DesktopScrapeResponse>((resolve, reject) => {
+    const onAbort = () => {
+      void invoke<null>('web_scrape_cancel', { requestId }).catch(() => undefined)
+      reject(options.signal.reason ?? new DOMException('Aborted', 'AbortError'))
+    }
+    options.signal.addEventListener('abort', onAbort, { once: true })
+    invoke<DesktopScrapeResponse>('web_scrape_local', {
+      requestId,
+      url,
+      timeoutMs: options.timeoutMs,
+    }).then(
+      (result) => {
+        options.signal.removeEventListener('abort', onAbort)
+        if (!options.signal.aborted) {
+          resolve(result)
+        }
+      },
+      (error) => {
+        options.signal.removeEventListener('abort', onAbort)
+        if (!options.signal.aborted) {
+          reject(error instanceof Error ? error : new Error(String(error)))
+        }
+      }
+    )
+  })
+}
+
 /**
  * 弹出系统保存对话框并写入文件。WKWebView 不支持 blob: 链接的 download 属性，
  * 桌面版只能由原生端保存。返回 false 表示用户取消。

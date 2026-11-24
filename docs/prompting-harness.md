@@ -32,17 +32,17 @@ situational awareness **without breaking KV-cache prefix reuse**:
 
 ## Where Every Prompt Piece Lives
 
-| Concern                                                 | Source of Truth                                                                                            |
-| :------------------------------------------------------ | :--------------------------------------------------------------------------------------------------------- |
-| Core orientation (`SYSTEM_PROMPT`)                      | `slices/conversations/src/store.ts`                                                                        |
-| Dynamic context (`latest_reminder`)                     | `slices/conversations/src/latestReminder.ts`                                                               |
-| Tool aggregation, `summary` injection, section order    | `app/toolGateway.ts`                                                                                       |
-| File Preview (`present_file`, `edit_file`, `read_file`) | `PREVIEW_TOOL_INSTRUCTIONS` in `slices/workspace-files/src/tools.ts`                                       |
-| Clarifying Questions (`ask_user`)                       | `ASK_USER_INSTRUCTIONS` in `slices/conversations/src/askUser.ts`                                           |
-| Subagent Coordination (`wait`, `post`) & Orientation    | `buildLeadSubagentInstructions`, `buildSubagentOrientation` in `slices/conversations/src/subagentTools.ts` |
-| Web Research (`web_search`, `web_scrape`, `research`)   | `instructionsFor` & `createResearchProfile` in `slices/web-research/src/index.ts` and `researchProfile.ts` |
-| Python (`python`, native vs. web)                       | `buildPythonInstructions` in `slices/python/src/tool.ts`                                                   |
-| Built-in Browser (`browser_*`)                          | `BROWSER_TOOL_INSTRUCTIONS` in `slices/browser/src/tools.ts`                                               |
+| Concern                                                 | Source of Truth                                                                                                                                                    |
+| :------------------------------------------------------ | :----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Core orientation (`SYSTEM_PROMPT`)                      | `slices/conversations/src/store.ts`                                                                                                                                |
+| Dynamic context (`latest_reminder`)                     | `slices/conversations/src/latestReminder.ts`                                                                                                                       |
+| Tool aggregation, `summary` injection, section order    | `app/toolGateway.ts`                                                                                                                                               |
+| File Preview (`present_file`, `edit_file`, `read_file`) | `PREVIEW_TOOL_INSTRUCTIONS` in `slices/workspace-files/src/tools.ts`                                                                                               |
+| Clarifying Questions (`ask_user`)                       | `ASK_USER_INSTRUCTIONS` in `slices/conversations/src/askUser.ts`                                                                                                   |
+| Subagent Coordination (`wait`, `post`) & Orientation    | `buildLeadSubagentInstructions`, `buildSubagentOrientation` in `slices/conversations/src/subagentTools.ts`                                                         |
+| Web Research (`web_search`, `web_scrape`, `research`)   | `instructionsFor` & `createResearchProfile` in `slices/web-research/src/index.ts` and `researchProfile.ts` (static desktop local-scrape vs. web Firecrawl wording) |
+| Python (`python`, native vs. web)                       | `buildPythonInstructions` in `slices/python/src/tool.ts`                                                                                                           |
+| Built-in Browser (`browser_*`)                          | `BROWSER_TOOL_INSTRUCTIONS` in `slices/browser/src/tools.ts`                                                                                                       |
 
 ## Maintenance Checklist (Preventing Drift & Regression)
 

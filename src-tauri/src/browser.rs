@@ -31,15 +31,15 @@ const BROWSER_DATA_STORE_ID: [u8; 16] = *b"ds-browser-v0001";
 /// Default desktop browser User-Agent so sites serve full modern pages instead of
 /// stripped-down embedded-webview fallbacks (bare WKWebView/WebKitGTK omit `Version/... Safari/...`).
 #[cfg(target_os = "macos")]
-const BROWSER_USER_AGENT: Option<&str> = Some(
+pub(crate) const BROWSER_USER_AGENT: Option<&str> = Some(
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.4 Safari/605.1.15",
 );
 #[cfg(target_os = "linux")]
-const BROWSER_USER_AGENT: Option<&str> = Some(
+pub(crate) const BROWSER_USER_AGENT: Option<&str> = Some(
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.4 Safari/605.1.15",
 );
 #[cfg(not(any(target_os = "macos", target_os = "linux")))]
-const BROWSER_USER_AGENT: Option<&str> = None;
+pub(crate) const BROWSER_USER_AGENT: Option<&str> = None;
 
 /// Ensures a command was invoked strictly from the trusted `"main"` UI webview.
 pub fn ensure_main_webview(webview: &Webview) -> Result<(), String> {
@@ -612,7 +612,7 @@ fn platform_history_action(webview: &Webview, action: &str) -> Result<(), String
 }
 
 #[cfg(target_os = "macos")]
-async fn platform_eval_js(
+pub(crate) async fn platform_eval_js(
     webview: &Webview,
     script: String,
     isolated_world: bool,
@@ -699,7 +699,7 @@ async fn platform_eval_js(
 }
 
 #[cfg(not(target_os = "macos"))]
-async fn platform_eval_js(
+pub(crate) async fn platform_eval_js(
     webview: &Webview,
     script: String,
     _isolated_world: bool,

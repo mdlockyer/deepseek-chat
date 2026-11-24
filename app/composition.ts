@@ -13,6 +13,7 @@ import { EventLog } from '@deepseek-chat/spine/runtime'
 import {
   desktopBrowserHost,
   desktopFetch,
+  desktopScrape,
   isDesktopApp,
   loadFirecrawlApiKey,
   loadKeychainApiKey,
@@ -89,6 +90,7 @@ export const webResearch = createWebResearchSlice({
   fetch: httpFetch,
   store: localStore,
   secret: isDesktopApp ? { load: loadFirecrawlApiKey, save: saveFirecrawlApiKey } : null,
+  localScrape: isDesktopApp ? desktopScrape : null,
 })
 
 export const voice = createVoiceSlice({

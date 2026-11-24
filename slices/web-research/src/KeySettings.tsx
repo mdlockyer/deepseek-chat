@@ -45,7 +45,13 @@ export const createUseKeyEditor =
 export type KeyEditor = ReturnType<ReturnType<typeof createUseKeyEditor>>
 
 /** Firecrawl 密钥设置：可选；未设置时使用无密钥免费额度 */
-export const KeySettings = ({ editor }: { editor: KeyEditor }) => {
+export const KeySettings = ({
+  editor,
+  localScrape = false,
+}: {
+  editor: KeyEditor
+  localScrape?: boolean
+}) => {
   const tr = webResearchMessages.useTranslate()
   const isMobile = useIsMobile()
   const { apiKey, editing, setEditing, form } = editor
@@ -79,7 +85,9 @@ export const KeySettings = ({ editor }: { editor: KeyEditor }) => {
               </span>
             ) : null}
           </div>
-          <div className={styles.description}>{tr('firecrawlKeyDescription')}</div>
+          <div className={styles.description}>
+            {tr(localScrape ? 'firecrawlKeyDescriptionDesktop' : 'firecrawlKeyDescription')}
+          </div>
 
           {editing ? (
             <>

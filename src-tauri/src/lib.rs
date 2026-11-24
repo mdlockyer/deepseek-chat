@@ -24,6 +24,7 @@ mod preview;
 mod python;
 mod python_runtime;
 mod python_sandbox;
+mod scraper;
 
 use std::path::{Path, PathBuf};
 
@@ -254,6 +255,7 @@ pub fn run() {
         .manage(browser::BrowserState::default())
         .manage(preview::PreviewState::default())
         .manage(python::PythonState::default())
+        .manage(scraper::ScraperState::default())
         .register_uri_scheme_protocol("ds-preview", preview::handle_protocol)
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_http::init())
@@ -289,7 +291,9 @@ pub fn run() {
             python::python_reset,
             python::python_stage_upload,
             python::python_runtime_status,
-            python::python_runtime_reset
+            python::python_runtime_reset,
+            scraper::web_scrape_local,
+            scraper::web_scrape_cancel
         ]);
 
     #[cfg(target_os = "macos")]

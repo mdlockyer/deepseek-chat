@@ -1,10 +1,12 @@
 import type { HttpFetch, KeyValueStore, SecretSlot } from '@deepseek-chat/spine/ports'
-import { useSyncExternalStore } from 'react'
+import { createElement, useSyncExternalStore, type ComponentType } from 'react'
 import {
   DEFAULT_FIRECRAWL_PARAMS,
   createFirecrawlClient,
   describeFirecrawlFailure,
+  formatScrapeOutcome,
   getRetryable429DelayMs,
+  isHttpUrl,
   type FirecrawlParams,
   type KeyVerification,
   type ScrapeOutcome,
@@ -13,7 +15,12 @@ import {
 } from './firecrawl.js'
 import { createKeyStore, type FirecrawlKeyState } from './key.js'
 import { KeySettings, createUseKeyEditor, type KeyEditor } from './KeySettings.js'
-import { SCRAPE_CREDITS, createFirecrawlLimiter, searchCredits } from './limiter.js'
+import {
+  SCRAPE_CREDITS,
+  createConcurrencyGate,
+  createFirecrawlLimiter,
+  searchCredits,
+} from './limiter.js'
 import {
   RESEARCH_TOOL,
   RESEARCH_TOOL_NAME,
@@ -69,12 +76,30 @@ export type WebRunOptions = {
   readonly replyKey?: string
 }
 
+export type LocalScrapeResult = {
+  /** Final URL after redirects (http/https). */
+  readonly url: string
+  /** Extracted page title, if any. */
+  readonly title: string | null
+  /** Main page content as Markdown. */
+  readonly markdown: string
+  /** How the page was fetched/extracted. */
+  readonly source: 'markdown-negotiated' | 'http' | 'webview'
+}
+
+export type LocalScraper = (
+  url: string,
+  options: { signal: AbortSignal; timeoutMs: number }
+) => Promise<LocalScrapeResult>
+
 export type WebResearchDeps = {
   readonly fetch: HttpFetch
   /** Web storage for the user's optional Firecrawl key. */
   readonly store: KeyValueStore
   /** Desktop private storage; `null` keeps the key in web storage. */
   readonly secret: SecretSlot | null
+  /** Optional local desktop scraper for `web_scrape`; `null` or omitted uses Firecrawl. */
+  readonly localScrape?: LocalScraper | null
   readonly params?: Partial<FirecrawlParams>
 }
 
@@ -103,7 +128,7 @@ export type WebResearchSlice = {
   /** Save (trimmed) or remove the key; rejects if desktop storage cannot be written. */
   setApiKey(apiKey: string | null): Promise<void>
   useKeyEditor(): KeyEditor
-  KeySettings: typeof KeySettings
+  KeySettings: ComponentType<{ editor: KeyEditor }>
 }
 
 const buildSearchTool = (params: FirecrawlParams): WebToolDefinition => ({
@@ -124,10 +149,11 @@ const buildSearchTool = (params: FirecrawlParams): WebToolDefinition => ({
   },
 })
 
-const SCRAPE_TOOL: WebToolDefinition = {
+const buildScrapeTool = (hasLocalScrape: boolean): WebToolDefinition => ({
   name: WEB_SCRAPE_TOOL_NAME,
-  description:
-    'Fetch and extract clean markdown content from a specific http:// or https:// webpage URL using Firecrawl.',
+  description: hasLocalScrape
+    ? 'Fetch and extract clean Markdown content from a specific public http:// or https:// webpage URL locally on this machine.'
+    : 'Fetch and extract clean markdown content from a specific http:// or https:// webpage URL using Firecrawl.',
   input_schema: {
     type: 'object',
     required: ['url'],
@@ -135,15 +161,17 @@ const SCRAPE_TOOL: WebToolDefinition = {
       url: { type: 'string', description: 'The http:// or https:// URL to read.' },
     },
   },
-}
+})
 
-const buildReplyWebInstructions = (includeResearch: boolean): string => {
+const buildReplyWebInstructions = (includeResearch: boolean, hasLocalScrape: boolean): string => {
   const base = [
     'Web Research (`web_search`, `web_scrape`):',
-    'You have fast headless web tools powered by Firecrawl. Reach for `web_search` and `web_scrape` when you need current facts, documentation, or clean Markdown from a URL—they are much faster and lighter than driving the built-in browser. Save the built-in browser for interactive flows, logged-in sessions, JavaScript-heavy apps, or visual inspection.',
+    hasLocalScrape
+      ? 'You have fast headless web tools: `web_search` searches the live web via Firecrawl, while `web_scrape` fetches and converts public webpages into clean Markdown locally on this machine (using no Firecrawl credits, with an isolated offscreen render fallback for JavaScript-heavy pages; private, localhost, and link-local/metadata network addresses are blocked by design for SSRF safety). Reach for `web_search` and `web_scrape` when you need current facts, documentation, or clean Markdown from a URL—they are much faster and lighter than driving the built-in browser. Save the built-in browser for interactive flows, logged-in sessions, localhost apps, or visual inspection.'
+      : 'You have fast headless web tools powered by Firecrawl. Reach for `web_search` and `web_scrape` when you need current facts, documentation, or clean Markdown from a URL—they are much faster and lighter than driving the built-in browser. Save the built-in browser for interactive flows, logged-in sessions, JavaScript-heavy apps, or visual inspection.',
     'When citing `web_search` results in your chat reply, place inline markers like `[citation:1]`, `[citation:2]` matching the 1-based result numbers returned by `web_search`—the app renders them as clickable source links and populates the Search Results panel. (Files presented with `present_file` render standalone Markdown and do not resolve `[citation:n]`, so use regular `[title](url)` links inside files and `[citation:n]` in your chat reply.)',
   ].join('\n')
-  return includeResearch ? `${base}\n\n${buildLeadResearchInstructions()}` : base
+  return includeResearch ? `${base}\n\n${buildLeadResearchInstructions(hasLocalScrape)}` : base
 }
 
 const containsHttpUrl = (text: string) => /https?:\/\/\S+/i.test(text)
@@ -186,6 +214,8 @@ const raceAbort = <T>(promise: Promise<T>, signal: AbortSignal): Promise<T> => {
 
 export const createWebResearchSlice = (deps: WebResearchDeps): WebResearchSlice => {
   const params: FirecrawlParams = { ...DEFAULT_FIRECRAWL_PARAMS, ...deps.params }
+  const localScrape = deps.localScrape ?? null
+  const hasLocalScrape = localScrape !== null
   const limiter = createFirecrawlLimiter({
     rateWindowMs: params.rateWindowMs,
     keylessRatePerMinute: params.keylessRatePerMinute,
@@ -194,6 +224,7 @@ export const createWebResearchSlice = (deps: WebResearchDeps): WebResearchSlice 
     backoff429Ms: params.backoff429Ms,
     maxCreditsPerReply: params.maxCreditsPerReply,
   })
+  const localScrapeGate = createConcurrencyGate(params.maxLocalScrapeConcurrency)
   const client = createFirecrawlClient(deps.fetch, params, {
     onRateLimited: () => limiter.noteRateLimited(),
   })
@@ -201,6 +232,7 @@ export const createWebResearchSlice = (deps: WebResearchDeps): WebResearchSlice 
   const pageCache = createPageCache()
   const replyScrapes = new Map<string, ReplyScrapeCache>()
   const searchTool = buildSearchTool(params)
+  const scrapeTool = buildScrapeTool(hasLocalScrape)
   const toolNames = {
     search: WEB_SEARCH_TOOL_NAME,
     scrape: WEB_SCRAPE_TOOL_NAME,
@@ -378,23 +410,43 @@ export const createWebResearchSlice = (deps: WebResearchDeps): WebResearchSlice 
       }
     }
 
+    const executeScrape = async (signal: AbortSignal): Promise<ScrapeOutcome> => {
+      if (localScrape) {
+        const lease = await localScrapeGate.acquire(signal)
+        try {
+          const result = await localScrape(trimmed, {
+            signal,
+            timeoutMs: params.scrapeTimeoutMs,
+          })
+          const finalUrl = isHttpUrl(result.url) ? result.url : trimmed
+          return formatScrapeOutcome({
+            url: finalUrl,
+            title: result.title,
+            markdown: result.markdown,
+            maxToolTextChars: params.maxToolTextChars,
+          })
+        } finally {
+          lease.release()
+        }
+      }
+      const outcome = await runWithRateLimitAndRetry({
+        hasKey,
+        credits: SCRAPE_CREDITS,
+        replyKey: options.replyKey,
+        signal,
+        execute: (reqSignal) => client.scrape(trimmed, { apiKey, signal: reqSignal, audience }),
+      })
+      if (!outcome.ok) {
+        throw outcome.kind === 'budget' ? new Error(outcome.message) : outcome.error
+      }
+      return outcome.value
+    }
+
     if (cache) {
       let entry = cache.inFlight.get(trimmed)
       if (!entry) {
         const controller = new AbortController()
-        const promise = (async () => {
-          const outcome = await runWithRateLimitAndRetry({
-            hasKey,
-            credits: SCRAPE_CREDITS,
-            replyKey: options.replyKey,
-            signal: controller.signal,
-            execute: (signal) => client.scrape(trimmed, { apiKey, signal, audience }),
-          })
-          if (!outcome.ok) {
-            throw outcome.kind === 'budget' ? new Error(outcome.message) : outcome.error
-          }
-          return outcome.value
-        })()
+        const promise = executeScrape(controller.signal)
         entry = { promise, controller, waiters: 0 }
         cache.inFlight.set(trimmed, entry)
         promise.then(
@@ -435,44 +487,40 @@ export const createWebResearchSlice = (deps: WebResearchDeps): WebResearchSlice 
       }
     }
 
-    const outcome = await runWithRateLimitAndRetry({
-      hasKey,
-      credits: SCRAPE_CREDITS,
-      replyKey: options.replyKey,
-      signal: options.signal,
-      execute: (signal) => client.scrape(trimmed, { apiKey, signal, audience }),
-    })
-    if (!outcome.ok) {
-      return outcome.kind === 'budget'
-        ? { status: 'error', content: outcome.message }
-        : failed(outcome.error, options.signal, hasKey, audience)
-    }
-    recordAgentPage(options.caller, trimmed, outcome.value)
-    return {
-      status: 'ok',
-      content: outcome.value.text,
-      scrapedPage: { url: outcome.value.url, title: outcome.value.title },
+    try {
+      const scraped = await executeScrape(options.signal)
+      recordAgentPage(options.caller, trimmed, scraped)
+      return {
+        status: 'ok',
+        content: scraped.text,
+        scrapedPage: { url: scraped.url, title: scraped.title },
+      }
+    } catch (error) {
+      return failed(error, options.signal, hasKey, audience)
     }
   }
 
   const instructionsFor = (audience: WebAudience, declaredNames?: ReadonlySet<string>): string => {
     if (audience === 'agent') {
-      return buildAgentWebInstructions(params)
+      return buildAgentWebInstructions(params, hasLocalScrape)
     }
     const includeResearch = declaredNames ? declaredNames.has(RESEARCH_TOOL_NAME) : true
-    return buildReplyWebInstructions(includeResearch)
+    return buildReplyWebInstructions(includeResearch, hasLocalScrape)
   }
+
+  const BoundKeySettings: ComponentType<{ editor: KeyEditor }> = ({ editor }) =>
+    createElement(KeySettings, { editor, localScrape: hasLocalScrape })
 
   return {
     toolNames,
-    instructions: buildReplyWebInstructions(true),
+    instructions: buildReplyWebInstructions(true, hasLocalScrape),
     instructionsFor,
     researchProfile,
     declareTools: ({ searchEnabled, questionText }) =>
       searchEnabled
-        ? [searchTool, SCRAPE_TOOL, RESEARCH_TOOL]
+        ? [searchTool, scrapeTool, RESEARCH_TOOL]
         : containsHttpUrl(questionText)
-          ? [SCRAPE_TOOL]
+          ? [scrapeTool]
           : [],
     handles: (toolName) => toolName === WEB_SEARCH_TOOL_NAME || toolName === WEB_SCRAPE_TOOL_NAME,
     run: (toolName, input, options) => {
@@ -491,6 +539,6 @@ export const createWebResearchSlice = (deps: WebResearchDeps): WebResearchSlice 
     hydrate: keys.hydrate,
     setApiKey: keys.setApiKey,
     useKeyEditor: createUseKeyEditor(keys, client.verifyKey),
-    KeySettings,
+    KeySettings: BoundKeySettings,
   }
 }
