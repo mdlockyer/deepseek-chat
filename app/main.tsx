@@ -2,7 +2,7 @@ import { onOverlayChange } from '@deepseek-chat/spine/design'
 import { createRoot } from 'react-dom/client'
 import { App } from './App.js'
 import { AppErrorBoundary } from './AppErrorBoundary.js'
-import { account, browser, webResearch } from './composition.js'
+import { account, browser, overlays, webResearch } from './composition.js'
 // 首屏渲染前创建 conversations slice（安装其端口）
 import './conversations.js'
 import { acquireSidePanelOverlayLock } from './rightPanel/state.js'
@@ -31,6 +31,22 @@ onOverlayChange((open) => {
   } else {
     releaseBrowserOverlay?.()
     releaseBrowserOverlay = null
+  }
+})
+let releaseUiOverlay: (() => void) | null = null
+overlays.subscribe((open) => {
+  if (open) {
+    if (!releaseUiOverlay) {
+      const releaseBrowser = browser.acquireOverlayLock()
+      const releasePanel = acquireSidePanelOverlayLock()
+      releaseUiOverlay = () => {
+        releaseBrowser()
+        releasePanel()
+      }
+    }
+  } else {
+    releaseUiOverlay?.()
+    releaseUiOverlay = null
   }
 })
 if (isDesktopApp) {

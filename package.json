@@ -25,6 +25,7 @@
   "dependencies": {
     "@deepseek-chat/lib-agent": "workspace:*",
     "@deepseek-chat/lib-markdown": "workspace:*",
+    "@deepseek-chat/lib-ui": "workspace:*",
     "@deepseek-chat/slice-account": "workspace:*",
     "@deepseek-chat/slice-browser": "workspace:*",
     "@deepseek-chat/slice-conversations": "workspace:*",

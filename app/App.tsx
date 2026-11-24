@@ -1,4 +1,5 @@
 import { MarkdownTheme } from '@deepseek-chat/lib-markdown'
+import { ToastViewport, UiProvider } from '@deepseek-chat/lib-ui'
 import { Toast, usePresence, PANEL_DURATION_MS } from '@deepseek-chat/spine/design'
 import { useLocale } from '@deepseek-chat/spine/i18n'
 import { useEffect } from 'react'
@@ -10,7 +11,7 @@ import { useIsMobile, useMobileViewport, usePreventPageScroll } from './viewport
 import { RightPanel } from './rightPanel/RightPanel.js'
 import { ensureApiKey, openSettingsFromShortcut } from './settings/settingsDialogState.js'
 import { SettingsDialog } from './settings/SettingsDialog.js'
-import { account, browser } from './composition.js'
+import { account, browser, notices, overlays } from './composition.js'
 import { conversations } from './conversations.js'
 import { isDesktopApp, onOpenSettings } from './platform/desktop.js'
 import { AppErrorBoundary } from './AppErrorBoundary.js'
@@ -73,32 +74,35 @@ export const App = () => {
   }, [])
 
   return (
-    <MarkdownTheme dark={dark}>
-      <div ref={frameRef} className={clsx(styles.frame, isDesktopApp && styles.desktop)}>
-        {isMobile ? (
-          <MobileSider />
-        ) : (
-          <>
-            <Sider
-              collapsed={siderCollapsed}
-              controlsHidden={siderCollapsed}
-              controlsLanding={collapsedSiderExiting}
-            />
-            {showCollapsedSider ? <CollapsedSider exiting={collapsedSiderExiting} /> : null}
-          </>
-        )}
-        <main className={styles.main}>
-          <ChatSaveBanner />
-          <div className={styles.content}>
-            <AppErrorBoundary resetKey={activeId}>
-              <ChatMain siderCollapsed={siderCollapsed} />
-            </AppErrorBoundary>
-          </div>
-        </main>
-        <RightPanel />
-      </div>
-      <SettingsDialog />
-      <Toast />
-    </MarkdownTheme>
+    <UiProvider notices={notices} overlay={overlays}>
+      <MarkdownTheme dark={dark}>
+        <div ref={frameRef} className={clsx(styles.frame, isDesktopApp && styles.desktop)}>
+          {isMobile ? (
+            <MobileSider />
+          ) : (
+            <>
+              <Sider
+                collapsed={siderCollapsed}
+                controlsHidden={siderCollapsed}
+                controlsLanding={collapsedSiderExiting}
+              />
+              {showCollapsedSider ? <CollapsedSider exiting={collapsedSiderExiting} /> : null}
+            </>
+          )}
+          <main className={styles.main}>
+            <ChatSaveBanner />
+            <div className={styles.content}>
+              <AppErrorBoundary resetKey={activeId}>
+                <ChatMain siderCollapsed={siderCollapsed} />
+              </AppErrorBoundary>
+            </div>
+          </main>
+          <RightPanel />
+        </div>
+        <SettingsDialog />
+        <Toast />
+        <ToastViewport />
+      </MarkdownTheme>
+    </UiProvider>
   )
 }

@@ -1,0 +1,113 @@
+@layer components {
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ui-space-1-5);
+    min-width: 0;
+  }
+
+  .label {
+    font: var(--ui-type-label-strong);
+    color: var(--ui-text-primary);
+  }
+
+  .hint {
+    font: var(--ui-type-micro);
+    font-weight: 400;
+    line-height: 18px;
+    color: var(--ui-text-muted);
+  }
+
+  .box {
+    display: flex;
+    align-items: center;
+    gap: var(--ui-space-2);
+    box-sizing: border-box;
+    height: var(--ui-control-xl);
+    padding: 0 var(--ui-space-1-5) 0 14px;
+    border-radius: var(--ui-radius-md);
+    border: 1px solid var(--ui-border-default);
+    background-color: var(--ui-surface-input);
+    transition: border-color var(--ui-duration-normal) var(--ui-ease-standard);
+
+    &:focus-within {
+      border-color: var(--ui-focus-ring);
+      outline: 2px solid transparent;
+    }
+  }
+
+  .compact {
+    height: var(--ui-control-sm);
+    padding: 0 var(--ui-space-2);
+    border-radius: var(--ui-radius-sm);
+  }
+
+  .boxError {
+    border-color: var(--ui-border-danger);
+
+    &:focus-within {
+      border-color: var(--ui-border-danger);
+    }
+  }
+
+  .input {
+    flex: 1;
+    min-width: 0;
+    height: 100%;
+    padding: 0;
+    border: none;
+    outline: none;
+    background: transparent;
+    color: var(--ui-text-primary);
+    font: var(--ui-type-label);
+    caret-color: var(--ui-text-accent);
+
+    &::placeholder {
+      color: var(--ui-text-placeholder);
+    }
+
+    &:disabled {
+      color: var(--ui-text-disabled);
+      cursor: not-allowed;
+    }
+  }
+
+  .monospace {
+    font-family: var(--ui-font-mono);
+    font-size: var(--ui-font-size-sm);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .slot {
+    display: inline-flex;
+    align-items: center;
+    flex-shrink: 0;
+    color: var(--ui-text-muted);
+  }
+
+  .errorRow {
+    display: flex;
+    align-items: center;
+    gap: var(--ui-space-1-5);
+    font: var(--ui-type-micro);
+    font-weight: 400;
+    line-height: 18px;
+    color: var(--ui-text-danger);
+
+    svg {
+      flex-shrink: 0;
+      width: 14px;
+      height: 14px;
+    }
+  }
+
+  @media not all and (min-width: 768px) {
+    .box:not(.compact) {
+      height: 52px;
+    }
+
+    .box:not(.compact) .input {
+      font-size: var(--ui-font-size-lg);
+    }
+  }
+}

@@ -1,0 +1,42 @@
+@layer components {
+  .trigger {
+    display: contents;
+  }
+
+  .tooltip {
+    position: fixed;
+    z-index: var(--ui-z-tooltip);
+    box-sizing: border-box;
+    max-width: calc(100vw - 28px);
+    padding: var(--ui-space-1) var(--ui-space-2);
+    border-radius: var(--ui-radius-sm);
+    background-color: var(--ui-surface-tooltip);
+    color: var(--ui-text-on-toast);
+    font: var(--ui-type-micro);
+    font-weight: 400;
+    line-height: 1.5;
+    box-shadow: var(--ui-shadow-tooltip);
+  }
+
+  .top {
+    animation: ui-tooltip-in-top var(--ui-duration-fast) var(--ui-ease-panel) both;
+  }
+
+  .bottom {
+    animation: ui-tooltip-in-bottom var(--ui-duration-fast) var(--ui-ease-panel) both;
+  }
+
+  @keyframes ui-tooltip-in-top {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+  }
+
+  @keyframes ui-tooltip-in-bottom {
+    from {
+      opacity: 0;
+      transform: translateY(-4px);
+    }
+  }
+}

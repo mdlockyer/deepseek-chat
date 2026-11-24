@@ -2,6 +2,7 @@
  * App Shell composition root: boots the Spine and instantiates slices with their host adapters.
  * No domain logic belongs here — only wiring.
  */
+import { createNoticeBus, createOverlayCoordinator } from '@deepseek-chat/lib-ui'
 import { createAccountSlice } from '@deepseek-chat/slice-account'
 import { createBrowserSlice } from '@deepseek-chat/slice-browser'
 import { createPreferencesSlice } from '@deepseek-chat/slice-preferences'
@@ -50,6 +51,8 @@ const pyodideIndexURL = () =>
 export const API_ORIGIN = __API_ORIGIN__
 
 export const spine = new EventLog()
+export const notices = createNoticeBus()
+export const overlays = createOverlayCoordinator()
 
 /** 先于首屏创建：恢复界面语言、主题与位置 */
 export const preferences = createPreferencesSlice({

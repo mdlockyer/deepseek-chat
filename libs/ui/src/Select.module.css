@@ -1,0 +1,117 @@
+@layer components {
+  .trigger {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    flex-shrink: 0;
+    box-sizing: border-box;
+    min-width: 90px;
+    max-width: 100%;
+    height: var(--ui-control-md);
+    padding: 0 42px 0 14px;
+    border: none;
+    border-radius: var(--ui-radius-pill);
+    background-color: var(--ui-surface-control);
+    color: var(--ui-text-primary);
+    font: var(--ui-type-label);
+    white-space: nowrap;
+    cursor: pointer;
+    transition:
+      background-color var(--ui-duration-normal) var(--ui-ease-standard),
+      color var(--ui-duration-normal) var(--ui-ease-standard);
+
+    @media (hover: hover) {
+      &:hover:not(:disabled) {
+        background-color: var(--ui-interactive-hover-strong);
+      }
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--ui-focus-ring);
+      outline-offset: 2px;
+    }
+
+    &:disabled {
+      color: var(--ui-text-disabled);
+      cursor: not-allowed;
+    }
+
+    > span:first-child {
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+  }
+
+  .open {
+    color: var(--ui-text-muted);
+  }
+
+  .placeholder {
+    color: var(--ui-text-muted);
+  }
+
+  .arrow {
+    position: absolute;
+    top: 50%;
+    right: 14px;
+    display: inline-flex;
+    color: var(--ui-text-secondary);
+    transform: translateY(-50%);
+    pointer-events: none;
+  }
+
+  .menu {
+    z-index: var(--ui-z-select);
+    min-width: 124px;
+    max-width: 280px;
+    padding: var(--ui-space-1);
+    border-radius: var(--ui-radius-md);
+    border-color: var(--ui-border-inverse);
+  }
+
+  .option {
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--ui-space-2);
+    width: 100%;
+    min-height: var(--ui-control-lg);
+    padding: var(--ui-space-1) var(--ui-space-2-5);
+    border: none;
+    border-radius: var(--ui-radius-sm);
+    background-color: transparent;
+    color: var(--ui-text-primary);
+    font: var(--ui-type-label);
+    text-align: left;
+    white-space: normal;
+    cursor: pointer;
+    user-select: none;
+    transition: background-color var(--ui-duration-normal) var(--ui-ease-standard);
+
+    @media (hover: hover) {
+      &:hover {
+        background-color: var(--ui-interactive-hover);
+      }
+    }
+
+    &:focus-visible {
+      background-color: var(--ui-interactive-hover);
+      outline: 2px solid var(--ui-focus-ring);
+      outline-offset: -2px;
+    }
+  }
+
+  .check {
+    display: inline-flex;
+    flex-shrink: 0;
+    color: var(--ui-text-accent);
+  }
+
+  @media (pointer: coarse) {
+    .trigger,
+    .option {
+      min-height: var(--ui-control-xl);
+    }
+  }
+}

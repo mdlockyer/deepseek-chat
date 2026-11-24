@@ -1,0 +1,84 @@
+@layer components {
+  .list {
+    display: flex;
+    gap: var(--ui-space-1);
+  }
+
+  .horizontal {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .vertical {
+    flex-direction: column;
+  }
+
+  .tab {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--ui-space-2);
+    box-sizing: border-box;
+    min-height: var(--ui-control-sm);
+    padding: var(--ui-space-1-5) var(--ui-space-2-5);
+    border: none;
+    border-radius: var(--ui-radius-md);
+    background-color: transparent;
+    color: var(--ui-text-secondary);
+    font: var(--ui-type-label);
+    text-align: left;
+    white-space: nowrap;
+    cursor: pointer;
+    user-select: none;
+    transition:
+      background-color var(--ui-duration-normal) var(--ui-ease-standard),
+      color var(--ui-duration-normal) var(--ui-ease-standard);
+
+    svg {
+      flex-shrink: 0;
+    }
+
+    @media (hover: hover) {
+      &:hover:not(:disabled) {
+        background-color: var(--ui-interactive-hover);
+        color: var(--ui-text-primary);
+      }
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--ui-focus-ring);
+      outline-offset: 2px;
+    }
+
+    &:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+  }
+
+  .tabSelected {
+    background-color: var(--ui-accent-soft);
+    color: var(--ui-text-primary);
+    font-weight: 500;
+
+    svg {
+      color: var(--ui-text-accent);
+    }
+
+    @media (hover: hover) {
+      &:hover:not(:disabled) {
+        background-color: var(--ui-accent-soft-hover);
+      }
+    }
+  }
+
+  .panel {
+    min-width: 0;
+    min-height: 0;
+  }
+
+  @media (pointer: coarse) {
+    .tab {
+      min-height: var(--ui-control-xl);
+    }
+  }
+}

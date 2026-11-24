@@ -1,0 +1,155 @@
+@layer components {
+  .button {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--ui-space-1-5);
+    box-sizing: border-box;
+    min-width: 72px;
+    padding: 0 14px;
+    border-radius: var(--ui-radius-pill);
+    border: 1px solid transparent;
+    font: var(--ui-type-label-strong);
+    text-decoration: none;
+    cursor: pointer;
+    white-space: nowrap;
+    user-select: none;
+    transition:
+      background-color var(--ui-duration-normal) var(--ui-ease-standard),
+      border-color var(--ui-duration-normal) var(--ui-ease-standard),
+      color var(--ui-duration-normal) var(--ui-ease-standard),
+      opacity var(--ui-duration-normal) var(--ui-ease-standard);
+
+    &:focus-visible {
+      outline: 2px solid var(--ui-focus-ring);
+      outline-offset: 2px;
+    }
+
+    &:disabled,
+    &[aria-disabled='true'] {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+  }
+
+  .l {
+    height: var(--ui-control-lg);
+  }
+
+  .m {
+    height: var(--ui-control-md);
+    gap: var(--ui-space-1);
+
+    svg {
+      width: 14px;
+      height: 14px;
+      flex-shrink: 0;
+    }
+  }
+
+  .s {
+    height: var(--ui-control-sm);
+    min-width: 58px;
+    padding: 0 var(--ui-space-3);
+    font: var(--ui-type-caption-strong);
+  }
+
+  .block {
+    width: 100%;
+  }
+
+  .primary {
+    color: var(--ui-text-on-accent);
+    background-color: var(--ui-accent-fill);
+
+    @media (hover: hover) {
+      &:hover:not(:disabled):not([aria-disabled='true']) {
+        background-color: var(--ui-accent-hover);
+      }
+    }
+  }
+
+  .secondary,
+  .outlined {
+    color: var(--ui-text-primary);
+    background-color: transparent;
+    border-color: var(--ui-border-default);
+    font-weight: 400;
+
+    @media (hover: hover) {
+      &:hover:not(:disabled):not([aria-disabled='true']) {
+        background-color: var(--ui-interactive-hover);
+      }
+    }
+  }
+
+  .ghost {
+    color: var(--ui-text-secondary);
+    background-color: transparent;
+    font-weight: 500;
+
+    @media (hover: hover) {
+      &:hover:not(:disabled):not([aria-disabled='true']) {
+        background-color: var(--ui-interactive-hover);
+        color: var(--ui-text-primary);
+      }
+    }
+  }
+
+  .danger {
+    color: var(--ui-text-on-danger);
+    background-color: var(--ui-danger-fill);
+
+    @media (hover: hover) {
+      &:hover:not(:disabled):not([aria-disabled='true']) {
+        background-color: var(--ui-danger-hover);
+      }
+    }
+
+    &:focus-visible {
+      outline-color: var(--ui-focus-ring-danger);
+    }
+  }
+
+  .dangerOutlined {
+    color: var(--ui-text-danger);
+    background-color: transparent;
+    border-color: var(--ui-border-danger);
+    font-weight: 400;
+
+    @media (hover: hover) {
+      &:hover:not(:disabled):not([aria-disabled='true']) {
+        background-color: var(--ui-interactive-danger-hover);
+      }
+    }
+
+    &:focus-visible {
+      outline-color: var(--ui-focus-ring-danger);
+    }
+  }
+
+  .spinner {
+    width: 14px;
+    height: 14px;
+    box-sizing: border-box;
+    border-radius: var(--ui-radius-pill);
+    border: 2px solid currentColor;
+    border-right-color: transparent;
+    flex-shrink: 0;
+    animation: ui-btn-spin 0.75s linear infinite;
+  }
+
+  @keyframes ui-btn-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  @media (pointer: coarse) {
+    .m,
+    .s {
+      min-height: var(--ui-control-xl);
+    }
+  }
+}

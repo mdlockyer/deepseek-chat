@@ -1,0 +1,109 @@
+@layer components {
+  .anchor {
+    display: inline-flex;
+  }
+
+  .menu {
+    min-width: 124px;
+    padding: var(--ui-space-1);
+    border-radius: var(--ui-radius-md);
+  }
+
+  .item {
+    display: flex;
+    align-items: center;
+    gap: var(--ui-space-2);
+    box-sizing: border-box;
+    width: 100%;
+    padding: var(--ui-space-2) var(--ui-space-2-5);
+    border: none;
+    border-radius: var(--ui-radius-sm);
+    background-color: transparent;
+    color: var(--ui-text-primary);
+    font: var(--ui-type-small);
+    text-align: left;
+    cursor: pointer;
+    user-select: none;
+    transition: background-color var(--ui-duration-normal) var(--ui-ease-standard);
+
+    @media (hover: hover) {
+      &:hover:not(:disabled) {
+        background-color: var(--ui-interactive-hover);
+      }
+    }
+
+    &:focus-visible {
+      background-color: var(--ui-interactive-hover);
+      outline: 2px solid var(--ui-focus-ring);
+      outline-offset: -2px;
+    }
+
+    &:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+  }
+
+  .icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 16px;
+    height: 16px;
+    color: var(--ui-text-secondary);
+  }
+
+  .label {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .shortcut {
+    flex-shrink: 0;
+    font: var(--ui-type-micro);
+    font-weight: 400;
+    font-variant-numeric: tabular-nums;
+    color: var(--ui-text-muted);
+  }
+
+  .check {
+    display: inline-flex;
+    flex-shrink: 0;
+    color: var(--ui-text-accent);
+  }
+
+  .danger {
+    color: var(--ui-text-danger);
+
+    .icon {
+      color: var(--ui-text-danger);
+    }
+
+    @media (hover: hover) {
+      &:hover:not(:disabled) {
+        background-color: var(--ui-interactive-danger-hover);
+      }
+    }
+
+    &:focus-visible {
+      outline-color: var(--ui-focus-ring-danger);
+    }
+  }
+
+  .separator {
+    height: 1px;
+    margin: var(--ui-space-1) var(--ui-space-1-5);
+    border: none;
+    background-color: var(--ui-border-subtle);
+  }
+
+  @media (pointer: coarse) {
+    .item {
+      min-height: var(--ui-control-xl);
+    }
+  }
+}

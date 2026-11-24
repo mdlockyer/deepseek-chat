@@ -137,6 +137,9 @@ for (const file of listSourceFiles(spineDir)) {
   }
 }
 
+const LIB_UI_PKG = `${LIB_PKG_PREFIX}ui`
+const LIBS_REQUIRING_SPEC = new Set(['ui', 'stage'])
+
 /** package.json shape shared by slices and libraries. */
 const checkManifest = (kind, name, dir, expectedPkg) => {
   const pkgPath = path.join(dir, 'package.json')
@@ -162,15 +165,21 @@ const checkManifest = (kind, name, dir, expectedPkg) => {
     ...pkg.optionalDependencies,
   })
   for (const dep of deps) {
-    const allowed = dep === SPINE_PKG || (kind === 'slice' && dep.startsWith(LIB_PKG_PREFIX))
+    const allowed =
+      dep === SPINE_PKG ||
+      (kind === 'slice' && dep.startsWith(LIB_PKG_PREFIX)) ||
+      (kind === 'library' && name !== 'ui' && dep === LIB_UI_PKG)
     if (dep.startsWith(SCOPE) && !allowed) {
       fail('DAG', `${kind} "${name}" depends on workspace package "${dep}"`)
     }
   }
 }
 
-// 2. Libraries: anatomy, manifest, and imports (spine's domain-blind parts and externals only).
+// 2. Libraries: anatomy, manifest, and imports (spine's domain-blind parts, lib-ui for non-ui libs, and externals only).
 for (const [name, dir] of libDirs) {
+  if (LIBS_REQUIRING_SPEC.has(name) && !fs.existsSync(path.join(dir, 'SPEC.md'))) {
+    fail('ANATOMY', `library "${name}" is missing SPEC.md`)
+  }
   const hasEntry = ['index.ts', 'index.tsx'].some((entry) =>
     fs.existsSync(path.join(dir, 'src', entry))
   )
@@ -186,7 +195,8 @@ for (const [name, dir] of libDirs) {
   for (const file of listSourceFiles(dir)) {
     for (const spec of extractImports(file)) {
       const ownPackage = libOfPackage(spec)?.name === name && !libOfPackage(spec)?.deep
-      if (spec.startsWith(SCOPE) && !ownPackage) {
+      const importsLibUi = name !== 'ui' && spec === LIB_UI_PKG
+      if (spec.startsWith(SCOPE) && !ownPackage && !importsLibUi) {
         if (!spec.startsWith(`${SPINE_PKG}/`)) {
           fail('DAG', `library "${name}" file ${rel(file)} imports workspace package "${spec}"`)
         } else if (
