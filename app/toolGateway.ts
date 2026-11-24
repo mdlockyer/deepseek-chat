@@ -113,7 +113,7 @@ const effectOf = (name: string): ToolEffect => {
 const TOOL_SUMMARY_SCHEMA = {
   type: 'string',
   description:
-    "Brief 1-sentence summary (6–18 words, in the user's language) explaining what this tool call is doing and why, shown live in the activity indicator. Always emit this field first.",
+    "Plain, active 1-sentence summary (6–18 words, in the user's language) explaining what this tool call is doing and why, using ordinary words rather than compressed shorthand. Shown live in the activity indicator; always emit this field first.",
 } as const
 
 type DeclaredTool = ReturnType<ToolGateway['declare']>[number]

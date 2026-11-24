@@ -205,13 +205,18 @@ describe('conversations subagent runtime (Phase 2 tests 2–19)', () => {
     assert.ok(declaredNames.has(WAIT_TOOL_NAME))
     assert.ok(declaredNames.has(POST_TOOL_NAME))
 
-    // Test 3: clean child never sees lead message text.
+    // Test 3: clean child never sees lead message text, and prompt layers avoid em-dash priming.
     assert.ok(childRequests.length >= 1)
+    assert.ok(
+      !leadRequests[0]?.system.includes('—'),
+      'lead system prompt must not contain em dashes'
+    )
     for (const creq of childRequests) {
       assert.ok(
         !JSON.stringify(creq).includes(leadSecret),
         'clean child must not contain lead prompt'
       )
+      assert.ok(!creq.system.includes('—'), 'subagent system prompt must not contain em dashes')
     }
 
     // Test 7: lead's follow-up request carries wait result and never child's raw blocks.

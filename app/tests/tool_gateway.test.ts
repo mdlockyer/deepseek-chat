@@ -167,6 +167,40 @@ describe('app wiring: tool gateway', () => {
     assert.deepEqual(toolGateway.instructions(new Set(), 'reply'), [])
   })
 
+  it('keeps slice instructions, profiles, and tool schemas free of em-dash priming', () => {
+    const declared = declaredNames({ search: true, python: true })
+    const instructionNames = new Set([...declared, 'browser_navigate'])
+    for (const audience of ['reply', 'agent'] as const) {
+      const sections = toolGateway.instructions(instructionNames, audience)
+      assert.ok(sections.length > 0)
+      for (const section of sections) {
+        assert.ok(!section.includes('—'), `${audience} instructions must not contain em dashes`)
+      }
+    }
+    for (const name of declared) {
+      const profile = toolGateway.agentProfile(name)
+      if (profile) {
+        assert.ok(
+          !profile.system.includes('—'),
+          `${name} profile system must not contain em dashes`
+        )
+      }
+      const described = toolGateway.describe(name, 'reply')
+      assert.ok(described, `${name} is describable`)
+      assert.ok(
+        !described.description.includes('—'),
+        `${name} description must not contain em dashes`
+      )
+      const props = described.input_schema.properties as
+        | Record<string, { description?: string }>
+        | undefined
+      assert.ok(
+        !props?.summary?.description?.includes('—'),
+        `${name} summary schema must not contain em dashes`
+      )
+    }
+  })
+
   it('enforces subagent profile wiring invariants across all registered profiles', () => {
     const names = declaredNames({ search: true, python: true })
     for (const name of names) {

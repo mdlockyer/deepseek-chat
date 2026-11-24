@@ -143,8 +143,12 @@ describe('conversations store: the tool-call loop', () => {
     assert.deepEqual([...declared].sort(), Object.keys(KINDS).sort())
     const sections = instructionsFor(declared).join('\n\n')
     assert.ok(request.system.endsWith(`\n\n${sections}`))
-    // Something (the identity) comes first.
+    // Something (the identity) comes first, stays free of em-dash priming, and stays static.
     assert.ok(request.system.length > sections.length + 2)
+    assert.ok(!request.system.includes('—'), 'core system prompt must not contain em dashes')
+    await turn('second prompt check')
+    const second = env.requests[before + 1]
+    assert.equal(second?.system, request.system, 'core system prompt stays static across turns')
   })
 
   it('stops after the current call when the turn is aborted during it', async () => {

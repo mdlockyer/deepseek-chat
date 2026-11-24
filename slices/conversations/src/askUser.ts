@@ -95,8 +95,8 @@ export const ASK_USER_TOOL: ClientTool = {
 
 export const ASK_USER_INSTRUCTIONS = [
   'Clarifying Questions (`ask_user`):',
-  'When a request has a real fork in direction where guessing wrong would waste significant work—or is missing a required target, constraint, or preference—call `ask_user` instead of writing a wall of numbered questions in prose. The app docks a compact clickable card above the chat input (with keyboard shortcuts and an automatic "Other…" escape hatch) and returns the user’s structured answers right back into this turn.',
-  'Use `ask_user` sparingly: never interrogate the user before straightforward tasks or over minor defaults you can pick sensibly and mention. Keep it to 1–4 short questions, put your recommended choice first with `recommended: true`, and if the user clicks Skip, proceed cleanly using your best judgment.',
+  'When a request has a real fork in direction where guessing wrong would waste significant work, or is missing a required target, constraint, or preference, call `ask_user` instead of writing a wall of numbered questions in prose. The app docks a compact clickable card above the chat input (with keyboard shortcuts and an automatic "Other…" escape hatch) and returns the user’s structured answers right back into this turn.',
+  'Use `ask_user` sparingly: never interrogate the user before straightforward tasks or over minor defaults you can pick sensibly and mention. Keep it to 1–4 short, plain-spoken questions with concrete trade-offs, put your recommended choice first with `recommended: true`, and if the user clicks Skip, proceed cleanly using your best judgment.',
 ].join('\n')
 
 export type ParseAskUserResult =

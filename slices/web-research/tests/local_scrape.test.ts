@@ -281,6 +281,9 @@ describe('web-research: localScrape port', () => {
 
     const localReplyPrompt = localWeb.instructionsFor('reply')
     assert.match(localReplyPrompt, /locally/i)
+    assert.ok(!localAgentPrompt.includes('—'), 'local agent prompt must not contain em dashes')
+    assert.ok(!remoteAgentPrompt.includes('—'), 'remote agent prompt must not contain em dashes')
+    assert.ok(!localReplyPrompt.includes('—'), 'local reply prompt must not contain em dashes')
   })
 
   it('supports local PDF scrapes with caching, quote verification, and accurate PDF prompt wording', async () => {
