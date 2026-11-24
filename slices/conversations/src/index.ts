@@ -11,7 +11,7 @@ import { loadFile } from './db.js'
 import { installDeps, type ConversationsDeps } from './env.js'
 import { translate } from './messages.js'
 import { getChatMessages, useChatMessages, useHistoryState } from './sessionAccess.js'
-import { setDraftText } from './drafts.js'
+import { addDraftFiles, setDraftText } from './drafts.js'
 import {
   continueReply,
   editMessage,
@@ -109,6 +109,13 @@ export const createConversationsSlice = (deps: ConversationsDeps) => {
       /** Resolves `true` once the chat is deleted from storage. */
       removeSession,
       setDraft: setDraftText,
+      /**
+       * Adds files to the chat's draft and starts uploading them, as the composer does. Returns the
+       * reason the batch was refused (count, size, type), or `null`. Until every upload has finished,
+       * `send` sends nothing and returns `false`.
+       */
+      attach: (sessionId: string | null, files: File[]) =>
+        addDraftFiles(sessionId, files, deps.getApiKey() ?? ''),
       /** Sends the chat's draft; `false` when nothing was sent. */
       send: sendMessage,
       regenerate: regenerateReply,

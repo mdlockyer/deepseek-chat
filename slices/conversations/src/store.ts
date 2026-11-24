@@ -72,11 +72,6 @@ const SYSTEM_PROMPT = [
 const SESSION_CACHE_LIMIT = 5
 /** 安全审核固定开启，所有请求都走扩展模式 */
 const SAFETY_CHECK = { level: 'high' } as const
-/** 服务端判定 file_id 失效后，重新补传并重发的最多次数（不含首次请求） */
-const FILE_RETRY_LIMIT = 2
-/** 退避基数，第 n 次重试等待 2^n 倍；连续失败达到上限就放弃，把原始报错展示出来 */
-const FILE_RETRY_BASE_DELAY = 1000
-
 /** data URL 转为可上传的文件 */
 const dataUrlToFile = (dataUrl: string, name: string): File => {
   const [header, data] = dataUrl.split(',', 2)
@@ -88,9 +83,6 @@ const dataUrlToFile = (dataUrl: string, name: string): File => {
   }
   return new File([bytes], name, { type })
 }
-
-/** 请求未得到任何响应时的自动重发次数 */
-const NETWORK_RETRY_LIMIT = 2
 
 /** Id prefix of the `wait` the app adds when the lead ends its turn with children still running. */
 const AUTO_WAIT_ID_PREFIX = 'auto-wait-'
@@ -1058,7 +1050,7 @@ const waitForRetry = (attempt: number, signal: AbortSignal) =>
         signal.removeEventListener('abort', onAbort)
         resolve()
       },
-      FILE_RETRY_BASE_DELAY * 2 ** attempt
+      runtimeParams().retryBaseDelayMs * 2 ** attempt
     )
     signal.addEventListener('abort', onAbort, { once: true })
   })
@@ -1198,7 +1190,7 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
     tools: deps().tools,
     params,
     apiKey: () => deps().getApiKey(),
-    retry: { limit: NETWORK_RETRY_LIMIT, wait: waitForRetry },
+    retry: { limit: params.networkRetryLimit, wait: waitForRetry },
     onSync: (agents, board, shouldPersist) => {
       reply = {
         ...reply,
@@ -1585,7 +1577,7 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
         }
         // 附件失效：重新补传后重发。收到过内容块（含丢弃的客户端工具）后不自动重发。
         if (
-          attempt < FILE_RETRY_LIMIT &&
+          attempt < params.fileReuploadLimit &&
           !receivedContent &&
           reuploadInvalidatedFiles(sessionId, request, error)
         ) {
@@ -1602,7 +1594,7 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
           error instanceof ApiError &&
           error.kind === 'network' &&
           !receivedContent &&
-          networkRetries < NETWORK_RETRY_LIMIT
+          networkRetries < params.networkRetryLimit
         ) {
           await waitForRetry(networkRetries, controller.signal)
           networkRetries += 1

@@ -28,6 +28,15 @@ export type ConversationsParams = {
   readonly maxPostChars: number
   /** Maximum characters retained in a finished child's stored tool_result blocks for display. */
   readonly childToolResultDisplayChars: number
+  /**
+   * Times a request that failed with a network error before any content arrived is sent again,
+   * counted per lead turn and per child run.
+   */
+  readonly networkRetryLimit: number
+  /** Times a lead request is sent again after the server says an attached file is gone. */
+  readonly fileReuploadLimit: number
+  /** Backoff before retry n (from 0) is `retryBaseDelayMs × 2ⁿ`. */
+  readonly retryBaseDelayMs: number
 }
 
 export const DEFAULT_CONVERSATIONS_PARAMS: ConversationsParams = {
@@ -40,6 +49,9 @@ export const DEFAULT_CONVERSATIONS_PARAMS: ConversationsParams = {
   maxPostsPerChild: 6,
   maxPostChars: 400,
   childToolResultDisplayChars: 2000,
+  networkRetryLimit: 2,
+  fileReuploadLimit: 2,
+  retryBaseDelayMs: 1000,
 }
 
 /** The ports the conversations slice runs on, given once at startup. */
