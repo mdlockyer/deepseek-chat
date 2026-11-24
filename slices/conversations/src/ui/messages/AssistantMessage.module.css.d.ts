@@ -1,6 +1,8 @@
 declare const styles: {
   readonly message: string
   readonly actions: string
+  readonly images: string
+  readonly outputImage: string
   readonly files: string
   readonly waiting: string
   readonly working: string
@@ -12,5 +14,7 @@ declare const styles: {
   readonly continueButton: string
   readonly summary: string
   readonly summaryActive: string
+  readonly sourcesIcon: string
+  readonly sourcesLabel: string
 }
 export = styles

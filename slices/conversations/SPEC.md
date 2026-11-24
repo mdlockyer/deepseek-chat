@@ -12,19 +12,19 @@ chat through the tool gateway the app supplies.
 
 `createConversationsSlice(deps)` installs the ports and returns the instance:
 
-| Member                                                          | Meaning                                                                               |
-| :-------------------------------------------------------------- | :------------------------------------------------------------------------------------ |
-| `stopReply(sessionId)`                                          | Stops that chat's reply in progress.                                                  |
-| `loadFile(id)`                                                  | Stored file contents (attachments, presented files).                                  |
-| `getChatMessages(id)`, `useChatMessages(id)`                    | A loaded chat's visible branch (empty while not loaded).                              |
-| `exportHistory()`, `importHistory(file)`, `clearHistory()`      | History as a v3 ZIP; import and clear replace everything.                             |
-| `useHistoryState()`, `historyErrorText(error)`                  | Replace in progress / no chats; an import error's reason.                             |
-| `useChatLifecycle()`                                            | Starts the chat and follows the chat on screen (call once, outside error boundaries). |
-| `useActiveSessionId()`                                          | The chat on screen (`null`: the new-chat screen).                                     |
-| `Sider`, `MobileSider`, `CollapsedSider`                        | The session list.                                                                     |
-| `ChatMain({ siderCollapsed })`, `ChatSaveBanner`                | Loading state, chat or welcome screen; the save-failure banner.                       |
-| `SearchPanel`, `useHasLastSearch()`, `restoreLastSearchPanel()` | Search results in the right-hand panel.                                               |
-| `commands`                                                      | Headless versions of what the views do (send, attach, edit, regenerate, continue…).   |
+| Member                                                                | Meaning                                                                               |
+| :-------------------------------------------------------------------- | :------------------------------------------------------------------------------------ |
+| `stopReply(sessionId)`                                                | Stops that chat's reply in progress.                                                  |
+| `loadFile(id)`                                                        | Stored file contents (attachments, presented files).                                  |
+| `getChatMessages(id)`, `useChatMessages(id)`                          | A loaded chat's visible branch (empty while not loaded).                              |
+| `exportHistory()`, `importHistory(file)`, `clearHistory()`            | History as a v3 ZIP; import and clear replace everything.                             |
+| `useHistoryState()`, `historyErrorText(error)`                        | Replace in progress / no chats; an import error's reason.                             |
+| `useChatLifecycle()`                                                  | Starts the chat and follows the chat on screen (call once, outside error boundaries). |
+| `useActiveSessionId()`                                                | The chat on screen (`null`: the new-chat screen).                                     |
+| `Sider`, `MobileSider`, `CollapsedSider`                              | The session list.                                                                     |
+| `ChatMain({ siderCollapsed })`, `ChatSaveBanner`                      | Loading state, chat or welcome screen; the save-failure banner.                       |
+| `ActivityPanel`, `useHasLastActivity()`, `restoreLastActivityPanel()` | Unified turn activity & sources inspector in the right-hand panel.                    |
+| `commands`                                                            | Headless versions of what the views do (send, attach, edit, regenerate, continue…).   |
 
 The package also exports the pure model functions (branches, reply events, the reply view, the API
 transport, the archive codec) and the composer toggles; the boundary tests use them.
@@ -63,7 +63,7 @@ on screen, a phase callback, and the file store (save/load).
 **View ports (`ui`).** `voice`: the voice input hook, voice button, spectrum, read-aloud button
 and stop. `panels.files`: whether the file panel shows a given file (`presented` or `upload`), open
 it, and the header toggle (`visible`, `open`, `toggle`). `panels.browser`: the header toggle, or
-`null` without a browser. `panels.search`: this slice's `PanelSlot`. `openSettings(section)`,
+`null` without a browser. `panels.activity`: this slice's `PanelSlot`. `openSettings(section)`,
 `openInApp(url)` (or `null`: ordinary links), `saveFile(name, blob)`, `setSiderCollapsed`.
 
 ## Behavioural invariants
@@ -122,13 +122,19 @@ it, and the header toggle (`visible`, `open`, `toggle`). `panels.browser`: the h
 9. **Session list groups:** Today, Yesterday, Previous 7 days, Previous 30 days, then by month.
 10. **Missing API key.** Sending, attaching, editing a question or starting voice input without a
     key opens Settings on the key section instead.
-11. **Search results panel.** Clicking a reply's sources shows them in the search slot; clicking the
-    same sources again closes it. When the slot shows something else, the last results are kept and
-    `restoreLastSearchPanel` shows them again. Switching chats closes them.
-12. **Links.** Citation marks and browser-step links open with `openInApp` when given (desktop:
-    the built-in browser); otherwise citations open a new tab and other links behave normally.
+11. **Activity & sources panel.** Clicking a reply's work strip or sources button opens that turn
+    in the right-hand activity slot (on the `Activity` or `Sources` tab respectively) and updates
+    live while the reply streams; clicking the same trigger again closes it. When the slot switches
+    to another right-hand panel on the same chat, the last inspected target is kept and
+    `restoreLastActivityPanel` restores it. Switching chats or branches closes it. Inside
+    `Activity`, consecutive web research calls merge across intervening thinking blocks, raw
+    `wait` plumbing is folded out, board posts attach to subagents as shared notes, and `Sources`
+    lists cited sources first followed by all other deduplicated sources.
+12. **Links.** Citation marks, source cards, and activity-panel page/browser links open with
+    `openInApp` when given (desktop: the built-in browser); otherwise citations open a new tab and
+    other links behave normally.
 13. **Following the chat on screen** (`useChatLifecycle`): the right-hand panels follow it
-    (`onActiveSessionChange`), read-aloud stops, search results close, and the mobile drawer
+    (`onActiveSessionChange`), read-aloud stops, the activity panel closes, and the mobile drawer
     closes.
 14. **History round trip.** Exporting the history and importing that file restores the same chats
     with the same titles and, for each, the same visible branch (roles and text). Choices on
@@ -138,20 +144,21 @@ it, and the header toggle (`visible`, `open`, `toggle`). `panels.browser`: the h
     its type (with the tool name), delta count, characters received and timings, ordered in time.
     A trace never contains message, tool-input or reply content.
 16. **Still working.** While a reply streams and nothing new has arrived for the stall delay (see
-    Parameters), a "Working…" line shows at the end of the reply, until the next content arrives.
-    It does not show while the reply has nothing yet (the waiting whale or the thinking title show
-    instead), or while its last step is a tool that already shows it is running (a tool without its
-    result, a running Python call, a running `wait` call, or a running child row). An open thinking
-    block does not count: during a stall it receives nothing, and it may stay open until the
-    held-back tool call arrives. The server may hold a whole tool call back until its input (e.g. a
-    file) is written, so this gap can last tens of seconds.
-17. **Files with the answer.** The files a reply produced (from any tool result: presented or
-    edited files, files from Python) show as cards with the answer, not inside the thinking and
-    tools timeline, so they stay visible when the timeline is collapsed. There is one card per file
-    (by path, or by name when there is no path), in the order the files first appeared, showing
-    the latest version. The timeline keeps each file step's line and errors. The cards appear once
-    the reply has finished (done, stopped or failed); while it streams there are none, since the
-    file panel opens by itself and follows each new version.
+    Parameters), a "Working…" status shows until the next content arrives — in-place inside the
+    bounded live work strip before answer prose begins, and below the answer if a stall occurs
+    mid-answer. It does not show while the reply has nothing yet (the waiting state shows instead),
+    or while its last step is a tool that already shows it is running (a tool without its result, a
+    running Python call, a running `wait` call, or a running child row). An open thinking block
+    does not count: during a stall it receives nothing, and it may stay open until the held-back
+    tool call arrives. The server may hold a whole tool call back until its input (e.g. a file) is
+    written, so this gap can last tens of seconds.
+17. **Deliverables with the answer.** Files a reply produced (from any tool result: presented or
+    edited files, files from Python) and generated visual outputs from Python (`images`) show Front
+    Stage with the answer, not buried inside the backstage activity panel. File cards show one card
+    per file (by path, or by name when there is no path), in first-seen order at the latest
+    version, once the reply finishes (done, stopped or failed); while streaming there are no file
+    cards, since the file panel opens by itself and follows each new version. Generated Python
+    images show with the answer as soon as they arrive.
 18. **Living session titles (turn-end hook).** After a reply finishes normally (not stopped, failed
     or refused), if the user has not locked the title by manually renaming the chat, a detached
     background fork request rides the turn's exact prompt prefix (`model`, `system`, `tools`,
@@ -161,15 +168,16 @@ it, and the header toggle (`visible`, `open`, `toggle`). `panels.browser`: the h
     executes tools, never blocks the next turn, and never bumps `updatedAt`. Any new send, edit,
     regenerate, branch switch, manual rename, delete or history replacement cancels an in-flight
     title refresh. Clearing a title manually unlocks auto-titling again.
-19. **One activity whale.** While a reply streams, the animated whale marks that the model is
-    working, and at most one whale shows per reply. Before any content arrives it stands alone as
-    the waiting indicator. Once there is a thinking title and no answer yet, it sits on the title.
-    Otherwise it sits on the last tool row that shows it is running (while the lead waits, the whale
-    sits on the `wait` row, and running child rows show a static running indicator), or, with none
-    running, on the "Working…" line. A clarifying question waiting for the user keeps its pulsing
-    dot, because the user, not the model, has the next move. When the reply stops streaming, the
-    title's whale stays in place as the still logo (grey if the reply was stopped); everywhere else
-    the whale gives way to that spot's static icon.
+19. **One activity whale & bounded work strip.** While a reply streams, at most one animated whale
+    shows per reply on the turn's single Work Strip (or on the mid-answer stall line if the answer
+    is already streaming and stalled). While working before the answer arrives, the Work Strip
+    stays bounded to at most 2 lines for single-threaded tools (active verb + tally on line 1,
+    latest plain-prose `summary` on line 2) and at most 3 compact active tracks (plus overflow
+    count) when parallel subagents run. A clarifying question waiting for the user keeps its
+    pulsing dot, because the user, not the model, has the next move; answered clarifying questions
+    remain visible Front Stage as a compact decision line. Once the answer arrives or the reply
+    ends, the Work Strip collapses to a single summary button carrying the still whale (muted grey
+    if stopped, or a warning icon if any tool step failed).
 20. **Subagents (runtime rules 2–16).**
     - **Read-only and depth 1:** a child receives only `read` tools from its profile (never another
       subagent), `post`, and its profile's `finish` tool. Any call to another tool gets an error

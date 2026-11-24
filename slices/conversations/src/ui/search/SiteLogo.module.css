@@ -28,24 +28,3 @@
     height: 70%;
   }
 }
-
-.group {
-  display: inline-flex;
-  margin-left: 6px;
-  user-select: none;
-}
-
-.thumbnail {
-  flex-shrink: 0;
-  width: 16px;
-  height: 16px;
-  margin-left: -4px;
-  transition: box-shadow 0.2s;
-  box-shadow:
-    0 0 0 1px var(--search-row-site-logo-color, var(--dsw-alias-bg-base)),
-    0 0 0 1px var(--dsw-alias-bg-base);
-
-  &:first-of-type {
-    margin-left: 0;
-  }
-}

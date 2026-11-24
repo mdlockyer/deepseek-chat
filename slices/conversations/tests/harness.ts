@@ -45,6 +45,7 @@ const KINDS: Record<string, ToolKind> = {
   read_file: 'read_file',
   python: 'python',
   ask_user: 'ask_user',
+  research: 'subagent',
 }
 
 const defaultEffectForKind = (kind: ToolKind | null): ToolEffect => {
@@ -53,6 +54,8 @@ const defaultEffectForKind = (kind: ToolKind | null): ToolEffect => {
     case 'web_scrape':
     case 'read_file':
       return 'read'
+    case 'subagent':
+      return 'spawn'
     case 'present_file':
     case 'edit_file':
       return 'artifact'
@@ -111,7 +114,7 @@ export const installTestSlice = (overrides: Partial<ConversationsDeps> = {}) =>
           useToggle: () => ({ visible: false, open: false, toggle: () => {} }),
         },
         browser: null,
-        search: fakeSearchSlot(),
+        activity: fakeSearchSlot(),
       },
       openSettings: () => {},
       openInApp: null,

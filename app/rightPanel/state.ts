@@ -1,11 +1,13 @@
 import { create } from 'zustand'
 import { localStore } from '../storage.js'
 
-export type RightPanelKind = 'preview' | 'browser' | 'search'
+export type RightPanelKind = 'preview' | 'browser' | 'activity'
 
 type SidePanelState = {
   activeSessionId: string | null
   activePanels: Record<string, RightPanelKind | null>
+  /** Last panel displaced on the same session, powering one-click return chips. */
+  previousPanels: Record<string, RightPanelKind | null>
   panelAnimating: boolean
   panelResizing: boolean
   overlayLocks: number
@@ -37,6 +39,7 @@ export const clampSidePanelResizeWidth = (proposedWidth: number, windowWidth: nu
 export const useSidePanelStore = create<SidePanelState>(() => ({
   activeSessionId: null,
   activePanels: {},
+  previousPanels: {},
   panelAnimating: false,
   panelResizing: false,
   overlayLocks: 0,
@@ -90,6 +93,16 @@ export const getActiveRightPanel = (
   return Object.hasOwn(state.activePanels, sessionId) ? state.activePanels[sessionId] : null
 }
 
+export const getPreviousRightPanel = (
+  sessionId: string | null | undefined,
+  state: Pick<SidePanelState, 'previousPanels'> = get()
+): RightPanelKind | null => {
+  if (!sessionId) {
+    return null
+  }
+  return Object.hasOwn(state.previousPanels, sessionId) ? state.previousPanels[sessionId] : null
+}
+
 export const setActiveSidePanelSession = (sessionId: string | null) => {
   const state = get()
   if (state.activeSessionId === sessionId) {
@@ -112,6 +125,8 @@ export const openRightPanel = (sessionId: string, kind: RightPanelKind) => {
   const isViewing = state.activeSessionId === sessionId
   set({
     activePanels: { ...state.activePanels, [sessionId]: kind },
+    previousPanels:
+      prev !== null ? { ...state.previousPanels, [sessionId]: prev } : state.previousPanels,
     ...(isViewing && prev === null ? { panelAnimating: true } : {}),
   })
 }
@@ -125,6 +140,7 @@ export const closeRightPanel = (sessionId: string, kind?: RightPanelKind) => {
   const isViewing = state.activeSessionId === sessionId
   set({
     activePanels: { ...state.activePanels, [sessionId]: null },
+    previousPanels: { ...state.previousPanels, [sessionId]: null },
     ...(isViewing ? { panelAnimating: false } : {}),
   })
 }
@@ -166,6 +182,9 @@ export const disposeSidePanelSession = (sessionId: string) => {
     activePanels: Object.fromEntries(
       Object.entries(state.activePanels).filter(([key]) => key !== sessionId)
     ),
+    previousPanels: Object.fromEntries(
+      Object.entries(state.previousPanels).filter(([key]) => key !== sessionId)
+    ),
     ...(state.activeSessionId === sessionId
       ? { activeSessionId: null, panelAnimating: false }
       : {}),
@@ -176,6 +195,7 @@ export const clearAllSidePanelSessions = () => {
   set({
     activeSessionId: null,
     activePanels: {},
+    previousPanels: {},
     panelAnimating: false,
     panelResizing: false,
   })

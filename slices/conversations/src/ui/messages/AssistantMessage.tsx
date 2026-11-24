@@ -1,28 +1,31 @@
-import { useTranslate } from '../../messages.js'
 import clsx from 'clsx'
 import { memo, useEffect, useState } from 'react'
-import { IconRefreshOutline16, IconWarningOutline16 } from '@deepseek-chat/spine/design'
+import {
+  Button,
+  IconButton,
+  IconGlobeLanguageOutline16,
+  IconRefreshOutline16,
+  IconWarningOutline16,
+} from '@deepseek-chat/spine/design'
 import { describeReply } from '../../describe.js'
+import { deps } from '../../env.js'
+import { useTranslate } from '../../messages.js'
 import { canContinueReply } from '../../reply.js'
 import { continueReply, regenerateReply } from '../../store.js'
 import { type AssistantMessage as AssistantMessageType } from '../../types.js'
-import { deps } from '../../env.js'
-import { IconButton } from '@deepseek-chat/spine/design'
-import { Button } from '@deepseek-chat/spine/design'
-import { ChatMarkdown as Markdown } from './ChatMarkdown.js'
-import { SiteThumbnails } from '../search/SiteLogo.js'
-import { toggleSearchPanel, useSearchPanel } from '../search/searchPanelState.js'
-import { CopyButton } from './CopyButton.js'
-import { PresentedFileCard, ReplyArea, runsTool, showsLiveTitle } from './ReplyArea.js'
 import { needsWorkingIndicator } from '../../view.js'
-import { useReplyView } from './useReplyView.js'
-import { WhaleLoader } from './WhaleLoader.js'
+import { toggleActivityPanel, useActivityPanel } from '../activity/activityPanelState.js'
+import styles from './AssistantMessage.module.css'
 import {
   BranchSwitcher,
   type MessageVersions,
   type SelectMessageVersion,
 } from './BranchSwitcher.js'
-import styles from './AssistantMessage.module.css'
+import { ChatMarkdown as Markdown } from './ChatMarkdown.js'
+import { CopyButton } from './CopyButton.js'
+import { PresentedFileCard, ReplyArea } from './ReplyArea.js'
+import { useReplyView } from './useReplyView.js'
+import { WhaleLoader } from './WhaleLoader.js'
 
 const TOP_UP_URL = 'https://platform.deepseek.com/top_up'
 
@@ -31,7 +34,6 @@ const STALL_DELAY_MS = 1500
 
 /**
  * 生成中且自上次内容变化起已过 `delay`：每个流式事件都会换掉消息对象，变化即重新计时。
- * 记录「哪个消息对象停住了」，内容一变就自动失效，不必在 effect 里重置状态。
  */
 const useStalled = (message: object, streaming: boolean, delay: number) => {
   const [stalledAt, setStalledAt] = useState<object | null>(null)
@@ -65,7 +67,7 @@ export const AssistantMessage = memo(function AssistantMessage({
   const t = useTranslate()
   const { ReadAloudButton } = deps().ui.voice
   const view = useReplyView(message, streaming)
-  const panelEntry = useSearchPanel((state) => state.entry)
+  const panelTarget = useActivityPanel((state) => state.target)
   const notice = streaming ? null : describeReply(message)
   // 安全拒绝：已下发的思考与正文按协议丢弃，只显示模板答复。
   const refused = message.stopReason === 'refusal'
@@ -74,20 +76,33 @@ export const AssistantMessage = memo(function AssistantMessage({
     .filter(Boolean)
     .join('\n\n')
   const copyText = responseText || notice?.text
-  const waiting = streaming && view.steps.length === 0 && !view.answer && !message.thinking
   const stalled = useStalled(message, streaming, STALL_DELAY_MS)
-  const working = stalled && !waiting && !refused && needsWorkingIndicator(view)
-  // 一条回复只出现一只鲸鱼：思考标题或运行中的工具行已有鲸鱼时，「正在处理…」只留文字
-  const workingWhale =
-    !showsLiveTitle(message, view, streaming, !!responseText) && !view.steps.some(runsTool)
-  const summaryEntry = `${message.id}-summary`
+  // Before answer text starts, ReplyArea shows stalls in-place inside its bounded live slot.
+  const midAnswerStalled = Boolean(answer) && stalled && !refused && needsWorkingIndicator(view)
+
+  const totalSources = view.sources.length
+  const citedCount = view.citedSourceIndexes.length
+  const sourcesLabel =
+    citedCount > 0 && totalSources > citedCount
+      ? t('activitySourcesCitedSummary', { cited: citedCount, total: totalSources })
+      : t(totalSources === 1 ? 'activityCountSourceOne' : 'activityCountSourceMany', {
+          count: totalSources,
+        })
+  const isSourcesOpen =
+    panelTarget !== null &&
+    panelTarget.sessionId === sessionId &&
+    panelTarget.messageId === message.id &&
+    panelTarget.tab === 'sources'
+
   return (
     <div className={styles.message}>
       {refused ? null : (
         <ReplyArea
+          sessionId={sessionId}
           message={message}
           view={view}
           streaming={streaming}
+          stalled={stalled}
           hasResponse={!!responseText}
         />
       )}
@@ -101,6 +116,18 @@ export const AssistantMessage = memo(function AssistantMessage({
           sources={view.sources}
         />
       ) : null}
+      {!refused && view.images.length > 0 ? (
+        <div className={styles.images}>
+          {view.images.map((src, index) => (
+            <img
+              key={src}
+              src={src}
+              alt={t('activityOutputImageAlt', { index: index + 1 })}
+              className={styles.outputImage}
+            />
+          ))}
+        </div>
+      ) : null}
       {view.files.length > 0 ? (
         <div className={styles.files}>
           {view.files.map((file) => (
@@ -108,14 +135,9 @@ export const AssistantMessage = memo(function AssistantMessage({
           ))}
         </div>
       ) : null}
-      {waiting ? (
-        <div className={styles.waiting}>
-          <WhaleLoader label={t('replyWaiting')} />
-        </div>
-      ) : null}
-      {working ? (
-        <div className={styles.working} role="status">
-          {workingWhale ? <WhaleLoader width={16} /> : null}
+      {midAnswerStalled ? (
+        <div className={styles.working} role="status" aria-live="polite">
+          <WhaleLoader width={16} />
           <span className={styles.workingText}>{t('replyWorking')}</span>
         </div>
       ) : null}
@@ -160,19 +182,19 @@ export const AssistantMessage = memo(function AssistantMessage({
           </span>
         </div>
       ) : null}
-      {!streaming && !refused && view.searchResults.length > 0 ? (
-        <div
-          className={clsx(styles.summary, panelEntry === summaryEntry && styles.summaryActive)}
-          onClick={() => toggleSearchPanel(summaryEntry, view.searchResults)}
+      {!streaming && !refused && totalSources > 0 ? (
+        <button
+          type="button"
+          className={clsx(styles.summary, isSourcesOpen && styles.summaryActive)}
+          aria-pressed={isSourcesOpen}
+          aria-label={t('activitySourcesLabel')}
+          onClick={() => toggleActivityPanel(sessionId, message.id, 'sources')}
         >
-          <SiteThumbnails sources={view.searchResults} />
-          <span>
-            {t(
-              view.searchResults.length === 1 ? 'messageSearchSummary' : 'messageSearchSummaries',
-              { count: view.searchResults.length }
-            )}
+          <span className={styles.sourcesIcon} aria-hidden="true">
+            <IconGlobeLanguageOutline16 />
           </span>
-        </div>
+          <span className={styles.sourcesLabel}>{sourcesLabel}</span>
+        </button>
       ) : null}
       {streaming ? null : (
         <div className={styles.bottom}>

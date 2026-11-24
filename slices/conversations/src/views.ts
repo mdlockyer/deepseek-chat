@@ -48,8 +48,8 @@ export type ChatPanels = {
       readonly toggle: () => void
     }
   } | null
-  /** This slice's slot for search results. */
-  readonly search: PanelSlot
+  /** This slice's slot for the unified turn activity & sources inspector. */
+  readonly activity: PanelSlot
 }
 
 export type SettingsSection = 'general' | 'apiKey' | 'data'

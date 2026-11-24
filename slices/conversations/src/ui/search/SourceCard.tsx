@@ -1,6 +1,7 @@
 import clsx from 'clsx'
-import { type Source } from '../../view.js'
+import { deps } from '../../env.js'
 import { formatDate } from '../../format.js'
+import { type Source } from '../../view.js'
 import { SiteLogo } from './SiteLogo.js'
 import styles from './SourceCard.module.css'
 
@@ -8,16 +9,38 @@ import styles from './SourceCard.module.css'
 const formatPublishedAt = (value: string | null) => (value ? (formatDate(value, '/') ?? value) : '')
 
 /**
- * 搜索结果卡片：站点图标与名称、日期、标题、摘要。
- * 元数据缺失时省略摘要，图标使用链接图标兜底。
+ * 来源卡片：引用角标（可选）、真实站点图标（无图标时省略，避免空占位链接图标）、站点名、日期、标题与摘要。
  */
-export const SourceCard = ({ source, className }: { source: Source; className?: string }) => {
+export const SourceCard = ({
+  source,
+  citationIndex,
+  className,
+}: {
+  source: Source
+  citationIndex?: number
+  className?: string
+}) => {
   const date = formatPublishedAt(source.publishedAt)
   return (
-    <a className={styles.anchor} href={source.url} target="_blank" rel="noreferrer">
+    <a
+      className={styles.anchor}
+      href={source.url}
+      target="_blank"
+      rel="noreferrer"
+      onClick={(event) => {
+        const { openInApp } = deps().ui
+        if (openInApp && /^https?:\/\//i.test(source.url)) {
+          event.preventDefault()
+          openInApp(source.url)
+        }
+      }}
+    >
       <div className={clsx(styles.card, className)}>
         <div className={styles.meta}>
-          <SiteLogo url={source.siteIcon} className={styles.siteIcon} />
+          {citationIndex !== undefined ? (
+            <span className={styles.citationBadge}>{citationIndex}</span>
+          ) : null}
+          {source.siteIcon ? <SiteLogo url={source.siteIcon} className={styles.siteIcon} /> : null}
           {source.siteName ? <span className={styles.siteName}>{source.siteName}</span> : null}
           {source.siteName && date ? <span className={styles.divider} /> : null}
           {date ? <span className={styles.date}>{date}</span> : null}

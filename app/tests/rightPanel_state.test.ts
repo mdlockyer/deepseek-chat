@@ -4,7 +4,9 @@ import {
   acquireSidePanelOverlayLock,
   clampSidePanelResizeWidth,
   closeActiveRightPanelKind,
+  closeRightPanel,
   getActiveRightPanel,
+  getPreviousRightPanel,
   openRightPanel,
   registerOverlayLockListener,
   useSidePanelStore,
@@ -14,6 +16,7 @@ const resetPanelStore = (activeSessionId: string | null = 's1') => {
   useSidePanelStore.setState({
     activeSessionId,
     activePanels: {},
+    previousPanels: {},
     panelAnimating: false,
     panelResizing: false,
     overlayLocks: 0,
@@ -35,19 +38,40 @@ describe('right panel resize clamping', () => {
 })
 
 describe('right-rail coordination', () => {
-  it('prevents closeActiveRightPanelKind("search") from closing an open preview or browser panel', () => {
+  it('prevents closeActiveRightPanelKind("activity") from closing an open preview or browser panel', () => {
     resetPanelStore('s1')
     openRightPanel('s1', 'preview')
     assert.equal(getActiveRightPanel('s1'), 'preview')
 
-    // Message sends trigger closeSearchPanel() -> closeActiveRightPanelKind('search')
-    closeActiveRightPanelKind('search')
+    // Message sends trigger closeActivityPanel() -> closeActiveRightPanelKind('activity')
+    closeActiveRightPanelKind('activity')
     assert.equal(getActiveRightPanel('s1'), 'preview')
 
-    openRightPanel('s1', 'search')
-    assert.equal(getActiveRightPanel('s1'), 'search')
-    closeActiveRightPanelKind('search')
+    openRightPanel('s1', 'activity')
+    assert.equal(getActiveRightPanel('s1'), 'activity')
+    assert.equal(getPreviousRightPanel('s1'), 'preview')
+
+    closeActiveRightPanelKind('activity')
     assert.equal(getActiveRightPanel('s1'), null)
+    assert.equal(getPreviousRightPanel('s1'), null)
+  })
+
+  it('tracks the displaced previous panel per session for one-click return chips', () => {
+    resetPanelStore('s1')
+    openRightPanel('s1', 'browser')
+    assert.equal(getPreviousRightPanel('s1'), null)
+
+    openRightPanel('s1', 'activity')
+    assert.equal(getActiveRightPanel('s1'), 'activity')
+    assert.equal(getPreviousRightPanel('s1'), 'browser')
+
+    openRightPanel('s1', 'preview')
+    assert.equal(getActiveRightPanel('s1'), 'preview')
+    assert.equal(getPreviousRightPanel('s1'), 'activity')
+
+    // Closing the active panel clears the return chip history for that session.
+    closeRightPanel('s1', 'preview')
+    assert.equal(getPreviousRightPanel('s1'), null)
   })
 
   it('fires shared overlay lock listeners only on 0->1 and 1->0 transitions', () => {

@@ -3,7 +3,7 @@ import { useIsMobile } from '@deepseek-chat/spine/design'
 import { buildMessageVersions, getVisibleMessages, type MessageVersions } from '../../branches.js'
 import { selectMessageVersion } from '../../store.js'
 import { type Session } from '../../types.js'
-import { closeSearchPanel } from '../search/searchPanelState.js'
+import { closeActivityPanel } from '../activity/activityPanelState.js'
 import { AssistantMessage } from './AssistantMessage.js'
 import { ScrollToBottomContext } from './scrollContext.js'
 import { UserMessage } from './UserMessage.js'
@@ -95,7 +95,7 @@ export const MessageList = ({
     scrollToBottom()
   }, [session.id, lastMessageId, scrollToBottom])
 
-  useEffect(closeSearchPanel, [session.id, lastMessageId])
+  useEffect(closeActivityPanel, [session.id, lastMessageId])
 
   const selectVersion = useCallback(
     (messageId: string, anchorTop: number) => {
@@ -104,7 +104,7 @@ export const MessageList = ({
       }
       restoreScrollRef.current = { messageId, top: anchorTop }
       stickyRef.current = false
-      closeSearchPanel()
+      closeActivityPanel()
       selectMessageVersion(session.id, messageId)
     },
     [session.id, streaming]

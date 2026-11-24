@@ -183,6 +183,8 @@ export type ReplyView = {
   answer: { markdown: string; text: string } | null
   /** 正文引用可指向的全部来源，按编号排列 */
   sources: Source[]
+  /** 正文中实际引用到的来源编号（按首次出现顺序去重） */
+  citedSourceIndexes: number[]
   /** 搜索到的网页（去重），用于底部汇总与搜索结果列表 */
   searchResults: Source[]
   /**
@@ -191,6 +193,8 @@ export type ReplyView = {
    * 只保留一张卡片，位置取首次出现，内容取最新版本。
    */
   files: PresentedFileRef[]
+  /** Python 执行产出的内联可视化图片（如 matplotlib 图表），提升到正文交付区展示 */
+  images: string[]
 }
 
 export const getSiteName = (url: string) => {
@@ -759,12 +763,44 @@ export const buildReplyView = (reply: AssistantMessage, streaming: boolean): Rep
   }
 
   const answer = pendingText.length > 0 ? joinTextBlocks(pendingText, registry) : null
+  const citedSourceIndexes: number[] = []
+  if (answer?.markdown) {
+    const seenCited = new Set<number>()
+    const maxIndex = registry.list.length
+    for (const match of answer.markdown.matchAll(/\[citation:(\d+)\]/g)) {
+      const idx = Number(match[1])
+      if (idx >= 1 && idx <= maxIndex && !seenCited.has(idx)) {
+        seenCited.add(idx)
+        citedSourceIndexes.push(idx)
+      }
+    }
+  }
   const files = new Map<string, PresentedFileRef>()
+  const images: string[] = []
+  const seenImages = new Set<string>()
+  const pythonCallIds = new Set<string>()
   for (const block of reply.blocks) {
+    if (block.type === 'tool_use') {
+      const toolKind = kindOf(block.name)
+      if (
+        toolKind === 'python' ||
+        (toolKind === null && block.name !== WAIT_TOOL_NAME && block.name !== POST_TOOL_NAME)
+      ) {
+        pythonCallIds.add(block.id)
+      }
+    }
     if (block.type === 'tool_result') {
       for (const file of block.files ?? []) {
         // Map 保留首次插入的顺序，覆盖时只更新内容
         files.set(file.path ?? file.name, file)
+      }
+      if (pythonCallIds.has(block.tool_use_id)) {
+        for (const img of block.images ?? []) {
+          if (img && !seenImages.has(img)) {
+            seenImages.add(img)
+            images.push(img)
+          }
+        }
       }
     }
   }
@@ -772,9 +808,11 @@ export const buildReplyView = (reply: AssistantMessage, streaming: boolean): Rep
     steps,
     answer: answer && answer.text ? answer : null,
     sources: registry.list,
+    citedSourceIndexes,
     searchResults,
     // 生成中不展示：文件面板会自动打开并跟随新版本，结束后再给出最终版本的卡片
     files: streaming ? [] : [...files.values()],
+    images,
   }
 }
 

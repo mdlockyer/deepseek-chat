@@ -11,7 +11,7 @@ import {
   selectSession,
   useChatStore,
 } from '../../store.js'
-import { closeSearchPanel } from '../search/searchPanelState.js'
+import { closeActivityPanel } from '../activity/activityPanelState.js'
 import { closeMobileSider } from '../sider/mobileSiderState.js'
 import styles from './ChatMain.module.css'
 import { MobileHeader } from './MobileHeader.js'
@@ -43,8 +43,8 @@ export const useChatLifecycle = () => {
   // 文件数、存储空间达到上限时，附件上只显示「上传失败」，原因用 toast 说明
   useEffect(() => onUploadNotice(showNotice), [])
   useEffect(bindChatPersistence, [])
-  // 搜索结果面板只属于当前会话
-  useEffect(closeSearchPanel, [activeId])
+  // 活动与来源面板只属于当前会话
+  useEffect(closeActivityPanel, [activeId])
   // 右侧面板（浏览器标签页等）绑定到当前会话
   useEffect(() => {
     deps().onActiveSessionChange(activeId)

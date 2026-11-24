@@ -1,53 +1,32 @@
 declare const styles: {
   readonly area: string
-  readonly title: string
-  readonly titleIcon: string
+  readonly waiting: string
+  readonly liveWrap: string
+  readonly stripButton: string
+  readonly settledButton: string
+  readonly stripButtonActive: string
+  readonly iconSlot: string
   readonly stoppedIcon: string
-  readonly titleText: string
+  readonly errorIcon: string
+  readonly headline: string
+  readonly tally: string
+  readonly settledLabel: string
+  readonly chevron: string
   readonly shimmer: string
-  readonly withLine: string
-  readonly content: string
-  readonly lastItem: string
-  readonly dot: string
+  readonly liveDetail: string
+  readonly liveAgents: string
+  readonly liveAgentRow: string
+  readonly liveAgentStatus: string
+  readonly liveAgentDot: string
+  readonly liveAgentLabel: string
+  readonly liveAgentDetail: string
+  readonly liveAgentOverflow: string
+  readonly waitingDot: string
   readonly dotInner: string
-  readonly pulse: string
-  readonly inactive: string
-  readonly rowIcon: string
-  readonly row: string
-  readonly clickable: string
-  readonly active: string
-  readonly prefix: string
-  readonly summary: string
-  readonly query: string
-  readonly fadeIn: string
-  readonly tool: string
-  readonly toolIcon: string
-  readonly toolBody: string
-  readonly intro: string
-  readonly stepSummary: string
-  readonly searchStep: string
-  readonly searchSummary: string
-  readonly askWaitingDot: string
-  readonly askSummary: string
+  readonly frontAsks: string
+  readonly frontAskRow: string
   readonly askEntry: string
   readonly askEntryKey: string
   readonly askEntryVal: string
-  readonly page: string
-  readonly pageText: string
-  readonly pageIcon: string
-  readonly pageDone: string
-  readonly pageFailed: string
-  readonly chip: string
-  readonly chipFailed: string
-  readonly chipIcon: string
-  readonly chipText: string
-  readonly agentRunningDot: string
-  readonly agentToggle: string
-  readonly agentLabel: string
-  readonly agentMeta: string
-  readonly agentBody: string
-  readonly boardList: string
-  readonly boardItem: string
-  readonly boardKind: string
 }
 export = styles

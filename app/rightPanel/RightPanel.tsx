@@ -1,26 +1,37 @@
 import { useCallback, useRef } from 'react'
+import {
+  IconBrowseOutline16,
+  IconGlobeLanguageOutline16,
+  IconSearchOutline16,
+  panelStyles,
+} from '@deepseek-chat/spine/design'
+import { browser } from '../composition.js'
+import { conversations } from '../conversations.js'
 import { useTranslate } from '../i18n/index.js'
 import { isDesktopApp } from '../platform/desktop.js'
-import { browser } from '../composition.js'
 import { useSessionFileRecords } from '../useSessionFileRecords.js'
 import { workspaceFiles } from '../workspaceFiles.js'
-import { getActiveRightPanel, useSidePanelStore, type RightPanelKind } from './state.js'
-import { IconSearchOutline16 } from '@deepseek-chat/spine/design'
-import { conversations } from '../conversations.js'
 import { SidePanel } from './SidePanel.js'
-import { panelStyles } from '@deepseek-chat/spine/design'
+import {
+  getActiveRightPanel,
+  getPreviousRightPanel,
+  openRightPanel,
+  useSidePanelStore,
+  type RightPanelKind,
+} from './state.js'
 
-/** 右侧面板统一宿主：在同一 SidePanel 壳层内切换文件预览、内置浏览器与搜索结果 */
+/** 右侧面板统一宿主：在同一 SidePanel 壳层内切换文件预览、内置浏览器与本轮活动/来源检查器 */
 export const RightPanel = () => {
   const t = useTranslate()
   const activeSessionId = useSidePanelStore((state) => state.activeSessionId)
   const activePanels = useSidePanelStore((state) => state.activePanels)
+  const previousPanels = useSidePanelStore((state) => state.previousPanels)
   const activeKind = getActiveRightPanel(activeSessionId, { activePanels })
+  const previousKind = getPreviousRightPanel(activeSessionId, { previousPanels })
   const effectiveKind = activeKind === 'browser' && !isDesktopApp ? null : activeKind
 
   const fileRecords = useSessionFileRecords(activeSessionId)
-
-  const hasLastSearch = conversations.useHasLastSearch()
+  const hasLastActivity = conversations.useHasLastActivity()
 
   const lastKindRef = useRef<RightPanelKind | null>(effectiveKind)
   if (effectiveKind !== null) {
@@ -43,29 +54,69 @@ export const RightPanel = () => {
     }
   }, [effectiveKind])
 
-  // 「返回搜索结果」入口：文件预览与内置浏览器的顶栏都可以带上
-  const searchAction =
-    hasLastSearch && (shownKind === 'preview' || shownKind === 'browser') ? (
-      <button
-        type="button"
-        className={panelStyles.modeChip}
-        title={t('browserBackToResults')}
-        aria-label={t('browserBackToResults')}
-        onClick={conversations.restoreLastSearchPanel}
-      >
-        <IconSearchOutline16 />
-        <span>{t('browserBackToResults')}</span>
-      </button>
-    ) : null
+  // Contextual one-click return chip when one right-hand panel displaced another on this session.
+  const returnAction = (() => {
+    if (!activeSessionId || !shownKind) {
+      return null
+    }
+    if (shownKind === 'preview' || shownKind === 'browser') {
+      if (!hasLastActivity) {
+        return null
+      }
+      return (
+        <button
+          type="button"
+          className={panelStyles.modeChip}
+          title={t('rightPanelBackToActivity')}
+          aria-label={t('rightPanelBackToActivity')}
+          onClick={conversations.restoreLastActivityPanel}
+        >
+          <IconSearchOutline16 />
+          <span>{t('rightPanelBackToActivity')}</span>
+        </button>
+      )
+    }
+    if (shownKind === 'activity') {
+      if (previousKind === 'preview' && fileRecords.length > 0) {
+        return (
+          <button
+            type="button"
+            className={panelStyles.modeChip}
+            title={t('rightPanelBackToFiles')}
+            aria-label={t('rightPanelBackToFiles')}
+            onClick={() => openRightPanel(activeSessionId, 'preview')}
+          >
+            <IconBrowseOutline16 />
+            <span>{t('rightPanelBackToFiles')}</span>
+          </button>
+        )
+      }
+      if (previousKind === 'browser' && isDesktopApp) {
+        return (
+          <button
+            type="button"
+            className={panelStyles.modeChip}
+            title={t('rightPanelBackToBrowser')}
+            aria-label={t('rightPanelBackToBrowser')}
+            onClick={() => openRightPanel(activeSessionId, 'browser')}
+          >
+            <IconGlobeLanguageOutline16 />
+            <span>{t('rightPanelBackToBrowser')}</span>
+          </button>
+        )
+      }
+    }
+    return null
+  })()
 
   return (
     <SidePanel open={effectiveKind !== null} onResizeHoverStart={handleResizeHoverStart}>
       {shownKind === 'browser' ? (
-        <browser.BrowserPanel topActions={searchAction} />
+        <browser.BrowserPanel topActions={returnAction} />
       ) : shownKind === 'preview' ? (
-        <workspaceFiles.PreviewPanel records={fileRecords} topActions={searchAction} />
-      ) : shownKind === 'search' ? (
-        <conversations.SearchPanel />
+        <workspaceFiles.PreviewPanel records={fileRecords} topActions={returnAction} />
+      ) : shownKind === 'activity' ? (
+        <conversations.ActivityPanel topActions={returnAction} />
       ) : null}
     </SidePanel>
   )

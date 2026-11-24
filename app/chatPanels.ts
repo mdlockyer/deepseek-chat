@@ -89,5 +89,5 @@ export const createChatPanels = (
         }),
       }
     : null,
-  search: createPanelSlot('search'),
+  activity: createPanelSlot('activity'),
 })

@@ -28,11 +28,11 @@ import {
   waitForIdle,
 } from './store.js'
 import {
-  bindSearchPanel,
-  restoreLastSearchPanel,
-  useSearchPanel,
-} from './ui/search/searchPanelState.js'
-import { SearchPanel } from './ui/search/SearchPanel.js'
+  bindActivityPanel,
+  restoreLastActivityPanel,
+  useActivityPanel,
+} from './ui/activity/activityPanelState.js'
+import { ActivityPanel } from './ui/activity/ActivityPanel.js'
 import {
   ChatMain,
   ChatSaveBanner,
@@ -91,7 +91,7 @@ export type { AskUserOption, AskUserQuestion, PendingAskUser } from './askUser.j
 export const createConversationsSlice = (deps: ConversationsDeps) => {
   installDeps(deps)
   hydrateComposerOptions()
-  bindSearchPanel()
+  bindActivityPanel()
   return {
     /** Stops the chat's reply in progress, if any. */
     stopReply,
@@ -156,11 +156,10 @@ export const createConversationsSlice = (deps: ConversationsDeps) => {
     CollapsedSider,
     ChatMain,
     ChatSaveBanner,
-    SearchPanel,
-    /** Whether the last search results can be shown again, and how. */
-    useHasLastSearch: () =>
-      useSearchPanel((state) => state.lastEntry !== null && state.lastSources.length > 0),
-    restoreLastSearchPanel,
+    ActivityPanel,
+    /** Whether the last inspected turn activity can be restored on this session, and how. */
+    useHasLastActivity: () => useActivityPanel((state) => state.lastTarget !== null),
+    restoreLastActivityPanel,
   }
 }
 
@@ -199,6 +198,17 @@ export {
 export { POST_TOOL_NAME, WAIT_TOOL_NAME } from './subagentTools.js'
 export { assignChildCitations, collectCitedUrls } from './citations.js'
 export { buildReplyView, getAreaTitle, needsWorkingIndicator } from './view.js'
+export {
+  buildActivityTimeline,
+  buildTurnWorkStrip,
+  getFrontStageAsks,
+  type ActivityPhase,
+  type ActivityTimeline,
+  type LiveAgentTrack,
+  type ResearchPhase,
+  type SubagentsPhase,
+  type TurnWorkStripState,
+} from './activityView.js'
 
 /** History archive codec (pure): the v3 export format's sessions and its ZIP container. */
 export { readSessionFile } from './history/schema.js'

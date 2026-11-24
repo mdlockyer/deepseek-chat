@@ -1,9 +1,13 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
+  buildActivityTimeline,
   buildReplyView,
+  buildTurnWorkStrip,
   getAreaTitle,
+  getFrontStageAsks,
   needsWorkingIndicator,
+  WAIT_TOOL_NAME,
   type AssistantMessage,
   type PresentedFileRef,
 } from '@deepseek-chat/slice-conversations'
@@ -581,5 +585,304 @@ describe('reply files (SPEC invariant 17)', () => {
       stopped.files.map((f) => [f.id, f.version]),
       [['f2', 2]]
     )
+  })
+
+  it('promotes Python visual outputs to view.images without leaking browser screenshots', () => {
+    const view = buildReplyView(
+      replyWith([
+        { type: 'tool_use', id: 'py1', name: 'python', input: { code: 'plot()' } },
+        {
+          type: 'tool_result',
+          tool_use_id: 'py1',
+          content: 'plotted',
+          status: 'ok',
+          images: ['data:image/png;base64,chart1', 'data:image/png;base64,chart1'],
+        },
+        { type: 'tool_use', id: 'b1', name: 'browser_click', input: { ref: 'e1' } },
+        {
+          type: 'tool_result',
+          tool_use_id: 'b1',
+          content: 'clicked',
+          status: 'ok',
+          images: ['data:image/jpeg;base64,browser-shot'],
+        },
+        { type: 'text', text: 'Here is the chart.' },
+      ]),
+      false
+    )
+    assert.deepEqual(view.images, ['data:image/png;base64,chart1'])
+  })
+})
+
+describe('buildActivityTimeline & buildTurnWorkStrip (SPEC invariants 11, 17, 19)', () => {
+  it('merges consecutive web searches and page reads across hidden thinking blocks and orders cited sources first', () => {
+    const reply = replyWith(
+      [
+        { type: 'thinking', thinking: 'Check weekly releases.', startedAt: 0, endedAt: 3_000 },
+        {
+          type: 'tool_use',
+          id: 's1',
+          name: 'web_search',
+          input: { summary: 'Searching weekly AI news', query: 'AI LLM releases Nov 2026' },
+        },
+        {
+          type: 'tool_result',
+          tool_use_id: 's1',
+          content: 'ok',
+          status: 'ok',
+          searchResults: [
+            {
+              url: 'https://first.example',
+              title: 'First',
+              snippet: 's1',
+              siteName: 'first.example',
+              publishedAt: null,
+            },
+            {
+              url: 'https://second.example',
+              title: 'Second',
+              snippet: 's2',
+              siteName: 'second.example',
+              publishedAt: null,
+            },
+          ],
+        },
+        { type: 'thinking', thinking: 'Read the news tracker.', startedAt: 3_000, endedAt: 5_000 },
+        {
+          type: 'tool_use',
+          id: 'o1',
+          name: 'web_scrape',
+          input: { summary: 'Reading tracker', url: 'https://second.example' },
+        },
+        {
+          type: 'tool_result',
+          tool_use_id: 'o1',
+          content: 'page',
+          status: 'ok',
+          scrapedPage: { url: 'https://second.example', title: 'Second Tracker' },
+        },
+        { type: 'thinking', thinking: 'Run another query.', startedAt: 5_000, endedAt: 8_000 },
+        {
+          type: 'tool_use',
+          id: 's2',
+          name: 'web_search',
+          input: { summary: 'Checking Nvidia news', query: 'Nvidia CEO status' },
+        },
+        {
+          type: 'tool_result',
+          tool_use_id: 's2',
+          content: 'ok',
+          status: 'ok',
+          searchResults: [
+            {
+              url: 'https://third.example',
+              title: 'Third',
+              snippet: 's3',
+              siteName: 'third.example',
+              publishedAt: null,
+            },
+          ],
+        },
+        { type: 'text', text: 'Confirmed by tracker[citation:2] and CNN[citation:3].' },
+      ],
+      true
+    )
+
+    const view = buildReplyView(reply, false)
+    const timeline = buildActivityTimeline(view, 10_000)
+
+    // Interleaved thinking blocks never fragment consecutive web research into separate rows.
+    assert.equal(timeline.phases.length, 1)
+    assert.equal(timeline.phases[0]?.type, 'research')
+    if (timeline.phases[0]?.type === 'research') {
+      assert.deepEqual(timeline.phases[0].queries, [
+        'AI LLM releases Nov 2026',
+        'Nvidia CEO status',
+      ])
+      assert.equal(timeline.phases[0].pages.length, 1)
+      assert.equal(timeline.phases[0].searchCount, 2)
+    }
+
+    assert.equal(timeline.thinkingBlocks.length, 3)
+    assert.equal(timeline.thinkingSeconds, 8)
+    assert.equal(timeline.thinkingOnly, false)
+
+    // Cited sources appear first in citation order; uncited results follow cleanly.
+    assert.deepEqual(
+      timeline.citedSources.map((s) => s.url),
+      ['https://second.example', 'https://third.example']
+    )
+    assert.deepEqual(
+      timeline.otherSources.map((s) => s.url),
+      ['https://first.example']
+    )
+
+    const strip = buildTurnWorkStrip(reply, view, false, 10_000, false, true)
+    assert.equal(strip.mode, 'settled')
+    if (strip.mode === 'settled') {
+      assert.equal(strip.stopped, false)
+      assert.equal(strip.errorCount, 0)
+      assert.equal(strip.hasSources, true)
+      assert.match(strip.label, /2/)
+      assert.match(strip.label, /1/)
+      assert.match(strip.label, /8/)
+    }
+  })
+
+  it('folds wait plumbing out of activity phases and attaches board notes to subagents', () => {
+    const reply: AssistantMessage = {
+      ...replyWith(
+        [
+          {
+            type: 'tool_use',
+            id: 'ag1',
+            name: 'research',
+            input: { summary: 'Check OpenAI updates' },
+          },
+          { type: 'tool_result', tool_use_id: 'ag1', content: 'runId: r1', status: 'ok' },
+          { type: 'tool_use', id: 'w1', name: WAIT_TOOL_NAME, input: { until: 'all' } },
+          { type: 'tool_result', tool_use_id: 'w1', content: 'done', status: 'ok' },
+          { type: 'text', text: 'Summary complete.' },
+        ],
+        true
+      ),
+      agents: [
+        {
+          runId: 'r1',
+          profile: 'research',
+          label: 'Researcher',
+          summary: 'Check OpenAI updates',
+          startedBy: 'ag1',
+          state: { status: 'finished', result: { content: 'Done', sources: [] } },
+          blocks: [],
+        },
+      ],
+      board: [
+        {
+          kind: 'finding',
+          id: 'p1',
+          author: { kind: 'agent', runId: 'r1' },
+          text: 'API batch pricing dropped',
+          url: 'https://openai.example',
+        },
+      ],
+    }
+
+    const view = buildReplyView(reply, false)
+    const timeline = buildActivityTimeline(view, 5_000)
+
+    assert.equal(timeline.phases.length, 1)
+    assert.equal(timeline.phases[0]?.type, 'subagents')
+    if (timeline.phases[0]?.type === 'subagents') {
+      assert.equal(timeline.phases[0].agents.length, 1)
+      assert.equal(timeline.phases[0].notes.length, 1)
+      assert.equal(timeline.phases[0].notes[0]?.kind, 'finding')
+    }
+  })
+
+  it('caps live parallel subagent tracks at 3 with overflow count and keeps answered asks Front Stage', () => {
+    const makeAgent = (n: number) => ({
+      runId: `r${n}`,
+      profile: 'research',
+      label: `Agent ${n}`,
+      summary: `Topic ${n}`,
+      startedBy: `call-${n}`,
+      state: { status: 'running' as const, round: 1 },
+      blocks: [],
+    })
+    const reply: AssistantMessage = {
+      ...replyWith(
+        [
+          {
+            type: 'tool_use',
+            id: 'ask1',
+            name: 'ask_user',
+            input: { summary: 'Confirm depth' },
+          },
+          {
+            type: 'tool_result',
+            tool_use_id: 'ask1',
+            content: '{}',
+            status: 'ok',
+            askAction: {
+              status: 'answered',
+              items: [{ id: 'd', header: 'Depth', question: 'How deep?', answer: 'Brief' }],
+            },
+          },
+          ...[1, 2, 3, 4].flatMap((n) => [
+            {
+              type: 'tool_use' as const,
+              id: `call-${n}`,
+              name: 'research',
+              input: { summary: `Topic ${n}` },
+            },
+            {
+              type: 'tool_result' as const,
+              tool_use_id: `call-${n}`,
+              content: `r${n}`,
+              status: 'ok' as const,
+            },
+          ]),
+        ],
+        true
+      ),
+      status: 'streaming',
+      agents: [1, 2, 3, 4].map(makeAgent),
+    }
+
+    const view = buildReplyView(reply, true)
+    assert.equal(getFrontStageAsks(view).length, 1)
+    assert.equal(getFrontStageAsks(view)[0]?.askAction?.items[0]?.answer, 'Brief')
+
+    const liveStrip = buildTurnWorkStrip(reply, view, true, 5_000, true, false)
+    assert.equal(liveStrip.mode, 'live')
+    if (liveStrip.mode === 'live') {
+      assert.equal(liveStrip.waitingForUser, false)
+      assert.equal(liveStrip.liveAgents.length, 3)
+      assert.equal(liveStrip.overflowAgents, 1)
+      assert.equal(liveStrip.detail, null)
+    }
+  })
+
+  it('keeps live strip bounded to headline + single detail line while streaming and folds to settled on answer', () => {
+    const streamingReply: AssistantMessage = {
+      ...replyWith(
+        [
+          {
+            type: 'tool_use',
+            id: 's1',
+            name: 'web_search',
+            input: { summary: 'Checking major AI releases this week', query: 'AI releases' },
+          },
+        ],
+        true
+      ),
+      status: 'streaming',
+    }
+    const liveView = buildReplyView(streamingReply, true)
+    const liveStrip = buildTurnWorkStrip(streamingReply, liveView, true, 2_000, false, false)
+    assert.equal(liveStrip.mode, 'live')
+    if (liveStrip.mode === 'live') {
+      assert.equal(liveStrip.detail, 'Checking major AI releases this week')
+      assert.equal(liveStrip.liveAgents.length, 0)
+    }
+
+    // Thinking-only turn marks thinkingOnly=true so ActivityPanel opens reasoning expanded.
+    const thinkReply = replyWith(
+      [
+        { type: 'thinking', thinking: 'Let me reason through this.', startedAt: 0, endedAt: 4_000 },
+        { type: 'text', text: 'Here is the answer.' },
+      ],
+      true
+    )
+    const thinkView = buildReplyView(thinkReply, false)
+    const thinkTimeline = buildActivityTimeline(thinkView, 5_000)
+    assert.equal(thinkTimeline.thinkingOnly, true)
+    const thinkStrip = buildTurnWorkStrip(thinkReply, thinkView, false, 5_000, false, true)
+    assert.equal(thinkStrip.mode, 'settled')
+    if (thinkStrip.mode === 'settled') {
+      assert.equal(thinkStrip.thinkingOnly, true)
+      assert.equal(thinkStrip.hasSources, false)
+    }
   })
 })
