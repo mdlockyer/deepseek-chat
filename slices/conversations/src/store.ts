@@ -1502,27 +1502,39 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
           controller.signal
         )
         const blockIndexes = new Map<number, number>()
-        for await (const event of events) {
-          tracer?.record(event, Date.now())
-          receivedContent ||= event.type === 'content_block_start'
-          if (
-            event.type === 'message_delta' &&
-            (event.delta.stop_reason === 'end_turn' || event.delta.stop_reason === 'max_tokens') &&
-            event.delta.title?.trim() &&
-            titleRequests.has(controller) &&
-            !controller.signal.aborted &&
-            !get().importingHistory
-          ) {
-            const title = event.delta.title.trim()
-            updateSession(sessionId, (session) => (session.title ? session : { ...session, title }))
-            titleRequests.delete(controller)
+        try {
+          for await (const event of events) {
+            tracer?.record(event, Date.now())
+            receivedContent ||= event.type === 'content_block_start'
+            if (
+              event.type === 'message_delta' &&
+              (event.delta.stop_reason === 'end_turn' ||
+                event.delta.stop_reason === 'max_tokens') &&
+              event.delta.title?.trim() &&
+              titleRequests.has(controller) &&
+              !controller.signal.aborted &&
+              !get().importingHistory
+            ) {
+              const title = event.delta.title.trim()
+              updateSession(sessionId, (session) =>
+                session.title ? session : { ...session, title }
+              )
+              titleRequests.delete(controller)
+            }
+            reply = applyEvent(reply, event, Date.now(), blockIndexes)
+            if (document.visibilityState === 'hidden') {
+              flush()
+            } else {
+              frame ||= requestAnimationFrame(flush)
+            }
           }
-          reply = applyEvent(reply, event, Date.now(), blockIndexes)
-          if (document.visibilityState === 'hidden') {
-            flush()
-          } else {
-            frame ||= requestAnimationFrame(flush)
+        } catch (error) {
+          // The stop reason arrived and only the closing message_stop is missing: the response is
+          // whole, so its tool calls run and the turn goes on as after a complete stream.
+          if (!(error instanceof ApiError && error.kind === 'interrupted' && reply.stopReason)) {
+            throw error
           }
+          finishTrace(error)
         }
         finishTrace()
         // 有未执行的工具调用就继续往返，不只看 stop_reason（服务端可能以 end_turn 结束带调用的回复）。
@@ -1605,10 +1617,7 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
           attempt -= 1
           continue
         }
-        if (error instanceof ApiError && error.kind === 'interrupted' && reply.stopReason) {
-          // 已收到 message_delta 的结束原因，只是缺了结尾的 message_stop
-          reply = settleReply(reply, 'done', Date.now())
-        } else if (error instanceof ApiError) {
+        if (error instanceof ApiError) {
           reply = settleReply(reply, 'error', Date.now(), {
             kind: error.kind,
             message: error.message,

@@ -24,6 +24,7 @@ chat through the tool gateway the app supplies.
 | `Sider`, `MobileSider`, `CollapsedSider`                        | The session list.                                                                     |
 | `ChatMain({ siderCollapsed })`, `ChatSaveBanner`                | Loading state, chat or welcome screen; the save-failure banner.                       |
 | `SearchPanel`, `useHasLastSearch()`, `restoreLastSearchPanel()` | Search results in the right-hand panel.                                               |
+| `commands`                                                      | Headless versions of what the views do (send, attach, edit, regenerate, continue…).   |
 
 The package also exports the pure model functions (branches, reply events, the reply view, the API
 transport, the archive codec) and the composer toggles; the boundary tests use them.
@@ -104,6 +105,20 @@ it, and the header toggle (`visible`, `open`, `toggle`). `panels.browser`: the h
 8. **Requests.** REST requests time out after 15 s, uploads after 60 s; a timeout is reported as a
    network error saying the request timed out, and a caller's abort is passed through as an abort.
    The reply stream itself has no overall timeout.
+   8a. **Reply requests.** A reply sends one request to the model at the start and one after each
+   tool round. For each of them:
+   - If it fails with a network error before any content block arrived, it is sent again after a
+     backoff, up to the network-retry parameter (counted for the whole turn). Past that, the reply
+     ends failed with the network error.
+   - If it fails after content arrived, it is not sent again: the reply ends failed and keeps what
+     arrived.
+   - A stream that ends after its stop reason but before `message_stop` counts as complete: its
+     tool calls run and the turn goes on as after any other complete response.
+   - If the server answers that an attached file no longer exists, the reply uploads those files
+     again from their local copies and sends the request again, up to the re-upload parameter
+     (counted per request). Past that, the reply ends failed with the server's error.
+   - If the attachments can't be made ready (a re-upload fails), the reply ends as an upload error
+     and the request is not sent.
 9. **Session list groups:** Today, Yesterday, Previous 7 days, Previous 30 days, then by month.
 10. **Missing API key.** Sending, attaching, editing a question or starting voice input without a
     key opens Settings on the key section instead.
@@ -159,6 +174,9 @@ it, and the header toggle (`visible`, `open`, `toggle`). `panels.browser`: the h
     - **Read-only and depth 1:** a child receives only `read` tools from its profile (never another
       subagent), `post`, and its profile's `finish` tool. Any call to another tool gets an error
       result without invoking the gateway.
+    - **Concurrency:** a child's calls follow the effect rules of invariant 2: consecutive allowed
+      `read` calls run concurrently up to the parallel-call parameter (counted per child), `post`
+      and refused calls run alone, and results return to the child in call order.
     - **Caps:** at most `maxRunningChildren` run concurrently and at most `maxChildrenPerReply` start
       in one reply; a `spawn` beyond either cap gets an error naming the cap and starts no child.
     - **Context:** `'clean'` isolates the child to its profile prompt, task, `latest_reminder`, own
@@ -203,22 +221,23 @@ it, and the header toggle (`visible`, `open`, `toggle`). `panels.browser`: the h
 
 ## Parameters
 
-| Name                                     | Value                                       |
-| :--------------------------------------- | :------------------------------------------ |
-| Loaded chat details kept in memory       | 5 (plus active, streaming and unsaved ones) |
-| Tool rounds per turn                     | 50 (`toolRoundLimit`)                       |
-| Concurrent `read` calls per batch        | 6 (`maxParallelReadCalls`)                  |
-| Running subagents per reply              | 5 (`maxRunningChildren`)                    |
-| Subagents started per reply              | 12 (`maxChildrenPerReply`)                  |
-| Default `wait` timeout                   | 60 s (`waitDefaultTimeoutS`)                |
-| Automatic `wait` timeout                 | 600 s (`autoWaitTimeoutS`)                  |
-| Board posts per child                    | 6 (`maxPostsPerChild`)                      |
-| Board post length                        | 400 chars (`maxPostChars`)                  |
-| Stored child tool-result display length  | 2,000 chars (`childToolResultDisplayChars`) |
-| Network retries per turn and per child   | 2                                           |
-| Re-uploads after the server drops a file | 2 (backoff 1 s × 2ⁿ)                        |
-| Attachments per message                  | 50                                          |
-| Attachment size                          | 64 MB                                       |
-| Concurrent uploads                       | 3                                           |
-| Request body limit                       | 3,000,000 bytes                             |
-| Stall delay before "Working…"            | 1.5 s                                       |
+| Name                                        | Value                                       |
+| :------------------------------------------ | :------------------------------------------ |
+| Loaded chat details kept in memory          | 5 (plus active, streaming and unsaved ones) |
+| Tool rounds per turn                        | 50 (`toolRoundLimit`)                       |
+| Concurrent `read` calls per batch           | 6 (`maxParallelReadCalls`)                  |
+| Running subagents per reply                 | 5 (`maxRunningChildren`)                    |
+| Subagents started per reply                 | 12 (`maxChildrenPerReply`)                  |
+| Default `wait` timeout                      | 60 s (`waitDefaultTimeoutS`)                |
+| Automatic `wait` timeout                    | 600 s (`autoWaitTimeoutS`)                  |
+| Board posts per child                       | 6 (`maxPostsPerChild`)                      |
+| Board post length                           | 400 chars (`maxPostChars`)                  |
+| Stored child tool-result display length     | 2,000 chars (`childToolResultDisplayChars`) |
+| Network retries per turn and per child      | 2 (`networkRetryLimit`)                     |
+| Re-uploads per request after a dropped file | 2 (`fileReuploadLimit`)                     |
+| Backoff before retry n (from 0)             | 1 s × 2ⁿ (`retryBaseDelayMs`)               |
+| Attachments per message                     | 50                                          |
+| Attachment size                             | 64 MB                                       |
+| Concurrent uploads                          | 3                                           |
+| Request body limit                          | 3,000,000 bytes                             |
+| Stall delay before "Working…"               | 1.5 s                                       |
