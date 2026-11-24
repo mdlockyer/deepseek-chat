@@ -11,6 +11,28 @@ export { Toast } from './Toast.js'
 export { copyText } from './clipboard.js'
 export { FileIcon } from './FileIcon.js'
 export { Tooltip, type TooltipPlacement } from './Tooltip.js'
+export {
+  HOVER_GLIDE_ITEM_ATTR,
+  HoverGlideIndicator,
+  hoverGlideItem,
+  useHoverGlide,
+  type HoverGlideOptions,
+  type HoverGlideResult,
+} from './HoverGlide.js'
+export {
+  INITIAL_HOVER_GLIDE_STATE,
+  enterGlideTarget,
+  expireGlideCooldown,
+  glideRectsEqual,
+  leaveGlideTarget,
+  measureGlideRect,
+  syncGlideRect,
+  type BoxRect,
+  type GlideRect,
+  type HoverGlideEffect,
+  type HoverGlideState,
+  type HoverGlideTransition,
+} from './hoverGlideState.js'
 export { DeepSeekMark } from './logo.js'
 export * from './icons.js'
 export {

@@ -1,5 +1,6 @@
 .item {
   position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
   box-sizing: border-box;
@@ -21,10 +22,6 @@
   }
 
   @media (hover: hover) {
-    &:not(.active):hover {
-      background-color: var(--dsw-specific-sidebar-nav-item-hover);
-    }
-
     &:hover,
     &.active {
       .action {

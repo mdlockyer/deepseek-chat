@@ -3,15 +3,16 @@ import clsx from 'clsx'
 import { memo, useState } from 'react'
 import { useTranslate } from '../../messages.js'
 import {
+  IconButton,
   IconEditOutline16,
   IconEllipsisOutline16,
   IconTrashOutline16,
+  Menu,
+  hoverGlideItem,
 } from '@deepseek-chat/spine/design'
 import { renameSession, selectSession } from '../../store.js'
 import { type SessionSummary } from '../../types.js'
 import { formatClock, sessionTitle } from '../../format.js'
-import { IconButton } from '@deepseek-chat/spine/design'
-import { Menu } from '@deepseek-chat/spine/design'
 import { closeMobileSider } from './mobileSiderState.js'
 import styles from './SessionItem.module.css'
 
@@ -65,6 +66,7 @@ export const SessionItem = memo(function SessionItem({
     <li
       className={clsx(styles.item, active && styles.active)}
       style={enterDelay ? { animationDelay: `${enterDelay}ms` } : undefined}
+      {...hoverGlideItem(active)}
     >
       <button
         type="button"

@@ -153,12 +153,27 @@
 }
 
 .list {
+  position: relative;
+  isolation: isolate;
   height: 100%;
   margin: 0 -2px;
   padding: 0 2px;
   overflow-y: auto;
-  list-style: none;
   scrollbar-color: var(--scroll-color) transparent;
+  --hover-glide-bg: var(--dsw-specific-sidebar-nav-item-hover);
+  --hover-glide-radius: 12px;
+}
+
+@media not all and (min-width: 768px) {
+  .list {
+    --hover-glide-radius: 16px;
+  }
+}
+
+.groups {
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
 .sessions {
@@ -438,6 +453,10 @@
 
   .listWrap {
     margin-top: 16px;
+  }
+
+  .list {
+    --hover-glide-radius: 16px;
   }
 
   .sectionHeader {

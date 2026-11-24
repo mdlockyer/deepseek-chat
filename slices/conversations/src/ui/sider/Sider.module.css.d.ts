@@ -7,6 +7,7 @@ declare const styles: {
   readonly newChatIcon: string
   readonly listWrap: string
   readonly list: string
+  readonly groups: string
   readonly section: string
   readonly sessions: string
   readonly sectionHeader: string

@@ -17,7 +17,7 @@ import { IconButton } from '@deepseek-chat/spine/design'
 import { Modal } from '@deepseek-chat/spine/design'
 import { showNotice } from '../../notice.js'
 import { closeMobileSider, useMobileSider } from './mobileSiderState.js'
-import { PANEL_DURATION_MS, usePresence } from '@deepseek-chat/spine/design'
+import { PANEL_DURATION_MS, useHoverGlide, usePresence } from '@deepseek-chat/spine/design'
 import { SessionItem } from './SessionItem.js'
 import styles from './Sider.module.css'
 
@@ -48,6 +48,7 @@ export const Sider = ({
   const deleteModal = usePresence(deleting !== null, 160)
   const shownDeleting = deleting ?? lastDeletingRef.current
   const [deletePending, setDeletePending] = useState(false)
+  const hoverGlide = useHoverGlide<HTMLDivElement>({ disabled: collapsed })
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>
@@ -113,24 +114,27 @@ export const Sider = ({
           {t('newChat')}
         </button>
         <div className={styles.listWrap}>
-          <ul className={styles.list}>
-            {groups.map((group) => (
-              <li key={group.key} className={styles.section}>
-                <div className={styles.sectionHeader}>{group.label}</div>
-                <ul className={styles.sessions}>
-                  {group.sessions.map((session) => (
-                    <SessionItem
-                      key={session.id}
-                      session={session}
-                      active={session.id === activeId}
-                      enterDelay={mobile ? 0 : Math.min(enterIndex++, 8) * 24}
-                      onDelete={() => setDeleting(session)}
-                    />
-                  ))}
-                </ul>
-              </li>
-            ))}
-          </ul>
+          <div className={styles.list} {...hoverGlide.containerProps}>
+            <div {...hoverGlide.indicatorProps} />
+            <ul className={styles.groups}>
+              {groups.map((group) => (
+                <li key={group.key} className={styles.section}>
+                  <div className={styles.sectionHeader}>{group.label}</div>
+                  <ul className={styles.sessions}>
+                    {group.sessions.map((session) => (
+                      <SessionItem
+                        key={session.id}
+                        session={session}
+                        active={session.id === activeId}
+                        enterDelay={mobile ? 0 : Math.min(enterIndex++, 8) * 24}
+                        onDelete={() => setDeleting(session)}
+                      />
+                    ))}
+                  </ul>
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
         <div className={styles.bottom}>
           <button
