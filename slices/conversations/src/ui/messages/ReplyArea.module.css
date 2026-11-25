@@ -311,7 +311,7 @@
     gap: var(--ui-space-2);
     max-width: 560px;
     margin-left: 7px;
-    padding: var(--ui-space-1) 0 var(--ui-space-1) var(--ui-space-3);
+    padding: var(--ui-space-1) 0 var(--ui-space-1) var(--ui-space-2);
     border-left: 1px solid var(--ui-border-default);
     animation: detail-in var(--ui-duration-normal) ease-out both;
   }
@@ -319,7 +319,7 @@
   .inlineThinking {
     max-height: 280px;
     overflow-y: auto;
-    padding-right: var(--ui-space-2);
+    padding: 0 var(--ui-space-2) 0 var(--ui-space-3);
     color: var(--ui-text-secondary);
     scrollbar-color: var(--ui-scrollbar-thumb) transparent;
   }
@@ -329,7 +329,7 @@
     flex-direction: column;
     gap: var(--ui-space-1-5);
     margin: 0;
-    padding: 0;
+    padding: 0 0 0 var(--ui-space-3);
     list-style: none;
   }
 
@@ -392,10 +392,6 @@
         color: var(--ui-text-primary);
       }
     }
-  }
-
-  .traceFooter > :first-child {
-    margin-left: calc(var(--ui-space-3) * -1);
   }
 
   .inspectButtonActive {
