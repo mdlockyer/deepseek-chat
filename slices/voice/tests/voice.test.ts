@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict'
 import { afterEach, beforeEach, describe, it } from 'node:test'
+import type {
+  ActiveSessionChanged,
+  ReplyLifecycleChanged,
+} from '@deepseek-chat/spine/facts/session'
 import { setLocale } from '@deepseek-chat/spine/i18n'
 import { memoryNoticePort, memoryStore } from '@deepseek-chat/spine/ports'
+import { EventLog } from '@deepseek-chat/spine/runtime'
 import {
   createVoiceSlice,
   type AudioContextLike,
@@ -149,7 +154,9 @@ const setup = (
   const calls: Call[] = []
   const fake = createFakeAudio(overrides.audioOptions)
   const notices = memoryNoticePort()
+  const log = overrides.log ?? new EventLog()
   const voice = createVoiceSlice({
+    log,
     fetch: async (url, init) => {
       const call = { url, init }
       calls.push(call)
@@ -162,7 +169,7 @@ const setup = (
     notify: notices,
     ...overrides,
   })
-  return { voice, calls, fake, notices }
+  return { voice, calls, fake, notices, log }
 }
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0))
@@ -177,6 +184,41 @@ beforeEach(() => setLocale('en-US'))
 // ---------- read-aloud ----------
 
 describe('voice: read-aloud', () => {
+  it('stops read-aloud automatically on ActiveSessionChanged and ReplyLifecycleChanged', async () => {
+    const pcm = controllableStream()
+    const { voice, log } = setup(() => new Response(pcm.stream))
+
+    log.publishSticky<ActiveSessionChanged>('unit', {
+      type: 'ActiveSessionChanged',
+      sessionId: 's1',
+    })
+    voice.readAloud.toggle('m1', 'Hello', () => undefined)
+    await settle()
+    assert.equal(voice.readAloud.getState().status, 'loading')
+
+    log.publishSticky<ActiveSessionChanged>('unit', {
+      type: 'ActiveSessionChanged',
+      sessionId: 's2',
+    })
+    assert.equal(voice.readAloud.getState().status, 'idle')
+
+    const pcm2 = controllableStream()
+    const env2 = setup(() => new Response(pcm2.stream))
+    env2.voice.readAloud.toggle('m2', 'Hello again', () => undefined)
+    await settle()
+    assert.equal(env2.voice.readAloud.getState().status, 'loading')
+
+    env2.log.publish<ReplyLifecycleChanged>({
+      type: 'ReplyLifecycleChanged',
+      sessionId: 's2',
+      messageId: 'm3',
+      phase: 'started',
+    })
+    assert.equal(env2.voice.readAloud.getState().status, 'idle')
+    voice.dispose()
+    env2.voice.dispose()
+  })
+
   it('requests PCM speech with the current key and voice', async () => {
     const pcm = controllableStream()
     const { voice, calls } = setup(() => new Response(pcm.stream))

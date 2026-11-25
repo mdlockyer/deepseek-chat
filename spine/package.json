@@ -9,7 +9,8 @@
     "./i18n": "./design/i18n.ts",
     "./design": "./design/index.ts",
     "./tokens.css": "./design/tokens.css",
-    "./facts/session": "./facts/session_facts.ts"
+    "./facts/session": "./facts/session_facts.ts",
+    "./facts/browser": "./facts/browser_facts.ts"
   },
   "peerDependencies": {
     "react": "18.3.1"

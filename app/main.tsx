@@ -21,17 +21,12 @@ if (__DEV__ && new URLSearchParams(window.location.search).get('workbench') === 
 } else {
   ensureKatex()
   setupTheme()
-  // 原生浏览器视图画在页面之上，任何 HTML 浮层（菜单、弹窗）打开时都要让位
+  // 原生浏览器与预览视图画在页面之上，任何 HTML 浮层（菜单、弹窗）打开时通过统一 PanelSlot 让位
   let releaseUiOverlay: (() => void) | null = null
   overlays.subscribe((open) => {
     if (open) {
       if (!releaseUiOverlay) {
-        const releaseBrowser = browser.acquireOverlayLock()
-        const releasePanel = acquireSidePanelOverlayLock()
-        releaseUiOverlay = () => {
-          releaseBrowser()
-          releasePanel()
-        }
+        releaseUiOverlay = acquireSidePanelOverlayLock()
       }
     } else {
       releaseUiOverlay?.()

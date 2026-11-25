@@ -1,4 +1,9 @@
-import type { SessionDeleted, SessionHistoryReplaced } from '@deepseek-chat/spine/facts/session'
+import type { BrowserControlTakenOver } from '@deepseek-chat/spine/facts/browser'
+import type {
+  ActiveSessionChanged,
+  SessionDeleted,
+  SessionHistoryReplaced,
+} from '@deepseek-chat/spine/facts/session'
 import {
   noopNoticePort,
   type KeyValueStore,
@@ -38,8 +43,6 @@ export type BrowserSliceDeps = {
   readonly store: KeyValueStore
   /** Opens a URL outside the app (system browser). */
   readonly openExternal: (url: string) => Promise<void>
-  /** Stops the reply that is driving the browser in a session (the "take over" button). */
-  readonly stopController: (sessionId: string) => void
   /** Ephemeral user feedback port; defaults to a safe no-op for headless callers. */
   readonly notify?: NoticePort
   readonly newId?: () => string
@@ -69,7 +72,17 @@ export const createBrowserSlice = (deps: BrowserSliceDeps) => {
   const tools = createBrowserTools(state, deps.host)
   const desktop = deps.host !== null
 
+  const takeOver = (sessionId: string) => {
+    deps.log.publish<BrowserControlTakenOver>({
+      type: 'BrowserControlTakenOver',
+      sessionId,
+    })
+  }
+
   const unsubscribers = [
+    deps.log.subscribe<ActiveSessionChanged>('ActiveSessionChanged', ({ fact }) => {
+      state.setActiveBrowserSession(fact.sessionId)
+    }),
     deps.log.subscribe<SessionDeleted>('SessionDeleted', ({ fact }) => {
       void state.disposeSessionBrowser(fact.sessionId)
     }),
@@ -106,6 +119,8 @@ export const createBrowserSlice = (deps: BrowserSliceDeps) => {
     togglePanel: state.toggleBrowserPanel,
     /** Opens a URL in the panel (or externally on the new-chat screen). */
     openUrl: state.openUrlInBrowserPanel,
+    /** User takes over control of the browser for `sessionId` (publishes `BrowserControlTakenOver`). */
+    takeOver,
     tabs: {
       create: state.createBrowserTab,
       close: state.closeBrowserTab,
@@ -115,8 +130,6 @@ export const createBrowserSlice = (deps: BrowserSliceDeps) => {
     },
     setStageSize: state.setBrowserStageSize,
     setPanelBounds: state.setBrowserPanelBounds,
-    /** Hides the native webview under an HTML overlay; returns the release function. */
-    acquireOverlayLock: state.acquireBrowserOverlayLock,
     /** Refreshes the still image shown while the native webview is hidden. */
     refreshSnapshot: state.refreshActiveTabSnapshot,
 
@@ -124,7 +137,7 @@ export const createBrowserSlice = (deps: BrowserSliceDeps) => {
       panel: deps.panel,
       desktop,
       openExternal: deps.openExternal,
-      stopController: deps.stopController,
+      takeOver,
     }),
     LocalhostSetting: createLocalhostSetting(allowLocalhost),
     dispose: () => {

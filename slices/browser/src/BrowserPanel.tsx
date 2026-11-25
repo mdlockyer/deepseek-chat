@@ -43,8 +43,8 @@ export type BrowserPanelDeps = {
   readonly panel: PanelSlot
   readonly desktop: boolean
   readonly openExternal: (url: string) => Promise<void>
-  /** Stops the reply that is driving the browser (the "take over" button). */
-  readonly stopController: (sessionId: string) => void
+  /** Publishes `BrowserControlTakenOver` when the user clicks "take over". */
+  readonly takeOver: (sessionId: string) => void
 }
 
 /** 右侧内置浏览器面板内容（托管在共享 SidePanel 壳层内） */
@@ -74,7 +74,6 @@ export const createBrowserPanel = (state: BrowserState, deps: BrowserPanelDeps) 
         : EMPTY_SESSION_BROWSER_STATE
     )
     const { tabs, activeTabId } = sessionBrowser
-    const overlayLocks = useBrowserStore((state) => state.overlayLocks)
     const overlayLocked = deps.panel.useLayout((layout) => layout.overlayLocked)
     const panelAnimating = deps.panel.useLayout((layout) => layout.animating)
     const panelResizing = deps.panel.useLayout((layout) => layout.resizing)
@@ -165,8 +164,7 @@ export const createBrowserPanel = (state: BrowserState, deps: BrowserPanelDeps) 
     }
 
     const showSnapshotFallback =
-      Boolean(activeTab?.snapshotUrl) &&
-      (panelAnimating || overlayLocked || overlayLocks > 0 || panelResizing)
+      Boolean(activeTab?.snapshotUrl) && (panelAnimating || overlayLocked || panelResizing)
     const isHttps = activeUrl.startsWith('https://')
 
     return (
@@ -314,7 +312,7 @@ export const createBrowserPanel = (state: BrowserState, deps: BrowserPanelDeps) 
                 title={controllingAction ?? t('browserControlling')}
                 onClick={() => {
                   if (controllingSessionId) {
-                    deps.stopController(controllingSessionId)
+                    deps.takeOver(controllingSessionId)
                   }
                 }}
               >

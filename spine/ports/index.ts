@@ -1,3 +1,4 @@
+export { memoryBlobStore, type BlobEntry, type BlobStore } from './blob.js'
 export type { HttpFetch } from './http.js'
 export type { PanelLayout, PanelSlot, StageHost, StageSize } from './layout.js'
 export { memoryStore, type KeyValueStore, type SecretSlot } from './storage.js'

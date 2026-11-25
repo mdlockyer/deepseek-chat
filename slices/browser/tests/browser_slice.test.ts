@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import type { PanelLayout, PanelSlot } from '@deepseek-chat/spine/ports'
-import type { SessionDeleted, SessionHistoryReplaced } from '@deepseek-chat/spine/facts/session'
+import type { BrowserControlTakenOver } from '@deepseek-chat/spine/facts/browser'
+import type {
+  ActiveSessionChanged,
+  SessionDeleted,
+  SessionHistoryReplaced,
+} from '@deepseek-chat/spine/facts/session'
 import { memoryStore } from '@deepseek-chat/spine/ports'
 import { EventLog } from '@deepseek-chat/spine/runtime'
 import {
@@ -165,6 +170,7 @@ const fakePanel = () => {
       update({ activeSessionId: sessionId, animating })
     },
     finishAnimation: () => update({ animating: false }),
+    setOverlayLocked: (overlayLocked: boolean) => update({ overlayLocked }),
     showOther: (sessionId: string) => {
       shown.set(sessionId, 'other')
       update({})
@@ -186,13 +192,12 @@ const setup = (options: { desktop?: boolean; store?: ReturnType<typeof memorySto
     openExternal: async (url) => {
       opened.push(url)
     },
-    stopController: () => {},
     newId: () => `id${++counter}`,
   })
-  /** What the app does on a chat switch: the panel first, then the browser. */
+  /** What the app does on a chat switch: the panel first, then the sticky ActiveSessionChanged fact. */
   const activate = (sessionId: string | null) => {
     panel.setActive(sessionId)
-    browser.setActiveSession(sessionId)
+    log.publishSticky<ActiveSessionChanged>('unit', { type: 'ActiveSessionChanged', sessionId })
   }
   return { browser, host, panel, log, opened, activate }
 }
@@ -361,21 +366,33 @@ describe('browser: native webview visibility', () => {
     assert.equal(host.lastActive.visible, true)
   })
 
-  it('hides under overlay locks until the last one is released; double release is harmless', async () => {
-    const { browser, host } = await withVisiblePage()
-    const releaseA = browser.acquireOverlayLock()
-    const releaseB = browser.acquireOverlayLock()
+  it('hides under panel overlay lock (capturing a snapshot on lock) and shows again when released', async () => {
+    const { host, panel } = await withVisiblePage()
+    const snapshotsBefore = host.named('takeSnapshot').length
+
+    panel.setOverlayLocked(true)
     await settle()
     assert.equal(host.lastActive.visible, false)
+    assert.ok(
+      host.named('takeSnapshot').length > snapshotsBefore,
+      'captures a still snapshot when an overlay opens over a visible webview'
+    )
 
-    releaseA()
-    releaseA()
-    await settle()
-    assert.equal(host.lastActive.visible, false, 'one lock still held')
-
-    releaseB()
+    panel.setOverlayLocked(false)
     await settle()
     assert.equal(host.lastActive.visible, true)
+  })
+
+  it('publishes BrowserControlTakenOver when the user takes over control', () => {
+    const { browser, log } = setup()
+    const takenOver: string[] = []
+    log.subscribe<BrowserControlTakenOver>('BrowserControlTakenOver', ({ fact }) => {
+      takenOver.push(fact.sessionId)
+    })
+
+    browser.takeOver('s1')
+    assert.deepEqual(takenOver, ['s1'])
+    browser.dispose()
   })
 
   it('hides when the user leaves the chat, and when the panel shows something else', async () => {

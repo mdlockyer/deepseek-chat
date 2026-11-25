@@ -28,6 +28,7 @@
     "@deepseek-chat/lib-agent": "workspace:*",
     "@deepseek-chat/lib-markdown": "workspace:*",
     "@deepseek-chat/lib-stage": "workspace:*",
+    "@deepseek-chat/lib-tools": "workspace:*",
     "@deepseek-chat/lib-ui": "workspace:*",
     "@deepseek-chat/slice-account": "workspace:*",
     "@deepseek-chat/slice-browser": "workspace:*",

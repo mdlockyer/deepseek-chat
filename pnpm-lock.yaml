@@ -17,6 +17,9 @@ importers:
       '@deepseek-chat/lib-stage':
         specifier: workspace:*
         version: link:libs/stage
+      '@deepseek-chat/lib-tools':
+        specifier: workspace:*
+        version: link:libs/tools
       '@deepseek-chat/lib-ui':
         specifier: workspace:*
         version: link:libs/ui
@@ -183,6 +186,15 @@ importers:
       react-dom:
         specifier: 18.3.1
         version: 18.3.1(react@18.3.1)
+
+  libs/tools:
+    dependencies:
+      '@deepseek-chat/spine':
+        specifier: workspace:*
+        version: link:../../spine
+      react:
+        specifier: 18.3.1
+        version: 18.3.1
 
   libs/ui:
     dependencies:

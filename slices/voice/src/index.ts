@@ -1,9 +1,14 @@
+import type {
+  ActiveSessionChanged,
+  ReplyLifecycleChanged,
+} from '@deepseek-chat/spine/facts/session'
 import {
   noopNoticePort,
   type HttpFetch,
   type KeyValueStore,
   type NoticePort,
 } from '@deepseek-chat/spine/ports'
+import type { EventLog } from '@deepseek-chat/spine/runtime'
 import { browserAudio, type VoiceAudio } from './audio.js'
 import { createReadAloud, type ReadAloudState } from './readAloud.js'
 import { createReadAloudButton } from './ReadAloudButton.js'
@@ -20,6 +25,7 @@ export type { TtsVoice } from './speechApi.js'
 export type { VoiceInput, VoiceInputStatus } from './voiceInput.js'
 
 export type VoiceSliceDeps = {
+  readonly log: EventLog
   readonly fetch: HttpFetch
   /** DeepSeek API origin; speech endpoints live under `/v1/tools`. */
   readonly apiOrigin: string
@@ -40,6 +46,21 @@ export const createVoiceSlice = (deps: VoiceSliceDeps) => {
   const preference = createVoicePreference(deps.store)
   const readAloud = createReadAloud({ api, audio, apiKey: deps.apiKey, voice: preference.get })
   const inputDeps = { api, audio, apiKey: deps.apiKey, notify }
+
+  let lastActiveSession: string | null | undefined
+  const unsubscribers = [
+    deps.log.subscribe<ActiveSessionChanged>('ActiveSessionChanged', ({ fact }) => {
+      if (lastActiveSession !== undefined && fact.sessionId !== lastActiveSession) {
+        readAloud.stop()
+      }
+      lastActiveSession = fact.sessionId
+    }),
+    deps.log.subscribe<ReplyLifecycleChanged>('ReplyLifecycleChanged', ({ fact }) => {
+      if (fact.phase === 'started') {
+        readAloud.stop()
+      }
+    }),
+  ]
 
   return {
     /** Read-aloud: one reply at a time. */
@@ -63,6 +84,12 @@ export const createVoiceSlice = (deps: VoiceSliceDeps) => {
     ReadAloudButton: createReadAloudButton(readAloud, notify),
     VoiceButton,
     Spectrum,
+    dispose: () => {
+      readAloud.stop()
+      for (const unsubscribe of unsubscribers) {
+        unsubscribe()
+      }
+    },
   }
 }
 

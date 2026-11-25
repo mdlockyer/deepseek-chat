@@ -1,0 +1,15 @@
+{
+  "name": "@deepseek-chat/lib-tools",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@deepseek-chat/spine": "workspace:*"
+  },
+  "peerDependencies": {
+    "react": "18.3.1"
+  }
+}

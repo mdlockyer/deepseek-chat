@@ -10,18 +10,19 @@ Two speech features over the DeepSeek speech tools API:
 
 ## Public entrypoint
 
-`createVoiceSlice({ fetch, apiOrigin, apiKey, store, audio? })` returns:
+`createVoiceSlice({ log, fetch, apiOrigin, apiKey, store, audio?, notify? })` returns:
 
 | Member                                       | Meaning                                                                                                    |
 | :------------------------------------------- | :--------------------------------------------------------------------------------------------------------- |
 | `readAloud.toggle(messageId, text, onError)` | Start reading a reply, or stop it if it is the one being read. `onError` receives the user-facing message. |
-| `readAloud.stop()`                           | Stop any reading (the app calls this on send, regenerate, session switch).                                 |
+| `readAloud.stop()`                           | Stop any reading (also triggered automatically by `ActiveSessionChanged` and `ReplyLifecycleChanged`).     |
 | `readAloud.getState()` / `subscribe`         | `{ status: 'idle' }` or `{ status: 'loading' \| 'playing', messageId }`.                                   |
 | `createVoiceInput(onText)`                   | A voice-input controller: `toggle`, `cancel`, `dispose`, `getStatus`, `getAnalyser`, `available`.          |
 | `useVoiceInput(onText)`                      | React binding of the controller, plus elapsed `seconds` while recording.                                   |
 | `getTtsVoice()` / `setTtsVoice(voice)`       | The read-aloud voice, `stella` or `tide`.                                                                  |
 | `VoiceSetting`                               | Settings row for the read-aloud voice.                                                                     |
 | `ReadAloudButton`, `VoiceButton`, `Spectrum` | The slice's views.                                                                                         |
+| `dispose()`                                  | Stops playback and unsubscribes all Spine `EventLog` listeners.                                            |
 
 `apiKey()` and the voice are read when each operation starts, so a settings change applies to the
 next one.
@@ -67,7 +68,8 @@ next one.
 
 ## Facts
 
-None consumed or published. `readAloud.stop()` is called top-down by the app.
+Consumes `ActiveSessionChanged` (stops read-aloud when switching chats) and
+`ReplyLifecycleChanged` (stops read-aloud when a new reply starts). Publishes none.
 
 ## Tunable parameters
 

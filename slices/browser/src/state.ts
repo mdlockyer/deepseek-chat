@@ -35,7 +35,6 @@ export const EMPTY_SESSION_BROWSER_STATE: SessionBrowserState = {
 type BrowserStoreState = {
   activeSessionId: string | null
   sessions: Record<string, SessionBrowserState>
-  overlayLocks: number
   controlling: boolean
   controllingAction: string | null
   controllingSessionId: string | null
@@ -76,7 +75,7 @@ const findTabOwner = (
 }
 
 export const isBrowserWebviewVisibleState = (
-  state: Pick<BrowserStoreState, 'activeSessionId' | 'sessions' | 'overlayLocks'>,
+  state: Pick<BrowserStoreState, 'activeSessionId' | 'sessions'>,
   layout: Pick<PanelLayout, 'animating' | 'resizing' | 'overlayLocked'>,
   desktop: boolean,
   isNativeCreated: (tabId: string) => boolean,
@@ -88,8 +87,7 @@ export const isBrowserWebviewVisibleState = (
     !isActiveRightPanel ||
     layout.animating ||
     layout.resizing ||
-    layout.overlayLocked ||
-    state.overlayLocks > 0
+    layout.overlayLocked
   ) {
     return false
   }
@@ -157,7 +155,6 @@ export const createBrowserState = (deps: BrowserStateDeps) => {
   const useBrowserStore = create<BrowserStoreState>(() => ({
     activeSessionId: null,
     sessions: {},
-    overlayLocks: 0,
     controlling: false,
     controllingAction: null,
     controllingSessionId: null,
@@ -319,11 +316,21 @@ export const createBrowserState = (deps: BrowserStateDeps) => {
     let prevLayout = panel.getLayout()
     const unsubSidePanel = panel.subscribe(() => {
       const layout = panel.getLayout()
+      const overlayLockEngaged = layout.overlayLocked && !prevLayout.overlayLocked
       let changed =
         layout.animating !== prevLayout.animating ||
         layout.resizing !== prevLayout.resizing ||
         layout.overlayLocked !== prevLayout.overlayLocked
       const current = get()
+      const wasVisibleBeforeLock =
+        overlayLockEngaged &&
+        isBrowserWebviewVisibleState(
+          current,
+          prevLayout,
+          desktop,
+          (tabId) => nativeCreated.has(tabId),
+          panel.isOpen(current.activeSessionId)
+        )
       let nextSessions = current.sessions
       for (const [sid, session] of Object.entries(current.sessions)) {
         if (session.panelOpen && !panel.isOpen(sid)) {
@@ -339,7 +346,11 @@ export const createBrowserState = (deps: BrowserStateDeps) => {
       }
       const sessionChanged = layout.activeSessionId !== prevLayout.activeSessionId
       prevLayout = layout
-      if (changed || sessionChanged) {
+      if (wasVisibleBeforeLock) {
+        void refreshActiveTabSnapshot().finally(() => {
+          void syncNativeVisibility()
+        })
+      } else if (changed || sessionChanged) {
         void syncNativeVisibility()
       }
     })
@@ -819,32 +830,6 @@ export const createBrowserState = (deps: BrowserStateDeps) => {
     }
   }
 
-  /**
-   * Temporarily hides the native child webview while a React Modal / Menu / Drawer
-   * is mounted above the viewport, preserving a snapshot behind the backdrop.
-   */
-  const acquireBrowserOverlayLock = (): (() => void) => {
-    const current = get()
-    const needsSnapshot = current.overlayLocks === 0 && shouldShowNativeWebview(current)
-    set((state) => ({ overlayLocks: state.overlayLocks + 1 }))
-    if (needsSnapshot) {
-      void refreshActiveTabSnapshot().finally(() => {
-        void syncNativeVisibility()
-      })
-    } else {
-      void syncNativeVisibility()
-    }
-    let released = false
-    return () => {
-      if (released) {
-        return
-      }
-      released = true
-      set((state) => ({ overlayLocks: Math.max(0, state.overlayLocks - 1) }))
-      void syncNativeVisibility()
-    }
-  }
-
   const navigateBrowserTab = async (
     tabId: string,
     rawUrl: string,
@@ -1096,7 +1081,6 @@ export const createBrowserState = (deps: BrowserStateDeps) => {
     setBrowserPanelBounds,
     setBrowserTabViewport,
     refreshActiveTabSnapshot,
-    acquireBrowserOverlayLock,
     navigateBrowserTab,
     openUrlInBrowserPanel,
     runBrowserHistory,

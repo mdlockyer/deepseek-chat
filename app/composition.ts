@@ -9,6 +9,7 @@ import { createPreferencesSlice } from '@deepseek-chat/slice-preferences'
 import { createPythonSlice } from '@deepseek-chat/slice-python'
 import { createVoiceSlice } from '@deepseek-chat/slice-voice'
 import { createWebResearchSlice } from '@deepseek-chat/slice-web-research'
+import type { BrowserControlTakenOver } from '@deepseek-chat/spine/facts/browser'
 import type { SessionDeleted, SessionHistoryReplaced } from '@deepseek-chat/spine/facts/session'
 import { EventLog } from '@deepseek-chat/spine/runtime'
 import {
@@ -97,6 +98,7 @@ export const webResearch = createWebResearchSlice({
 })
 
 export const voice = createVoiceSlice({
+  log: spine,
   fetch: httpFetch,
   apiOrigin: API_ORIGIN,
   apiKey: () => account.getApiKey(),
@@ -111,8 +113,6 @@ export const browser = createBrowserSlice({
   store: localStore,
   openExternal: openExternalUrl,
   notify: notices,
-  // conversations 在本模块之后创建
-  stopController: (sessionId) => late.stopReply(sessionId),
 })
 
 /** 右侧面板跟随当前会话：面板栏位与各 slice 的会话状态一起切换 */
@@ -120,6 +120,10 @@ export const setActivePanelSession = (sessionId: string | null) => {
   setActiveSidePanelSession(sessionId)
   browser.setActiveSession(sessionId)
 }
+
+spine.subscribe<BrowserControlTakenOver>('BrowserControlTakenOver', ({ fact }) =>
+  late.stopReply(fact.sessionId)
+)
 
 // 会话删除或历史被替换后清理右侧面板的会话状态（各 slice 自己订阅同样的事实）
 spine.subscribe<SessionDeleted>('SessionDeleted', ({ fact }) =>

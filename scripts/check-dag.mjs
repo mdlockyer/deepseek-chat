@@ -145,7 +145,7 @@ for (const file of listSourceFiles(spineDir)) {
 }
 
 const LIB_UI_PKG = `${LIB_PKG_PREFIX}ui`
-const LIBS_REQUIRING_SPEC = new Set(['ui', 'stage'])
+const LIBS_REQUIRING_SPEC = new Set(['ui', 'stage', 'tools'])
 
 /** package.json shape shared by slices and libraries. */
 const checkManifest = (kind, name, dir, expectedPkg) => {
