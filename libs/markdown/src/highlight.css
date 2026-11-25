@@ -1,4 +1,4 @@
-body.dark :is(.md-code-block, .ds-code-highlight) {
+[data-markdown-theme='dark'] :is(.md-code-block, .ds-code-highlight) {
   .token.comment,
   .token.prolog,
   .token.doctype,
@@ -236,7 +236,7 @@ body.dark :is(.md-code-block, .ds-code-highlight) {
   }
 }
 
-body.light :is(.md-code-block, .ds-code-highlight) {
+[data-markdown-theme='light'] :is(.md-code-block, .ds-code-highlight) {
   .token.comment,
   .token.prolog,
   .token.cdata {

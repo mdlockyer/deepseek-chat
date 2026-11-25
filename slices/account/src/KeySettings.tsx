@@ -1,141 +1,230 @@
 import {
+  Badge,
   Button,
-  IconButton,
   IconCheckOutline16,
-  IconEyeOffOutline16,
-  IconEyeOutline16,
   IconKeyOutline16,
   IconRightUpOutline14,
   IconToastError16,
-  maskSecret,
-  settingStyles as styles,
+  LinkButton,
+  PasswordField,
+  SettingInlineConfirm,
+  SettingRow,
   useIsMobile,
-  useSecretKeyForm,
-} from '@deepseek-chat/spine/design'
-import clsx from 'clsx'
+} from '@deepseek-chat/lib-ui'
 import { useState, useSyncExternalStore } from 'react'
-import type { Account } from './account.js'
+import type { Account, KeyCheck } from './account.js'
 import { accountMessages } from './messages.js'
+import styles from './KeySettings.module.css'
 
 const DEEPSEEK_KEYS_URL = 'https://platform.deepseek.com/api_keys'
 
-const t = accountMessages.translate
+type KeyFailure =
+  | { readonly kind: 'empty' }
+  | { readonly kind: 'check'; readonly check: Exclude<KeyCheck, { kind: 'valid' }> }
+
+type KeyEditorPhase =
+  | { readonly kind: 'viewing'; readonly verified: boolean; readonly error: KeyFailure | null }
+  | { readonly kind: 'testing' }
+  | { readonly kind: 'confirmingRemove'; readonly error: KeyFailure | null }
+  | { readonly kind: 'clearing' }
+  | { readonly kind: 'editing'; readonly draft: string; readonly error: KeyFailure | null }
+  | { readonly kind: 'verifying'; readonly draft: string }
+
+const maskDeepSeekKey = (key: string): string => {
+  if (key.length <= 8) {
+    return '•'.repeat(Math.max(4, key.length))
+  }
+  const prefix = key.startsWith('sk-') ? key.slice(0, 3) : key.slice(0, 2)
+  return `${prefix}${'•'.repeat(10)}${key.slice(-4)}`
+}
+
+const failedCheck = (error: unknown): KeyFailure => ({
+  kind: 'check',
+  check: { kind: 'failed', message: error instanceof Error ? error.message : String(error) },
+})
+
+const describeFailure = (
+  failure: KeyFailure | null,
+  tr: ReturnType<typeof accountMessages.useTranslate>
+): string | null => {
+  if (!failure) {
+    return null
+  }
+  if (failure.kind === 'empty') {
+    return tr('apiKeyPlaceholder')
+  }
+  const { check } = failure
+  return check.kind === 'invalid'
+    ? tr('apiKeyInvalid')
+    : check.kind === 'unreachable'
+      ? tr('networkError')
+      : tr('apiKeyVerificationFailed', { message: check.message })
+}
 
 /** Editor state for the key view; held by the settings dialog so typed input survives tab switches. */
 export const createUseKeyEditor = (account: Account) => () => {
   const state = useSyncExternalStore(account.subscribe, account.getState, account.getState)
   const apiKey = state.status === 'ready' ? state.apiKey : null
-  const [editing, setEditing] = useState(false)
-  const form = useSecretKeyForm({
-    verify: (key) => account.verifyKey(key),
-    save: account.setApiKey,
-    onSaved: () => setEditing(false),
-    messages: {
-      empty: () => t('apiKeyPlaceholder'),
-      invalid: () => t('apiKeyInvalid'),
-      unreachable: () => t('networkError'),
-      failed: (message) => t('apiKeyVerificationFailed', { message }),
-    },
+  const [phase, setPhase] = useState<KeyEditorPhase>({
+    kind: 'viewing',
+    verified: false,
+    error: null,
   })
-  return { apiKey, editing, setEditing, form, showInput: !apiKey || editing }
+
+  const setDraft = (draft: string) => {
+    setPhase((prev) => {
+      if (prev.kind === 'editing') {
+        const clearError =
+          prev.error?.kind === 'empty' ? Boolean(draft.trim()) : prev.error !== null
+        return { kind: 'editing', draft, error: clearError ? null : prev.error }
+      }
+      return { kind: 'editing', draft, error: null }
+    })
+  }
+
+  const startEdit = () => setPhase({ kind: 'editing', draft: '', error: null })
+  const cancelEdit = () => setPhase({ kind: 'viewing', verified: false, error: null })
+  const openRemoveConfirm = () => setPhase({ kind: 'confirmingRemove', error: null })
+  const cancelRemoveConfirm = () => setPhase({ kind: 'viewing', verified: false, error: null })
+
+  const submit = async () => {
+    const rawDraft = phase.kind === 'editing' ? phase.draft : ''
+    const trimmed = rawDraft.trim()
+    if (!trimmed) {
+      setPhase({ kind: 'editing', draft: rawDraft, error: { kind: 'empty' } })
+      return
+    }
+    if (phase.kind === 'verifying') {
+      return
+    }
+    setPhase({ kind: 'verifying', draft: rawDraft })
+    try {
+      const result = await account.verifyKey(trimmed)
+      if (result.kind !== 'valid') {
+        setPhase({ kind: 'editing', draft: rawDraft, error: { kind: 'check', check: result } })
+        return
+      }
+      await account.setApiKey(trimmed)
+      setPhase({ kind: 'viewing', verified: true, error: null })
+    } catch (error) {
+      setPhase({ kind: 'editing', draft: rawDraft, error: failedCheck(error) })
+    }
+  }
+
+  const testExisting = async () => {
+    if (!apiKey || phase.kind === 'testing' || phase.kind === 'clearing') {
+      return
+    }
+    setPhase({ kind: 'testing' })
+    try {
+      const result = await account.verifyKey(apiKey)
+      if (result.kind === 'valid') {
+        setPhase({ kind: 'viewing', verified: true, error: null })
+      } else {
+        setPhase({ kind: 'viewing', verified: false, error: { kind: 'check', check: result } })
+      }
+    } catch (error) {
+      setPhase({ kind: 'viewing', verified: false, error: failedCheck(error) })
+    }
+  }
+
+  const clear = async () => {
+    if (phase.kind === 'clearing') {
+      return
+    }
+    setPhase({ kind: 'clearing' })
+    try {
+      await account.setApiKey(null)
+      setPhase({ kind: 'viewing', verified: false, error: null })
+    } catch (error) {
+      setPhase({ kind: 'viewing', verified: false, error: failedCheck(error) })
+    }
+  }
+
+  return {
+    apiKey,
+    phase,
+    setDraft,
+    startEdit,
+    cancelEdit,
+    openRemoveConfirm,
+    cancelRemoveConfirm,
+    submit,
+    testExisting,
+    clear,
+  }
 }
 
 export type KeyEditor = ReturnType<ReturnType<typeof createUseKeyEditor>>
 
-/** API Key 设置：掩码摘要、在线测试、明暗切换、控制台入口与清除确认 */
 export const createKeySettings = (account: Account) => {
   const KeySettings = ({ editor }: { editor: KeyEditor }) => {
     const tr = accountMessages.useTranslate()
     const isMobile = useIsMobile()
-    const { apiKey, editing, setEditing, form, showInput } = editor
-    const [revealed, setRevealed] = useState(false)
-    const [confirmRemove, setConfirmRemove] = useState(false)
-
-    const startEdit = () => {
-      form.clearFeedback()
-      form.resetForm()
-      setRevealed(false)
-      setConfirmRemove(false)
-      setEditing(true)
-    }
-
-    const cancelEdit = () => {
-      form.resetForm()
-      setRevealed(false)
-      setEditing(false)
-    }
-
-    const confirmClear = async () => {
-      await form.clear()
-      setConfirmRemove(false)
-      setEditing(false)
-    }
+    const { apiKey, phase } = editor
+    const editingExisting = phase.kind === 'editing' || phase.kind === 'verifying'
+    const showInput = !apiKey || editingExisting
+    const draft = phase.kind === 'editing' || phase.kind === 'verifying' ? phase.draft : ''
+    const verifying = phase.kind === 'verifying'
+    const testing = phase.kind === 'testing'
+    const clearing = phase.kind === 'clearing'
+    const verified = phase.kind === 'viewing' && phase.verified
+    const errorMessage = describeFailure(
+      phase.kind === 'editing' || phase.kind === 'viewing' || phase.kind === 'confirmingRemove'
+        ? phase.error
+        : null,
+      tr
+    )
 
     return (
       <>
-        <div className={styles.cell}>
+        <SettingRow stack>
           <div className={styles.secret}>
-            <div className={styles.secretHeader}>
-              <div className={styles.label}>{tr('apiKeyLabel')}</div>
-              {!showInput && form.verified ? (
-                <span className={styles.secretStatus} role="status">
-                  <IconCheckOutline16 />
+            <div className={styles.header}>
+              <div className={styles.title}>{tr('apiKeyLabel')}</div>
+              {!showInput && verified ? (
+                <Badge tone="success" icon={<IconCheckOutline16 />}>
                   {tr('apiKeyVerified')}
-                </span>
+                </Badge>
               ) : null}
             </div>
 
             {showInput ? (
               <>
-                <div className={styles.description}>{tr('apiKeyStart')}</div>
-                <div className={clsx(styles.secretInput, form.error && styles.secretInputError)}>
-                  <input
-                    type={revealed ? 'text' : 'password'}
-                    placeholder={tr('apiKeyPlaceholder')}
-                    autoComplete="off"
-                    spellCheck={false}
-                    // 移动端打开设置时不弹键盘，点编辑后才聚焦
-                    autoFocus={!isMobile || editing}
-                    value={form.value}
-                    onChange={(event) => form.setValue(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
-                        void form.submit()
-                      } else if (event.key === 'Escape' && editing) {
-                        event.stopPropagation()
-                        cancelEdit()
-                      }
-                    }}
-                  />
-                  <IconButton
-                    size="m"
-                    icon={revealed ? <IconEyeOffOutline16 /> : <IconEyeOutline16 />}
-                    tooltip={tr(revealed ? 'apiKeyHide' : 'apiKeyShow')}
-                    onMouseDown={(event) => event.preventDefault()}
-                    onClick={() => setRevealed((value) => !value)}
-                  />
-                </div>
-                {form.error ? (
-                  <div className={styles.errorRow} role="alert">
-                    <IconToastError16 />
-                    <span>{form.error}</span>
-                  </div>
-                ) : null}
-                <div className={styles.secretActions}>
+                <PasswordField
+                  hint={tr('apiKeyStart')}
+                  placeholder={tr('apiKeyPlaceholder')}
+                  showLabel={tr('apiKeyShow')}
+                  hideLabel={tr('apiKeyHide')}
+                  error={errorMessage}
+                  autoFocus={!isMobile || editingExisting}
+                  value={draft}
+                  onChange={(event) => editor.setDraft(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
+                      void editor.submit()
+                    } else if (event.key === 'Escape' && editingExisting && apiKey) {
+                      event.stopPropagation()
+                      editor.cancelEdit()
+                    }
+                  }}
+                />
+                <div className={styles.actions}>
                   <Button
                     variant="primary"
                     size="m"
-                    disabled={form.verifying}
-                    onClick={() => void form.submit()}
+                    loading={verifying}
+                    disabled={verifying}
+                    onClick={() => void editor.submit()}
                   >
-                    {form.verifying ? tr('apiKeyVerifying') : tr('save')}
+                    {verifying ? tr('apiKeyVerifying') : tr('save')}
                   </Button>
-                  {editing ? (
+                  {editingExisting && apiKey ? (
                     <Button
                       variant="outlined"
                       size="m"
-                      disabled={form.verifying}
-                      onClick={cancelEdit}
+                      disabled={verifying}
+                      onClick={editor.cancelEdit}
                     >
                       {tr('cancel')}
                     </Button>
@@ -144,101 +233,80 @@ export const createKeySettings = (account: Account) => {
               </>
             ) : (
               <>
-                <div className={styles.secretSaved}>
-                  <span className={styles.secretSavedIcon}>
+                <div className={styles.savedBox}>
+                  <span className={styles.savedIcon}>
                     <IconKeyOutline16 />
                   </span>
-                  <span className={styles.secretMask}>{maskSecret(apiKey ?? '')}</span>
+                  <span className={styles.savedMask}>{maskDeepSeekKey(apiKey ?? '')}</span>
                 </div>
-                {form.error ? (
+                {errorMessage ? (
                   <div className={styles.errorRow} role="alert">
                     <IconToastError16 />
-                    <span>{form.error}</span>
+                    <span>{errorMessage}</span>
                   </div>
                 ) : null}
-                <div className={styles.secretActions}>
+                <div className={styles.actions}>
                   <Button
                     variant="outlined"
                     size="m"
-                    disabled={form.testing || form.clearing}
-                    onClick={startEdit}
+                    disabled={testing || clearing}
+                    onClick={editor.startEdit}
                   >
                     {tr('apiKeyChange')}
                   </Button>
                   <Button
                     variant="outlined"
                     size="m"
-                    disabled={form.testing || form.clearing}
-                    onClick={() => void form.testExisting(apiKey ?? '')}
+                    loading={testing}
+                    disabled={testing || clearing}
+                    onClick={() => void editor.testExisting()}
                   >
-                    {form.testing ? tr('apiKeyVerifying') : tr('apiKeyTest')}
+                    {testing ? tr('apiKeyVerifying') : tr('apiKeyTest')}
                   </Button>
                 </div>
               </>
             )}
           </div>
-        </div>
+        </SettingRow>
 
-        <div className={clsx(styles.cell, styles.row)}>
-          <div className={styles.text}>
-            <div className={styles.label}>{tr('apiKeyConsoleLabel')}</div>
-            <div className={styles.description}>{tr('apiKeyConsoleDescription')}</div>
-          </div>
-          <a
-            className={styles.linkButton}
-            href={DEEPSEEK_KEYS_URL}
-            target="_blank"
-            rel="noreferrer"
-            data-external-browser="true"
-          >
-            <span>{tr('apiKeyConsoleAction')}</span>
-            <IconRightUpOutline14 />
-          </a>
-        </div>
+        <SettingRow
+          label={tr('apiKeyConsoleLabel')}
+          description={tr('apiKeyConsoleDescription')}
+          action={
+            <LinkButton
+              href={DEEPSEEK_KEYS_URL}
+              target="_blank"
+              rel="noreferrer"
+              data-external-browser="true"
+            >
+              <span>{tr('apiKeyConsoleAction')}</span>
+              <IconRightUpOutline14 />
+            </LinkButton>
+          }
+        />
 
         {!showInput ? (
-          <div className={clsx(styles.cell, styles.row)}>
-            <div className={styles.text}>
-              <div className={styles.label}>{tr('apiKeyRemoveLabel')}</div>
-              <div className={styles.description}>
-                {tr(
-                  account.storage === 'device'
-                    ? 'apiKeyRemoveDescriptionDesktop'
-                    : 'apiKeyRemoveDescriptionWeb'
-                )}
-              </div>
-            </div>
-            {confirmRemove ? (
-              <div className={styles.inlineConfirm}>
-                <Button
-                  variant="outlined"
-                  size="m"
-                  disabled={form.clearing}
-                  onClick={() => setConfirmRemove(false)}
-                >
-                  {tr('cancel')}
-                </Button>
-                <Button
-                  variant="danger"
-                  size="m"
-                  disabled={form.clearing}
-                  onClick={() => void confirmClear()}
-                >
-                  {tr('apiKeyRemoveConfirm')}
-                </Button>
-              </div>
-            ) : (
-              <Button
-                variant="dangerOutlined"
-                size="m"
-                className={styles.cellButton}
-                disabled={form.testing || form.clearing}
-                onClick={() => setConfirmRemove(true)}
-              >
-                {tr('apiKeyRemove')}
-              </Button>
+          <SettingRow
+            label={tr('apiKeyRemoveLabel')}
+            description={tr(
+              account.storage === 'device'
+                ? 'apiKeyRemoveDescriptionDesktop'
+                : 'apiKeyRemoveDescriptionWeb'
             )}
-          </div>
+            action={
+              <SettingInlineConfirm
+                confirming={phase.kind === 'confirmingRemove' || clearing}
+                triggerLabel={tr('apiKeyRemove')}
+                confirmLabel={tr('apiKeyRemoveConfirm')}
+                cancelLabel={tr('cancel')}
+                disabled={testing}
+                busy={clearing}
+                onOpen={editor.openRemoveConfirm}
+                onCancel={editor.cancelRemoveConfirm}
+                onConfirm={() => void editor.clear()}
+              />
+            }
+          />
         ) : null}
       </>
     )

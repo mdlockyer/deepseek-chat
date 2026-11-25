@@ -1,8 +1,7 @@
+import { StageFrame, type ViewportSpec } from '@deepseek-chat/lib-stage'
+import { Banner } from '@deepseek-chat/lib-ui'
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useWorkspace } from '../context.js'
-import type { BrowserViewportSpec } from '@deepseek-chat/spine/design'
-import { StageFrame } from '@deepseek-chat/spine/design'
-import { panelStyles } from '@deepseek-chat/spine/design'
 import styles from '../PreviewPanel.module.css'
 import { NativePreviewSurface } from './NativePreviewSurface.js'
 
@@ -34,9 +33,9 @@ export const HtmlPreview = ({
   html: string
   bytes: Uint8Array
   title: string
-  viewport: BrowserViewportSpec | null
+  viewport: ViewportSpec | null
   reloadKey: number
-  onViewportCommit?: (next: BrowserViewportSpec) => void
+  onViewportCommit?: (next: ViewportSpec) => void
 }) => {
   const { host, panel } = useWorkspace()
   const isDesktopApp = host !== null
@@ -87,7 +86,13 @@ export const HtmlPreview = ({
       host={panel}
       viewport={viewport}
       onViewportCommit={onViewportCommit}
-      banner={runtimeError ? <div className={panelStyles.errorBanner}>{runtimeError}</div> : null}
+      banner={
+        runtimeError ? (
+          <Banner tone="error" className={styles.errorBanner}>
+            {runtimeError}
+          </Banner>
+        ) : null
+      }
     >
       {(fit, { resizing, viewport: liveViewport }) => {
         const scaledStyle =

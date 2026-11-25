@@ -3,17 +3,11 @@
 }
 
 .loading .bar {
-  fill: var(--dsw-static-neutral-300);
-}
-
-[data-ds-dark-theme] {
-  .loading .bar {
-    fill: var(--dsw-static-neutral-550);
-  }
+  fill: var(--ui-bar-muted);
 }
 
 .sweep {
-  fill: #000;
+  fill: var(--ui-text-primary);
   fill-opacity: 0;
   animation-duration: 1.5s;
   animation-timing-function: linear;
@@ -309,7 +303,7 @@
 }
 
 .playing .bar {
-  fill: var(--dsw-alias-brand-primary);
+  fill: var(--ui-accent-fill);
 }
 
 @keyframes tts-settle {

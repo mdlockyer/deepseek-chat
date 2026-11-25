@@ -1,5 +1,5 @@
 import type { SessionDeleted, SessionHistoryReplaced } from '@deepseek-chat/spine/facts/session'
-import type { PanelSlot } from '@deepseek-chat/spine/design'
+import { noopNoticePort, type NoticePort, type PanelSlot } from '@deepseek-chat/spine/ports'
 import type { EventLog } from '@deepseek-chat/spine/runtime'
 import type { PreviewHost, WorkspaceViews } from './context.js'
 import { createPreviewPanel } from './PreviewPanel.js'
@@ -60,11 +60,14 @@ export type WorkspaceFilesDeps = {
   readonly saveFile: (name: string, blob: Blob) => Promise<void>
   readonly copyText: (text: string) => Promise<boolean>
   readonly views: WorkspaceViews
+  /** Ephemeral user feedback port; defaults to a safe no-op for headless callers. */
+  readonly notify?: NoticePort
   readonly newId?: () => string
 }
 
 export const createWorkspaceFilesSlice = (deps: WorkspaceFilesDeps) => {
   const state = createPreviewState(deps.panel)
+  const notify = deps.notify ?? noopNoticePort
   const newId = deps.newId ?? (() => crypto.randomUUID())
 
   const unsubscribers = [
@@ -124,6 +127,7 @@ export const createWorkspaceFilesSlice = (deps: WorkspaceFilesDeps) => {
       loadFile: deps.loadFile,
       saveFile: deps.saveFile,
       copyText: deps.copyText,
+      notify,
     }),
     dispose: () => {
       for (const unsubscribe of unsubscribers) {

@@ -1,3 +1,4 @@
+import { Chip } from '@deepseek-chat/lib-ui'
 import { workspaceMessages } from '../messages.js'
 import { useWorkspace } from '../context.js'
 import styles from '../PreviewPanel.module.css'
@@ -35,9 +36,7 @@ export const PdfPreview = ({
     <div className={styles.body}>
       <div className={styles.pdfNotice}>
         <span>{t('previewPdfFallbackHint')}</span>
-        <button type="button" className={styles.actionChip} onClick={onSave}>
-          {t('previewSaveFile')}
-        </button>
+        <Chip onClick={onSave}>{t('previewSaveFile')}</Chip>
       </div>
       <iframe key={reloadKey} title={name} src={blobUrl} className={styles.iframeSurface} />
     </div>

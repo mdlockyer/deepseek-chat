@@ -1,6 +1,10 @@
 import type { SessionDeleted, SessionHistoryReplaced } from '@deepseek-chat/spine/facts/session'
-import { showToast, type PanelSlot } from '@deepseek-chat/spine/design'
-import type { KeyValueStore } from '@deepseek-chat/spine/ports'
+import {
+  noopNoticePort,
+  type KeyValueStore,
+  type NoticePort,
+  type PanelSlot,
+} from '@deepseek-chat/spine/ports'
 import type { EventLog } from '@deepseek-chat/spine/runtime'
 import { createBrowserPanel } from './BrowserPanel.js'
 import type { BrowserHost } from './host.js'
@@ -36,11 +40,14 @@ export type BrowserSliceDeps = {
   readonly openExternal: (url: string) => Promise<void>
   /** Stops the reply that is driving the browser in a session (the "take over" button). */
   readonly stopController: (sessionId: string) => void
+  /** Ephemeral user feedback port; defaults to a safe no-op for headless callers. */
+  readonly notify?: NoticePort
   readonly newId?: () => string
 }
 
 export const createBrowserSlice = (deps: BrowserSliceDeps) => {
   const allowLocalhost = createLocalhostPreference(deps.store)
+  const notice = deps.notify ?? noopNoticePort
   const state = createBrowserState({
     host: deps.host,
     panel: deps.panel,
@@ -48,12 +55,12 @@ export const createBrowserSlice = (deps: BrowserSliceDeps) => {
     openExternal: deps.openExternal,
     notify: {
       navigationBlocked: (url, reason) =>
-        showToast({
+        notice.show({
           text: () => browserMessages.translate('browserNavigationBlocked', { url, reason }),
           tone: 'error',
         }),
       downloadBlocked: (reason) =>
-        showToast({
+        notice.show({
           text: () => browserMessages.translate('browserDownloadBlocked', { reason }),
         }),
     },

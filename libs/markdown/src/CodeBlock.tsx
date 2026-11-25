@@ -1,16 +1,16 @@
-import { memo, useState } from 'react'
 import {
   IconCheckOutline16,
   IconCopyOutline16,
+  SegmentedControl,
   copyText,
-  showToast,
-} from '@deepseek-chat/spine/design'
+  useUiNotice,
+} from '@deepseek-chat/lib-ui'
+import { memo, useState } from 'react'
 import { useHighlightedHtml } from './highlight.js'
 import { markdownMessages } from './messages.js'
 import { MermaidDiagram } from './MermaidDiagram.js'
 import styles from './CodeBlock.module.css'
 
-/** 代码块标题栏：左侧语言名，右侧复制 */
 const CodeInfoRow = ({
   code,
   infostring,
@@ -23,28 +23,24 @@ const CodeInfoRow = ({
   onToggleDiagram?: () => void
 }) => {
   const t = markdownMessages.useTranslate()
+  const notice = useUiNotice()
   const [copied, setCopied] = useState(false)
   return (
     <div className={styles.container}>
       {onToggleDiagram ? (
-        <div className="md-code-block-switch" aria-label={t('mermaidSwitchLabel')}>
-          <button
-            type="button"
-            className={styles.button}
-            aria-pressed={showDiagram}
-            onClick={() => !showDiagram && onToggleDiagram()}
-          >
-            {t('mermaidDiagram')}
-          </button>
-          <button
-            type="button"
-            className={styles.button}
-            aria-pressed={!showDiagram}
-            onClick={() => showDiagram && onToggleDiagram()}
-          >
-            {t('mermaidCode')}
-          </button>
-        </div>
+        <SegmentedControl
+          ariaLabel={t('mermaidSwitchLabel')}
+          value={showDiagram ? 'diagram' : 'code'}
+          options={[
+            { value: 'diagram', label: t('mermaidDiagram') },
+            { value: 'code', label: t('mermaidCode') },
+          ]}
+          onChange={(mode) => {
+            if ((mode === 'diagram') !== showDiagram) {
+              onToggleDiagram()
+            }
+          }}
+        />
       ) : (
         <span className={styles.name}>{infostring}</span>
       )}
@@ -53,7 +49,7 @@ const CodeInfoRow = ({
         className={styles.button}
         onClick={async () => {
           if (!(await copyText(code))) {
-            showToast({ text: () => markdownMessages.translate('copyFailed') })
+            notice.show({ text: () => markdownMessages.translate('copyFailed') })
             return
           }
           setCopied(true)
@@ -67,7 +63,6 @@ const CodeInfoRow = ({
   )
 }
 
-/** 代码块：语言包按需加载，不支持或尚未加载的语言按纯文本显示 */
 export const CodeBlock = memo(function CodeBlock({
   code,
   infostring,

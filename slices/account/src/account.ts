@@ -1,5 +1,11 @@
-import type { KeyCheck } from '@deepseek-chat/spine/design'
 import type { HttpFetch, KeyValueStore, SecretSlot } from '@deepseek-chat/spine/ports'
+
+/** Outcome of verifying a DeepSeek API key against `/models`. */
+export type KeyCheck =
+  | { readonly kind: 'valid' }
+  | { readonly kind: 'invalid' }
+  | { readonly kind: 'unreachable' }
+  | { readonly kind: 'failed'; readonly message: string }
 
 /** Storage key kept from the original app so saved keys survive the upgrade. */
 const STORAGE_KEY = 'chat-demo:api-key'

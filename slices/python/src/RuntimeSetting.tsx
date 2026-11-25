@@ -1,4 +1,4 @@
-import { Button, SettingRow, settingStyles } from '@deepseek-chat/spine/design'
+import { Button, SettingRow } from '@deepseek-chat/lib-ui'
 import { useEffect, useState } from 'react'
 import type { NativeRuntimeStatus } from './kernel.js'
 import { pythonMessages } from './messages.js'
@@ -99,7 +99,7 @@ export const createRuntimeSetting = (managed: ManagedRuntime | null) => {
           <Button
             variant="outlined"
             size="m"
-            className={settingStyles.cellButton}
+            loading={resetting}
             disabled={loading || resetting || !runtime?.ready}
             onClick={() => void onReset()}
           >

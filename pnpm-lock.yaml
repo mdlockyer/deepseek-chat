@@ -117,6 +117,9 @@ importers:
 
   libs/markdown:
     dependencies:
+      '@deepseek-chat/lib-ui':
+        specifier: workspace:*
+        version: link:../ui
       '@deepseek-chat/spine':
         specifier: workspace:*
         version: link:../../spine
@@ -198,6 +201,9 @@ importers:
 
   slices/account:
     dependencies:
+      '@deepseek-chat/lib-ui':
+        specifier: workspace:*
+        version: link:../../libs/ui
       '@deepseek-chat/spine':
         specifier: workspace:*
         version: link:../../spine
@@ -213,6 +219,9 @@ importers:
       '@deepseek-chat/lib-stage':
         specifier: workspace:*
         version: link:../../libs/stage
+      '@deepseek-chat/lib-ui':
+        specifier: workspace:*
+        version: link:../../libs/ui
       '@deepseek-chat/spine':
         specifier: workspace:*
         version: link:../../spine
@@ -253,6 +262,9 @@ importers:
 
   slices/preferences:
     dependencies:
+      '@deepseek-chat/lib-ui':
+        specifier: workspace:*
+        version: link:../../libs/ui
       '@deepseek-chat/spine':
         specifier: workspace:*
         version: link:../../spine
@@ -265,6 +277,9 @@ importers:
 
   slices/python:
     dependencies:
+      '@deepseek-chat/lib-ui':
+        specifier: workspace:*
+        version: link:../../libs/ui
       '@deepseek-chat/spine':
         specifier: workspace:*
         version: link:../../spine
@@ -274,6 +289,9 @@ importers:
 
   slices/voice:
     dependencies:
+      '@deepseek-chat/lib-ui':
+        specifier: workspace:*
+        version: link:../../libs/ui
       '@deepseek-chat/spine':
         specifier: workspace:*
         version: link:../../spine
@@ -286,12 +304,24 @@ importers:
 
   slices/web-research:
     dependencies:
+      '@deepseek-chat/lib-ui':
+        specifier: workspace:*
+        version: link:../../libs/ui
       '@deepseek-chat/spine':
         specifier: workspace:*
         version: link:../../spine
+      react:
+        specifier: 18.3.1
+        version: 18.3.1
 
   slices/workspace-files:
     dependencies:
+      '@deepseek-chat/lib-stage':
+        specifier: workspace:*
+        version: link:../../libs/stage
+      '@deepseek-chat/lib-ui':
+        specifier: workspace:*
+        version: link:../../libs/ui
       '@deepseek-chat/spine':
         specifier: workspace:*
         version: link:../../spine

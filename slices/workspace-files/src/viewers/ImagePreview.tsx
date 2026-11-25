@@ -1,3 +1,4 @@
+import { Chip } from '@deepseek-chat/lib-ui'
 import { useState } from 'react'
 import { workspaceMessages } from '../messages.js'
 import { formatSize } from '../format.js'
@@ -40,9 +41,9 @@ export const ImagePreview = ({
           {dimensions ? `${dimensions.width} × ${dimensions.height} · ` : ''}
           {formatSize(size)}
         </span>
-        <button type="button" className={styles.actionChip} onClick={onToggleActualSize}>
+        <Chip onClick={onToggleActualSize}>
           {t(actualSize ? 'previewZoomFit' : 'previewZoomActual')}
-        </button>
+        </Chip>
       </div>
     </div>
   )

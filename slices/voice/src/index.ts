@@ -1,4 +1,9 @@
-import type { HttpFetch, KeyValueStore } from '@deepseek-chat/spine/ports'
+import {
+  noopNoticePort,
+  type HttpFetch,
+  type KeyValueStore,
+  type NoticePort,
+} from '@deepseek-chat/spine/ports'
 import { browserAudio, type VoiceAudio } from './audio.js'
 import { createReadAloud, type ReadAloudState } from './readAloud.js'
 import { createReadAloudButton } from './ReadAloudButton.js'
@@ -24,14 +29,17 @@ export type VoiceSliceDeps = {
   readonly store: KeyValueStore
   /** Audio and microphone; defaults to the browser's. */
   readonly audio?: VoiceAudio
+  /** Ephemeral user feedback port; defaults to a safe no-op for headless callers. */
+  readonly notify?: NoticePort
 }
 
 export const createVoiceSlice = (deps: VoiceSliceDeps) => {
   const api = createSpeechApi({ fetch: deps.fetch, apiOrigin: deps.apiOrigin })
   const audio = deps.audio ?? browserAudio()
+  const notify = deps.notify ?? noopNoticePort
   const preference = createVoicePreference(deps.store)
   const readAloud = createReadAloud({ api, audio, apiKey: deps.apiKey, voice: preference.get })
-  const inputDeps = { api, audio, apiKey: deps.apiKey }
+  const inputDeps = { api, audio, apiKey: deps.apiKey, notify }
 
   return {
     /** Read-aloud: one reply at a time. */
@@ -52,7 +60,7 @@ export const createVoiceSlice = (deps: VoiceSliceDeps) => {
     setTtsVoice: (voice: TtsVoice) => preference.set(voice),
     /** Settings row for the read-aloud voice. */
     VoiceSetting: createVoiceSetting(preference),
-    ReadAloudButton: createReadAloudButton(readAloud),
+    ReadAloudButton: createReadAloudButton(readAloud, notify),
     VoiceButton,
     Spectrum,
   }

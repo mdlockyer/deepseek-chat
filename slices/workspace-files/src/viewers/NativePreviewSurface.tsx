@@ -1,9 +1,8 @@
+import { StageFrame, type StageFit, type ViewportSpec } from '@deepseek-chat/lib-stage'
+import { Banner } from '@deepseek-chat/lib-ui'
 import clsx from 'clsx'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useWorkspace } from '../context.js'
-import type { BrowserStageFit, BrowserViewportSpec } from '@deepseek-chat/spine/design'
-import { StageFrame } from '@deepseek-chat/spine/design'
-import { panelStyles } from '@deepseek-chat/spine/design'
 import styles from '../PreviewPanel.module.css'
 
 /** 桌面端原生隔离预览子 Webview 宿主：用于 HTML 与 PDF，复用浏览器面板的坐标/缩放/覆盖层快照机制 */
@@ -17,9 +16,9 @@ export const NativePreviewSurface = ({
 }: {
   bytes: Uint8Array
   mimeType: 'text/html' | 'application/pdf'
-  viewport: BrowserViewportSpec | null
+  viewport: ViewportSpec | null
   reloadKey: number
-  onViewportCommit?: (next: BrowserViewportSpec) => void
+  onViewportCommit?: (next: ViewportSpec) => void
   banner?: React.ReactNode
 }) => {
   const { host, panel, state: previewState } = useWorkspace()
@@ -28,7 +27,7 @@ export const NativePreviewSurface = ({
   const panelResizing = panel.useLayout((layout) => layout.resizing)
   const overlayLocked = panel.useLayout((layout) => layout.overlayLocked)
   const storedWidth = panel.useLayout((layout) => layout.width)
-  const [stageFit, setStageFit] = useState<BrowserStageFit | null>(null)
+  const [stageFit, setStageFit] = useState<StageFit | null>(null)
   const [snapshot, setSnapshot] = useState<{
     dataUrl: string
     width: number
@@ -149,7 +148,15 @@ export const NativePreviewSurface = ({
       onFitChange={setStageFit}
       onViewportResizeHoverStart={previewState.triggerNativePreviewSnapshot}
       onViewportCommit={onViewportCommit}
-      banner={error ? <div className={panelStyles.errorBanner}>{error}</div> : banner}
+      banner={
+        error ? (
+          <Banner tone="error" className={styles.errorBanner}>
+            {error}
+          </Banner>
+        ) : (
+          banner
+        )
+      }
     >
       {() => (
         <>

@@ -7,6 +7,10 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
+    "@deepseek-chat/lib-ui": "workspace:*",
     "@deepseek-chat/spine": "workspace:*"
+  },
+  "peerDependencies": {
+    "react": "18.3.1"
   }
 }

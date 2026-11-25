@@ -1,8 +1,7 @@
 import assert from 'node:assert/strict'
 import { afterEach, beforeEach, describe, it } from 'node:test'
-import { getToast } from '@deepseek-chat/spine/design'
 import { setLocale } from '@deepseek-chat/spine/i18n'
-import { memoryStore } from '@deepseek-chat/spine/ports'
+import { memoryNoticePort, memoryStore } from '@deepseek-chat/spine/ports'
 import {
   createVoiceSlice,
   type AudioContextLike,
@@ -149,6 +148,7 @@ const setup = (
 ) => {
   const calls: Call[] = []
   const fake = createFakeAudio(overrides.audioOptions)
+  const notices = memoryNoticePort()
   const voice = createVoiceSlice({
     fetch: async (url, init) => {
       const call = { url, init }
@@ -159,9 +159,10 @@ const setup = (
     apiKey: () => 'sk-test',
     store: memoryStore({ 'chat-demo:tts-voice': 'tide' }),
     audio: fake.audio,
+    notify: notices,
     ...overrides,
   })
-  return { voice, calls, fake }
+  return { voice, calls, fake, notices }
 }
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0))
@@ -170,7 +171,6 @@ const settle = async () => {
     await tick()
   }
 }
-const toastText = () => getToast().content?.text() ?? null
 
 beforeEach(() => setLocale('en-US'))
 
@@ -412,7 +412,7 @@ describe('voice: voice input', () => {
 
   it('says no speech was detected for a blank transcript', async () => {
     const texts: string[] = []
-    const { voice, fake } = setup(asrOk('   '))
+    const { voice, fake, notices } = setup(asrOk('   '))
     const input = voice.createVoiceInput((text) => texts.push(text))
 
     await input.toggle()
@@ -420,11 +420,11 @@ describe('voice: voice input', () => {
     await input.toggle()
 
     assert.deepEqual(texts, [])
-    assert.equal(toastText(), 'No speech detected')
+    assert.equal(notices.latest()?.text(), 'No speech detected')
   })
 
   it('reports a failed transcription', async () => {
-    const { voice, fake } = setup(() => new Response('busy', { status: 503 }))
+    const { voice, fake, notices } = setup(() => new Response('busy', { status: 503 }))
     const input = voice.createVoiceInput(() => undefined)
 
     await input.toggle()
@@ -432,7 +432,7 @@ describe('voice: voice input', () => {
     await input.toggle()
 
     assert.equal(input.getStatus(), 'idle')
-    assert.equal(toastText(), 'Speech recognition failed. Please try again later.')
+    assert.equal(notices.latest()?.text(), 'Speech recognition failed. Please try again later.')
   })
 
   it('sends nothing when nothing was recorded', async () => {
@@ -450,7 +450,7 @@ describe('voice: voice input', () => {
     const texts: string[] = []
     let answer: (response: Response) => void = () => undefined
     let seenSignal: AbortSignal | undefined
-    const { voice, fake } = setup((call) => {
+    const { voice, fake, notices } = setup((call) => {
       seenSignal = call.init.signal ?? undefined
       return new Promise((resolve) => {
         answer = resolve
@@ -461,7 +461,7 @@ describe('voice: voice input', () => {
     fake.contexts[0]?.feed(0.1)
     const finishing = input.toggle()
     await settle()
-    const toastBefore = getToast().id
+    const noticeCountBefore = notices.history.length
 
     await input.toggle()
     assert.equal(input.getStatus(), 'idle')
@@ -470,7 +470,11 @@ describe('voice: voice input', () => {
     answer(new Response(JSON.stringify({ text: 'too late' })))
     await finishing
     assert.deepEqual(texts, [])
-    assert.equal(getToast().id, toastBefore, 'no toast for a cancelled transcription')
+    assert.equal(
+      notices.history.length,
+      noticeCountBefore,
+      'no notice for a cancelled transcription'
+    )
     assert.equal(input.getStatus(), 'idle')
   })
 
@@ -495,7 +499,7 @@ describe('voice: voice input', () => {
     ['AbortError', 'Speech recognition failed. Please try again later.'],
   ] as const) {
     it(`explains a microphone ${name}`, async () => {
-      const { voice } = setup(asrOk('x'), {
+      const { voice, notices } = setup(asrOk('x'), {
         audioOptions: { micError: new DOMException('denied', name) },
       })
       const input = voice.createVoiceInput(() => undefined)
@@ -503,13 +507,13 @@ describe('voice: voice input', () => {
       await input.toggle()
 
       assert.equal(input.getStatus(), 'idle')
-      assert.equal(toastText(), expected)
+      assert.equal(notices.latest()?.text(), expected)
     })
   }
 
   it('stops at the length limit, says so, and sends at most 120 s of audio', async () => {
     const texts: string[] = []
-    const { voice, calls, fake } = setup(asrOk('long'))
+    const { voice, calls, fake, notices } = setup(asrOk('long'))
     const input = voice.createVoiceInput((text) => texts.push(text))
     await input.toggle()
 
@@ -517,7 +521,7 @@ describe('voice: voice input', () => {
     for (let frame = 0; frame < 470; frame += 1) {
       fake.contexts[0]?.feed(0.1)
     }
-    assert.equal(toastText(), 'Maximum recording length reached')
+    assert.equal(notices.latest()?.text(), 'Maximum recording length reached')
     await settle()
 
     assert.deepEqual(texts, ['long'])

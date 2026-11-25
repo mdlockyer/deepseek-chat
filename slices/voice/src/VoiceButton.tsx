@@ -1,7 +1,6 @@
+import { IconMicFill16, IconMicOutline16, Spinner, Tooltip } from '@deepseek-chat/lib-ui'
 import clsx from 'clsx'
 import { voiceMessages } from './messages.js'
-import { IconMicFill16, IconMicOutline16 } from '@deepseek-chat/spine/design'
-import { Tooltip } from '@deepseek-chat/spine/design'
 import type { VoiceInputStatus } from './voiceInput.js'
 import styles from './VoiceButton.module.css'
 
@@ -67,7 +66,7 @@ export const VoiceButton = ({
               </span>
             </span>
           ) : status === 'transcribing' ? (
-            <span className={styles.loading} />
+            <Spinner size="sm" label={t('voiceInputCancel')} />
           ) : (
             <IconMicOutline16 />
           )}

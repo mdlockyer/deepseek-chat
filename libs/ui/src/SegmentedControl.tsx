@@ -48,7 +48,7 @@ export const SegmentedControl = <T extends string>({
           }}
         >
           {option.icon}
-          <span>{option.label}</span>
+          {option.label}
         </button>
       )
     })}

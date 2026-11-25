@@ -1,4 +1,4 @@
-import type { PanelSlot } from '@deepseek-chat/spine/design'
+import type { NoticePort, PanelSlot } from '@deepseek-chat/spine/ports'
 import { createContext, useContext, type ComponentType } from 'react'
 import type { PreviewState } from './state.js'
 
@@ -35,6 +35,7 @@ export type WorkspaceEnv = {
   readonly loadFile: (fileId: string) => Promise<Blob | undefined>
   readonly saveFile: (name: string, blob: Blob) => Promise<void>
   readonly copyText: (text: string) => Promise<boolean>
+  readonly notify: NoticePort
 }
 
 const WorkspaceContext = createContext<WorkspaceEnv | null>(null)

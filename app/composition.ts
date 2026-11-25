@@ -101,6 +101,7 @@ export const voice = createVoiceSlice({
   apiOrigin: API_ORIGIN,
   apiKey: () => account.getApiKey(),
   store: localStore,
+  notify: notices,
 })
 
 export const browser = createBrowserSlice({
@@ -109,6 +110,7 @@ export const browser = createBrowserSlice({
   panel: createPanelSlot('browser'),
   store: localStore,
   openExternal: openExternalUrl,
+  notify: notices,
   // conversations 在本模块之后创建
   stopController: (sessionId) => late.stopReply(sessionId),
 })

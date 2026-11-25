@@ -1,55 +1,58 @@
-.container {
-  display: flex;
-  width: 100%;
-  justify-content: space-between;
-  align-items: center;
-  padding: 6px;
-}
-
-.name {
-  margin-left: 8px;
-  color: var(--dsw-alias-label-primary);
-  font-family: var(--ds-font-family-code);
-  font-size: 12px;
-  line-height: 18px;
-}
-
-.button {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  height: 28px;
-  padding: 0 10px;
-  border: none;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--dsw-alias-label-secondary);
-  font: inherit;
-  font-size: 13px;
-  line-height: 20px;
-  cursor: pointer;
-  user-select: none;
-  transition:
-    background-color var(--ds-transition-duration) var(--ds-ease-in-out),
-    color var(--ds-transition-duration) var(--ds-ease-in-out),
-    transform var(--ds-transition-duration) var(--ds-ease-in-out);
-
-  &:active {
-    transform: scale(0.97);
+@layer components {
+  .container {
+    display: flex;
+    width: 100%;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--ui-space-1-5);
   }
 
-  &:active {
-    background-color: var(--dsw-alias-interactive-bg-hover);
+  .name {
+    margin-left: var(--ui-space-2);
+    color: var(--ui-text-primary);
+    font-family: var(--ui-font-mono);
+    font-size: var(--ui-font-size-xs);
+    line-height: 18px;
   }
 
-  @media (hover: hover) {
-    &:hover {
-      background-color: var(--dsw-alias-interactive-bg-hover);
+  .button {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--ui-space-1);
+    height: var(--ui-control-xs);
+    padding: 0 var(--ui-space-2-5);
+    border: none;
+    border-radius: var(--ui-radius-sm);
+    background-color: transparent;
+    color: var(--ui-text-secondary);
+    font: var(--ui-type-caption);
+    cursor: pointer;
+    user-select: none;
+    transition:
+      background-color var(--ui-duration-normal) var(--ui-ease-standard),
+      color var(--ui-duration-normal) var(--ui-ease-standard),
+      transform var(--ui-duration-normal) var(--ui-ease-standard);
+
+    &:active {
+      transform: scale(0.97);
+      background-color: var(--ui-interactive-hover);
     }
-  }
 
-  svg {
-    width: 14px;
-    height: 14px;
+    @media (hover: hover) {
+      &:hover {
+        background-color: var(--ui-interactive-hover);
+        color: var(--ui-text-primary);
+      }
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--ui-focus-ring);
+      outline-offset: 2px;
+    }
+
+    svg {
+      width: 14px;
+      height: 14px;
+    }
   }
 }

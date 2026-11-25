@@ -1,109 +1,64 @@
-.locationCell {
-  flex-wrap: wrap;
-}
-
-.locationCell .locationText {
-  flex: 1 0 auto;
-  padding-right: 8px;
-}
-
-.locationSelectors {
-  display: flex;
-  flex-wrap: nowrap;
-  align-items: flex-start;
-  justify-content: flex-end;
-  gap: 16px;
-  min-width: 0;
-  max-width: 100%;
-}
-
-.locationSelectors > button {
-  flex-shrink: 1;
-  min-width: 0;
-  text-align: start;
-}
-
-.provinceSelect {
-  width: 159px;
-}
-
-.locationSelectors > .citySelect {
-  min-width: 120px;
-  width: 120px;
-}
-
-.regionSelect {
-  max-width: min(285px, 100%);
-}
-
-.theme {
-  flex-shrink: 0;
-  margin-top: 10px;
-}
-
-.themeOptions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin: 8px 0 10px;
-}
-
-.themeOption {
-  display: inline-flex;
-  flex: 1;
-  flex-direction: column;
-  align-items: center;
-  justify-content: space-between;
-  box-sizing: border-box;
-  min-width: 128px;
-  height: 82px;
-  padding: 21px 32px;
-  border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: 12px;
-  background-color: transparent;
-  color: var(--dsw-alias-label-primary);
-  font: inherit;
-  font-size: 14px;
-  line-height: 22px;
-  text-align: center;
-  white-space: nowrap;
-  cursor: pointer;
-  user-select: none;
-  outline: none;
-  transition: background-color var(--ds-transition-duration) var(--ds-ease-in-out);
-
-  &:hover {
-    background-color: var(--dsw-specific-selector);
-  }
-
-  /* 选中项用品牌色边框与浅品牌底，与悬停区分 */
-  &.themeOptionSelected {
-    border-color: var(--dsw-alias-brand-primary);
-    background-color: var(--dsw-alias-button-ghost-active-fill);
-  }
-
-  &:focus-visible {
-    box-shadow: 0 0 0 2px var(--dsw-alias-button-primary-fill);
-  }
-}
-
-@media not all and (min-width: 768px) {
+@layer slice {
   .locationCell {
-    gap: 12px;
-  }
-
-  .locationCell .locationText {
-    flex-basis: 100%;
-    padding-right: 0;
+    flex-wrap: wrap;
   }
 
   .locationSelectors {
-    width: 100%;
-    gap: 12px;
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: flex-start;
+    justify-content: flex-end;
+    gap: var(--ui-space-4);
+    min-width: 0;
+    max-width: 100%;
   }
 
-  .provinceSelect,
-  .citySelect {
-    flex: 1 1 auto;
+  .locationSelectors > button {
+    flex-shrink: 1;
+    min-width: 0;
+    text-align: start;
+  }
+
+  .provinceSelect {
+    width: 159px;
+  }
+
+  .locationSelectors > .citySelect {
+    min-width: 120px;
+    width: 120px;
+  }
+
+  .regionSelect {
+    max-width: min(285px, 100%);
+  }
+
+  .theme {
+    flex-shrink: 0;
+    margin-top: var(--ui-space-2-5);
+  }
+
+  .themeLabel {
+    font: var(--ui-type-label);
+    color: var(--ui-text-primary);
+  }
+
+  .themeOptions {
+    margin: var(--ui-space-2) 0 var(--ui-space-2-5);
+  }
+
+  @media not all and (min-width: 768px) {
+    .locationCell {
+      gap: var(--ui-space-3);
+    }
+
+    .locationSelectors {
+      width: 100%;
+      gap: var(--ui-space-3);
+    }
+
+    .provinceSelect,
+    .citySelect {
+      flex: 1 1 auto;
+    }
   }
 }

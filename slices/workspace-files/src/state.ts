@@ -1,5 +1,6 @@
+import type { ViewportSpec } from '@deepseek-chat/lib-stage'
+import type { PanelSlot } from '@deepseek-chat/spine/ports'
 import { create } from 'zustand'
-import type { BrowserViewportSpec, PanelSlot } from '@deepseek-chat/spine/design'
 
 export type PreviewViewMode = 'preview' | 'code'
 
@@ -9,7 +10,7 @@ export type SessionPreviewState = {
   uploadKeys: string[]
   selectedFileIdByKey: Record<string, string>
   viewModeByKey: Record<string, PreviewViewMode>
-  viewportByKey: Record<string, BrowserViewportSpec | null>
+  viewportByKey: Record<string, ViewportSpec | null>
 }
 
 export const EMPTY_SESSION_PREVIEW_STATE: SessionPreviewState = {
@@ -155,11 +156,7 @@ export const createPreviewState = (panel: PanelSlot) => {
     }))
   }
 
-  const setPreviewViewport = (
-    sessionId: string,
-    key: string,
-    viewport: BrowserViewportSpec | null
-  ) => {
+  const setPreviewViewport = (sessionId: string, key: string, viewport: ViewportSpec | null) => {
     updateSessionPreview(sessionId, (prev) => ({
       ...prev,
       viewportByKey: { ...prev.viewportByKey, [key]: viewport },

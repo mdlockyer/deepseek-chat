@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { ViewportMenu, fitViewportToStage } from '@deepseek-chat/lib-stage'
 import {
+  EmptyState,
   IconBrowseOutline16,
   IconBrowserOutline14,
   IconButton,
@@ -8,11 +9,9 @@ import {
   IconCopyOutline16,
   IconDownloadOutline16,
   IconRefreshOutline16,
-  ViewportMenu,
-  fitViewportToStage,
-  panelStyles,
-  showToast,
-} from '@deepseek-chat/spine/design'
+  SegmentedControl,
+} from '@deepseek-chat/lib-ui'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useWorkspace, WorkspaceProvider, type WorkspaceEnv } from './context.js'
 import { classifyPreviewKind, isTextPreviewKind, supportsPreviewToggle } from './fileKinds.js'
 import { FileSwitcherMenu, type PreviewFileItem } from './FileSwitcherMenu.js'
@@ -254,12 +253,12 @@ const PreviewPanelContent = ({
   const renderContent = () => {
     if (!activeItem || !activeEntry || !activeKind) {
       return (
-        <div className={panelStyles.emptyState}>
-          <div className={panelStyles.emptyIcon}>
-            <IconBrowseOutline16 />
-          </div>
-          <div className={panelStyles.emptyTitle}>{t('previewEmptyTitle')}</div>
-          <div className={panelStyles.emptyDesc}>{t('previewEmptyDescription')}</div>
+        <div className={styles.emptyOverlay}>
+          <EmptyState
+            icon={<IconBrowseOutline16 />}
+            title={t('previewEmptyTitle')}
+            description={t('previewEmptyDescription')}
+          />
         </div>
       )
     }
@@ -385,28 +384,16 @@ const PreviewPanelContent = ({
 
         <div className={styles.headerControls}>
           {activeItem && activeEntry && canToggleMode ? (
-            <div className={styles.segmented} role="group">
-              <button
-                type="button"
-                className={styles.segmentBtn}
-                aria-pressed={effectiveMode === 'preview'}
-                onClick={() =>
-                  activeSessionId && setPreviewViewMode(activeSessionId, activeItem.key, 'preview')
-                }
-              >
-                {t('previewModePreview')}
-              </button>
-              <button
-                type="button"
-                className={styles.segmentBtn}
-                aria-pressed={effectiveMode === 'code'}
-                onClick={() =>
-                  activeSessionId && setPreviewViewMode(activeSessionId, activeItem.key, 'code')
-                }
-              >
-                {t('previewModeCode')}
-              </button>
-            </div>
+            <SegmentedControl
+              value={effectiveMode}
+              options={[
+                { value: 'preview', label: t('previewModePreview') },
+                { value: 'code', label: t('previewModeCode') },
+              ]}
+              onChange={(mode) =>
+                activeSessionId && setPreviewViewMode(activeSessionId, activeItem.key, mode)
+              }
+            />
           ) : null}
 
           {activeItem && activeKind === 'html' && effectiveMode === 'preview' ? (
@@ -454,7 +441,7 @@ const PreviewPanelContent = ({
                 const content = activeLoaded.text ?? ''
                 void env.copyText(content).then((ok) => {
                   if (!ok) {
-                    showToast({ text: () => workspaceMessages.translate('copyFailed') })
+                    env.notify.show({ text: () => workspaceMessages.translate('copyFailed') })
                     return
                   }
                   setCopied(true)

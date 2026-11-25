@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import type { PanelLayout, PanelSlot } from '@deepseek-chat/spine/design'
+import type { PanelLayout, PanelSlot } from '@deepseek-chat/spine/ports'
 import type { SessionDeleted, SessionHistoryReplaced } from '@deepseek-chat/spine/facts/session'
 import { EventLog } from '@deepseek-chat/spine/runtime'
 import {

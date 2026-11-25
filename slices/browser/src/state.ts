@@ -1,11 +1,6 @@
+import { fitViewportToStage, type StageFit, type ViewportSpec } from '@deepseek-chat/lib-stage'
+import type { PanelLayout, PanelSlot } from '@deepseek-chat/spine/ports'
 import { create } from 'zustand'
-import {
-  fitViewportToStage,
-  type BrowserStageFit,
-  type BrowserViewportSpec,
-  type PanelLayout,
-  type PanelSlot,
-} from '@deepseek-chat/spine/design'
 import { NO_HOST, type BrowserBounds, type BrowserHost } from './host.js'
 
 const MAX_LIVE_NATIVE_TABS = 14
@@ -17,7 +12,7 @@ export type BrowserTab = {
   isLoading: boolean
   canGoBack: boolean
   canGoForward: boolean
-  viewport: BrowserViewportSpec | null
+  viewport: ViewportSpec | null
   zoom: number
   snapshotUrl: string | null
   snapshotWidth: number | null
@@ -750,9 +745,9 @@ export const createBrowserState = (deps: BrowserStateDeps) => {
 
   const setBrowserTabViewport = async (
     tabId: string,
-    viewport: BrowserViewportSpec | null,
+    viewport: ViewportSpec | null,
     options: { preserveSnapshot?: boolean } = {}
-  ): Promise<BrowserStageFit> => {
+  ): Promise<StageFit> => {
     const state = get()
     const owner = findTabOwner(state, tabId)
     const stage = state.stageSize ?? {

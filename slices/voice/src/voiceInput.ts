@@ -1,4 +1,4 @@
-import { showToast } from '@deepseek-chat/spine/design'
+import type { NoticePort } from '@deepseek-chat/spine/ports'
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import type { VoiceAudio } from './audio.js'
 import { voiceMessages, type VoiceMessageKey } from './messages.js'
@@ -11,9 +11,8 @@ export type VoiceInputDeps = {
   api: SpeechApi
   audio: VoiceAudio
   apiKey: () => string | null
+  notify: NoticePort
 }
-
-const toast = (key: VoiceMessageKey) => showToast({ text: () => voiceMessages.translate(key) })
 
 const describeRecordingError = (error: unknown): VoiceMessageKey => {
   if (error instanceof DOMException) {
@@ -33,6 +32,8 @@ const describeRecordingError = (error: unknown): VoiceMessageKey => {
  * 每次开始或取消都换一个 operation 编号，迟到的异步结果按编号丢弃。
  */
 export const createVoiceInput = (deps: VoiceInputDeps, onText: (text: string) => void) => {
+  const toast = (key: VoiceMessageKey) =>
+    deps.notify.show({ text: () => voiceMessages.translate(key) })
   /**
    * 录音依赖 getUserMedia，只在安全上下文可用（HTTPS、localhost、file://）。
    * 普通 HTTP 页面上直接禁用入口，避免点击后必然失败。

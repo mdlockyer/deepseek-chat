@@ -1,4 +1,4 @@
-import { Select, SettingRow } from '@deepseek-chat/spine/design'
+import { Select, SettingRow } from '@deepseek-chat/lib-ui'
 import { useSyncExternalStore } from 'react'
 import { voiceMessages } from './messages.js'
 import type { VoicePreference } from './voicePreference.js'

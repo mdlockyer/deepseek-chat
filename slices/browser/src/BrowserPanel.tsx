@@ -1,6 +1,7 @@
-import clsx from 'clsx'
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { StageFrame, ViewportMenu, type StageFit } from '@deepseek-chat/lib-stage'
 import {
+  Banner,
+  EmptyState,
   IconBrowserOutline14,
   IconButton,
   IconChevronLeftOutline14,
@@ -14,12 +15,11 @@ import {
   IconRefreshOutline16,
   IconTrashOutline16,
   Menu,
-  StageFrame,
-  ViewportMenu,
-  panelStyles,
-  type BrowserStageFit,
-  type PanelSlot,
-} from '@deepseek-chat/spine/design'
+  Spinner,
+} from '@deepseek-chat/lib-ui'
+import type { PanelSlot } from '@deepseek-chat/spine/ports'
+import clsx from 'clsx'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import chrome from './BrowserChrome.module.css'
 import { browserMessages } from './messages.js'
 import { EMPTY_SESSION_BROWSER_STATE, isHttpUrl, type BrowserState } from './state.js'
@@ -87,7 +87,7 @@ export const createBrowserPanel = (state: BrowserState, deps: BrowserPanelDeps) 
     const omniboxRef = useRef<HTMLInputElement>(null)
     const [addressDraft, setAddressDraft] = useState('')
     const [editingAddress, setEditingAddress] = useState(false)
-    const [stageFit, setStageFit] = useState<BrowserStageFit | null>(null)
+    const [stageFit, setStageFit] = useState<StageFit | null>(null)
 
     const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? tabs[0] ?? null
     const activeUrl = activeTab && isHttpUrl(activeTab.url) ? activeTab.url : ''
@@ -194,7 +194,7 @@ export const createBrowserPanel = (state: BrowserState, deps: BrowserPanelDeps) 
                   >
                     <span className={chrome.tabIcon}>
                       {tab.isLoading ? (
-                        <span className={styles.tabSpinner} />
+                        <Spinner size="sm" className={styles.tabSpinner} />
                       ) : (
                         <IconGlobeLanguageOutline14 />
                       )}
@@ -228,7 +228,7 @@ export const createBrowserPanel = (state: BrowserState, deps: BrowserPanelDeps) 
                 }
               />
             </div>
-            <div className={panelStyles.topActions}>
+            <div className={chrome.topActions}>
               {topActions}
               <IconButton
                 size="xs"
@@ -390,7 +390,9 @@ export const createBrowserPanel = (state: BrowserState, deps: BrowserPanelDeps) 
           }
           banner={
             activeTab?.error ? (
-              <div className={panelStyles.errorBanner}>{activeTab.error}</div>
+              <Banner tone="error" className={styles.errorBanner}>
+                {activeTab.error}
+              </Banner>
             ) : null
           }
         >
@@ -398,20 +400,23 @@ export const createBrowserPanel = (state: BrowserState, deps: BrowserPanelDeps) 
             <>
               <div ref={viewportRef} className={styles.viewport} />
               {!activeUrl ? (
-                <div className={panelStyles.emptyState}>
-                  <div className={panelStyles.emptyIcon}>
-                    <IconBrowserOutline14 />
-                  </div>
-                  <div className={panelStyles.emptyTitle}>{t('browserEmptyTitle')}</div>
-                  <div className={panelStyles.emptyDesc}>{t('browserEmptyDescription')}</div>
-                  {liveViewport ? (
-                    <div className={styles.emptyViewportTag}>
-                      {liveViewport.width}×{liveViewport.height}
-                      {fit && Math.round(fit.zoom * 100) < 100
-                        ? ` · ${Math.round(fit.zoom * 100)}%`
-                        : ''}
-                    </div>
-                  ) : null}
+                <div className={styles.emptyOverlay}>
+                  <EmptyState
+                    compact={hasCustomViewport}
+                    icon={<IconBrowserOutline14 />}
+                    title={t('browserEmptyTitle')}
+                    description={t('browserEmptyDescription')}
+                    action={
+                      liveViewport ? (
+                        <div className={styles.emptyViewportTag}>
+                          {liveViewport.width}×{liveViewport.height}
+                          {fit && Math.round(fit.zoom * 100) < 100
+                            ? ` · ${Math.round(fit.zoom * 100)}%`
+                            : ''}
+                        </div>
+                      ) : null
+                    }
+                  />
                 </div>
               ) : null}
               {showSnapshotFallback && activeTab?.snapshotUrl ? (
