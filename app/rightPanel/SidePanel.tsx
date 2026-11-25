@@ -10,21 +10,37 @@ import {
   type ReactNode,
 } from 'react'
 import { useAppRuntime } from '../RuntimeContext.js'
+import { useTranslate } from '../i18n/index.js'
 import styles from './RightPanel.module.css'
-import { DEFAULT_SIDE_PANEL_WIDTH, clampSidePanelResizeWidth } from './state.js'
+import {
+  DEFAULT_SIDE_PANEL_WIDTH,
+  MIN_SIDE_PANEL_WIDTH,
+  clampSidePanelResizeWidth,
+} from './state.js'
 
 /** 共享右侧面板壳层：开合动画、左侧拖拽调宽、窄屏自动收起侧边栏、移动端全屏抽屉 */
 export const SidePanel = ({
   open,
+  width,
+  minWidth = MIN_SIDE_PANEL_WIDTH,
+  defaultWidth = DEFAULT_SIDE_PANEL_WIDTH,
+  onWidthChange,
   onResizeHoverStart,
   children,
 }: {
   open: boolean
+  width?: number
+  minWidth?: number
+  defaultWidth?: number
+  onWidthChange?: (width: number) => void
   onResizeHoverStart?: () => void
   children: ReactNode
 }) => {
+  const t = useTranslate()
   const { rightPanel, layout } = useAppRuntime()
   const storedWidth = rightPanel.useStore((state) => state.width)
+  const resolvedWidth = width ?? storedWidth
+  const commitWidth = onWidthChange ?? rightPanel.setWidth
   const { mounted, exiting } = usePresence(open, PANEL_DURATION_MS)
   const panelRef = useRef<HTMLElement>(null)
   const dragCleanupRef = useRef<(() => void) | null>(null)
@@ -45,16 +61,16 @@ export const SidePanel = ({
     setEntering(open)
   }
 
-  const panelWidth = resizingWidth ?? storedWidth
+  const panelWidth = resizingWidth ?? resolvedWidth
 
   useEffect(() => {
     if (!open) {
       return
     }
-    if (layout.getState().mode === 'expanded' && window.innerWidth - storedWidth - 261 < 420) {
+    if (layout.getState().mode === 'expanded' && window.innerWidth - resolvedWidth - 261 < 420) {
       layout.setSiderCollapsed(true)
     }
-  }, [layout, open, storedWidth])
+  }, [layout, open, resolvedWidth])
 
   useEffect(() => {
     if (!entering) {
@@ -163,14 +179,15 @@ export const SidePanel = ({
       }
       latestWidth = clampSidePanelResizeWidth(
         startWidth + (startX - moveEvent.clientX),
-        window.innerWidth
+        window.innerWidth,
+        minWidth
       )
       setResizingWidth(latestWidth)
     }
 
     const onEnd = () => {
       cleanup()
-      rightPanel.setWidth(latestWidth)
+      commitWidth(latestWidth)
       setResizingWidth(null)
       cancelReleaseFrames()
       const f1 = requestAnimationFrame(() => {
@@ -200,25 +217,25 @@ export const SidePanel = ({
     const windowWidth = typeof window !== 'undefined' ? window.innerWidth : 1280
     if (event.key === 'ArrowLeft') {
       event.preventDefault()
-      rightPanel.setWidth(clampSidePanelResizeWidth(panelWidth + step, windowWidth))
+      commitWidth(clampSidePanelResizeWidth(panelWidth + step, windowWidth, minWidth))
     } else if (event.key === 'ArrowRight') {
       event.preventDefault()
-      rightPanel.setWidth(clampSidePanelResizeWidth(panelWidth - step, windowWidth))
+      commitWidth(clampSidePanelResizeWidth(panelWidth - step, windowWidth, minWidth))
     } else if (event.key === 'Home') {
       event.preventDefault()
-      rightPanel.setWidth(clampSidePanelResizeWidth(360, windowWidth))
+      commitWidth(clampSidePanelResizeWidth(minWidth, windowWidth, minWidth))
     } else if (event.key === 'End') {
       event.preventDefault()
-      rightPanel.setWidth(clampSidePanelResizeWidth(windowWidth, windowWidth))
+      commitWidth(clampSidePanelResizeWidth(windowWidth, windowWidth, minWidth))
     } else if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault()
-      rightPanel.setWidth(DEFAULT_SIDE_PANEL_WIDTH)
+      commitWidth(defaultWidth)
     }
   }
 
   const maxResizerWidth =
     typeof window !== 'undefined'
-      ? clampSidePanelResizeWidth(window.innerWidth, window.innerWidth)
+      ? clampSidePanelResizeWidth(window.innerWidth, window.innerWidth, minWidth)
       : 920
 
   return (
@@ -230,7 +247,12 @@ export const SidePanel = ({
         exiting && styles.panelExiting,
         resizingWidth !== null && styles.panelResizing
       )}
-      style={{ '--side-panel-width': `${panelWidth}px` } as CSSProperties}
+      style={
+        {
+          '--side-panel-width': `${panelWidth}px`,
+          '--side-panel-min-width': `${minWidth}px`,
+        } as CSSProperties
+      }
       onAnimationEnd={(event) => {
         if (event.target === event.currentTarget && !exiting && entering) {
           setEntering(false)
@@ -241,9 +263,9 @@ export const SidePanel = ({
       <div
         role="separator"
         tabIndex={0}
-        aria-label="Resize side panel"
+        aria-label={t('resizeSidePanel')}
         aria-orientation="vertical"
-        aria-valuemin={360}
+        aria-valuemin={minWidth}
         aria-valuemax={maxResizerWidth}
         aria-valuenow={panelWidth}
         className={clsx(styles.resizer, resizingWidth !== null && styles.resizing)}
@@ -255,7 +277,7 @@ export const SidePanel = ({
         onMouseDown={(event) => event.preventDefault()}
         onPointerDown={startResize}
         onKeyDown={handleResizerKeyDown}
-        onDoubleClick={() => rightPanel.setWidth(DEFAULT_SIDE_PANEL_WIDTH)}
+        onDoubleClick={() => commitWidth(defaultWidth)}
       />
       <div className={styles.panelInner}>{children}</div>
     </aside>

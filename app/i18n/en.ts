@@ -10,4 +10,7 @@ export const en = {
   errorBoundaryTitle: 'Something went wrong',
   errorBoundaryDescription: 'An unexpected error occurred. Try again or reload the app.',
   errorBoundaryReload: 'Reload',
+  widenPanel: 'Widen panel',
+  narrowPanel: 'Narrow panel',
+  resizeSidePanel: 'Resize side panel',
 } satisfies Record<keyof typeof zh, string>

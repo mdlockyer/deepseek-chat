@@ -2,7 +2,13 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { memoryStore } from '@deepseek-chat/spine/ports'
 import { EventLog } from '@deepseek-chat/spine/runtime'
-import { clampSidePanelResizeWidth, createRightPanelController } from '../rightPanel/state.js'
+import {
+  DEFAULT_ACTIVITY_PANEL_WIDTH,
+  DEFAULT_SIDE_PANEL_WIDTH,
+  MIN_ACTIVITY_PANEL_WIDTH,
+  clampSidePanelResizeWidth,
+  createRightPanelController,
+} from '../rightPanel/state.js'
 
 const makeController = (activeSessionId: string | null = 's1') => {
   const log = new EventLog()
@@ -18,6 +24,34 @@ describe('right panel resize clamping', () => {
     assert.equal(clampSidePanelResizeWidth(950, 1200), 840)
     assert.equal(clampSidePanelResizeWidth(1400, 1800), 1296)
     assert.equal(clampSidePanelResizeWidth(500, 600), 360)
+    assert.equal(clampSidePanelResizeWidth(240, 1200, MIN_ACTIVITY_PANEL_WIDTH), 320)
+  })
+
+  it('defaults activity panel to 400px independent of browser/preview persisted width', () => {
+    const store = memoryStore({ 'chat-demo:browser-panel-width': '620' })
+    const log = new EventLog()
+    const panel = createRightPanelController(store, log)
+    panel.setActiveSession('s1')
+
+    assert.equal(panel.getPanelWidth('browser'), 620)
+    assert.equal(panel.getPanelWidth('activity'), DEFAULT_ACTIVITY_PANEL_WIDTH)
+
+    panel.openPanel('s1', 'activity')
+    assert.equal(panel.createSlot('activity').getLayout().width, DEFAULT_ACTIVITY_PANEL_WIDTH)
+
+    panel.setWidthForKind('activity', 560)
+    assert.equal(panel.getPanelWidth('activity'), 560)
+    assert.equal(panel.getPanelWidth('browser'), 620)
+    assert.equal(
+      store.get('chat-demo:browser-panel-width'),
+      '620',
+      'resizing Activity must not overwrite Browser/Preview persisted width'
+    )
+
+    panel.setWidthForKind('browser', DEFAULT_SIDE_PANEL_WIDTH)
+    assert.equal(store.get('chat-demo:browser-panel-width'), String(DEFAULT_SIDE_PANEL_WIDTH))
+    assert.equal(panel.getPanelWidth('activity'), 560)
+    panel.dispose()
   })
 })
 

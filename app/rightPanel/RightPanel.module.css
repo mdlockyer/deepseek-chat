@@ -6,7 +6,7 @@
     box-sizing: border-box;
     width: var(--side-panel-width, 540px);
     max-width: 72vw;
-    min-width: 360px;
+    min-width: var(--side-panel-min-width, 360px);
     height: 100%;
     border-left: 1px solid var(--ui-border-default);
     color: var(--ui-text-primary);

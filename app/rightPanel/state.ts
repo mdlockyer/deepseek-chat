@@ -21,32 +21,52 @@ export type SidePanelState = {
   panelResizing: boolean
   overlayLocks: number
   stageSize: { width: number; height: number } | null
-  /** Panel width (px), persisted under `chat-demo:browser-panel-width`. */
+  /** Browser/preview panel width (px), persisted under `chat-demo:browser-panel-width`. */
   width: number
+  /** Activity inspector width (px), defaulting slimmer so chat content stays unclipped. */
+  activityWidth: number
 }
 
 export const DEFAULT_SIDE_PANEL_WIDTH = 540
+export const DEFAULT_ACTIVITY_PANEL_WIDTH = 400
+export const WIDE_ACTIVITY_PANEL_WIDTH = 560
+export const MIN_SIDE_PANEL_WIDTH = 360
+export const MIN_ACTIVITY_PANEL_WIDTH = 320
 
 /** App-shell layout key kept from the original app so saved panel width survives upgrades. */
 const WIDTH_KEY = 'chat-demo:browser-panel-width'
 
-const clampStoredWidth = (value: number) =>
+const clampStoredWidth = (value: number, minWidth = MIN_SIDE_PANEL_WIDTH) =>
   Number.isFinite(value)
-    ? Math.min(Math.max(Math.round(value), 360), 1100)
+    ? Math.min(Math.max(Math.round(value), minWidth), 1100)
     : DEFAULT_SIDE_PANEL_WIDTH
 
-export const clampSidePanelResizeWidth = (proposedWidth: number, windowWidth: number): number => {
-  const maxWidth = Math.max(360, Math.min(windowWidth - 360, Math.floor(windowWidth * 0.72)))
-  return Math.round(Math.min(maxWidth, Math.max(360, proposedWidth)))
+export const getPanelMinWidth = (kind: RightPanelKind | null): number =>
+  kind === 'activity' ? MIN_ACTIVITY_PANEL_WIDTH : MIN_SIDE_PANEL_WIDTH
+
+export const getPanelDefaultWidth = (kind: RightPanelKind | null): number =>
+  kind === 'activity' ? DEFAULT_ACTIVITY_PANEL_WIDTH : DEFAULT_SIDE_PANEL_WIDTH
+
+export const clampSidePanelResizeWidth = (
+  proposedWidth: number,
+  windowWidth: number,
+  minWidth = MIN_SIDE_PANEL_WIDTH
+): number => {
+  const floor = Math.max(MIN_ACTIVITY_PANEL_WIDTH, Math.round(minWidth))
+  const maxWidth = Math.max(floor, Math.min(windowWidth - 360, Math.floor(windowWidth * 0.72)))
+  return Math.round(Math.min(maxWidth, Math.max(floor, proposedWidth)))
 }
 
-const toLayout = (state: SidePanelState): PanelLayout => ({
-  activeSessionId: state.activeSessionId,
-  animating: state.panelAnimating,
-  resizing: state.panelResizing,
-  overlayLocked: state.overlayLocks > 0,
-  width: state.width,
-})
+const toLayout = (state: SidePanelState): PanelLayout => {
+  const activeKind = getActiveRightPanel(state.activeSessionId, state)
+  return {
+    activeSessionId: state.activeSessionId,
+    animating: state.panelAnimating,
+    resizing: state.panelResizing,
+    overlayLocked: state.overlayLocks > 0,
+    width: activeKind === 'activity' ? state.activityWidth : state.width,
+  }
+}
 
 export const getActiveRightPanel = (
   sessionId: string | null | undefined,
@@ -81,6 +101,7 @@ export const createRightPanelController = (store: KeyValueStore, log: EventLog) 
     overlayLocks: 0,
     stageSize: null,
     width: initialWidth,
+    activityWidth: DEFAULT_ACTIVITY_PANEL_WIDTH,
   }))
 
   const { getState: get, setState: set } = useStore
@@ -235,10 +256,22 @@ export const createRightPanelController = (store: KeyValueStore, log: EventLog) 
   }
 
   const setWidth = (width: number) => {
-    const clamped = clampStoredWidth(width)
+    const clamped = clampStoredWidth(width, MIN_SIDE_PANEL_WIDTH)
     store.set(WIDTH_KEY, String(clamped))
     set({ width: clamped })
   }
+
+  const setWidthForKind = (kind: RightPanelKind, width: number) => {
+    if (kind === 'activity') {
+      const clamped = clampStoredWidth(width, MIN_ACTIVITY_PANEL_WIDTH)
+      set({ activityWidth: clamped })
+      return
+    }
+    setWidth(width)
+  }
+
+  const getPanelWidth = (kind: RightPanelKind | null): number =>
+    kind === 'activity' ? get().activityWidth : get().width
 
   const createSlot = (kind: RightPanelKind): PanelSlot => ({
     useStageSize: () => useStore((state) => state.stageSize),
@@ -294,6 +327,8 @@ export const createRightPanelController = (store: KeyValueStore, log: EventLog) 
     setResizing,
     setStageSize,
     setWidth,
+    setWidthForKind,
+    getPanelWidth,
     acquireOverlayLock,
     registerOverlayLockListener,
     createSlot,
