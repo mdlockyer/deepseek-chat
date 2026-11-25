@@ -116,8 +116,15 @@ const sliceOfPackage = (spec) => {
   return { name, deep: subpath.length > 0 }
 }
 
-// 1. Spine: imports nothing above it; domain-blind parts don't touch facts.
+// 1. Spine: imports nothing above it; domain-blind parts don't touch facts; spine/design holds no .tsx components.
+const SPINE_DESIGN_DIR = path.join(spineDir, 'design')
 for (const file of listSourceFiles(spineDir)) {
+  if (isInside(SPINE_DESIGN_DIR, file) && file.endsWith('.tsx')) {
+    fail(
+      'SPINE',
+      `spine/design file ${rel(file)} contains UI components (.tsx); move interactive primitives to libs/ui`
+    )
+  }
   const domainBlind = DOMAIN_BLIND.some((dir) => isInside(dir, file))
   for (const spec of extractImports(file)) {
     if (spec.startsWith(SLICE_PKG_PREFIX) || spec.startsWith(LIB_PKG_PREFIX)) {

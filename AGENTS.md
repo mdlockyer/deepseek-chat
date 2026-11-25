@@ -10,8 +10,9 @@ Tiers, top to bottom: `app/` → `slices/*` → `libs/*` → `spine/`. `src-taur
 - Test the spine: `node --import ./scripts/test-loader.mjs --test 'spine/tests/**/*.test.ts'`
 - Test app wiring: `node --import ./scripts/test-loader.mjs --test 'app/tests/**/*.test.ts'`
 - Verify the DAG and slice anatomy: `pnpm check:dag`
+- Verify design tokens, contrast, and boundaries: `pnpm check:design`
 - Full gate before every commit:
-  `pnpm -s type && pnpm -s test && pnpm -s lint && pnpm -s check:dag && pnpm -s format:check && pnpm -s build`
+  `pnpm -s type && pnpm -s test && pnpm -s lint && pnpm -s check:dag && pnpm -s check:design && pnpm -s format:check && pnpm -s build`
 - Format: `pnpm -s oxfmt --write <paths>` (no semicolons, single quotes, width 100).
 
 ## Authoring Rules
@@ -24,13 +25,14 @@ Tiers, top to bottom: `app/` → `slices/*` → `libs/*` → `spine/`. `src-taur
   `tests/`). Touch `app/` only for composition, port adapters, view placement and the window
   layout (right-hand panel, settings dialog frame). Domain rules stay in the owning slice.
 - **Spine discipline.** `spine/runtime`, `spine/ports` and `spine/design` stay domain-blind;
-  `spine/design` holds stateless UI primitives, the translation mechanism and the locale, never
-  strings of a feature. Facts in `spine/facts/` are named and shaped in the producer's domain, and
-  added only when a built slice or the app consumes them. Prefer a small local helper over growing
-  the spine.
-- **Libraries** (`libs/*`) are domain-free code shared by slices (e.g. Markdown rendering). They
-  import only themselves, the spine's domain-blind parts and external packages; callers pass in
-  anything domain-shaped (citations, scroll, theme).
+  `spine/design` holds CSS semantic tokens (`tokens.css`), the root theme contract (`theme.ts`),
+  and the translation mechanism/locale (`i18n.ts`), never React UI components or feature strings.
+  Facts in `spine/facts/` are named and shaped in the producer's domain, and added only when a
+  built slice or the app consumes them. Prefer a small local helper over growing the spine.
+- **Libraries** (`libs/*`) are domain-free code shared by slices (e.g. `libs/ui` component kit,
+  `libs/stage` viewport stage, `libs/markdown` renderer, `libs/agent` streaming). They import only
+  themselves, the spine's domain-blind parts, `@deepseek-chat/lib-ui` (for non-UI libraries), and
+  external packages; callers pass in anything domain-shaped (citations, scroll, theme).
 - **Ownership.** Each slice owns its storage keys (keep existing `chat-demo:*` keys exactly), its
   UI strings (its own catalogue via `defineMessages`), its settings rows and its views. A slice
   that renders into the right-hand panel gets a `PanelSlot` for its own panel kind only.

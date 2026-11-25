@@ -11,11 +11,7 @@
     "./tokens.css": "./design/tokens.css",
     "./facts/session": "./facts/session_facts.ts"
   },
-  "dependencies": {
-    "clsx": "2.1.1"
-  },
   "peerDependencies": {
-    "react": "18.3.1",
-    "react-dom": "18.3.1"
+    "react": "18.3.1"
   }
 }

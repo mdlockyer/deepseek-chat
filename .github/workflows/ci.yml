@@ -47,6 +47,9 @@ jobs:
       - name: Check SSA boundaries
         run: pnpm check:dag
 
+      - name: Check design system boundaries
+        run: pnpm check:design
+
       - name: Run tests
         run: pnpm test
 

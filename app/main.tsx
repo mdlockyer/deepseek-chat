@@ -10,7 +10,6 @@ import { isDesktopApp, openExternalLinksInBrowser } from './platform/desktop.js'
 import { ensureKatex } from '@deepseek-chat/lib-markdown'
 import '@fontsource-variable/google-sans-flex'
 import '@deepseek-chat/spine/tokens.css'
-import './theme.css'
 import './global.css'
 
 ensureKatex()

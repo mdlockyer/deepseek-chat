@@ -35,15 +35,7 @@ const applyTheme = (theme: Theme) => {
   const body = document.body
   // 主题切换帧禁用过渡，使页面颜色同步更新
   body.classList.add('change-theme')
-  body.classList.toggle('dark', theme === 'dark')
-  body.classList.toggle('light', theme === 'light')
   applyDocumentTheme(document.documentElement, theme)
-  // Transitional hooks kept until Phase 6 finishes removing legacy selectors from slices.
-  if (theme === 'dark') {
-    body.setAttribute('data-ds-dark-theme', 'dark')
-  } else {
-    body.removeAttribute('data-ds-dark-theme')
-  }
   // 首次背景色同步在样式表加载完成后执行，适配 WebKit 的 defer 脚本执行顺序。
   if (document.readyState === 'complete') {
     syncPageBackground()
