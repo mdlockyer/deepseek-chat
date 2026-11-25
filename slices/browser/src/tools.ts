@@ -593,8 +593,7 @@ export const createBrowserTools = (state: BrowserState, host: BrowserHost | null
     toolName: string,
     rawInput: unknown,
     signal: AbortSignal,
-    sessionId?: string,
-    options: { holdControl?: boolean } = {}
+    sessionId?: string
   ): Promise<BrowserToolRunResult> => {
     const startedAt = Date.now()
     if (!desktop) {
@@ -641,14 +640,7 @@ export const createBrowserTools = (state: BrowserState, host: BrowserHost | null
           }
         }
         started = true
-        return executeBrowserTool(
-          toolName,
-          rawInput,
-          signal,
-          startedAt,
-          sessionId,
-          options.holdControl === true
-        )
+        return executeBrowserTool(toolName, rawInput, signal, startedAt, sessionId)
       })
       browserQueue = task.then(
         () => {},
@@ -663,8 +655,7 @@ export const createBrowserTools = (state: BrowserState, host: BrowserHost | null
     rawInput: unknown,
     signal: AbortSignal,
     startedAt: number,
-    sessionId?: string,
-    holdControl = false
+    sessionId?: string
   ): Promise<BrowserToolRunResult> => {
     const input =
       rawInput && typeof rawInput === 'object' && !Array.isArray(rawInput)
@@ -1165,14 +1156,7 @@ export const createBrowserTools = (state: BrowserState, host: BrowserHost | null
         durationMs: Date.now() - startedAt,
       }
     } finally {
-      if (holdControl && !signal.aborted) {
-        const current = useBrowserStore.getState()
-        if (current.controlling && current.controllingSessionId === targetSessionId) {
-          setBrowserControlling(true, null, targetSessionId)
-        }
-      } else {
-        setBrowserControlling(false)
-      }
+      setBrowserControlling(false)
     }
   }
 

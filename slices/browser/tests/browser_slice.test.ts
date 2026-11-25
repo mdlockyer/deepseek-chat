@@ -1,8 +1,5 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { createElement } from 'react'
-import { renderToStaticMarkup } from 'react-dom/server'
-import { UiProvider } from '@deepseek-chat/lib-ui'
 import type { PanelLayout, PanelSlot } from '@deepseek-chat/spine/ports'
 import type { BrowserControlTakenOver } from '@deepseek-chat/spine/facts/browser'
 import type {
@@ -715,13 +712,6 @@ describe('browser: ToolCapability, toggle, presenter, and archive serialization'
       { streaming: false }
     )
     assert.equal(summary?.lane, 'browser')
-    env.browser.capability.turnHooks?.onTurnSettled?.({
-      sessionId: 's1',
-      replyId: 'r1',
-      reason: 'done',
-      readReplyState: () => undefined,
-      writeReplyState: () => {},
-    })
     env.browser.dispose()
   })
 })
@@ -1098,52 +1088,5 @@ describe('browser: bounds sync, stable refs, and SoM screenshot badges', () => {
       ;(globalThis as Record<string, unknown>).document = prevDocument
       ;(globalThis as Record<string, unknown>).Image = prevImage
     }
-  })
-
-  it('keeps the top take-over control strip steady across reply tool calls and clears on turn settle or takeOver', async () => {
-    const env = await withVisiblePage()
-    const renderPanel = () =>
-      renderToStaticMarkup(createElement(UiProvider, null, createElement(env.browser.BrowserPanel)))
-
-    assert.doesNotMatch(renderPanel(), /role="status"/)
-
-    const ctx = {
-      sessionId: 's1',
-      replyId: 'r1',
-      signal: signal(),
-      caller: { kind: 'reply' as const },
-      citedUrls: new Map<string, number>(),
-      isActive: () => true,
-      onProgress: () => {},
-      readReplyState: () => undefined,
-      writeReplyState: () => {},
-    }
-    const res = await env.browser.capability.run(
-      { id: 'c1', name: 'browser_observe', input: {} },
-      ctx
-    )
-    assert.equal(res.status, 'ok')
-
-    // After a reply tool call finishes, the control strip stays mounted between steps (no vertical bounce).
-    const betweenSteps = renderPanel()
-    assert.match(betweenSteps, /role="status"/)
-    assert.match(betweenSteps, /Take over/)
-
-    // Clicking Take over clears the strip immediately and publishes BrowserControlTakenOver.
-    env.browser.takeOver('s1')
-    assert.doesNotMatch(renderPanel(), /role="status"/)
-
-    // Running another step re-shows the strip, and onTurnSettled clears it cleanly.
-    await env.browser.capability.run({ id: 'c2', name: 'browser_observe', input: {} }, ctx)
-    assert.match(renderPanel(), /role="status"/)
-    env.browser.capability.turnHooks?.onTurnSettled?.({
-      sessionId: 's1',
-      replyId: 'r1',
-      reason: 'done',
-      readReplyState: () => undefined,
-      writeReplyState: () => {},
-    })
-    assert.doesNotMatch(renderPanel(), /role="status"/)
-    env.browser.dispose()
   })
 })

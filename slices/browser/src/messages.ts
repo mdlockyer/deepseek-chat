@@ -11,7 +11,6 @@ export const browserMessages = defineMessages({
     browserBack: '后退',
     browserClearSiteData: '清除网站数据',
     browserCloseTab: '关闭标签页',
-    browserControlling: 'DeepSeek 控制中',
     browserDownloadBlocked: '内置浏览器出于安全考虑已拦截自动下载',
     browserEmptyDescription:
       '在上方输入网址，或开启输入框中的「浏览器」开关让 DeepSeek 自动浏览网页。',
@@ -24,7 +23,6 @@ export const browserMessages = defineMessages({
     browserOpenExternal: '在默认浏览器中打开',
     browserReload: '刷新',
     browserStopLoad: '停止加载',
-    browserTakeOver: '接管',
     closeBrowser: '关闭浏览器',
     openBrowser: '打开浏览器',
     browserToggleLabel: '内置浏览器',
@@ -44,7 +42,6 @@ export const browserMessages = defineMessages({
     browserBack: 'Back',
     browserClearSiteData: 'Clear website data',
     browserCloseTab: 'Close tab',
-    browserControlling: 'DeepSeek controlling',
     browserDownloadBlocked:
       'Automatic downloads inside the built-in browser are blocked for safety',
     browserEmptyDescription:
@@ -58,7 +55,6 @@ export const browserMessages = defineMessages({
     browserOpenExternal: 'Open in default browser',
     browserReload: 'Reload',
     browserStopLoad: 'Stop loading',
-    browserTakeOver: 'Take over',
     closeBrowser: 'Close browser',
     openBrowser: 'Open browser',
     browserToggleLabel: 'Browser',
