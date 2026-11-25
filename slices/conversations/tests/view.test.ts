@@ -12,7 +12,9 @@ import {
   getAreaTitle,
   getFrontStageNotes,
   needsWorkingIndicator,
+  selectInlineTracePreview,
   type AssistantMessage,
+  type InlineTraceItem,
 } from '@deepseek-chat/slice-conversations'
 
 const replyWith = (blocks: AssistantMessage['blocks'], thinking = false): AssistantMessage => ({
@@ -303,7 +305,7 @@ describe('delivered files projection', () => {
 })
 
 describe('buildTurnWorkStrip & getFrontStageNotes', () => {
-  it('aggregates presenter tallies, errors, and thinking duration in settled mode', () => {
+  it('formats middot-free natural settled summaries without appending thinking duration onto tool counts', () => {
     const reply = replyWith(
       [
         { type: 'thinking', thinking: 'plan', startedAt: 0, endedAt: 5_000 },
@@ -333,13 +335,44 @@ describe('buildTurnWorkStrip & getFrontStageNotes', () => {
     assert.equal(strip.mode, 'settled')
     if (strip.mode === 'settled') {
       assert.equal(strip.errorCount, 1)
+      assert.equal(
+        strip.label.includes('·'),
+        false,
+        'settled label must never use middot separators'
+      )
       assert.match(strip.label, /1 searches/)
       assert.match(strip.label, /1 pages/)
-      assert.match(strip.label, /5/)
+      assert.match(strip.label, /1 error|1 项出错/)
+      assert.doesNotMatch(
+        strip.label,
+        /5s|5 秒/,
+        'thinking duration must not be appended onto tool counts'
+      )
+    }
+
+    const thinkingOnly = replyWith(
+      [
+        { type: 'thinking', thinking: 'weighing options', startedAt: 0, endedAt: 5_000 },
+        { type: 'text', text: 'Answer.' },
+      ],
+      true
+    )
+    const thinkingStrip = buildTurnWorkStrip(
+      thinkingOnly,
+      buildReplyView(thinkingOnly, false, testRegistry),
+      false,
+      10_000,
+      false,
+      true
+    )
+    assert.equal(thinkingStrip.mode, 'settled')
+    if (thinkingStrip.mode === 'settled') {
+      assert.equal(thinkingStrip.thinkingOnly, true)
+      assert.match(thinkingStrip.label, /5/)
     }
   })
 
-  it('caps live parallel tracks at 3 with overflow count and extracts settled FrontStageNotes', () => {
+  it('caps live parallel tracks at 3 with overflow count, emits middot-free headline, and extracts settled FrontStageNotes', () => {
     const reply: AssistantMessage = {
       ...replyWith(
         [
@@ -385,6 +418,8 @@ describe('buildTurnWorkStrip & getFrontStageNotes', () => {
     if (strip.mode === 'live') {
       assert.equal(strip.liveTracks.length, 3)
       assert.equal(strip.overflowTracks, 2)
+      assert.equal(strip.headline.includes('·'), false)
+      assert.match(strip.headline, /5/)
     }
 
     const notes = getFrontStageNotes(view)
@@ -426,7 +461,6 @@ describe('buildTurnWorkStrip & getFrontStageNotes', () => {
     assert.equal(trace.items.length, 2, 'hiddenInTimeline step is omitted')
     assert.equal(trace.items[0]?.label, 'Checking Wikipedia docs')
     assert.equal(trace.items[0]?.status, 'done')
-    assert.equal(trace.items[0]?.durationMs, 1200)
     assert.equal(trace.items[1]?.label, 'Reading target page')
     assert.equal(trace.items[1]?.status, 'failed')
     assert.equal(trace.items[1]?.errorText, 'Connection timed out')
@@ -443,5 +477,81 @@ describe('buildTurnWorkStrip & getFrontStageNotes', () => {
     assert.deepEqual(thinkingTrace.items, [])
     assert.equal(thinkingTrace.thinkingMarkdown, 'Weighing the tradeoffs carefully.')
     assert.equal(thinkingTrace.hasRichDetails, false)
+  })
+
+  it('retains all failed and running steps in chronological order with exact gap markers in selectInlineTracePreview', () => {
+    const makeItems = (count: number, statuses: Record<number, InlineTraceItem['status']>) =>
+      Array.from({ length: count }, (_, i) => ({
+        key: `s-${i}`,
+        label: `Step ${i}`,
+        status: statuses[i] ?? ('done' as const),
+      }))
+
+    // Short list: no truncation and no gaps.
+    const short = selectInlineTracePreview(makeItems(4, { 2: 'failed' }), 6)
+    assert.equal(short.hiddenCount, 0)
+    assert.equal(short.entries.length, 4)
+    assert.equal(
+      short.entries.every((e) => !e.gapBefore),
+      true
+    )
+
+    // Long 32-step run with a late error at index 26: keeps 5 opening steps + failed step 26 with a gap marker.
+    const longWithLateError = selectInlineTracePreview(makeItems(32, { 26: 'failed' }), 6)
+    assert.deepEqual(
+      longWithLateError.entries.map((e) => [e.item.key, e.gapBefore]),
+      [
+        ['s-0', false],
+        ['s-1', false],
+        ['s-2', false],
+        ['s-3', false],
+        ['s-4', false],
+        ['s-26', true],
+      ]
+    )
+    assert.equal(longWithLateError.hiddenCount, 26)
+
+    // Extreme case: more failed/running items than maxVisible still surfaces every exception.
+    const manyErrors = selectInlineTracePreview(
+      makeItems(12, {
+        1: 'failed',
+        3: 'failed',
+        5: 'failed',
+        7: 'failed',
+        9: 'failed',
+        10: 'failed',
+        11: 'running',
+      }),
+      6
+    )
+    assert.equal(manyErrors.entries.length, 7)
+    assert.equal(manyErrors.hiddenCount, 5)
+    assert.deepEqual(
+      manyErrors.entries.map((e) => e.item.key),
+      ['s-1', 's-3', 's-5', 's-7', 's-9', 's-10', 's-11']
+    )
+
+    // Invariants across varied positions and caps.
+    for (const total of [0, 1, 6, 7, 15, 32]) {
+      for (const cap of [3, 6]) {
+        const items = makeItems(total, {
+          [Math.floor(total / 2)]: 'failed',
+          [Math.max(0, total - 1)]: 'running',
+        })
+        const preview = selectInlineTracePreview(items, cap)
+        assert.equal(preview.entries.length + preview.hiddenCount, items.length)
+        const shownKeys = new Set(preview.entries.map((e) => e.item.key))
+        for (const item of items) {
+          if (item.status === 'failed' || item.status === 'running') {
+            assert.ok(shownKeys.has(item.key), `must retain ${item.status} item ${item.key}`)
+          }
+        }
+        const indices = preview.entries.map((e) => Number(e.item.key.slice(2)))
+        for (let i = 1; i < indices.length; i += 1) {
+          assert.ok(indices[i] > indices[i - 1], 'must preserve chronological order')
+          assert.equal(preview.entries[i].gapBefore, indices[i] > indices[i - 1] + 1)
+        }
+      }
+    }
   })
 })

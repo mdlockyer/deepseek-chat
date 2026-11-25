@@ -14,9 +14,11 @@ import { useTranslate } from '../../messages.js'
 import type { AssistantMessage } from '../../types.js'
 import type { ReplyView } from '../../view.js'
 import {
+  INLINE_TRACE_PREVIEW_LIMIT,
   buildInlineTrace,
   buildTurnWorkStrip,
   getFrontStageNotes,
+  selectInlineTracePreview,
   type FrontStageNoteEntry,
   type InlineTrace,
 } from '../../workStrip.js'
@@ -133,7 +135,6 @@ export const ReplyArea = memo(function ReplyArea({
               <WhaleLoader width={strip.waitingForUser ? 15 : 16} still={strip.waitingForUser} />
             </span>
             <span className={styles.headline}>{strip.headline}</span>
-            {strip.tally ? <span className={styles.tally}>· {strip.tally}</span> : null}
             <span className={styles.chevron} aria-hidden="true">
               {expanded ? <IconChevronDownOutline14 /> : <IconChevronRightOutline14 />}
             </span>
@@ -265,6 +266,16 @@ const InlineTraceInlay = ({
   onInspect: () => void
 }) => {
   const t = useTranslate()
+  const [showAll, setShowAll] = useState(false)
+  const preview = showAll
+    ? {
+        entries: trace.items.map((item) => ({ item, gapBefore: false })),
+        hiddenCount: 0,
+      }
+    : selectInlineTracePreview(trace.items)
+  const canCollapseList = showAll && trace.items.length > INLINE_TRACE_PREVIEW_LIMIT
+  const showFooter = preview.hiddenCount > 0 || canCollapseList || trace.hasRichDetails
+
   return (
     <div className={styles.inlineTrace}>
       {thinkingOnly && trace.thinkingMarkdown ? (
@@ -277,29 +288,32 @@ const InlineTraceInlay = ({
           />
         </div>
       ) : trace.items.length > 0 ? (
-        <ol className={styles.traceList}>
-          {trace.items.map((item, index) => (
+        <ul className={styles.traceList}>
+          {preview.entries.map(({ item, gapBefore }) => (
             <li
               key={item.key}
               className={clsx(
                 styles.traceItem,
+                gapBefore && styles.traceItemGap,
                 item.status === 'running' && styles.traceItemRunning,
                 item.status === 'failed' && styles.traceItemFailed
               )}
             >
               <div className={styles.traceRow}>
-                <span className={styles.traceIndex}>{index + 1}.</span>
+                {item.status === 'failed' ? (
+                  <span className={styles.traceFailIcon} aria-hidden="true">
+                    <IconWarningOutline16 />
+                  </span>
+                ) : null}
                 <span className={styles.traceLabel}>{item.label}</span>
                 {item.status === 'running' ? (
-                  <span className={styles.traceMeta}>{t('activityTrackRunning')}</span>
-                ) : item.durationMs !== undefined && item.durationMs >= 500 ? (
-                  <span className={styles.traceMeta}>{(item.durationMs / 1000).toFixed(1)}s</span>
+                  <span className={styles.traceRunningTag}>{t('activityTrackRunning')}</span>
                 ) : null}
               </div>
               {item.errorText ? <div className={styles.traceError}>{item.errorText}</div> : null}
             </li>
           ))}
-        </ol>
+        </ul>
       ) : trace.thinkingMarkdown ? (
         <div className={clsx(styles.inlineThinking, 'ds-think-content')}>
           <Markdown
@@ -311,17 +325,41 @@ const InlineTraceInlay = ({
         </div>
       ) : null}
 
-      {trace.hasRichDetails ? (
+      {showFooter ? (
         <div className={styles.traceFooter}>
-          <button
-            type="button"
-            className={clsx(styles.inspectButton, isInspecting && styles.inspectButtonActive)}
-            aria-pressed={isInspecting}
-            onClick={onInspect}
-          >
-            <IconPanelRightOutline16 />
-            <span>{isInspecting ? t('activityViewingInPanel') : t('activityOpenInPanel')}</span>
-          </button>
+          {preview.hiddenCount > 0 ? (
+            <button
+              type="button"
+              className={styles.traceFooterButton}
+              onClick={() => setShowAll(true)}
+            >
+              {t(
+                preview.hiddenCount === 1
+                  ? 'activityShowMoreStepsOne'
+                  : 'activityShowMoreStepsMany',
+                { count: preview.hiddenCount }
+              )}
+            </button>
+          ) : canCollapseList ? (
+            <button
+              type="button"
+              className={styles.traceFooterButton}
+              onClick={() => setShowAll(false)}
+            >
+              {t('activityShowFewerSteps')}
+            </button>
+          ) : null}
+          {trace.hasRichDetails ? (
+            <button
+              type="button"
+              className={clsx(styles.inspectButton, isInspecting && styles.inspectButtonActive)}
+              aria-pressed={isInspecting}
+              onClick={onInspect}
+            >
+              <IconPanelRightOutline16 />
+              <span>{isInspecting ? t('activityViewingInPanel') : t('activityOpenInPanel')}</span>
+            </button>
+          ) : null}
         </div>
       ) : null}
     </div>

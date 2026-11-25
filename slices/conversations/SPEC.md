@@ -103,7 +103,10 @@ The package also exports pure model functions (`branches`, `reply`, `view`, `wor
    at latest version in first-seen order and appear once streaming ends. Tool `images` without
    `previewImages` promote to Front Stage (`view.images`); tools that supply clean `previewImages`
    keep their screenshots backstage in the Activity Inspector. `buildTurnWorkStrip` is driven solely
-   by `ToolStepPresenter.summarize` and `result.frontStageNote`.
+   by `ToolStepPresenter.summarize` and `result.frontStageNote`, emitting middot-free natural-language
+   summaries (never appending thinking duration onto tool counts). `buildInlineTrace` and
+   `selectInlineTracePreview` project domain-blind plain-prose steps without step numbers or per-step
+   durations, and bounded previews always retain every failed and running step in chronological order.
 10. **Living session titles.** After a reply finishes normally, if the title is unlocked and inline
     `delta.title` did not already name turn 1, a detached cache-riding fork updates the title
     without altering `session.messages` or `updatedAt`. Any user mutation cancels an in-flight fork.
@@ -125,3 +128,4 @@ The package also exports pure model functions (`branches`, `reply`, `view`, `wor
 | Concurrent uploads                          | 3                                           |
 | Request body limit                          | 3,000,000 bytes                             |
 | Stall delay before "Working…"               | 1.5 s                                       |
+| Inline trace preview cap                    | 6 steps (`INLINE_TRACE_PREVIEW_LIMIT`)      |

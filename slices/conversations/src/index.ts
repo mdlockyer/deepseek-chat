@@ -175,11 +175,15 @@ export {
   type ToolStep,
 } from './view.js'
 export {
+  INLINE_TRACE_PREVIEW_LIMIT,
   buildInlineTrace,
   buildTurnWorkStrip,
   getFrontStageNotes,
+  selectInlineTracePreview,
   type FrontStageNoteEntry,
   type InlineTrace,
   type InlineTraceItem,
+  type InlineTracePreview,
+  type InlineTracePreviewEntry,
   type TurnWorkStripState,
 } from './workStrip.js'

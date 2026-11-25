@@ -17,7 +17,6 @@ export type TurnWorkStripState =
   | {
       mode: 'live'
       headline: string
-      tally: string | null
       detail: string | null
       liveTracks: LiveTrack[]
       overflowTracks: number
@@ -43,7 +42,6 @@ export type InlineTraceItem = {
   readonly label: string
   readonly status: 'running' | 'done' | 'failed'
   readonly errorText?: string
-  readonly durationMs?: number
 }
 
 export type InlineTrace = {
@@ -51,6 +49,18 @@ export type InlineTrace = {
   readonly thinkingMarkdown: string | null
   readonly hasRichDetails: boolean
 }
+
+export type InlineTracePreviewEntry = {
+  readonly item: InlineTraceItem
+  readonly gapBefore: boolean
+}
+
+export type InlineTracePreview = {
+  readonly entries: readonly InlineTracePreviewEntry[]
+  readonly hiddenCount: number
+}
+
+export const INLINE_TRACE_PREVIEW_LIMIT = 6
 
 const MAX_LIVE_TRACKS = 3
 
@@ -137,13 +147,17 @@ const collectMetrics = (view: ReplyView) => {
 }
 
 const formatTallies = (tallies: readonly TallyEntry[], maxItems = 3): string | null => {
-  if (tallies.length === 0) {
+  const labels = tallies.slice(0, maxItems).map((entry) => entry.label(entry.count))
+  if (labels.length === 0) {
     return null
   }
-  return tallies
-    .slice(0, maxItems)
-    .map((entry) => entry.label(entry.count))
-    .join(translate('activityListSeparator'))
+  if (labels.length === 1) {
+    return labels[0]
+  }
+  if (labels.length === 2) {
+    return `${labels[0]}${translate('activityListPairSeparator')}${labels[1]}`
+  }
+  return `${labels.slice(0, -1).join(translate('activityListSeparator'))}${translate('activityListLastSeparator')}${labels.at(-1)}`
 }
 
 const liveHeadlineAndDetail = (
@@ -168,7 +182,7 @@ const liveHeadlineAndDetail = (
     return {
       headline:
         runningTracks.length > 1
-          ? translate('activityLiveParallel')
+          ? translate('activityLiveParallelCount', { count: runningTracks.length })
           : (trackStep?.summary?.liveVerb ?? translate('replyWorking')),
       detail: null,
       waitingForUser: false,
@@ -277,24 +291,10 @@ export const buildTurnWorkStrip = (
       : []
     const liveTracks = orderedTracks.slice(0, MAX_LIVE_TRACKS)
     const overflowTracks = Math.max(0, orderedTracks.length - liveTracks.length)
-    const baseTally = formatTallies(tallies, 2)
-    const tallyWithSources =
-      liveTracks.length > 0 && view.sources.length > 0
-        ? [
-            baseTally,
-            translate(
-              view.sources.length === 1 ? 'activityCountSourceOne' : 'activityCountSourceMany',
-              { count: view.sources.length }
-            ),
-          ]
-            .filter(Boolean)
-            .join(' · ')
-        : baseTally
 
     return {
       mode: 'live',
       headline,
-      tally: tallyWithSources,
       detail: liveTracks.length > 0 ? null : detail,
       liveTracks,
       overflowTracks,
@@ -315,18 +315,13 @@ export const buildTurnWorkStrip = (
       ? translate('activityStoppedAfter', { work: workPhrase })
       : translate('messageThinkStopped')
   } else if (workPhrase) {
-    const pieces = [workPhrase]
-    if (errorCount > 0) {
-      pieces.push(
-        translate(errorCount === 1 ? 'activityWithErrorsOne' : 'activityWithErrorsMany', {
-          count: errorCount,
-        })
-      )
-    }
-    if (thinkingSeconds !== null) {
-      pieces.push(translate('activityDurationShort', { count: thinkingSeconds }))
-    }
-    label = pieces.join(' · ')
+    label =
+      errorCount > 0
+        ? translate(errorCount === 1 ? 'activityWorkWithErrorsOne' : 'activityWorkWithErrorsMany', {
+            work: workPhrase,
+            count: errorCount,
+          })
+        : workPhrase
   } else if (hasThinking) {
     label =
       thinkingSeconds !== null
@@ -464,7 +459,6 @@ export const buildInlineTrace = (view: ReplyView): InlineTrace => {
         label,
         status,
         ...(errorText ? { errorText } : {}),
-        ...(step.result?.durationMs !== undefined ? { durationMs: step.result.durationMs } : {}),
       })
     }
   }
@@ -479,5 +473,47 @@ export const buildInlineTrace = (view: ReplyView): InlineTrace => {
     items,
     thinkingMarkdown,
     hasRichDetails,
+  }
+}
+
+/**
+ * Selects a bounded preview of inline trace steps in original chronological order.
+ * Every failed or currently running step is always retained so exceptions are never hidden.
+ */
+export const selectInlineTracePreview = (
+  items: readonly InlineTraceItem[],
+  maxVisible = INLINE_TRACE_PREVIEW_LIMIT
+): InlineTracePreview => {
+  if (items.length <= maxVisible) {
+    return {
+      entries: items.map((item) => ({ item, gapBefore: false })),
+      hiddenCount: 0,
+    }
+  }
+
+  const selected = new Set<number>()
+  for (let i = 0; i < items.length; i += 1) {
+    const status = items[i].status
+    if (status === 'failed' || status === 'running') {
+      selected.add(i)
+    }
+  }
+
+  const remaining = Math.max(0, maxVisible - selected.size)
+  let added = 0
+  for (let i = 0; i < items.length && added < remaining; i += 1) {
+    if (!selected.has(i)) {
+      selected.add(i)
+      added += 1
+    }
+  }
+
+  const orderedIndices = [...selected].sort((a, b) => a - b)
+  return {
+    entries: orderedIndices.map((index, pos) => ({
+      item: items[index],
+      gapBefore: pos > 0 && index > orderedIndices[pos - 1] + 1,
+    })),
+    hiddenCount: items.length - orderedIndices.length,
   }
 }

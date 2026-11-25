@@ -51,6 +51,10 @@ contracts, and live SSA proofs.
 - **State, specs and errors.** `SPEC.md` separates behavioural invariants from tunable
   parameters. Model lifecycles as discriminated unions, not boolean flags; keep stateless
   transforms pure. Never mask invariant failures with broad catches or silent fallbacks.
+- **UI copy & row discipline (no middot `·` separators).** Never use `·` to join items in a row.
+  A middot usually masks information that does not belong there, a missing visual hierarchy, or
+  fragments that should read as one natural sentence. Drop low-value telemetry, write one coherent
+  phrase, or give distinct facts distinct layout/visual structure.
 - **Harness prompting.** System prompt sections, tool descriptions, `COMPOSITION_PROMPT_NOTES`, and
   `latest_reminder` follow the unified human-voiced prompting architecture documented in
   `docs/prompting-harness.md`. Whenever you add/change tools, UI surfaces, or sandbox/security
