@@ -57,25 +57,42 @@ panel, from `spine/design`), `KeyValueStore`.
 9. **URLs.** Only `http:`/`https:` are web pages. Address-bar input: explicit `http(s)://` kept;
    `localhost`/`127.0.0.1`/`[::1]` (with port/path) get `http://`; `name.tld` gets `https://`;
    anything else becomes a Google search; blank is `about:blank`.
-10. **Tool runs & action settling.** Calls execute one at a time in call order. A call aborted
-    before it starts resolves `aborted` without touching the browser; a failure resolves `error`
-    with the message; while a call runs the chat is marked as controlled by the model, and the mark
-    is cleared afterwards. Actions that initiate a document navigation (`browser_navigate`,
-    navigating `browser_click`, `browser_type` with `submit: true`, and form-submitting
-    `browser_press_key`) wait for the navigation to start and finish loading before snapshotting.
-    `browser_type` with `submit: true` yields after input before dispatching `Enter` to the live
-    active element (without a premature `change` event). Detached element refs fail with
+10. **Tool runs & action settling.** Calls execute one at a time in call order. Tool calls politely
+    reveal the browser panel (`panel.reveal`) rather than forcing it over another open workspace
+    panel or a user dismissal, while still executing against the tab's webview in the background. A
+    call aborted before it starts resolves `aborted` without touching the browser; a failure
+    resolves `error` with the message; while a call runs the chat is marked as controlled by the
+    model, and the mark is cleared afterwards. Actions that initiate a document navigation (`browser_navigate`,
+    navigating `browser_click`, `browser_type` with `submit: true`, and form-submitting or
+    link-activating `browser_press_key`) wait for the navigation to start and finish loading before
+    snapshotting. `browser_type` with `submit: true` yields after input before dispatching `Enter`
+    to the live active element (without a premature `change` event). `browser_click` and
+    `browser_type` only `scrollIntoView` when targeting by `ref` (never shifting elements under
+    explicit viewport `(x, y)` coordinates). `browser_press_key` executes standard keyboard default
+    actions (`Tab`/`Shift+Tab` focus traversal, `Enter`/`Space` control activation, `Home`/`End`
+    and page scrolling) when `keydown` is not prevented by the page. Detached element refs fail with
     `status: 'error'` (never silently retargeting another node) and include refreshed interactive
     refs (and matching replacement hints) wrapped in `<untrusted_webpage_content …>`.
-11. **Untrusted content & snapshot verbosity.** Page text, refreshed stale-ref listings, and
-    `browser_eval` results reach the model wrapped in
+11. **Untrusted content, iframes & snapshot verbosity.** Page text, refreshed stale-ref listings,
+    cross-origin iframe listings, and `browser_eval` results reach the model wrapped in
     `<untrusted_webpage_content …>…</untrusted_webpage_content>`; truncation always occurs inside
-    the wrapper so the closing tag is never dropped. Snapshots never include password field values.
-    Layout/chrome actions (`browser_scroll`, `browser_set_viewport`, `browser_tabs` switch) omit
-    page text unless requested; same-URL content-mutating actions (`browser_click`, `browser_type`,
-    `browser_press_key`, `browser_select`) deduplicate unchanged page text and report only changed
-    lines (or full text when the page mostly changed); `browser_observe` and navigations return
-    full page text unless `text: false`.
+    the wrapper so the closing tag is never dropped. Interactive element listings and `Page text:`
+    are budgeted separately so link-dense pages never starve page text, truncated page text reports
+    shown vs. total character counts with `selector`/`browser_eval` guidance, and capped element
+    lists note that existing `[eN]` refs stay valid. Snapshot headers report CSS viewport pixels
+    and, when a screenshot is attached, its encoded pixel dimensions and scale vs. the CSS viewport
+    so coordinate clicks stay unambiguous on HiDPI displays and scaled viewports. Snapshots never
+    include password field values, traverse accessible same-origin iframes into `[eN]` refs and
+    page text, list visible cross-origin iframes (title and `src`) when present, index visible
+    scrollable containers for `browser_scroll({ ref })` (excluded from screenshot SoM badges), and
+    clear transient driver highlight overlays before capturing screenshots. Layout/chrome actions
+    (`browser_scroll`, `browser_set_viewport`, `browser_tabs` switch) omit page text unless
+    requested (`browser_scroll` with `ref` reports the container's updated scroll position);
+    same-URL content-mutating actions (`browser_click`, `browser_type`, `browser_press_key`,
+    `browser_select`) deduplicate unchanged page text across hash-only URL changes and report only
+    changed lines (or full text when the page mostly changed); `browser_observe` and navigations
+    return full page text unless `text: false`. `browser_tabs` `close` reports the newly active tab
+    (or notes when no tabs remain).
 12. **Viewports** are per tab; the tab's zoom is the fit of its viewport into the stage.
 13. **Localhost access.** Stored under `chat-demo:browser-allow-localhost` (default off) and sent to
     the host when events are bound and whenever it changes.
@@ -86,8 +103,10 @@ panel, from `spine/design`), `KeyValueStore`.
 - Navigation settle delays: post-load SPA settle (~180 ms), post-type submit yield (~150 ms),
   non-navigating action settle (~180–250 ms), expected-navigation start window (~2,000 ms), and
   load timeout (~10,000–15,000 ms).
-- Snapshot budgets: interactive element cap (140), extracted page text cap (12,000 chars), and
-  outer tool output cap (24,000 chars, truncated inside `<untrusted_webpage_content>`).
+- Snapshot budgets: interactive element cap (140), scrollable container cap (8), cross-origin iframe
+  listing cap (12), `<select>` option preview cap (20, always retaining selected option(s) with
+  overflow count), extracted page text cap (12,000 chars), and outer tool output cap (24,000 chars,
+  truncated inside `<untrusted_webpage_content>`).
 - Delta reporting threshold: same-URL diff emits changed lines when at most half the page changed
   and the delta fits within a compact cap; larger rewrites emit full page text.
 

@@ -151,6 +151,13 @@ const fakePanel = () => {
       shown.set(sessionId, 'browser')
       update(wasEmpty && layout.activeSessionId === sessionId ? { animating: true } : {})
     },
+    reveal: (sessionId) => {
+      if (shown.has(sessionId)) {
+        return
+      }
+      shown.set(sessionId, 'browser')
+      update(layout.activeSessionId === sessionId ? { animating: true } : {})
+    },
     close: (sessionId) => {
       if (shown.get(sessionId) === 'browser') {
         shown.delete(sessionId)
@@ -418,6 +425,16 @@ describe('browser: native webview visibility', () => {
     await settle()
     assert.equal(env.host.lastActive.visible, false)
     assert.equal(env.browser.getSession('s1').panelOpen, false, 'replaced panel counts as closed')
+
+    // Subsequent browser tool calls run cleanly in the background without stealing the right panel.
+    const bgObserve = await env.browser.run(
+      'browser_observe',
+      {},
+      { signal: signal(), sessionId: 's1' }
+    )
+    assert.equal(bgObserve.status, 'ok')
+    assert.equal(env.panel.slot.isOpen('s1'), false, 'other panel was not hijacked')
+    assert.equal(env.host.lastActive.visible, false, 'native webview stays hidden while displaced')
   })
 })
 
@@ -1104,6 +1121,11 @@ describe('browser: navigation settling, async form submit, stale-ref recovery, a
       cancelable: boolean
       defaultPrevented = false
       key?: string
+      code?: string
+      shiftKey = false
+      metaKey = false
+      ctrlKey = false
+      altKey = false
       target: unknown = null
       constructor(type: string, init: Record<string, unknown> = {}) {
         this.type = type
@@ -1112,6 +1134,13 @@ describe('browser: navigation settling, async form submit, stale-ref recovery, a
         if (typeof init.key === 'string') {
           this.key = init.key
         }
+        if (typeof init.code === 'string') {
+          this.code = init.code
+        }
+        this.shiftKey = Boolean(init.shiftKey)
+        this.metaKey = Boolean(init.metaKey)
+        this.ctrlKey = Boolean(init.ctrlKey)
+        this.altKey = Boolean(init.altKey)
       }
       preventDefault() {
         if (this.cancelable) {
@@ -1127,9 +1156,27 @@ describe('browser: navigation settling, async form submit, stale-ref recovery, a
       attrs = new Map<string, string>()
       children: SimElement[] = []
       parentElement: SimElement | null = null
+      ownerDocument: unknown = null
       isConnected = true
       innerText: string
+      style: Record<string, string> = {
+        display: 'block',
+        visibility: 'visible',
+        opacity: '1',
+        overflowX: 'visible',
+        overflowY: 'visible',
+        cssText: '',
+      }
       rect = { left: 10, top: 20, right: 130, bottom: 52, width: 120, height: 32 }
+      scrollLeft = 0
+      scrollTop = 0
+      scrollWidth = 120
+      scrollHeight = 32
+      clientWidth = 120
+      clientHeight = 32
+      clientLeft = 0
+      clientTop = 0
+      scrollIntoViewCalls = 0
       listeners = new Map<string, Listener[]>()
       onClickAction: ((ev: SimEvent) => void) | null = null
 
@@ -1144,8 +1191,21 @@ describe('browser: navigation settling, async form submit, stale-ref recovery, a
       append(child: SimElement) {
         child.parentElement = this
         child.isConnected = this.isConnected
+        if (!child.ownerDocument && this.ownerDocument) {
+          child.ownerDocument = this.ownerDocument
+        }
         this.children.push(child)
         return child
+      }
+      appendChild(child: SimElement) {
+        return this.append(child)
+      }
+      remove() {
+        if (this.parentElement) {
+          this.parentElement.children = this.parentElement.children.filter((c) => c !== this)
+          this.parentElement = null
+        }
+        this.isConnected = false
       }
       getAttribute(name: string) {
         return this.attrs.get(name) ?? null
@@ -1159,9 +1219,12 @@ describe('browser: navigation settling, async form submit, stale-ref recovery, a
       getBoundingClientRect() {
         return this.rect
       }
-      scrollIntoView() {}
+      scrollIntoView() {
+        this.scrollIntoViewCalls += 1
+      }
       focus() {
-        simDocument.activeElement = this
+        const doc = (this.ownerDocument as { activeElement?: unknown } | null) ?? simDocument
+        doc.activeElement = this
       }
       addEventListener(type: string, fn: (ev: SimEvent) => void, opts?: { once?: boolean }) {
         const list = this.listeners.get(type) ?? []
@@ -1230,6 +1293,23 @@ describe('browser: navigation settling, async form submit, stale-ref recovery, a
         }
         return null
       }
+      querySelectorAll(selector: string): SimElement[] {
+        const out: SimElement[] = []
+        const walk = (node: SimElement) => {
+          for (const child of node.children) {
+            if (
+              selector === '*' ||
+              (selector === '[data-ds-overlay="1"]' &&
+                child.getAttribute('data-ds-overlay') === '1')
+            ) {
+              out.push(child)
+            }
+            walk(child)
+          }
+        }
+        walk(this)
+        return out
+      }
     }
 
     const ancestorsOf = (start: SimElement): SimElement[] => {
@@ -1262,6 +1342,7 @@ describe('browser: navigation settling, async form submit, stale-ref recovery, a
     class SimInput extends SimHTMLElement {
       type = 'text'
       private _value = ''
+      checked = false
       disabled = false
       labels: SimElement[] = []
       form: SimForm | null = null
@@ -1275,17 +1356,48 @@ describe('browser: navigation settling, async form submit, stale-ref recovery, a
       set value(v: string) {
         this._value = v
       }
+      override click() {
+        if (this.type === 'checkbox') {
+          this.checked = !this.checked
+        }
+        super.click()
+      }
     }
     class SimTextarea extends SimHTMLElement {
       value = ''
       disabled = false
       labels: SimElement[] = []
     }
+    class SimOption {
+      value: string
+      text: string
+      selected: boolean
+      constructor(value: string, text: string, selected = false) {
+        this.value = value
+        this.text = text
+        this.selected = selected
+      }
+    }
+    let selectProtoSetterCalls = 0
     class SimSelect extends SimHTMLElement {
-      value = ''
       disabled = false
-      options: SimElement[] = []
+      multiple = false
+      options: SimOption[] = []
       labels: SimElement[] = []
+      constructor(label: string, options: SimOption[] = [], top = 20) {
+        super('select', '', top)
+        this.setAttribute('aria-label', label)
+        this.options = options
+      }
+      get value(): string {
+        return this.options.find((o) => o.selected)?.value ?? this.options[0]?.value ?? ''
+      }
+      set value(v: string) {
+        selectProtoSetterCalls += 1
+        for (const opt of this.options) {
+          opt.selected = opt.value === v
+        }
+      }
     }
     class SimAnchor extends SimHTMLElement {
       href: string
@@ -1298,7 +1410,13 @@ describe('browser: navigation settling, async form submit, stale-ref recovery, a
     }
 
     const docListeners = new Map<string, Listener[]>()
+    const docRoot = new SimHTMLElement('html', '', 0)
+    docRoot.clientWidth = 800
+    docRoot.clientHeight = 600
+    docRoot.scrollWidth = 800
+    docRoot.scrollHeight = 2400
     const body = new SimHTMLElement('body', '', 0)
+    docRoot.append(body)
     const simLocation = { href: initialUrl }
     const simWindow: Record<PropertyKey, unknown> = {
       innerWidth: 800,
@@ -1307,27 +1425,49 @@ describe('browser: navigation settling, async form submit, stale-ref recovery, a
       scrollY: 0,
       scrollBy: (_opts: { top?: number; left?: number }) => {
         simWindow.scrollY = Number(simWindow.scrollY) + (_opts?.top ?? 0)
+        simWindow.scrollX = Number(simWindow.scrollX) + (_opts?.left ?? 0)
       },
-      scrollTo: (_opts: { top?: number }) => {
-        simWindow.scrollY = _opts?.top ?? 0
+      scrollTo: (_opts: { top?: number; left?: number }) => {
+        if (_opts?.top !== undefined) {
+          simWindow.scrollY = _opts.top
+        }
+        if (_opts?.left !== undefined) {
+          simWindow.scrollX = _opts.left
+        }
       },
     }
     const simDocument = {
+      defaultView: simWindow,
       body,
-      documentElement: {
-        clientWidth: 800,
-        clientHeight: 600,
-        scrollWidth: 800,
-        scrollHeight: 2400,
-        appendChild: () => {},
-      },
+      documentElement: docRoot,
       title: initialTitle,
       readyState: 'complete',
       activeElement: body as SimElement,
       getElementById: () => null,
       querySelector: () => null,
-      querySelectorAll: () => [],
-      createElement: () => new SimHTMLElement('div', '', 0),
+      querySelectorAll: (selector: string) => docRoot.querySelectorAll(selector),
+      elementFromPoint: (x: number, y: number): SimElement | null => {
+        let hit: SimElement | null = null
+        const walk = (node: SimElement) => {
+          for (const child of node.children) {
+            if (child.getAttribute('data-ds-overlay') === '1') {
+              continue
+            }
+            const r = child.getBoundingClientRect()
+            if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) {
+              hit = child
+            }
+            walk(child)
+          }
+        }
+        walk(body)
+        return hit
+      },
+      createElement: (tag: string) => {
+        const el = new SimHTMLElement(tag || 'div', '', 0)
+        el.ownerDocument = simDocument
+        return el
+      },
       addEventListener: (type: string, fn: (ev: SimEvent) => void, opts?: { once?: boolean }) => {
         const list = docListeners.get(type) ?? []
         list.push({ fn, once: Boolean(opts?.once) })
@@ -1344,6 +1484,28 @@ describe('browser: navigation settling, async form submit, stale-ref recovery, a
         )
       },
     }
+    docRoot.ownerDocument = simDocument
+    body.ownerDocument = simDocument
+    simWindow.Element = SimElement
+    simWindow.HTMLElement = SimHTMLElement
+    simWindow.SVGElement = SimSVGElement
+    simWindow.HTMLInputElement = SimInput
+    simWindow.HTMLTextAreaElement = SimTextarea
+    simWindow.HTMLSelectElement = SimSelect
+    simWindow.HTMLAnchorElement = SimAnchor
+    simWindow.PointerEvent = SimEvent
+    simWindow.MouseEvent = SimEvent
+    simWindow.KeyboardEvent = SimEvent
+    simWindow.InputEvent = SimEvent
+    simWindow.Event = SimEvent
+    simWindow.getComputedStyle = (el: SimElement) =>
+      el?.style ?? {
+        display: 'block',
+        visibility: 'visible',
+        opacity: '1',
+        overflowX: 'visible',
+        overflowY: 'visible',
+      }
 
     const runScript = (script: string): string => {
       const fn = new Function(
@@ -1369,7 +1531,7 @@ describe('browser: navigation settling, async form submit, stale-ref recovery, a
         simWindow,
         simDocument,
         simLocation,
-        () => ({ display: 'block', visibility: 'visible', opacity: '1' }),
+        simWindow.getComputedStyle,
         SimElement,
         SimHTMLElement,
         SimSVGElement,
@@ -1391,11 +1553,15 @@ describe('browser: navigation settling, async form submit, stale-ref recovery, a
       SimHTMLElement,
       SimForm,
       SimInput,
+      SimOption,
+      SimSelect,
       SimAnchor,
       body,
+      docRoot,
       simWindow,
       simDocument,
       simLocation,
+      getSelectProtoSetterCalls: () => selectProtoSetterCalls,
       runScript,
     }
   }
@@ -1782,6 +1948,546 @@ describe('browser: navigation settling, async form submit, stale-ref recovery, a
       assert.match(hugeEval.text, /Truncated/i)
     }
 
+    env.browser.dispose()
+  })
+
+  it('traverses same-origin iframes (cross-realm) for refs/select/text/wait and surfaces cross-origin iframes in snapshots', async () => {
+    const dom = createInteractiveDom(
+      'https://developer.mozilla.org/en-US/docs/select',
+      'MDN Select'
+    )
+    dom.body.innerText = 'Top level MDN page'
+
+    // Build a separate-realm same-origin iframe (its Element/HTMLSelectElement are distinct constructors).
+    const frameDom = createInteractiveDom(
+      'https://developer.mozilla.org/en-US/embed/demo',
+      'Embedded Demo'
+    )
+    frameDom.body.innerText = 'Embedded demo instructions'
+    const frameSelect = new frameDom.SimSelect(
+      'Pet choice',
+      [
+        new frameDom.SimOption('', '--Choose--', true),
+        new frameDom.SimOption('dog', 'Dog'),
+        new frameDom.SimOption('cat', 'Cat'),
+      ],
+      12
+    )
+    let frameBtnClicks = 0
+    const frameBtn = new frameDom.SimHTMLElement('button', 'Apply Pet', 56)
+    frameBtn.onClickAction = () => {
+      frameBtnClicks += 1
+    }
+    frameDom.body.append(frameSelect)
+    frameDom.body.append(frameBtn)
+
+    const sameOriginIframe = new dom.SimHTMLElement('iframe', '', 100) as unknown as {
+      rect: {
+        left: number
+        top: number
+        right: number
+        bottom: number
+        width: number
+        height: number
+      }
+      attrs: Map<string, string>
+      setAttribute: (k: string, v: string) => void
+      contentDocument: unknown
+      contentWindow: unknown
+    }
+    sameOriginIframe.rect = { left: 40, top: 100, right: 440, bottom: 320, width: 400, height: 220 }
+    sameOriginIframe.setAttribute('src', 'https://developer.mozilla.org/en-US/embed/demo')
+    sameOriginIframe.setAttribute('title', 'Same-origin demo')
+    sameOriginIframe.contentDocument = frameDom.simDocument
+    sameOriginIframe.contentWindow = frameDom.simWindow
+    dom.body.append(sameOriginIframe as unknown as InstanceType<typeof dom.SimHTMLElement>)
+
+    // Cross-origin iframe whose contentDocument throws SecurityError.
+    const crossOriginIframe = new dom.SimHTMLElement('iframe', '', 340)
+    crossOriginIframe.rect = {
+      left: 40,
+      top: 340,
+      right: 680,
+      bottom: 580,
+      width: 640,
+      height: 240,
+    }
+    crossOriginIframe.setAttribute('src', 'https://live.mdnplay.dev/en-US/docs/select/runner.html')
+    crossOriginIframe.setAttribute('title', 'MDN live sample')
+    Object.defineProperty(crossOriginIframe, 'contentDocument', {
+      get() {
+        throw new Error('Blocked a frame with origin from accessing a cross-origin frame.')
+      },
+    })
+    Object.defineProperty(crossOriginIframe, 'contentWindow', {
+      get() {
+        return {
+          get document() {
+            throw new Error('Blocked a frame with origin from accessing a cross-origin frame.')
+          },
+        }
+      },
+    })
+    dom.body.append(crossOriginIframe)
+
+    const env = await withVisiblePage()
+    env.host.host.evalJs = async (_tabId, script, isolated) =>
+      isolated ? dom.runScript(script) : JSON.stringify({ ok: true, value: null })
+
+    const obs = await env.browser.run('browser_observe', {}, { signal: signal(), sessionId: 's1' })
+    assert.equal(obs.status, 'ok')
+    assert.match(obs.text, /select "Pet choice"/)
+    assert.match(obs.text, /button "Apply Pet"/)
+    assert.match(obs.text, /Embedded demo instructions/)
+    assert.match(
+      obs.text,
+      /<untrusted_webpage_content[^>]*>[\s\S]*MDN live sample[\s\S]*live\.mdnplay\.dev[\s\S]*<\/untrusted_webpage_content>/
+    )
+
+    const selectRef = /\[(e\d+)\] select "Pet choice"/.exec(obs.text)?.[1]
+    const btnRef = /\[(e\d+)\] button "Apply Pet"/.exec(obs.text)?.[1]
+    assert.ok(selectRef && btnRef)
+
+    const selected = await env.browser.run(
+      'browser_select',
+      { ref: selectRef, values: ['Cat'] },
+      { signal: signal(), sessionId: 's1' }
+    )
+    assert.equal(selected.status, 'ok')
+    assert.equal(frameSelect.value, 'cat')
+
+    const clicked = await env.browser.run(
+      'browser_click',
+      { ref: btnRef },
+      { signal: signal(), sessionId: 's1' }
+    )
+    assert.equal(clicked.status, 'ok')
+    assert.equal(frameBtnClicks, 1)
+
+    const waited = await env.browser.run(
+      'browser_wait',
+      { text: 'Embedded demo instructions', timeout_ms: 500 },
+      { signal: signal(), sessionId: 's1' }
+    )
+    assert.equal(waited.status, 'ok')
+    env.browser.dispose()
+  })
+
+  it('executes keyboard default actions on browser_press_key (Tab/Shift+Tab, Enter, Space, Home/End) unless preventDefault is called', async () => {
+    const dom = createInteractiveDom('https://example.com/form', 'Keyboard Form')
+    const inputA = new dom.SimInput('Username', 20)
+    const disabledBtn = new dom.SimHTMLElement('button', 'Disabled', 60)
+    disabledBtn.setAttribute('disabled', '')
+    const checkbox = new dom.SimInput('Remember me', 100)
+    checkbox.type = 'checkbox'
+    let actionClicks = 0
+    const actionBtn = new dom.SimHTMLElement('button', 'Continue', 140)
+    actionBtn.onClickAction = () => {
+      actionClicks += 1
+    }
+    const guardedBtn = new dom.SimHTMLElement('button', 'Guarded', 180)
+    let guardedClicks = 0
+    guardedBtn.onClickAction = () => {
+      guardedClicks += 1
+    }
+    guardedBtn.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter') {
+        ev.preventDefault()
+      }
+    })
+    dom.body.append(inputA)
+    dom.body.append(disabledBtn)
+    dom.body.append(checkbox)
+    dom.body.append(actionBtn)
+    dom.body.append(guardedBtn)
+
+    const env = await withVisiblePage()
+    env.host.host.evalJs = async (_tabId, script, isolated) =>
+      isolated ? dom.runScript(script) : JSON.stringify({ ok: true, value: null })
+
+    // Home/End when body is focused.
+    const endRes = await env.browser.run(
+      'browser_press_key',
+      { key: 'End' },
+      { signal: signal(), sessionId: 's1' }
+    )
+    assert.equal(endRes.status, 'ok')
+    assert.equal(dom.simWindow.scrollY, 2400)
+
+    const homeRes = await env.browser.run(
+      'browser_press_key',
+      { key: 'Home' },
+      { signal: signal(), sessionId: 's1' }
+    )
+    assert.equal(homeRes.status, 'ok')
+    assert.equal(dom.simWindow.scrollY, 0)
+
+    // Tab moves focus: body -> inputA -> checkbox (skipping disabledBtn) -> actionBtn; Shift+Tab returns to checkbox.
+    const tab1 = await env.browser.run(
+      'browser_press_key',
+      { key: 'Tab' },
+      { signal: signal(), sessionId: 's1' }
+    )
+    assert.equal(tab1.status, 'ok')
+    assert.equal(dom.simDocument.activeElement, inputA)
+    assert.match(tab1.text, /Focused: <input> "Username"/)
+
+    const tab2 = await env.browser.run(
+      'browser_press_key',
+      { key: 'Tab' },
+      { signal: signal(), sessionId: 's1' }
+    )
+    assert.equal(tab2.status, 'ok')
+    assert.equal(dom.simDocument.activeElement, checkbox)
+
+    // Space toggles the focused checkbox.
+    const spaceRes = await env.browser.run(
+      'browser_press_key',
+      { key: ' ' },
+      { signal: signal(), sessionId: 's1' }
+    )
+    assert.equal(spaceRes.status, 'ok')
+    assert.equal(checkbox.checked, true)
+
+    await env.browser.run(
+      'browser_press_key',
+      { key: 'Tab' },
+      { signal: signal(), sessionId: 's1' }
+    )
+    assert.equal(dom.simDocument.activeElement, actionBtn)
+
+    // Enter activates the focused button.
+    const enterRes = await env.browser.run(
+      'browser_press_key',
+      { key: 'Enter' },
+      { signal: signal(), sessionId: 's1' }
+    )
+    assert.equal(enterRes.status, 'ok')
+    assert.equal(actionClicks, 1)
+
+    // Shift+Tab moves back to checkbox.
+    await env.browser.run(
+      'browser_press_key',
+      { key: 'Tab', modifiers: ['shift'] },
+      { signal: signal(), sessionId: 's1' }
+    )
+    assert.equal(dom.simDocument.activeElement, checkbox)
+
+    // preventDefault() on keydown suppresses default Enter click.
+    guardedBtn.focus()
+    await env.browser.run(
+      'browser_press_key',
+      { key: 'Enter' },
+      { signal: signal(), sessionId: 's1' }
+    )
+    assert.equal(guardedClicks, 0)
+    env.browser.dispose()
+  })
+
+  it('clears transient driver highlight overlays before taking a screenshot and deduplicates text across same-page #hash clicks', async () => {
+    const dom = createInteractiveDom(
+      'https://en.wikipedia.org/wiki/DeepSeek',
+      'DeepSeek - Wikipedia'
+    )
+    dom.body.innerText =
+      'DeepSeek\nLong article body paragraph that should not be re-sent on anchor jump.'
+    const historyLink = new dom.SimAnchor('History', '#History', 40)
+    historyLink.onClickAction = () => {
+      dom.simLocation.href = 'https://en.wikipedia.org/wiki/DeepSeek#History'
+      dom.simWindow.scrollY = 2108
+    }
+    dom.body.append(historyLink)
+
+    const env = await withVisiblePage()
+    let overlaysDuringSnapshot = -1
+    env.host.host.evalJs = async (_tabId, script, isolated) =>
+      isolated ? dom.runScript(script) : JSON.stringify({ ok: true, value: null })
+    env.host.host.takeSnapshot = async () => {
+      overlaysDuringSnapshot = dom.docRoot.querySelectorAll('[data-ds-overlay="1"]').length
+      return { dataUrl: 'data:image/jpeg;base64,CLEAN', width: 800, height: 600 }
+    }
+
+    const obs = await env.browser.run('browser_observe', {}, { signal: signal(), sessionId: 's1' })
+    assert.match(obs.text, /Long article body paragraph/)
+    const historyRef = /\[(e\d+)\] link "History"/.exec(obs.text)?.[1]
+    assert.ok(historyRef)
+
+    const clicked = await env.browser.run(
+      'browser_click',
+      { ref: historyRef, screenshot: true },
+      { signal: signal(), sessionId: 's1' }
+    )
+    assert.equal(clicked.status, 'ok')
+    assert.equal(
+      overlaysDuringSnapshot,
+      0,
+      'transient highlight overlays must be cleared before screenshot'
+    )
+    assert.doesNotMatch(
+      clicked.text,
+      /Long article body paragraph/,
+      'hash-only anchor click with unchanged text must deduplicate page text'
+    )
+    assert.match(clicked.text, /unchanged/i)
+    env.browser.dispose()
+  })
+
+  it('indexes scrollable containers (without SoM badges), scrolls them proportionally, and reports container scroll offsets', async () => {
+    const dom = createInteractiveDom('https://example.com/inbox', 'Inbox')
+    const scroller = new dom.SimHTMLElement('div', '', 40)
+    scroller.setAttribute('aria-label', 'Message list')
+    scroller.style.overflowY = 'auto'
+    scroller.rect = { left: 10, top: 40, right: 410, bottom: 340, width: 400, height: 300 }
+    scroller.clientWidth = 400
+    scroller.clientHeight = 300
+    scroller.scrollWidth = 400
+    scroller.scrollHeight = 1800
+    const itemBtn = new dom.SimHTMLElement('button', 'Open thread', 50)
+    scroller.append(itemBtn)
+    dom.body.append(scroller)
+
+    const env = await withVisiblePage()
+    env.host.host.evalJs = async (_tabId, script, isolated) =>
+      isolated ? dom.runScript(script) : JSON.stringify({ ok: true, value: null })
+
+    const obs = await env.browser.run('browser_observe', {}, { signal: signal(), sessionId: 's1' })
+    assert.equal(obs.status, 'ok')
+    assert.match(obs.text, /scrollable "Message list"/)
+    const scrollRef = /\[(e\d+)\] scrollable "Message list"/.exec(obs.text)?.[1]
+    assert.ok(scrollRef)
+
+    const scrolled = await env.browser.run(
+      'browser_scroll',
+      { ref: scrollRef, direction: 'down' },
+      { signal: signal(), sessionId: 's1' }
+    )
+    assert.equal(scrolled.status, 'ok')
+    assert.equal(scroller.scrollTop, Math.round(300 * 0.75))
+    assert.match(scrolled.text, /Scrolled \[e\d+\] down to \(0, 225\) of 400x1800/)
+    env.browser.dispose()
+  })
+
+  it('uses native prototype value setter for single <select>, preserves selected option in truncated lists, and notes overflow', async () => {
+    const dom = createInteractiveDom('https://example.com/countries', 'Countries')
+    const options = Array.from({ length: 30 }, (_, i) => {
+      const idx = i + 1
+      return new dom.SimOption(`c${idx}`, `Country ${idx}`, idx === 28)
+    })
+    const select = new dom.SimSelect('Country', options, 30)
+    let inputEvents = 0
+    let changeEvents = 0
+    select.addEventListener('input', () => {
+      inputEvents += 1
+    })
+    select.addEventListener('change', () => {
+      changeEvents += 1
+    })
+    dom.body.append(select)
+
+    const env = await withVisiblePage()
+    env.host.host.evalJs = async (_tabId, script, isolated) =>
+      isolated ? dom.runScript(script) : JSON.stringify({ ok: true, value: null })
+
+    const obs = await env.browser.run('browser_observe', {}, { signal: signal(), sessionId: 's1' })
+    assert.equal(obs.status, 'ok')
+    assert.match(obs.text, /"c28":"Country 28"\*/)
+    assert.match(obs.text, /\(\+10 more\)/)
+    const selectRef = /\[(e\d+)\] select "Country"/.exec(obs.text)?.[1]
+    assert.ok(selectRef)
+
+    const beforeSetterCalls = dom.getSelectProtoSetterCalls()
+    const res = await env.browser.run(
+      'browser_select',
+      { ref: selectRef, values: ['Country 5'] },
+      { signal: signal(), sessionId: 's1' }
+    )
+    assert.equal(res.status, 'ok')
+    assert.equal(select.value, 'c5')
+    assert.ok(
+      dom.getSelectProtoSetterCalls() > beforeSetterCalls,
+      'must use native prototype value setter'
+    )
+    assert.equal(inputEvents, 1)
+    assert.equal(changeEvents, 1)
+    env.browser.dispose()
+  })
+
+  it('evaluates multi-line expressions, IIFEs, strings with keywords/semicolons, and non-JSON values in browser_eval', async () => {
+    const { browser } = await withVisiblePage()
+    const run = (script: string) =>
+      browser.run('browser_eval', { script }, { signal: signal(), sessionId: 's1' })
+
+    const multilineObj = await run('({\n  a: 1,\n  b: "two"\n})')
+    assert.equal(multilineObj.status, 'ok')
+    assert.match(multilineObj.text, /"a": 1/)
+    assert.match(multilineObj.text, /"b": "two"/)
+
+    const stringWithKeywordAndSemi = await run('"if;then".split(";")[0]')
+    assert.equal(stringWithKeywordAndSemi.status, 'ok')
+    assert.match(stringWithKeywordAndSemi.text, /\nif\n/)
+
+    const iife = await run('(() => {\n  const x = 6;\n  return x * 7;\n})()')
+    assert.equal(iife.status, 'ok')
+    assert.match(iife.text, /\n42\n/)
+
+    const specialValues = await run(
+      'const obj = { s: new Set([1, 2]), big: 9n }; obj.self = obj; return obj;'
+    )
+    assert.equal(specialValues.status, 'ok')
+    assert.match(specialValues.text, /\[Circular\]/)
+    assert.match(specialValues.text, /"9"/)
+    browser.dispose()
+  })
+
+  it('reports the next active tab on browser_tabs close and avoids scrolling before coordinate clicks', async () => {
+    const dom = createInteractiveDom('https://example.com/coords', 'Coords')
+    let clicks = 0
+    const btn = new dom.SimHTMLElement('button', 'Target', 40)
+    btn.rect = { left: 50, top: 40, right: 170, bottom: 72, width: 120, height: 32 }
+    btn.onClickAction = () => {
+      clicks += 1
+    }
+    dom.body.append(btn)
+
+    const env = await withVisiblePage()
+    env.host.host.evalJs = async (_tabId, script, isolated) =>
+      isolated ? dom.runScript(script) : JSON.stringify({ ok: true, value: null })
+
+    // Coordinate click must NOT call scrollIntoView before clicking at (x, y).
+    const coordClick = await env.browser.run(
+      'browser_click',
+      { x: 100, y: 55 },
+      { signal: signal(), sessionId: 's1' }
+    )
+    assert.equal(coordClick.status, 'ok')
+    assert.equal(clicks, 1)
+    assert.equal(btn.scrollIntoViewCalls, 0)
+
+    // Opening a second tab and closing it reports the active tab we returned to.
+    const firstTabId = env.browser.getSession('s1').tabs[0]?.id ?? ''
+    assert.ok(firstTabId)
+    const opened = await env.browser.run(
+      'browser_tabs',
+      { action: 'new', url: 'https://example.org/' },
+      { signal: signal(), sessionId: 's1' }
+    )
+    assert.equal(opened.status, 'ok')
+
+    const closedSecond = await env.browser.run(
+      'browser_tabs',
+      { action: 'close' },
+      { signal: signal(), sessionId: 's1' }
+    )
+    assert.equal(closedSecond.status, 'ok')
+    assert.match(closedSecond.text, new RegExp(`Active tab is now ${firstTabId}`))
+    assert.equal(closedSecond.meta.url, 'https://example.com/')
+
+    const closedLast = await env.browser.run(
+      'browser_tabs',
+      { action: 'close' },
+      { signal: signal(), sessionId: 's1' }
+    )
+    assert.equal(closedLast.status, 'ok')
+    assert.match(closedLast.text, /No tabs remain/i)
+    env.browser.dispose()
+  })
+
+  it('prevents link-dense pages from starving Page text, reports exact truncation counts, and clarifies ref stability when elements are capped', async () => {
+    const dom = createInteractiveDom(
+      'https://en.wikipedia.org/wiki/Red_panda',
+      'Red panda - Wikipedia'
+    )
+    for (let i = 1; i <= 180; i += 1) {
+      const link = new dom.SimAnchor(
+        `Red panda taxonomy reference link entry number ${i} with descriptive title`,
+        `/wiki/Red_panda_section_${i}_${'a'.repeat(80)}`,
+        i <= 15 ? i * 30 : 1200 + i * 24
+      )
+      dom.body.append(link)
+    }
+    const prefix = 'Red panda habitat notes. '.repeat(400) // 10,000 chars
+    const deepMarker = 'DEEP_SECTION_MARKER_10K'
+    const tail = 'Additional alpine ecology context. '.repeat(450).trimEnd() // ~15,749 chars
+    dom.body.innerText = `${prefix}${deepMarker}${tail}`
+    const expectedTotal = dom.body.innerText.length
+
+    const env = await withVisiblePage()
+    env.host.host.evalJs = async (_tabId, script, isolated) =>
+      isolated ? dom.runScript(script) : JSON.stringify({ ok: true, value: null })
+
+    const obs = await env.browser.run('browser_observe', {}, { signal: signal(), sessionId: 's1' })
+    assert.equal(obs.status, 'ok')
+    assert.ok(obs.text.length <= 24_000, `output length ${obs.text.length} must stay within 24,000`)
+    assert.ok(
+      obs.text.trimEnd().endsWith('</untrusted_webpage_content>'),
+      'output must end cleanly with </untrusted_webpage_content>'
+    )
+    assert.match(
+      obs.text,
+      /Interactive elements \(showing \d+ of 180, in-viewport first; existing \[eN\] refs stay valid\):/
+    )
+    assert.match(obs.text, /Page text:/)
+    assert.ok(
+      obs.text.includes(deepMarker),
+      'link-dense interactive elements must not starve Page text before ~10,000 chars'
+    )
+    assert.match(
+      obs.text,
+      new RegExp(
+        `\\[Page text truncated: showing [\\d,]+ of ${expectedTotal.toLocaleString()} chars; use browser_observe with selector or browser_eval to read other sections\\]`
+      )
+    )
+    env.browser.dispose()
+  })
+
+  it('reports CSS viewport pixels, Retina screenshot pixel dimensions/scale, and CSS coordinate schemas', async () => {
+    const env = await withVisiblePage()
+    const declared = env.browser.declareTools({ enabled: true })
+    const clickSchema = declared.find((t) => t.name === 'browser_click')?.input_schema as {
+      properties?: Record<string, { description?: string }>
+    }
+    const typeSchema = declared.find((t) => t.name === 'browser_type')?.input_schema as {
+      properties?: Record<string, { description?: string }>
+    }
+    assert.match(clickSchema?.properties?.x?.description ?? '', /CSS viewport/i)
+    assert.match(clickSchema?.properties?.x?.description ?? '', /not raw screenshot pixels/i)
+    assert.match(typeSchema?.properties?.y?.description ?? '', /CSS viewport/i)
+
+    // 2x Retina screenshot on an 800x600 CSS viewport.
+    env.host.host.takeSnapshot = async () => ({
+      dataUrl: 'data:image/jpeg;base64,RETINA',
+      width: 800,
+      height: 600,
+      pixelWidth: 1600,
+      pixelHeight: 1200,
+    })
+    const retinaObs = await env.browser.run(
+      'browser_observe',
+      { screenshot: true },
+      { signal: signal(), sessionId: 's1' }
+    )
+    assert.equal(retinaObs.status, 'ok')
+    assert.match(retinaObs.text, /Viewport: 800x600 CSS px/)
+    assert.match(
+      retinaObs.text,
+      /Screenshot: 1600x1200px \(2x vs CSS viewport; browser_click\/browser_type x,y use CSS viewport px\)/
+    )
+
+    // 1x screenshot reports 1x CSS viewport without scale warning noise.
+    env.host.host.takeSnapshot = async () => ({
+      dataUrl: 'data:image/jpeg;base64,STANDARD',
+      width: 800,
+      height: 600,
+      pixelWidth: 800,
+      pixelHeight: 600,
+    })
+    const standardObs = await env.browser.run(
+      'browser_observe',
+      { screenshot: true },
+      { signal: signal(), sessionId: 's1' }
+    )
+    assert.equal(standardObs.status, 'ok')
+    assert.match(standardObs.text, /Screenshot: 800x600px \(1x CSS viewport\)/)
     env.browser.dispose()
   })
 })

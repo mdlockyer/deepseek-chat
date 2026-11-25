@@ -191,6 +191,8 @@ export type BrowserSnapshotResult = {
   dataUrl: string
   width: number
   height: number
+  pixelWidth?: number
+  pixelHeight?: number
 }
 
 export type BrowserStateResult = {

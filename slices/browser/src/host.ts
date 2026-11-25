@@ -19,7 +19,17 @@ export type BrowserNewTabPayload = { tabId: string; url: string }
 
 export type BrowserBlockedPayload = { tabId: string; url: string; reason: string }
 
-export type BrowserSnapshotResult = { dataUrl: string; width: number; height: number }
+export type BrowserSnapshotResult = {
+  dataUrl: string
+  /** Logical layout width of the captured webview in CSS points. */
+  width: number
+  /** Logical layout height of the captured webview in CSS points. */
+  height: number
+  /** Actual encoded image width in physical pixels (when reported by the host). */
+  pixelWidth?: number
+  /** Actual encoded image height in physical pixels (when reported by the host). */
+  pixelHeight?: number
+}
 
 export type BrowserStateResult = { url: string; canGoBack: boolean; canGoForward: boolean }
 

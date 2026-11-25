@@ -109,6 +109,10 @@ pub struct BrowserSnapshotResult {
     pub data_url: String,
     pub width: u32,
     pub height: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pixel_width: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pixel_height: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -733,6 +737,34 @@ pub(crate) async fn platform_eval_js(
     Ok(raw)
 }
 
+/// Computes the logical `snapshotWidth` (in macOS points) needed so the captured bitmap stays
+/// within `max_pixel_width` physical pixels on HiDPI displays. Returns `None` when the current
+/// frame is already within budget.
+pub(crate) fn compute_snapshot_logical_width(
+    frame_width: f64,
+    max_pixel_width: f64,
+    scale_factor: f64,
+) -> Option<f64> {
+    if !frame_width.is_finite()
+        || frame_width <= 0.0
+        || !max_pixel_width.is_finite()
+        || max_pixel_width <= 0.0
+    {
+        return None;
+    }
+    let scale = if scale_factor.is_finite() && scale_factor > 0.0 {
+        scale_factor
+    } else {
+        1.0
+    };
+    let physical_width = frame_width * scale;
+    if physical_width > max_pixel_width {
+        Some((max_pixel_width / scale).max(1.0))
+    } else {
+        None
+    }
+}
+
 #[cfg(target_os = "macos")]
 pub(crate) async fn platform_take_snapshot(
     webview: &Webview,
@@ -748,6 +780,7 @@ pub(crate) async fn platform_take_snapshot(
     use std::sync::{Arc, Mutex};
     use tokio::sync::oneshot;
 
+    let scale_factor = webview.window().scale_factor().unwrap_or(1.0);
     let (tx, rx) = oneshot::channel::<Result<BrowserSnapshotResult, String>>();
     let tx_slot = Arc::new(Mutex::new(Some(tx)));
 
@@ -760,11 +793,13 @@ pub(crate) async fn platform_take_snapshot(
                 }
                 return;
             };
-            let frame_width = wk.frame().size.width;
+            let frame_size = wk.frame().size;
             let cfg = WKSnapshotConfiguration::new(mtm);
             cfg.setAfterScreenUpdates(true);
-            if max_width > 0.0 && frame_width > max_width {
-                let target = NSNumber::numberWithDouble(max_width);
+            if let Some(logical_w) =
+                compute_snapshot_logical_width(frame_size.width, max_width, scale_factor)
+            {
+                let target = NSNumber::numberWithDouble(logical_w);
                 cfg.setSnapshotWidth(Some(&target));
             }
             let tx_cb = Arc::clone(&tx_slot);
@@ -781,7 +816,7 @@ pub(crate) async fn platform_take_snapshot(
                     return;
                 }
                 let ns_image = &*image;
-                let size = ns_image.size();
+                let image_size = ns_image.size();
                 let Some(tiff) = ns_image.TIFFRepresentation() else {
                     let _ = tx.send(Err("Failed to encode snapshot TIFF".into()));
                     return;
@@ -790,6 +825,8 @@ pub(crate) async fn platform_take_snapshot(
                     let _ = tx.send(Err("Failed to build NSBitmapImageRep".into()));
                     return;
                 };
+                let pixel_w = bitmap.pixelsWide();
+                let pixel_h = bitmap.pixelsHigh();
                 let quality = NSNumber::numberWithDouble(0.76);
                 let quality_obj: &objc2::runtime::AnyObject =
                     &*(quality.as_ref() as *const NSNumber as *const objc2::runtime::AnyObject);
@@ -801,10 +838,22 @@ pub(crate) async fn platform_take_snapshot(
                     return;
                 };
                 let encoded = base64::engine::general_purpose::STANDARD.encode(jpeg_data.to_vec());
+                let logical_w = if frame_size.width > 0.0 {
+                    frame_size.width
+                } else {
+                    image_size.width
+                };
+                let logical_h = if frame_size.height > 0.0 {
+                    frame_size.height
+                } else {
+                    image_size.height
+                };
                 let _ = tx.send(Ok(BrowserSnapshotResult {
                     data_url: format!("data:image/jpeg;base64,{encoded}"),
-                    width: size.width.max(1.0).round() as u32,
-                    height: size.height.max(1.0).round() as u32,
+                    width: logical_w.max(1.0).round() as u32,
+                    height: logical_h.max(1.0).round() as u32,
+                    pixel_width: (pixel_w > 0).then_some(pixel_w as u32),
+                    pixel_height: (pixel_h > 0).then_some(pixel_h as u32),
                 }));
             });
             wk.takeSnapshotWithConfiguration_completionHandler(Some(&cfg), &handler);
@@ -1274,5 +1323,27 @@ mod tests {
         assert_eq!(sanitize_zoom(-2.0), 0.25);
         assert_eq!(sanitize_zoom(10.0), 4.0);
         assert_eq!(sanitize_zoom(f64::NAN), 1.0);
+    }
+
+    #[test]
+    fn caps_retina_snapshot_width_in_physical_pixels() {
+        // 1x display: only downscale when logical width exceeds 1280px.
+        assert_eq!(compute_snapshot_logical_width(800.0, 1280.0, 1.0), None);
+        assert_eq!(
+            compute_snapshot_logical_width(1600.0, 1280.0, 1.0),
+            Some(1280.0)
+        );
+        // 2x Retina display: 600pt (1200px) stays crisp; 800pt (1600px) caps to 640pt (1280px).
+        assert_eq!(compute_snapshot_logical_width(600.0, 1280.0, 2.0), None);
+        assert_eq!(
+            compute_snapshot_logical_width(800.0, 1280.0, 2.0),
+            Some(640.0)
+        );
+        // 3x display: 500pt (1500px) caps to ~426.67pt (1280px).
+        let w3 = compute_snapshot_logical_width(500.0, 1280.0, 3.0).expect("should cap at 3x");
+        assert!((w3 * 3.0 - 1280.0).abs() < 1e-6);
+        // Invalid scale falls back safely to 1x; zero/negative max_width disables cap.
+        assert_eq!(compute_snapshot_logical_width(800.0, 1280.0, 0.0), None);
+        assert_eq!(compute_snapshot_logical_width(800.0, 0.0, 2.0), None);
     }
 }
