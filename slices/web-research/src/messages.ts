@@ -36,6 +36,8 @@ export const webResearchMessages = defineMessages({
     activityWebSearchCountMany: '{count} 次搜索',
     activityWebPageCountOne: '1 个网页',
     activityWebPageCountMany: '{count} 个网页',
+    activityWebResultsOne: '1 条结果',
+    activityWebResultsMany: '{count} 条结果',
   },
   'en-US': {
     firecrawlKeyLabel: 'Firecrawl API key (optional)',
@@ -72,5 +74,7 @@ export const webResearchMessages = defineMessages({
     activityWebSearchCountMany: '{count} searches',
     activityWebPageCountOne: '1 page',
     activityWebPageCountMany: '{count} pages',
+    activityWebResultsOne: '1 result',
+    activityWebResultsMany: '{count} results',
   },
 })

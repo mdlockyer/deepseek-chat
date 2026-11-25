@@ -89,6 +89,13 @@ export const createActivityPanelState = (panel: PanelSlot, log: EventLog) => {
     })
   }
 
+  const followLatest = (sessionId: string) => {
+    const prevTab = useStore.getState().selection?.tab ?? 'activity'
+    useStore.setState({
+      selection: { kind: 'follow_latest', sessionId, tab: prevTab },
+    })
+  }
+
   const setTab = (tab: ActivityTab) => {
     useStore.setState((curr) => {
       if (!curr.selection || curr.selection.tab === tab) {
@@ -173,6 +180,7 @@ export const createActivityPanelState = (panel: PanelSlot, log: EventLog) => {
     togglePanel,
     toggleTurn,
     selectTurn,
+    followLatest,
     setTab,
     close,
     getActiveTarget,

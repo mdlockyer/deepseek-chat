@@ -27,7 +27,7 @@
     }
 
     hr {
-      margin: 28px 0;
+      margin: var(--ui-space-6) 0;
     }
 
     blockquote {
@@ -102,6 +102,23 @@
       + .ds-markdown-cite {
         margin-left: 0;
       }
+    }
+  }
+
+  .ds-activity-preamble .ds-markdown {
+    font: var(--ui-type-caption);
+    color: var(--ui-text-muted);
+
+    .ds-markdown-paragraph {
+      margin: var(--ui-space-1) 0;
+    }
+
+    > :first-child {
+      margin-top: 0;
+    }
+
+    > :last-child {
+      margin-bottom: 0;
     }
   }
 }

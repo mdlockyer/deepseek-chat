@@ -1,17 +1,16 @@
 import {
+  Button,
   IconBrowseOutline16,
-  IconChevronDownOutline14,
-  IconChevronRightOutline14,
+  IconOpenExternalOutline14,
+  IconWarningOutline16,
 } from '@deepseek-chat/lib-ui'
 import type {
-  ActivityStepRenderProps,
+  ActivityStepDetailProps,
   ArchiveFragment,
   ToolCallRecord,
   ToolResultRecord,
   ToolStepPresenter,
 } from '@deepseek-chat/lib-tools'
-import clsx from 'clsx'
-import { useEffect, useState } from 'react'
 import { getCodeLanguage } from './fileKinds.js'
 import { workspaceMessages } from './messages.js'
 import { EDIT_FILE_TOOL_NAME, PRESENT_FILE_TOOL_NAME, READ_FILE_TOOL_NAME } from './tools.js'
@@ -95,88 +94,51 @@ export const serializeWorkspaceFileForArchive = (
   return []
 }
 
-const FileActivityView = ({
-  entries,
-  sessionId,
-  openFile,
-  focusedCallId,
-  focusNonce,
-}: ActivityStepRenderProps) => {
+const FileStepDetail = ({ entry, sessionId, openFile }: ActivityStepDetailProps) => {
   const t = workspaceMessages.useTranslate()
-  const hasFocused = Boolean(
-    focusedCallId && entries.some((entry) => entry.call.id === focusedCallId)
-  )
-  const [open, setOpen] = useState(hasFocused)
-
-  useEffect(() => {
-    if (hasFocused) {
-      setOpen(true)
-    }
-  }, [focusedCallId, focusNonce, hasFocused])
+  const { call, result } = entry
+  const action = readAction(call, result)
+  const key =
+    action.tool === 'edit_file'
+      ? 'activityFileEdited'
+      : action.tool === 'read_file'
+        ? 'activityFileRead'
+        : 'activityFilePresented'
+  const actionLabel = t(key, { path: action.title || action.path })
+  const fileRef = result?.files?.[0]
+  const failed = Boolean(result && result.status !== 'ok' && result.status !== 'running')
 
   return (
-    <div className={styles.root}>
-      <button
-        type="button"
-        className={styles.toggleHeader}
-        aria-expanded={open}
-        onClick={() => setOpen((value) => !value)}
-      >
-        <span className={styles.title}>
-          <IconBrowseOutline16 />
-          <span>{t('activityFileTitle')}</span>
-          <span className={styles.meta}>{entries.length}</span>
-        </span>
-        <span className={styles.chevron} aria-hidden="true">
-          {open ? <IconChevronDownOutline14 /> : <IconChevronRightOutline14 />}
-        </span>
-      </button>
-      {open ? (
-        <div className={styles.list}>
-          {entries.map(({ call, result }) => {
-            const action = readAction(call, result)
-            const key =
-              action.tool === 'edit_file'
-                ? 'activityFileEdited'
-                : action.tool === 'read_file'
-                  ? 'activityFileRead'
-                  : 'activityFilePresented'
-            const label = t(key, { path: action.title || action.path })
-            const fileRef = result?.files?.[0]
-            const failed = Boolean(result && result.status !== 'ok' && result.status !== 'running')
-            if (fileRef && sessionId && openFile) {
-              return (
-                <button
-                  key={call.id}
-                  type="button"
-                  data-activity-call-id={call.id}
-                  className={clsx(styles.row, styles.rowButton, failed && styles.rowError)}
-                  onClick={() => openFile(sessionId, fileRef)}
-                >
-                  <span className={styles.path}>{label}</span>
-                  {action.version ? (
-                    <span className={styles.meta}>
-                      {t('previewVersionLabel', { version: action.version })}
-                    </span>
-                  ) : null}
-                </button>
-              )
-            }
-            return (
-              <div
-                key={call.id}
-                data-activity-call-id={call.id}
-                className={clsx(styles.row, failed && styles.rowError)}
-              >
-                <span className={styles.path}>{label}</span>
-                {action.version ? (
-                  <span className={styles.meta}>
-                    {t('previewVersionLabel', { version: action.version })}
-                  </span>
-                ) : null}
-              </div>
-            )
-          })}
+    <div className={styles.detail}>
+      <div className={styles.infoRow}>
+        <span className={styles.actionLabel}>{actionLabel}</span>
+        {action.version ? (
+          <span className={styles.meta}>
+            {t('previewVersionLabel', { version: action.version })}
+          </span>
+        ) : null}
+      </div>
+      {action.title && action.path && action.title !== action.path ? (
+        <div className={styles.path}>{action.path}</div>
+      ) : null}
+      {failed && result?.content?.trim() ? (
+        <div className={styles.errorBox} role="note">
+          <span className={styles.errorIcon} aria-hidden="true">
+            <IconWarningOutline16 />
+          </span>
+          <div className={styles.errorText}>{result.content.trim()}</div>
+        </div>
+      ) : null}
+      {fileRef && sessionId && openFile ? (
+        <div className={styles.actions}>
+          <Button
+            variant="ghost"
+            size="s"
+            icon={<IconOpenExternalOutline14 />}
+            onClick={() => openFile(sessionId, fileRef)}
+          >
+            {t('activityFileOpenPreview')}
+          </Button>
         </div>
       ) : null}
     </div>
@@ -187,11 +149,16 @@ export const workspaceFilesPresenter: ToolStepPresenter = {
   summarize: (call, result, { streaming }) => {
     const action = readAction(call, result)
     const running = !result || result.status === 'running'
+    const version = action.version
+      ? workspaceMessages.translate('previewVersionLabel', { version: action.version })
+      : undefined
     return {
       lane: 'files',
       icon: <IconBrowseOutline16 />,
       liveVerb: workspaceMessages.translate('activityFileWorking'),
       detail: action.title || action.path,
+      ...(version ? { meta: version } : {}),
+      hasDetail: true,
       stillRunning: running && streaming,
       failed: !running && result.status !== 'ok',
       tally: {
@@ -207,5 +174,5 @@ export const workspaceFilesPresenter: ToolStepPresenter = {
       },
     }
   },
-  renderActivity: FileActivityView,
+  renderStepDetail: FileStepDetail,
 }

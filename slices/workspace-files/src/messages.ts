@@ -15,6 +15,7 @@ export const workspaceMessages = defineMessages({
     activityFileRead: '读取 {path}',
     activityFileCountOne: '1 个文件',
     activityFileCountMany: '{count} 个文件',
+    activityFileOpenPreview: '在预览中打开',
     previewEmptyDescription: 'DeepSeek 生成或对话中上传的文件可在右侧预览、查看代码与保存。',
     previewEmptyTitle: '文件预览',
     previewFileMissing: '该文件原件在本地已不可用',
@@ -48,6 +49,7 @@ export const workspaceMessages = defineMessages({
     activityFileRead: 'Read {path}',
     activityFileCountOne: '1 file',
     activityFileCountMany: '{count} files',
+    activityFileOpenPreview: 'Open preview',
     previewEmptyDescription:
       'Files created by DeepSeek or uploaded in this chat can be viewed and saved here.',
     previewEmptyTitle: 'File preview',

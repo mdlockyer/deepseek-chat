@@ -1,6 +1,7 @@
 export { createToolRegistry } from './registry.js'
 export { withSummaryParam } from './summary.js'
 export type {
+  ActivityStepDetailProps,
   ActivityStepEntry,
   ActivityStepRenderProps,
   AgentProfileSpec,
@@ -27,5 +28,6 @@ export type {
   ToolStepPresenter,
   ToolStepSummary,
   ToolStepTally,
+  ToolStepVisualArtifact,
   TurnLifecycleHooks,
 } from './types.js'

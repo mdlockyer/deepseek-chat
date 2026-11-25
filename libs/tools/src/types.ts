@@ -180,16 +180,30 @@ export type ToolStepTally = {
   readonly label: (count: number) => string
 }
 
+/** Domain-blind visual artifact captured by a tool step (e.g. a screenshot or generated figure). */
+export type ToolStepVisualArtifact = {
+  readonly src: string
+  readonly alt: string
+  readonly caption?: string
+  readonly href?: string
+}
+
 /** Domain-blind summary of one tool step for the live Work Strip and Activity Inspector. */
 export type ToolStepSummary = {
   /** Grouping lane in the Activity Inspector; consecutive steps sharing a lane coalesce. */
   readonly lane: string
   /** Short active verb shown while running (e.g. "Running code", "Searching the web"). */
   readonly liveVerb: string
-  /** Optional compact 14px outline icon representing this step in inline traces. */
+  /** Optional compact 14px outline icon representing this step in inline traces and Activity rows. */
   readonly icon?: ReactNode
   /** Optional single-line fallback detail when the call has no `summary` argument. */
   readonly detail?: string
+  /** Optional compact right-side metadata label on collapsed Activity rows (e.g. duration or version). */
+  readonly meta?: string
+  /** Optional visual artifacts captured by this step for row badges and visual storyboard filtering. */
+  readonly visuals?: readonly ToolStepVisualArtifact[]
+  /** True when the step has expandable details in Activity (omit to let the inspector infer). */
+  readonly hasDetail?: boolean
   /** Optional tally count contributed to the Work Strip summary. */
   readonly tally?: ToolStepTally
   /** Optional compact parallel live tracks (e.g. concurrent child agents). */
@@ -207,6 +221,20 @@ export type ToolStepSummary = {
 export type ActivityStepEntry = {
   readonly call: ToolCallRecord
   readonly result?: ToolResultRecord
+}
+
+export type ActivityStepDetailProps = {
+  readonly sessionId: string | null
+  readonly entry: ActivityStepEntry
+  readonly streaming: boolean
+  readonly now: number
+  readonly capabilityState?: unknown
+  readonly openLink: (event: MouseEvent, url: string) => void
+  readonly openFile?: (sessionId: string, file: DeliveredFileRef) => void
+  readonly renderMarkdown: (props: {
+    readonly content: string
+    readonly cacheKey: string
+  }) => ReactNode
 }
 
 export type ActivityStepRenderProps = {
@@ -235,7 +263,16 @@ export type ToolStepPresenter = {
     result: ToolResultRecord | undefined,
     ctx: { readonly streaming: boolean; readonly capabilityState?: unknown }
   ): ToolStepSummary
-  readonly renderActivity: ComponentType<ActivityStepRenderProps>
+  /**
+   * Unified detail renderer: renders only the expanded body for a single step inside the Activity
+   * panel's shared row chrome (icon, human summary, status/meta badges, hover glide, focus ring).
+   */
+  readonly renderStepDetail?: ComponentType<ActivityStepDetailProps>
+  /**
+   * Optional custom lane renderer for capabilities that manage their own grouped chrome
+   * (used only when `renderStepDetail` is omitted).
+   */
+  readonly renderActivity?: ComponentType<ActivityStepRenderProps>
 }
 
 /** Portable v3 archive fragment emitted by a capability's `serializeForArchive`. */

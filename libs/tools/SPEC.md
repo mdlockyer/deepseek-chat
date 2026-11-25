@@ -21,8 +21,9 @@ hooks to the application without coupling slices to one another or requiring a s
    current turn.
 4. **Graceful unknown handling.** Calling `run` for an unknown tool always resolves with
    `status: 'error'` and never throws; `effectOf` defaults to `'session'`.
-5. **Domain-blind presentation & deep-linking.** `ToolStepSummary` may attach an optional
-   `icon?: ReactNode` so transcript views render capability-supplied icons without knowing any
-   sibling slice's tools. `ActivityStepRenderProps` may carry optional `focusedCallId?: string | null`
-   and `focusNonce?: number` so presenters can auto-expand an explicitly targeted call while
-   keeping all other items collapsed by default.
+5. **Domain-blind presentation & deep-linking.** `ToolStepSummary` may attach optional `icon`,
+   `meta`, `visuals`, and `hasDetail` metadata so transcript and Activity views render consistent
+   step rows, badges, and visual storyboards without knowing any sibling slice's tools.
+   `ToolStepPresenter` prefers `renderStepDetail` (rendering only the expanded body inside shared
+   row chrome) and falls back to optional `renderActivity` for custom multi-entry presenters.
+   `ActivityStepRenderProps` carries optional `focusedCallId` and `focusNonce` for deep-linking.

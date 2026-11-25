@@ -729,11 +729,30 @@ describe('browser: ToolCapability, toggle, presenter, and archive serialization'
     assert.equal(navArchive?.[0]?.type, 'TOOL_OPEN')
 
     const summary = env.browser.capability.presenter?.summarize(
-      { id: 'b1', name: 'browser_navigate', input: { url: 'https://example.com/' } },
-      { tool_use_id: 'b1', content: nav.content, status: 'ok', payload: nav.payload },
+      {
+        id: 'b1',
+        name: 'browser_navigate',
+        input: {
+          summary: 'Loading example.com to test basic navigation',
+          url: 'https://example.com/',
+        },
+      },
+      {
+        tool_use_id: 'b1',
+        content: nav.content,
+        status: 'ok',
+        payload: nav.payload,
+        previewImages: ['data:image/jpeg;base64,AA=='],
+      },
       { streaming: false }
     )
     assert.equal(summary?.lane, 'browser')
+    assert.equal(summary?.detail, 'Loading example.com to test basic navigation')
+    assert.equal(summary?.visuals?.length, 1)
+    assert.ok(
+      summary?.visuals?.[0]?.alt && summary.visuals[0].alt.length > 0,
+      'screenshot visual artifacts carry descriptive alt text'
+    )
     env.browser.dispose()
   })
 })

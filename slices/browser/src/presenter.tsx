@@ -1,20 +1,20 @@
 import type {
-  ActivityStepRenderProps,
+  ActivityStepDetailProps,
   ArchiveFragment,
   ToolCallRecord,
   ToolResultRecord,
   ToolStepPresenter,
+  ToolStepVisualArtifact,
 } from '@deepseek-chat/lib-tools'
 import {
   IconBrowserOutline14,
-  IconChevronDownOutline14,
-  IconChevronRightOutline14,
   IconCodeOutline14,
   IconEyeOutline16,
   IconGlobeLanguageOutline14,
+  IconOpenExternalOutline14,
   IconViewportOutline14,
+  IconWarningOutline16,
 } from '@deepseek-chat/lib-ui'
-import { useEffect, useState, type MouseEvent } from 'react'
 import styles from './BrowserActivity.module.css'
 import { browserMessages } from './messages.js'
 import { isHttpUrl } from './state.js'
@@ -25,6 +25,8 @@ import {
   BROWSER_SET_VIEWPORT_TOOL_NAME,
   type BrowserActionMeta,
 } from './tools.js'
+
+const MAX_OUTPUT_PREVIEW_CHARS = 1800
 
 const browserToolIcon = (toolName: string) => {
   switch (toolName) {
@@ -55,6 +57,24 @@ const fence = (lang: string, body: string) => {
   return `${marks}${lang}\n${body}\n${marks}`
 }
 
+const callSummaryOf = (call: ToolCallRecord): string | null => {
+  const input =
+    call.input && typeof call.input === 'object' ? (call.input as { summary?: unknown }) : null
+  if (typeof input?.summary === 'string' && input.summary.trim()) {
+    return input.summary.trim()
+  }
+  return null
+}
+
+const evalScriptOf = (call: ToolCallRecord): string | null => {
+  if (call.name !== BROWSER_EVAL_TOOL_NAME) {
+    return null
+  }
+  const input =
+    call.input && typeof call.input === 'object' ? (call.input as { script?: unknown }) : null
+  return typeof input?.script === 'string' && input.script.trim() ? input.script.trim() : null
+}
+
 const readMeta = (
   call: ToolCallRecord,
   result: ToolResultRecord | undefined
@@ -73,6 +93,40 @@ const readMeta = (
       typeof input?.summary === 'string' && input.summary.trim() ? input.summary.trim() : call.name,
     ...(typeof input?.url === 'string' ? { url: input.url } : {}),
   }
+}
+
+const screenshotsOf = (result: ToolResultRecord | undefined): readonly string[] =>
+  result?.previewImages?.length ? result.previewImages : (result?.images ?? [])
+
+const formatOutputPreview = (raw: string): string => {
+  const cleaned = raw.replace(/<\/?untrusted_webpage_content>/g, '').trim()
+  if (cleaned.length <= MAX_OUTPUT_PREVIEW_CHARS) {
+    return cleaned
+  }
+  return `${cleaned.slice(0, MAX_OUTPUT_PREVIEW_CHARS).trimEnd()}…`
+}
+
+const buildVisuals = (
+  call: ToolCallRecord,
+  result: ToolResultRecord | undefined,
+  meta: BrowserActionMeta
+): readonly ToolStepVisualArtifact[] | undefined => {
+  const shots = screenshotsOf(result)
+  if (shots.length === 0) {
+    return undefined
+  }
+  const actionUrl = meta.url && isHttpUrl(meta.url) ? meta.url : undefined
+  const humanSummary = callSummaryOf(call)
+  const target =
+    meta.title || (actionUrl ? getSiteName(actionUrl) : null) || humanSummary || meta.summary
+  const alt = browserMessages.translate('browserScreenshotAlt', { target })
+  const caption = humanSummary ?? meta.summary
+  return shots.map((src) => ({
+    src,
+    alt,
+    caption,
+    ...(actionUrl ? { href: actionUrl } : {}),
+  }))
 }
 
 export const serializeBrowserForArchive = (
@@ -105,109 +159,74 @@ export const serializeBrowserForArchive = (
   return [{ type: 'MARKDOWN', content: fence('text', body), separate: true }]
 }
 
-const BrowserActionRow = ({
-  entry,
-  openLink,
-  focusedCallId,
-  focusNonce,
-}: {
-  entry: ActivityStepRenderProps['entries'][number]
-  openLink: (event: MouseEvent, url: string) => void
-  focusedCallId?: string | null
-  focusNonce?: number
-}) => {
+const BrowserStepDetail = ({ entry, openLink, renderMarkdown }: ActivityStepDetailProps) => {
+  const t = browserMessages.useTranslate()
   const { call, result } = entry
   const meta = readMeta(call, result)
+  const humanSummary = callSummaryOf(call)
   const actionUrl = meta.url && isHttpUrl(meta.url) ? meta.url : null
-  const screenshots = result?.previewImages?.length ? result.previewImages : (result?.images ?? [])
+  const visuals = buildVisuals(call, result, meta) ?? []
   const failed = Boolean(result && result.status !== 'ok' && result.status !== 'running')
-  const hasDetails = Boolean(actionUrl || (failed && result?.content) || screenshots.length > 0)
-  const isFocused = Boolean(focusedCallId && focusedCallId === call.id)
-  const [open, setOpen] = useState(isFocused)
-
-  useEffect(() => {
-    if (focusedCallId === call.id) {
-      setOpen(true)
-    }
-  }, [focusedCallId, focusNonce, call.id])
-
-  const icon = browserToolIcon(call.name)
+  const script = evalScriptOf(call)
+  const rawOutput = result?.content?.trim() ?? ''
+  const showOutput =
+    !failed &&
+    Boolean(rawOutput) &&
+    (visuals.length === 0 ||
+      call.name === BROWSER_EVAL_TOOL_NAME ||
+      call.name === BROWSER_OBSERVE_TOOL_NAME)
+  const showTechNote = Boolean(
+    humanSummary && meta.summary && meta.summary.toLowerCase() !== humanSummary.toLowerCase()
+  )
 
   return (
-    <div className={styles.actionRow} data-activity-call-id={call.id}>
-      {hasDetails ? (
-        <button
-          type="button"
-          className={styles.actionToggle}
-          aria-expanded={open}
-          onClick={() => setOpen((value) => !value)}
+    <div className={styles.detail}>
+      {actionUrl ? (
+        <a
+          className={styles.link}
+          href={actionUrl}
+          target="_blank"
+          rel="noreferrer"
+          onClick={(event) => openLink(event, actionUrl)}
         >
-          <span className={styles.actionIcon} aria-hidden="true">
-            {icon}
+          <span className={styles.linkText}>{meta.title || actionUrl}</span>
+          <span className={styles.linkIcon} aria-hidden="true">
+            <IconOpenExternalOutline14 />
           </span>
-          <span className={styles.actionSummary}>{meta.summary}</span>
-          <span className={styles.chevron} aria-hidden="true">
-            {open ? <IconChevronDownOutline14 /> : <IconChevronRightOutline14 />}
-          </span>
-        </button>
-      ) : (
-        <div className={styles.actionStatic}>
-          <span className={styles.actionIcon} aria-hidden="true">
-            {icon}
-          </span>
-          <span className={styles.actionSummary}>{meta.summary}</span>
-        </div>
-      )}
-      {hasDetails && open ? (
-        <div className={styles.actionDetails}>
-          {actionUrl ? (
-            <a
-              className={styles.link}
-              href={actionUrl}
-              target="_blank"
-              rel="noreferrer"
-              onClick={(event) => openLink(event, actionUrl)}
-            >
-              {meta.title || actionUrl}
-            </a>
-          ) : null}
-          {failed && result?.content ? <div className={styles.error}>{result.content}</div> : null}
-          {screenshots.map((src, imgIndex) => (
-            <img key={imgIndex} src={src} alt="" className={styles.screenshot} />
-          ))}
+        </a>
+      ) : null}
+
+      {showTechNote ? <div className={styles.techNote}>{meta.summary}</div> : null}
+
+      {script ? (
+        <div className={styles.block}>
+          <div className={styles.sectionLabel}>{t('browserScriptHeading')}</div>
+          {renderMarkdown({
+            content: fence('js', script),
+            cacheKey: `browser-eval-${call.id}`,
+          })}
         </div>
       ) : null}
-    </div>
-  )
-}
 
-const BrowserActivityView = ({
-  entries,
-  openLink,
-  focusedCallId,
-  focusNonce,
-}: ActivityStepRenderProps) => {
-  const t = browserMessages.useTranslate()
-  return (
-    <div className={styles.root}>
-      <div className={styles.laneHeader}>
-        <span className={styles.title}>
-          <IconBrowserOutline14 />
-          <span>{t('browserToggleLabel')}</span>
-        </span>
-        <span className={styles.meta}>{entries.length}</span>
-      </div>
-      <div className={styles.actions}>
-        {entries.map((entry) => (
-          <BrowserActionRow
-            key={entry.call.id}
-            entry={entry}
-            openLink={openLink}
-            focusedCallId={focusedCallId}
-            focusNonce={focusNonce}
-          />
-        ))}
-      </div>
+      {failed && rawOutput ? (
+        <div className={styles.errorBox} role="note">
+          <span className={styles.errorIcon} aria-hidden="true">
+            <IconWarningOutline16 />
+          </span>
+          <div className={styles.errorText}>{rawOutput}</div>
+        </div>
+      ) : null}
+
+      {visuals.map((visual, imgIndex) => (
+        <img key={imgIndex} src={visual.src} alt={visual.alt} className={styles.screenshot} />
+      ))}
+
+      {showOutput ? (
+        <div className={styles.block}>
+          <div className={styles.sectionLabel}>{t('browserOutputHeading')}</div>
+          <pre className={styles.output}>{formatOutputPreview(rawOutput)}</pre>
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -215,12 +234,26 @@ const BrowserActivityView = ({
 export const browserPresenter: ToolStepPresenter = {
   summarize: (call, result, { streaming }) => {
     const meta = readMeta(call, result)
+    const humanSummary = callSummaryOf(call)
     const running = !result || result.status === 'running'
+    const actionUrl = meta.url && isHttpUrl(meta.url) ? meta.url : null
+    const host = actionUrl ? getSiteName(actionUrl) : null
+    const visuals = buildVisuals(call, result, meta)
+    const script = evalScriptOf(call)
+    const hasOutput = Boolean(result?.content?.trim())
+    const showHostMeta =
+      call.name === BROWSER_NAVIGATE_TOOL_NAME &&
+      host &&
+      !(humanSummary && humanSummary.toLowerCase().includes(host.toLowerCase()))
+
     return {
       lane: 'browser',
       icon: browserToolIcon(call.name),
       liveVerb: browserMessages.translate('browserStepRunning'),
-      detail: meta.summary,
+      detail: humanSummary ?? meta.summary,
+      ...(showHostMeta ? { meta: host } : {}),
+      ...(visuals ? { visuals } : {}),
+      hasDetail: Boolean(actionUrl || visuals?.length || hasOutput || script),
       stillRunning: running && streaming,
       failed: !running && result.status !== 'ok',
       tally: {
@@ -233,5 +266,5 @@ export const browserPresenter: ToolStepPresenter = {
       },
     }
   },
-  renderActivity: BrowserActivityView,
+  renderStepDetail: BrowserStepDetail,
 }

@@ -32,6 +32,9 @@ export const browserMessages = defineMessages({
     browserStepMany: '{count} 步浏览器操作',
     browserCountOne: '1 步浏览',
     browserCountMany: '{count} 步浏览',
+    browserScreenshotAlt: '{target} 的页面截图',
+    browserScriptHeading: '页面脚本',
+    browserOutputHeading: '返回结果',
   },
   'en-US': {
     browserAddressPlaceholder: 'Enter URL or search',
@@ -65,5 +68,8 @@ export const browserMessages = defineMessages({
     browserStepMany: '{count} browser actions',
     browserCountOne: '1 browser action',
     browserCountMany: '{count} browser actions',
+    browserScreenshotAlt: 'Screenshot of {target}',
+    browserScriptHeading: 'Script',
+    browserOutputHeading: 'Output',
   },
 })

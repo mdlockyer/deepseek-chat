@@ -12,8 +12,10 @@ import {
   type ActivityLanePhase,
   type ActivityPreamblePhase,
   type ActivityServerSearchPhase,
+  type ActivityStepRecord,
   type ActivityTimeline,
   type ActivityTimelinePhase,
+  type ActivityVisualItem,
 } from './timeline.js'
 import type {
   ActivityInspectorDeps,
@@ -39,10 +41,12 @@ export type {
   ActivitySelection,
   ActivityServerSearchPhase,
   ActivitySource,
+  ActivityStepRecord,
   ActivityTab,
   ActivityTarget,
   ActivityTimeline,
   ActivityTimelinePhase,
+  ActivityVisualItem,
   ExtractedTurnSources,
   SessionTurnSummary,
   TurnBlock,
@@ -78,6 +82,7 @@ export const createActivityInspectorSlice = (deps: ActivityInspectorDeps) => {
     HeaderToggle,
     togglePanel: state.togglePanel,
     selectTurn: state.selectTurn,
+    followLatest: state.followLatest,
     useActiveTarget: (): ActivityTarget | null => {
       const selection = state.useStore((s) => s.selection)
       const panelOpen = state.useStore((s) => s.panelOpen)

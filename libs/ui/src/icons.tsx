@@ -1098,3 +1098,25 @@ export const IconLockOutline12 = () => (
     />
   </svg>
 )
+
+export const IconPhotoOutline14 = () => (
+  <svg
+    aria-hidden="true"
+    focusable="false"
+    width={14}
+    height={14}
+    viewBox="0 0 14 14"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <rect x="1.5" y="2.25" width="11" height="9.5" rx="2" stroke="currentColor" strokeWidth="1.2" />
+    <circle cx="4.75" cy="5.25" r="0.95" fill="currentColor" />
+    <path
+      d="M2.25 10.25L5.1 7.45C5.45 7.1 6.02 7.1 6.37 7.45L8.2 9.25L9.55 7.95C9.9 7.6 10.46 7.6 10.8 7.95L12.1 9.25"
+      stroke="currentColor"
+      strokeWidth="1.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+)

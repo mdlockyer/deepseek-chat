@@ -1,13 +1,29 @@
 @layer slice {
   .anchor {
+    display: block;
+    border-radius: var(--ui-radius-sm);
     text-decoration: none;
+
+    &:focus-visible {
+      outline: 2px solid var(--ui-focus-ring);
+      outline-offset: 2px;
+    }
   }
 
   .card {
     display: flex;
     flex-direction: column;
+    padding: var(--ui-space-1-5) var(--ui-space-2);
+    border-radius: var(--ui-radius-sm);
     cursor: pointer;
+    transition: background-color var(--ui-duration-fast) var(--ui-ease-standard);
     animation: card-in var(--ui-duration-normal) var(--ui-ease-panel) both;
+
+    @media (hover: hover) {
+      &:hover {
+        background: var(--ui-interactive-hover);
+      }
+    }
   }
 
   @keyframes card-in {
@@ -21,8 +37,7 @@
     display: flex;
     align-items: center;
     gap: var(--ui-space-1-5);
-    padding-top: var(--search-view-card-meta-padding-top, 0);
-    font: var(--search-view-card-meta-font, var(--ui-type-micro));
+    font: var(--ui-type-micro);
   }
 
   .citationBadge {
@@ -30,48 +45,46 @@
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    min-width: 18px;
-    height: 18px;
-    padding: 0 5px;
+    min-width: var(--ui-space-4);
+    height: var(--ui-space-4);
+    padding: 0 var(--ui-space-1);
     border-radius: var(--ui-radius-xs);
     background: var(--ui-surface-tag);
     color: var(--ui-text-secondary);
-    font-size: 11px;
-    font-weight: 600;
+    font: var(--ui-type-micro);
     font-variant-numeric: tabular-nums;
   }
 
   .siteIcon {
     flex-shrink: 0;
-    width: 18px;
-    height: 18px;
+    width: var(--ui-space-4);
+    height: var(--ui-space-4);
   }
 
   .siteName {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    color: var(--search-view-card-secondary-color, var(--ui-text-secondary));
+    color: var(--ui-text-muted);
   }
 
   .divider {
     width: 1px;
-    height: 12px;
-    margin: 0 3px;
+    height: var(--ui-space-3);
+    margin: 0 var(--ui-space-1);
     background-color: var(--ui-border-strong);
   }
 
   .date {
     flex-shrink: 0;
-    font-weight: 400;
-    color: var(--search-view-card-secondary-color, var(--ui-text-secondary));
+    color: var(--ui-text-muted);
   }
 
   .title {
     display: -webkit-box;
-    margin-top: var(--ui-space-1-5);
+    margin-top: var(--ui-space-1);
     overflow: hidden;
-    font: var(--search-view-card-title-font, 500 16px/25px var(--ui-font-sans));
+    font: var(--ui-type-label-strong);
     color: var(--ui-text-primary);
     line-clamp: 2;
     -webkit-line-clamp: 2;
@@ -80,10 +93,10 @@
 
   .snippet {
     display: -webkit-box;
-    margin-top: var(--ui-space-1-5);
+    margin-top: var(--ui-space-1);
     overflow: hidden;
     font: var(--ui-type-caption);
-    color: var(--search-view-card-secondary-color, var(--ui-text-secondary));
+    color: var(--ui-text-muted);
     line-clamp: 2;
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;

@@ -1,94 +1,67 @@
 @layer slice {
-  .root {
-    display: flex;
-    flex-direction: column;
-    gap: var(--ui-space-2);
-  }
-
-  .toggleHeader {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--ui-space-2);
-    width: 100%;
-    padding: 0;
-    border: none;
-    border-radius: var(--ui-radius-sm);
-    background: transparent;
-    color: var(--ui-text-primary);
-    text-align: left;
-    cursor: pointer;
-
-    &:focus-visible {
-      outline: 2px solid var(--ui-focus-ring);
-      outline-offset: 2px;
-    }
-  }
-
-  .title {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--ui-space-1-5);
-    font: var(--ui-type-label-strong);
-    color: var(--ui-text-primary);
-  }
-
-  .chevron {
-    display: inline-flex;
-    align-items: center;
-    color: var(--ui-text-muted);
-    flex-shrink: 0;
-  }
-
-  .list {
+  .detail {
     display: flex;
     flex-direction: column;
     gap: var(--ui-space-1-5);
   }
 
-  .row {
+  .infoRow {
     display: flex;
-    align-items: center;
+    align-items: baseline;
     justify-content: space-between;
     gap: var(--ui-space-2);
-    padding: var(--ui-space-1-5) var(--ui-space-2);
-    border-radius: var(--ui-radius-sm);
-    background: var(--ui-surface-sunken);
+  }
+
+  .actionLabel {
+    flex: 1;
+    min-width: 0;
     font: var(--ui-type-caption);
-    color: var(--ui-text-primary);
-  }
-
-  .rowButton {
-    border: none;
-    cursor: pointer;
-    width: 100%;
-    text-align: left;
-
-    &:hover {
-      background: var(--ui-interactive-hover);
-    }
-  }
-
-  .rowError {
-    color: var(--ui-text-danger);
+    color: var(--ui-text-secondary);
+    overflow-wrap: anywhere;
   }
 
   .path {
-    flex: 1;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    font: var(--ui-type-code-block);
+    font-size: var(--ui-font-size-xs);
+    color: var(--ui-text-muted);
+    overflow-wrap: anywhere;
   }
 
   .meta {
-    font: var(--ui-type-micro);
-    color: var(--ui-text-muted);
     flex-shrink: 0;
+    font: var(--ui-type-micro);
+    font-variant-numeric: tabular-nums;
+    color: var(--ui-text-muted);
   }
 
-  .headerButtonActive {
-    background: var(--ui-accent-soft);
-    color: var(--ui-text-accent);
+  .actions {
+    display: flex;
+    align-items: center;
+    padding-top: var(--ui-space-0-5);
+  }
+
+  .errorBox {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--ui-space-1-5);
+    padding: var(--ui-space-2);
+    border-radius: var(--ui-radius-sm);
+    background: var(--ui-danger-soft);
+    color: var(--ui-text-danger);
+  }
+
+  .errorIcon {
+    display: inline-flex;
+    align-items: center;
+    flex-shrink: 0;
+    height: 16px;
+  }
+
+  .errorText {
+    flex: 1;
+    min-width: 0;
+    font: var(--ui-type-micro);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
   }
 }

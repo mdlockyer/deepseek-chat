@@ -1,7 +1,14 @@
 import { usePresence } from '@deepseek-chat/lib-ui'
 import { PANEL_DURATION_MS } from '@deepseek-chat/spine/design'
 import clsx from 'clsx'
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent,
+  type ReactNode,
+} from 'react'
 import { useAppRuntime } from '../RuntimeContext.js'
 import styles from './RightPanel.module.css'
 import { DEFAULT_SIDE_PANEL_WIDTH, clampSidePanelResizeWidth } from './state.js'
@@ -185,6 +192,35 @@ export const SidePanel = ({
     window.addEventListener('blur', onEnd)
   }
 
+  const handleResizerKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (exiting) {
+      return
+    }
+    const step = event.shiftKey ? 96 : 32
+    const windowWidth = typeof window !== 'undefined' ? window.innerWidth : 1280
+    if (event.key === 'ArrowLeft') {
+      event.preventDefault()
+      rightPanel.setWidth(clampSidePanelResizeWidth(panelWidth + step, windowWidth))
+    } else if (event.key === 'ArrowRight') {
+      event.preventDefault()
+      rightPanel.setWidth(clampSidePanelResizeWidth(panelWidth - step, windowWidth))
+    } else if (event.key === 'Home') {
+      event.preventDefault()
+      rightPanel.setWidth(clampSidePanelResizeWidth(360, windowWidth))
+    } else if (event.key === 'End') {
+      event.preventDefault()
+      rightPanel.setWidth(clampSidePanelResizeWidth(windowWidth, windowWidth))
+    } else if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      rightPanel.setWidth(DEFAULT_SIDE_PANEL_WIDTH)
+    }
+  }
+
+  const maxResizerWidth =
+    typeof window !== 'undefined'
+      ? clampSidePanelResizeWidth(window.innerWidth, window.innerWidth)
+      : 920
+
   return (
     <aside
       ref={panelRef}
@@ -204,7 +240,12 @@ export const SidePanel = ({
     >
       <div
         role="separator"
+        tabIndex={0}
+        aria-label="Resize side panel"
         aria-orientation="vertical"
+        aria-valuemin={360}
+        aria-valuemax={maxResizerWidth}
+        aria-valuenow={panelWidth}
         className={clsx(styles.resizer, resizingWidth !== null && styles.resizing)}
         onPointerEnter={() => {
           if (resizingWidth === null) {
@@ -213,6 +254,7 @@ export const SidePanel = ({
         }}
         onMouseDown={(event) => event.preventDefault()}
         onPointerDown={startResize}
+        onKeyDown={handleResizerKeyDown}
         onDoubleClick={() => rightPanel.setWidth(DEFAULT_SIDE_PANEL_WIDTH)}
       />
       <div className={styles.panelInner}>{children}</div>

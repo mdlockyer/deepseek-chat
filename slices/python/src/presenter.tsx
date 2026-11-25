@@ -1,16 +1,12 @@
-import {
-  IconChevronDownOutline14,
-  IconChevronRightOutline14,
-  IconCodeOutline14,
-} from '@deepseek-chat/lib-ui'
+import { IconCodeOutline14, IconWarningOutline16 } from '@deepseek-chat/lib-ui'
 import type {
-  ActivityStepRenderProps,
+  ActivityStepDetailProps,
   ArchiveFragment,
   ToolCallRecord,
   ToolResultRecord,
   ToolStepPresenter,
+  ToolStepVisualArtifact,
 } from '@deepseek-chat/lib-tools'
-import { useEffect, useState } from 'react'
 import { pythonMessages } from './messages.js'
 import styles from './PythonActivity.module.css'
 
@@ -30,6 +26,18 @@ const summaryOf = (call: ToolCallRecord): string | null => {
   return typeof input?.summary === 'string' && input.summary.trim() ? input.summary.trim() : null
 }
 
+const visualsOf = (
+  call: ToolCallRecord,
+  result: ToolResultRecord | undefined
+): readonly ToolStepVisualArtifact[] | undefined => {
+  const images = result?.previewImages?.length ? result.previewImages : (result?.images ?? [])
+  if (images.length === 0) {
+    return undefined
+  }
+  const label = summaryOf(call) ?? pythonMessages.translate('pythonActivityTitle')
+  return images.map((src) => ({ src, alt: label, caption: label }))
+}
+
 export const serializePythonForArchive = (
   call: ToolCallRecord,
   result: ToolResultRecord | undefined
@@ -45,97 +53,45 @@ export const serializePythonForArchive = (
   return fragments
 }
 
-const PythonRunRow = ({
-  entry,
-  renderMarkdown,
-  focusedCallId,
-  focusNonce,
-}: {
-  entry: ActivityStepRenderProps['entries'][number]
-  renderMarkdown: ActivityStepRenderProps['renderMarkdown']
-  focusedCallId?: string | null
-  focusNonce?: number
-}) => {
+const PythonStepDetail = ({ entry, renderMarkdown }: ActivityStepDetailProps) => {
   const t = pythonMessages.useTranslate()
   const { call, result } = entry
-  const isFocused = Boolean(focusedCallId && focusedCallId === call.id)
-  const [open, setOpen] = useState(isFocused)
-
-  useEffect(() => {
-    if (focusedCallId === call.id) {
-      setOpen(true)
-    }
-  }, [focusedCallId, focusNonce, call.id])
-
   const code = codeOf(call)
-  const summary = summaryOf(call)
   const failed = Boolean(result && result.status !== 'ok' && result.status !== 'running')
-  const duration =
-    result?.durationMs !== undefined ? `${(result.durationMs / 1000).toFixed(1)}s` : null
+  const visuals = visualsOf(call, result) ?? []
 
   return (
-    <div className={styles.run} data-activity-call-id={call.id}>
-      <button
-        type="button"
-        className={styles.toggleHeader}
-        aria-expanded={open}
-        onClick={() => setOpen((value) => !value)}
-      >
-        <span className={styles.title}>
-          <span className={styles.icon} aria-hidden="true">
-            <IconCodeOutline14 />
-          </span>
-          <span className={styles.titleText}>{summary ?? t('pythonActivityTitle')}</span>
-        </span>
-        <span className={styles.right}>
-          {duration ? (
-            <span className={failed ? styles.error : styles.meta}>{duration}</span>
-          ) : null}
-          <span className={styles.chevron} aria-hidden="true">
-            {open ? <IconChevronDownOutline14 /> : <IconChevronRightOutline14 />}
-          </span>
-        </span>
-      </button>
-      {open ? (
-        <div className={styles.body}>
-          {code.trim()
-            ? renderMarkdown({
-                content: fence('python', code),
-                cacheKey: `py-code-${call.id}`,
-              })
-            : null}
-          {result?.content?.trim() ? (
-            <pre className={failed ? `${styles.output} ${styles.error}` : styles.output}>
-              {result.content}
-            </pre>
-          ) : null}
-        </div>
+    <div className={styles.detail}>
+      {code.trim()
+        ? renderMarkdown({
+            content: fence('python', code),
+            cacheKey: `py-code-${call.id}`,
+          })
+        : null}
+      {result?.content?.trim() ? (
+        failed ? (
+          <div className={styles.errorBox} role="note">
+            <span className={styles.errorIcon} aria-hidden="true">
+              <IconWarningOutline16 />
+            </span>
+            <pre className={styles.errorOutput}>{result.content}</pre>
+          </div>
+        ) : (
+          <div className={styles.outputBlock}>
+            <div className={styles.sectionLabel}>{t('pythonOutputHeading')}</div>
+            <pre className={styles.output}>{result.content}</pre>
+          </div>
+        )
       ) : null}
+      {visuals.map((visual, idx) => (
+        <img key={idx} src={visual.src} alt={visual.alt} className={styles.figure} />
+      ))}
     </div>
   )
 }
 
-const PythonActivityView = ({
-  entries,
-  renderMarkdown,
-  focusedCallId,
-  focusNonce,
-}: ActivityStepRenderProps) => (
-  <div className={styles.root}>
-    {entries.map((entry) => (
-      <PythonRunRow
-        key={entry.call.id}
-        entry={entry}
-        renderMarkdown={renderMarkdown}
-        focusedCallId={focusedCallId}
-        focusNonce={focusNonce}
-      />
-    ))}
-  </div>
-)
-
 export const pythonPresenter: ToolStepPresenter = {
-  summarize: (_call, result, { streaming }) => {
+  summarize: (call, result, { streaming }) => {
     const running = !result || result.status === 'running'
     const phase = result?.progress?.phase
     const verbKey =
@@ -144,10 +100,18 @@ export const pythonPresenter: ToolStepPresenter = {
         : phase === 'starting'
           ? 'pythonStarting'
           : 'pythonRunning'
+    const duration =
+      result?.durationMs !== undefined ? `${(result.durationMs / 1000).toFixed(1)}s` : undefined
+    const visuals = visualsOf(call, result)
+
     return {
       lane: 'python',
       icon: <IconCodeOutline14 />,
       liveVerb: pythonMessages.translate(verbKey),
+      detail: summaryOf(call) ?? pythonMessages.translate('pythonActivityTitle'),
+      ...(duration ? { meta: duration } : {}),
+      ...(visuals ? { visuals } : {}),
+      hasDetail: Boolean(codeOf(call).trim() || result?.content?.trim() || visuals?.length),
       stillRunning: running && streaming,
       failed: !running && result.status !== 'ok',
       tally: {
@@ -158,5 +122,5 @@ export const pythonPresenter: ToolStepPresenter = {
       },
     }
   },
-  renderActivity: PythonActivityView,
+  renderStepDetail: PythonStepDetail,
 }
