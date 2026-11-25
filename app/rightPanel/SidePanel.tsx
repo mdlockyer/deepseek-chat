@@ -1,17 +1,10 @@
-import clsx from 'clsx'
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
-import { setSiderCollapsed, useLayout } from '../layout.js'
-import {
-  DEFAULT_SIDE_PANEL_WIDTH,
-  clampSidePanelResizeWidth,
-  setRightPanelAnimating,
-  setRightPanelResizing,
-  setSidePanelWidth,
-  useSidePanelStore,
-} from './state.js'
 import { usePresence } from '@deepseek-chat/lib-ui'
 import { PANEL_DURATION_MS } from '@deepseek-chat/spine/design'
+import clsx from 'clsx'
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { useAppRuntime } from '../RuntimeContext.js'
 import styles from './RightPanel.module.css'
+import { DEFAULT_SIDE_PANEL_WIDTH, clampSidePanelResizeWidth } from './state.js'
 
 /** 共享右侧面板壳层：开合动画、左侧拖拽调宽、窄屏自动收起侧边栏、移动端全屏抽屉 */
 export const SidePanel = ({
@@ -23,7 +16,8 @@ export const SidePanel = ({
   onResizeHoverStart?: () => void
   children: ReactNode
 }) => {
-  const storedWidth = useSidePanelStore((state) => state.width)
+  const { rightPanel, layout } = useAppRuntime()
+  const storedWidth = rightPanel.useStore((state) => state.width)
   const { mounted, exiting } = usePresence(open, PANEL_DURATION_MS)
   const panelRef = useRef<HTMLElement>(null)
   const dragCleanupRef = useRef<(() => void) | null>(null)
@@ -38,18 +32,16 @@ export const SidePanel = ({
 
   const panelWidth = resizingWidth ?? storedWidth
 
-  // 打开面板时，如果窄屏下侧边栏展开会导致聊天区过窄，自动收起左侧边栏
   useEffect(() => {
     if (!open) {
       return
     }
-    const { siderCollapsed } = useLayout.getState()
+    const { siderCollapsed } = layout.useStore.getState()
     if (!siderCollapsed && window.innerWidth - storedWidth - 261 < 420) {
-      setSiderCollapsed(true)
+      layout.setSiderCollapsed(true)
     }
-  }, [open, storedWidth])
+  }, [layout, open, storedWidth])
 
-  // 入场兜底：确保系统减弱动效或动画被打断时仍能及时清理动画状态
   useEffect(() => {
     if (!entering) {
       return
@@ -58,27 +50,27 @@ export const SidePanel = ({
     const timer = window.setTimeout(
       () => {
         setEntering(false)
-        setRightPanelAnimating(false)
+        rightPanel.setAnimating(false)
       },
       reduced ? 30 : PANEL_DURATION_MS + 60
     )
     return () => window.clearTimeout(timer)
-  }, [entering])
+  }, [entering, rightPanel])
 
   useEffect(() => () => dragCleanupRef.current?.(), [])
 
   useEffect(() => {
     if (exiting) {
-      setRightPanelAnimating(true)
+      rightPanel.setAnimating(true)
     }
-  }, [exiting])
+  }, [exiting, rightPanel])
 
   useEffect(() => {
     if (!mounted) {
-      setRightPanelAnimating(false)
-      setRightPanelResizing(false)
+      rightPanel.setAnimating(false)
+      rightPanel.setResizing(false)
     }
-  }, [mounted])
+  }, [mounted, rightPanel])
 
   if (!mounted) {
     return null
@@ -94,8 +86,8 @@ export const SidePanel = ({
     if (entering) {
       setEntering(false)
     }
-    setRightPanelAnimating(false)
-    setRightPanelResizing(true)
+    rightPanel.setAnimating(false)
+    rightPanel.setResizing(true)
 
     const target = event.currentTarget
     try {
@@ -140,7 +132,7 @@ export const SidePanel = ({
     const forceCancel = () => {
       cleanup()
       setResizingWidth(null)
-      setRightPanelResizing(false)
+      rightPanel.setResizing(false)
     }
 
     const onMove = (moveEvent: PointerEvent) => {
@@ -157,11 +149,11 @@ export const SidePanel = ({
 
     const onEnd = () => {
       cleanup()
-      setSidePanelWidth(latestWidth)
+      rightPanel.setWidth(latestWidth)
       setResizingWidth(null)
       requestAnimationFrame(() => {
-        if (dragCleanupRef.current === null && useSidePanelStore.getState().panelResizing) {
-          setRightPanelResizing(false)
+        if (dragCleanupRef.current === null && rightPanel.useStore.getState().panelResizing) {
+          rightPanel.setResizing(false)
         }
       })
     }
@@ -186,7 +178,7 @@ export const SidePanel = ({
       onAnimationEnd={(event) => {
         if (event.target === event.currentTarget && !exiting && entering) {
           setEntering(false)
-          setRightPanelAnimating(false)
+          rightPanel.setAnimating(false)
         }
       }}
     >
@@ -201,7 +193,7 @@ export const SidePanel = ({
         }}
         onMouseDown={(event) => event.preventDefault()}
         onPointerDown={startResize}
-        onDoubleClick={() => setSidePanelWidth(DEFAULT_SIDE_PANEL_WIDTH)}
+        onDoubleClick={() => rightPanel.setWidth(DEFAULT_SIDE_PANEL_WIDTH)}
       />
       <div className={styles.panelInner}>{children}</div>
     </aside>

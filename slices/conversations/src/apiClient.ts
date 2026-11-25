@@ -13,7 +13,7 @@ import {
   type FilePurpose,
   type MessageStreamEvent,
 } from '@deepseek-chat/lib-agent'
-import { deps } from './env.js'
+import type { HttpFetch } from '@deepseek-chat/spine/ports'
 import { translate, type TranslationMessage } from './messages.js'
 
 export { DEFAULT_REST_TIMEOUT_MS, UPLOAD_TIMEOUT_MS, type ApiErrorKind }
@@ -44,53 +44,71 @@ const wrapApiError = (error: unknown): never => {
   throw error
 }
 
-export const createAgentIO = (apiKeyOverride?: string): AgentIO => ({
-  fetch: deps().fetch,
-  apiOrigin: deps().apiOrigin,
-  apiKey: () => apiKeyOverride ?? deps().getApiKey(),
-})
+export type ApiClient = {
+  request(url: string, init: RequestInit, timeoutMs?: number): Promise<Response>
+  uploadFile(
+    apiKey: string,
+    file: File,
+    purpose: FilePurpose | null,
+    signal?: AbortSignal
+  ): Promise<FileObject>
+  deleteFile(apiKey: string, fileId: string): Promise<void>
+  streamMessage(
+    apiKey: string,
+    body: CreateMessageRequest,
+    signal: AbortSignal
+  ): AsyncGenerator<MessageStreamEvent>
+}
 
-export const request = async (
+export const requestWith = async (
+  fetchFn: HttpFetch,
   url: string,
   init: RequestInit,
   timeoutMs?: number
 ): Promise<Response> => {
   try {
-    return await libRequest(deps().fetch, url, init, timeoutMs)
+    return await libRequest(fetchFn, url, init, timeoutMs)
   } catch (error) {
     return wrapApiError(error)
   }
 }
 
-export const uploadFile = async (
-  apiKey: string,
-  file: File,
-  purpose: FilePurpose | null,
-  signal?: AbortSignal
-): Promise<FileObject> => {
-  try {
-    return await libUploadFile(createAgentIO(apiKey), file, purpose, signal)
-  } catch (error) {
-    return wrapApiError(error)
-  }
-}
+export const createApiClient = (deps: {
+  readonly fetch: HttpFetch
+  readonly apiOrigin: string
+  readonly getApiKey: () => string | null
+}): ApiClient => {
+  const ioFor = (apiKeyOverride?: string): AgentIO => ({
+    fetch: deps.fetch,
+    apiOrigin: deps.apiOrigin,
+    apiKey: () => apiKeyOverride ?? deps.getApiKey(),
+  })
 
-export const deleteFile = async (apiKey: string, fileId: string): Promise<void> => {
-  try {
-    await libDeleteFile(createAgentIO(apiKey), fileId)
-  } catch (error) {
-    wrapApiError(error)
-  }
-}
+  return {
+    request: (url, init, timeoutMs) => requestWith(deps.fetch, url, init, timeoutMs),
 
-export async function* streamMessage(
-  apiKey: string,
-  body: CreateMessageRequest,
-  signal: AbortSignal
-): AsyncGenerator<MessageStreamEvent> {
-  try {
-    yield* libStreamMessage(createAgentIO(apiKey), body, signal)
-  } catch (error) {
-    wrapApiError(error)
+    uploadFile: async (apiKey, file, purpose, signal) => {
+      try {
+        return await libUploadFile(ioFor(apiKey), file, purpose, signal)
+      } catch (error) {
+        return wrapApiError(error)
+      }
+    },
+
+    deleteFile: async (apiKey, fileId) => {
+      try {
+        await libDeleteFile(ioFor(apiKey), fileId)
+      } catch (error) {
+        wrapApiError(error)
+      }
+    },
+
+    streamMessage: async function* (apiKey, body, signal) {
+      try {
+        yield* libStreamMessage(ioFor(apiKey), body, signal)
+      } catch (error) {
+        wrapApiError(error)
+      }
+    },
   }
 }

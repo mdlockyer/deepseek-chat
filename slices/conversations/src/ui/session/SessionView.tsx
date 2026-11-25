@@ -1,16 +1,9 @@
-import {
-  IconBrowseOutline16,
-  IconButton,
-  IconGlobeLanguageOutline16,
-  useIsMobile,
-} from '@deepseek-chat/lib-ui'
+import { useIsMobile } from '@deepseek-chat/lib-ui'
 import clsx from 'clsx'
-import { deps } from '../../env.js'
+import { useConversations } from '../../context.js'
 import { sessionTitle } from '../../format.js'
 import { useTranslate } from '../../messages.js'
-import { stopReply } from '../../store.js'
 import { type Session } from '../../types.js'
-import type { ChatPanels } from '../../views.js'
 import { ChatInput } from '../chatInput/ChatInput.js'
 import { MessageList } from '../messages/MessageList.js'
 import { MobileHeader } from './MobileHeader.js'
@@ -30,8 +23,8 @@ export const SessionView = ({
 }) => {
   const t = useTranslate()
   const isMobile = useIsMobile()
-  const { panels, composerDock: ComposerDock, useHasComposerDock = useNoDock } = deps().ui
-  const filesToggle = panels.files.useToggle(session)
+  const { deps, stopReply } = useConversations()
+  const { headerActions = [], composerDock: ComposerDock, useHasComposerDock = useNoDock } = deps.ui
   const hasDock = useHasComposerDock(session.id)
   const title = sessionTitle(session, t('untitledChat'))
   return (
@@ -46,23 +39,11 @@ export const SessionView = ({
           >
             {title}
           </div>
-          {filesToggle.visible || panels.browser ? (
+          {headerActions.length > 0 ? (
             <div className={styles.headerActions}>
-              {filesToggle.visible ? (
-                <IconButton
-                  size="m"
-                  tone="primary"
-                  className={clsx(filesToggle.open && styles.browserButtonActive)}
-                  icon={<IconBrowseOutline16 />}
-                  tooltip={t(filesToggle.open ? 'previewClosePanel' : 'previewOpenPanel')}
-                  tooltipPlacement="bottom"
-                  aria-pressed={filesToggle.open}
-                  onClick={filesToggle.toggle}
-                />
-              ) : null}
-              {panels.browser ? (
-                <BrowserToggle browser={panels.browser} sessionId={session.id} />
-              ) : null}
+              {headerActions.map((Action, index) => (
+                <Action key={index} sessionId={session.id} />
+              ))}
             </div>
           ) : null}
         </div>
@@ -82,29 +63,5 @@ export const SessionView = ({
         }
       />
     </div>
-  )
-}
-
-/** 内置浏览器的开关（仅桌面端） */
-const BrowserToggle = ({
-  browser,
-  sessionId,
-}: {
-  browser: NonNullable<ChatPanels['browser']>
-  sessionId: string
-}) => {
-  const t = useTranslate()
-  const { open, toggle } = browser.useToggle(sessionId)
-  return (
-    <IconButton
-      size="m"
-      tone="primary"
-      className={clsx(open && styles.browserButtonActive)}
-      icon={<IconGlobeLanguageOutline16 />}
-      tooltip={t(open ? 'closeBrowser' : 'openBrowser')}
-      tooltipPlacement="bottom"
-      aria-pressed={open}
-      onClick={toggle}
-    />
   )
 }

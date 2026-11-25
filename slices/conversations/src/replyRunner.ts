@@ -1,0 +1,885 @@
+import {
+  extractFileIds,
+  getFileErrorCode,
+  isRetryableApiError,
+  type ChatModel,
+  type CreateMessageRequest,
+} from '@deepseek-chat/lib-agent'
+import type { ToolRegistry, ToolRunResult } from '@deepseek-chat/lib-tools'
+import type {
+  ReplyLifecycleChanged,
+  SessionFileDescriptor,
+  ToolFileDelivered,
+} from '@deepseek-chat/spine/facts/session'
+import { getLocale, type Locale } from '@deepseek-chat/spine/i18n'
+import type { BlobStore } from '@deepseek-chat/spine/ports'
+import type { EventLog } from '@deepseek-chat/spine/runtime'
+import { ApiError, type ApiClient } from './apiClient.js'
+import { describeUploadError, type UploadsController } from './attachments.js'
+import type { AutoTitleParams } from './autoTitleRunner.js'
+import { collectCitedUrls } from './citations.js'
+import { createLatestReminder } from './latestReminder.js'
+import {
+  applyEvent,
+  getContextRounds,
+  pickImageResults,
+  settleReply,
+  toRequestMessages,
+} from './reply.js'
+import { createStreamTracer, type StreamTrace } from './streamTrace.js'
+import type {
+  AssistantMessage,
+  FileAttachment,
+  Message,
+  Session,
+  ToolCallPart,
+  ToolResultPart,
+  UserMessage,
+} from './types.js'
+
+export const DEFAULT_MODEL: ChatModel = 'deepseek-flash'
+
+/** Static core harness orientation shared by every turn (kept static so KV-cache prefix stays hot). */
+export const SYSTEM_PROMPT = [
+  'You are DeepSeek, created by DeepSeek, running inside a local split-pane chat app (desktop on macOS, or web in a browser).',
+  'Here is how the app around you works so you can operate it naturally:\n' +
+    '- Left pane (the chat): Your conversation with the user. While you work, the transcript shows a compact live status line above your reply (never a long vertical wall of tool logs); once your answer arrives, all thinking and tool work folds into a single quiet summary button above your reply, while produced files, generated charts, and a unified Sources button stay visible with your answer.\n' +
+    '- Right pane (the workspace panel): A single shared side panel that hosts mounted workspace tools (such as file preview, live browser, and the turn activity & sources inspector, where users can click your turn summary or Sources button to inspect grouped work, reasoning, and cited sources side by side).\n' +
+    "- Tool `summary` field: Every client tool accepts a `summary` parameter first. Always emit a plain, active 1-sentence summary (6–18 words, in the user's language) explaining what the call is doing and why, using ordinary words rather than compressed shorthand. The app displays it directly as the live status line while you work and inside the Activity inspector afterwards, so the user can follow your progress at a glance.\n" +
+    '- Time and environment: The current local date, weekday, platform (`App` on desktop or `Web`), user location (if set), and UI language are provided in `latest_reminder` rather than here so your prompt prefix stays cacheable across turns.',
+  'How to communicate:\n' +
+    "Write like a clear, thoughtful person talking to someone who only has your reply on screen. They didn't see your collapsed thinking, your tool logs, or the raw pages you read. Match the user's language, depth, and tone: conversational when chatting, direct when answering a concrete question, and structured only when headings, lists, or tables genuinely make a multi-part answer easier to scan. Don't turn a short reply into a mini-report with a closing summary.\n\n" +
+    'A few habits tend to creep into long or tool-heavy turns; watch for them:\n' +
+    '- Compressing syntax: stacking nouns together or dropping small connecting words saves tokens for you, while forcing the reader to unpack your sentence. Say who or what does what with plain, literal verbs.\n' +
+    "- Leaking working context: don't assume the reader shares shorthand labels, internal jargon, or raw tool terms you just read. Use ordinary words first and put technical identifiers in backticks.\n" +
+    '- Performing thoroughness: skip cheerleading openers, fake-profound signposts ("Crucially,", "What this means:"), unprompted "not X, but Y" setups, and wrap-up paragraphs that restate what you already said.\n' +
+    "- Punctuation and decoration crutches: default to periods, commas, colons, and parentheses instead of em dashes, saving a dash for the rare sentence that truly needs an abrupt turn. Don't decorate headings, bullets, or explanations with emojis; keep them for moments where the user sets that tone or asks for them.\n\n" +
+    'Never trade away accuracy for smoothness: keep important numbers, units, and conditions intact. What the user asks for always wins.',
+].join('\n\n')
+
+const SAFETY_CHECK = { level: 'high' } as const
+const DEFAULT_TOOL_ROUND_LIMIT = 50
+
+export type ReplyRequest = {
+  readonly history: Message[]
+  readonly question: UserMessage
+  readonly prefix?: AssistantMessage
+}
+
+export type ReplyRunnerParams = {
+  readonly maxParallelReadCalls: number
+  readonly toolRoundLimit: number
+  readonly networkRetryLimit: number
+  readonly fileReuploadLimit: number
+  readonly retryBaseDelayMs: number
+}
+
+export type ReplyRunnerHost = {
+  readonly log: EventLog
+  readonly blobs: BlobStore
+  readonly tools: ToolRegistry
+  readonly apiClient: Pick<ApiClient, 'streamMessage' | 'uploadFile'>
+  readonly uploads: Pick<UploadsController, 'useUploads' | 'uploadAttachment' | 'cancelUpload'>
+  readonly platform: 'desktop' | 'web'
+  readonly params: ReplyRunnerParams
+  readonly getApiKey: () => string | null
+  readonly getLocationLabel: (locale: Locale) => string
+  readonly onStreamTrace?: (trace: StreamTrace) => void
+  readonly getHistoryEpoch: () => number
+  readonly isImportingHistory: () => boolean
+  readonly getActiveSessionId: () => string | null
+  readonly getSession: (sessionId: string) => Session | undefined
+  readonly updateSession: (sessionId: string, updater: (session: Session) => Session) => void
+  readonly updateReply: (sessionId: string, reply: AssistantMessage) => void
+  readonly persist: (sessionId: string) => void
+  readonly publishSessionFiles: (sessionId: string) => void
+  readonly setStreaming: (sessionId: string, controller: AbortController | null) => void
+  readonly registerFlush: (sessionId: string, flush: (() => void) | null) => void
+  readonly trackTitleRequest: (controller: AbortController, active: boolean) => void
+  readonly hasTitleRequest: (controller: AbortController) => boolean
+  readonly onAutoTitle: (params: AutoTitleParams) => void
+}
+
+const dataUrlToFile = (dataUrl: string, name: string): File => {
+  const [header, data] = dataUrl.split(',', 2)
+  const type = /data:([^;]+)/.exec(header)?.[1] ?? 'image/jpeg'
+  const binary = atob(data ?? '')
+  const bytes = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i)
+  }
+  return new File([bytes], name, { type })
+}
+
+const pendingToolCalls = (reply: AssistantMessage): ToolCallPart[] => {
+  const done = new Set(
+    reply.blocks.flatMap((block) => (block.type === 'tool_result' ? [block.tool_use_id] : []))
+  )
+  return reply.blocks.flatMap((block) =>
+    block.type === 'tool_use' && !done.has(block.id) ? [block] : []
+  )
+}
+
+const collectServerFileIds = (request: ReplyRequest): Set<string> => {
+  const ids = new Set<string>()
+  const add = (files: FileAttachment[]) => {
+    for (const file of files) {
+      if (file.serverId) {
+        ids.add(file.serverId)
+      }
+    }
+  }
+  add(request.question.files)
+  for (const [user] of getContextRounds(request.history)) {
+    add(user.files)
+  }
+  return ids
+}
+
+export const createReplyRunner = (host: ReplyRunnerHost) => {
+  const waitForRetry = (attempt: number, signal: AbortSignal) =>
+    new Promise<void>((resolve) => {
+      function onAbort() {
+        clearTimeout(timer)
+        resolve()
+      }
+      const timer = setTimeout(
+        () => {
+          signal.removeEventListener('abort', onAbort)
+          resolve()
+        },
+        host.params.retryBaseDelayMs * 2 ** attempt
+      )
+      signal.addEventListener('abort', onAbort, { once: true })
+    })
+
+  const saveServerIds = (sessionId: string, serverIds: Map<string, string>) => {
+    if (serverIds.size === 0) {
+      return
+    }
+    host.updateSession(sessionId, (session) => ({
+      ...session,
+      messages: session.messages.map((message) =>
+        message.role === 'user' && message.files.some((file) => serverIds.has(file.id))
+          ? {
+              ...message,
+              files: message.files.map((file) =>
+                serverIds.has(file.id)
+                  ? { ...file, serverId: serverIds.get(file.id) ?? null }
+                  : file
+              ),
+            }
+          : message
+      ),
+    }))
+    host.persist(sessionId)
+  }
+
+  const ensureServerId = async (apiKey: string, file: FileAttachment): Promise<string | null> => {
+    if (file.serverId) {
+      return file.serverId
+    }
+    const task = host.uploads.useUploads.getState().tasks[file.id]
+    if (task?.status === 'done') {
+      return task.serverId
+    }
+    const blob = await host.blobs.get(file.id)
+    if (!blob) {
+      return null
+    }
+    return host.uploads.uploadAttachment(apiKey, file.id, blob, file.name, file.isImage)
+  }
+
+  const refreshRequest = (sessionId: string, request: ReplyRequest): ReplyRequest => {
+    const session = host.getSession(sessionId)
+    if (!session) {
+      return request
+    }
+    const byId = new Map(session.messages.map((message) => [message.id, message]))
+    const pick = <T extends Message>(message: T): T =>
+      (byId.get(message.id) as T | undefined) ?? message
+    return {
+      history: request.history.map(pick),
+      question: pick(request.question),
+      prefix: request.prefix,
+    }
+  }
+
+  const prepareFiles = async (sessionId: string, request: ReplyRequest, signal: AbortSignal) => {
+    const epoch = host.getHistoryEpoch()
+    request = refreshRequest(sessionId, request)
+    const apiKey = host.getApiKey() ?? ''
+    const serverIds = new Map<string, string>()
+    const aborted = new Promise<never>((_, reject) => {
+      signal.addEventListener('abort', () => reject(signal.reason), { once: true })
+    })
+    const uploads = Promise.allSettled(
+      request.question.files.map(async (file) => {
+        const serverId = await ensureServerId(apiKey, file)
+        if (serverId) {
+          serverIds.set(file.id, serverId)
+        }
+      })
+    )
+    void uploads.then(() => {
+      if (epoch === host.getHistoryEpoch()) {
+        saveServerIds(sessionId, serverIds)
+      }
+    })
+    const results = await Promise.race([uploads, aborted])
+    const failed = results.find((result) => result.status === 'rejected')
+    if (failed) {
+      throw failed.reason
+    }
+
+    const pending = new Map<string, FileAttachment>()
+    for (const [user] of getContextRounds(request.history).toReversed()) {
+      for (const file of user.files) {
+        if (!file.serverId && !serverIds.has(file.id) && !pending.has(file.id)) {
+          pending.set(file.id, file)
+        }
+      }
+    }
+    for (const file of pending.values()) {
+      signal.throwIfAborted()
+      try {
+        const serverId = await Promise.race([ensureServerId(apiKey, file), aborted])
+        if (serverId) {
+          serverIds.set(file.id, serverId)
+          saveServerIds(sessionId, new Map([[file.id, serverId]]))
+        }
+      } catch {
+        signal.throwIfAborted()
+      }
+    }
+
+    const session = host.getSession(sessionId)
+    const resolve = <T extends Message>(message: T): T =>
+      (session?.messages.find((m) => m.id === message.id) as T | undefined) ?? message
+    return {
+      history: request.history.map(resolve),
+      question: resolve(request.question),
+      prefix: request.prefix,
+    }
+  }
+
+  const reuploadInvalidatedFiles = (
+    sessionId: string,
+    request: ReplyRequest,
+    error: unknown
+  ): boolean => {
+    if (!(error instanceof ApiError) || !getFileErrorCode(error)) {
+      return false
+    }
+    const mentioned = extractFileIds(error.message)
+    const targets =
+      mentioned.length > 0
+        ? new Set(mentioned)
+        : collectServerFileIds(refreshRequest(sessionId, request))
+    const session = host.getSession(sessionId)
+    if (targets.size === 0 || !session) {
+      return false
+    }
+    const localIds: string[] = []
+    const messages = session.messages.map((message) => {
+      if (message.role !== 'user') {
+        return message
+      }
+      let changed = false
+      const files = message.files.map((file) => {
+        if (!file.serverId || !targets.has(file.serverId)) {
+          return file
+        }
+        localIds.push(file.id)
+        changed = true
+        return { ...file, serverId: null }
+      })
+      return changed ? { ...message, files } : message
+    })
+    if (localIds.length === 0) {
+      return false
+    }
+    host.updateSession(sessionId, (current) => ({ ...current, messages }))
+    localIds.forEach(host.uploads.cancelUpload)
+    host.persist(sessionId)
+    return true
+  }
+
+  const streamReply = async (
+    sessionId: string,
+    initial: AssistantMessage,
+    request: ReplyRequest
+  ) => {
+    const epoch = host.getHistoryEpoch()
+    const controller = new AbortController()
+    const initialSession = host.getSession(sessionId)
+    if (!initialSession?.title && !initialSession?.titleLocked) {
+      host.trackTitleRequest(controller, true)
+    }
+    host.setStreaming(sessionId, controller)
+    host.log.publish<ReplyLifecycleChanged>({
+      type: 'ReplyLifecycleChanged',
+      sessionId,
+      messageId: initial.id,
+      phase: 'started',
+    })
+
+    let reply = initial
+    let settledByRoundLimit = false
+    let lastTurnContext: {
+      model: ChatModel
+      system: string
+      tools: CreateMessageRequest['tools']
+      safetyCheck?: CreateMessageRequest['safety_check']
+      history: Message[]
+      question: UserMessage
+      declaredClientNames: ReadonlySet<string>
+    } | null = null
+    let frame = 0
+    const flush = () => {
+      cancelAnimationFrame(frame)
+      frame = 0
+      host.updateReply(sessionId, reply)
+    }
+    host.registerFlush(sessionId, flush)
+
+    const toolRoundLimit = Math.max(1, host.params.toolRoundLimit || DEFAULT_TOOL_ROUND_LIMIT)
+    let toolRound = initial.blocks.some((block) => block.type === 'tool_use') ? 1 : 0
+
+    const readCapState = (capabilityId: string) => {
+      const map = reply.capabilityState
+      return map && Object.hasOwn(map, capabilityId) ? map[capabilityId] : undefined
+    }
+
+    const writeCapState = (
+      capabilityId: string,
+      next: unknown,
+      options?: { readonly persist?: boolean }
+    ) => {
+      reply = {
+        ...reply,
+        capabilityState: {
+          ...reply.capabilityState,
+          [capabilityId]: next,
+        },
+      }
+      if (options?.persist !== false) {
+        flush()
+        host.persist(sessionId)
+      } else if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+        flush()
+      } else {
+        frame ||= requestAnimationFrame(flush)
+      }
+    }
+
+    const settleTurnHooks = (reason: 'done' | 'user' | 'interrupted' | 'roundLimit') => {
+      for (const { capabilityId, hooks } of host.tools.turnHooks) {
+        hooks.onTurnSettled?.({
+          sessionId,
+          replyId: reply.id,
+          reason,
+          readReplyState: () => readCapState(capabilityId),
+          writeReplyState: (next, opts) => writeCapState(capabilityId, next, opts),
+        })
+      }
+    }
+
+    const uploadToolImages = async () => {
+      const apiKey = host.getApiKey() ?? ''
+      for (const block of pickImageResults(reply.blocks)) {
+        const images = block.images ?? []
+        const ids = [...(block.imageFileIds ?? [])]
+        if (images.every((_, index) => ids[index] !== undefined)) {
+          continue
+        }
+        for (const [index, image] of images.entries()) {
+          if (ids[index] !== undefined) {
+            continue
+          }
+          try {
+            const file = dataUrlToFile(image, `tool-output-${block.tool_use_id}-${index + 1}.jpg`)
+            ids[index] = (await host.apiClient.uploadFile(apiKey, file, null, controller.signal)).id
+          } catch (error) {
+            if (controller.signal.aborted) {
+              throw error
+            }
+            ids[index] = null
+          }
+        }
+        reply = {
+          ...reply,
+          blocks: reply.blocks.map((item) =>
+            item === block ? { ...block, imageFileIds: ids } : item
+          ),
+        }
+        flush()
+      }
+    }
+
+    const runToolCalls = async (calls: ToolCallPart[]) => {
+      const maxParallel = Math.max(1, host.params.maxParallelReadCalls)
+      const updateResult = (callId: string, patch: Partial<ToolResultPart>) => {
+        reply = {
+          ...reply,
+          blocks: reply.blocks.map((block) =>
+            block.type === 'tool_result' && block.tool_use_id === callId
+              ? { ...block, ...patch }
+              : block
+          ),
+        }
+        flush()
+      }
+
+      const executeCall = async (
+        call: ToolCallPart,
+        formatters?: Map<string, (urlToIndex: ReadonlyMap<string, number>) => string>
+      ) => {
+        const startedAt = Date.now()
+        const capabilityId = host.tools.capabilityIdOf(call.name) ?? undefined
+        const initialProgress = host.tools.initialProgressOf(call.name)
+        reply = {
+          ...reply,
+          blocks: [
+            ...reply.blocks,
+            {
+              type: 'tool_result',
+              tool_use_id: call.id,
+              ...(capabilityId ? { capability: capabilityId } : {}),
+              content: '',
+              status: 'running',
+              ...(initialProgress ? { progress: initialProgress } : {}),
+              startedAt,
+            },
+          ],
+        }
+        flush()
+
+        const spawnIndex = reply.blocks.findIndex(
+          (block) => block.type === 'tool_use' && block.id === call.id
+        )
+        const replyBeforeCall: AssistantMessage = {
+          ...reply,
+          blocks: spawnIndex >= 0 ? reply.blocks.slice(0, spawnIndex) : reply.blocks,
+        }
+        const effectiveCapId = capabilityId ?? call.name
+        const outcome: ToolRunResult & { readonly capabilityId?: string } = await host.tools.run(
+          call,
+          {
+            sessionId,
+            replyId: reply.id,
+            signal: controller.signal,
+            caller: { kind: 'reply' },
+            ...(call.inputJson !== undefined ? { inputJson: call.inputJson } : {}),
+            citedUrls: collectCitedUrls(reply.blocks),
+            isActive: () => host.getActiveSessionId() === sessionId,
+            onProgress: (progress) => updateResult(call.id, { progress }),
+            readReplyState: <T = unknown>() => readCapState(effectiveCapId) as T | undefined,
+            writeReplyState: (next, opts) => writeCapState(effectiveCapId, next, opts),
+            ...(reply.latestReminder ? { latestReminder: reply.latestReminder } : {}),
+            forkMessages: () =>
+              toRequestMessages(
+                lastTurnContext?.history ?? request.history,
+                lastTurnContext?.question ?? request.question,
+                undefined,
+                initial.thinking ?? false,
+                reply.latestReminder,
+                replyBeforeCall.blocks.length > 0 ? replyBeforeCall : undefined,
+                lastTurnContext?.declaredClientNames ?? true
+              ),
+          }
+        )
+
+        if (formatters && outcome.formatContentWithCitations) {
+          formatters.set(call.id, outcome.formatContentWithCitations)
+        }
+
+        const resolvedCapability = outcome.capabilityId ?? capabilityId
+        updateResult(call.id, {
+          ...(resolvedCapability ? { capability: resolvedCapability } : {}),
+          content: outcome.content,
+          status: outcome.status,
+          durationMs: outcome.durationMs ?? Date.now() - startedAt,
+          ...(outcome.images ? { images: outcome.images } : {}),
+          ...(outcome.previewImages ? { previewImages: outcome.previewImages } : {}),
+          ...(outcome.files ? { files: outcome.files } : {}),
+          ...(outcome.sources ? { sources: outcome.sources } : {}),
+          ...(outcome.frontStageNote ? { frontStageNote: outcome.frontStageNote } : {}),
+          ...(outcome.payload !== undefined ? { payload: outcome.payload } : {}),
+        })
+        host.persist(sessionId)
+
+        if (outcome.files && outcome.files.length > 0) {
+          host.publishSessionFiles(sessionId)
+          const isActiveSession = host.getActiveSessionId() === sessionId
+          for (const file of outcome.files) {
+            const descriptor: SessionFileDescriptor = {
+              kind: 'delivered',
+              fileId: file.id,
+              name: file.name,
+              size: file.size,
+              mimeType: file.mimeType,
+              ...(file.path ? { path: file.path } : {}),
+              ...(file.title ? { title: file.title } : {}),
+              ...(file.version !== undefined ? { version: file.version } : {}),
+              ...((file.producer ?? resolvedCapability)
+                ? { producer: file.producer ?? resolvedCapability }
+                : {}),
+              producedByTool: call.name,
+              messageId: reply.id,
+              createdAt: reply.createdAt,
+            }
+            host.log.publish<ToolFileDelivered>({
+              type: 'ToolFileDelivered',
+              sessionId,
+              messageId: reply.id,
+              file: descriptor,
+              isActiveSession,
+            })
+          }
+        }
+      }
+
+      const isConcurrentRead = (call: ToolCallPart) => host.tools.effectOf(call.name) === 'read'
+
+      for (let i = 0; i < calls.length; ) {
+        if (controller.signal.aborted) {
+          return
+        }
+        const first = calls[i]
+        if (!first) {
+          break
+        }
+        if (!isConcurrentRead(first)) {
+          await executeCall(first)
+          i += 1
+          continue
+        }
+        let end = i + 1
+        while (end < calls.length && isConcurrentRead(calls[end])) {
+          end += 1
+        }
+        const segment = calls.slice(i, end)
+        i = end
+        const baseCitedUrls = segment.length > 1 ? collectCitedUrls(reply.blocks) : null
+        const formatters = new Map<string, (urlToIndex: ReadonlyMap<string, number>) => string>()
+        let cursor = 0
+        const workerCount = Math.min(maxParallel, segment.length)
+        const worker = async () => {
+          while (!controller.signal.aborted) {
+            const nextIndex = cursor
+            if (nextIndex >= segment.length) {
+              return
+            }
+            cursor += 1
+            await executeCall(segment[nextIndex], baseCitedUrls ? formatters : undefined)
+          }
+        }
+        await Promise.all(Array.from({ length: workerCount }, () => worker()))
+
+        // Reconcile citation indices across concurrent read batches in deterministic call order.
+        if (baseCitedUrls && !controller.signal.aborted) {
+          const runningCited = new Map(baseCitedUrls)
+          let changed = false
+          for (const call of segment) {
+            const block = reply.blocks.find(
+              (b): b is ToolResultPart => b.type === 'tool_result' && b.tool_use_id === call.id
+            )
+            if (!block) {
+              continue
+            }
+            for (const source of block.sources ?? []) {
+              const url = source.url.trim()
+              if (url && !runningCited.has(url)) {
+                runningCited.set(url, runningCited.size + 1)
+              }
+            }
+            const formatter = formatters.get(call.id)
+            if (formatter) {
+              const rewritten = formatter(runningCited)
+              if (rewritten !== block.content) {
+                updateResult(call.id, { content: rewritten })
+                changed = true
+              }
+            }
+          }
+          if (changed) {
+            host.persist(sessionId)
+          }
+        }
+      }
+    }
+
+    let networkRetries = 0
+    try {
+      for (let attempt = 0; ; attempt += 1) {
+        let preparing = true
+        let receivedContent = false
+        let tracer: ReturnType<typeof createStreamTracer> | null = null
+        const finishTrace = (error?: unknown) => {
+          if (tracer) {
+            host.onStreamTrace?.(tracer.finish(Date.now(), error))
+            tracer = null
+          }
+        }
+        try {
+          const calls = pendingToolCalls(reply)
+          if (calls.length > 0) {
+            if (toolRound >= toolRoundLimit) {
+              settledByRoundLimit = true
+              settleTurnHooks('roundLimit')
+              reply = settleReply(reply, 'error', Date.now(), {
+                kind: 'protocol',
+                message: `Stopped after ${toolRoundLimit} rounds of tool calls in one reply.`,
+              })
+              break
+            }
+            toolRound += 1
+            await runToolCalls(calls)
+            if (controller.signal.aborted) {
+              settleTurnHooks('user')
+              reply = settleReply(reply, 'stopped', Date.now())
+              break
+            }
+            host.persist(sessionId)
+          }
+          reply = { ...reply, stopReason: undefined, stopDetails: undefined }
+          const prepared = await prepareFiles(sessionId, request, controller.signal)
+          preparing = false
+          const latestReminder = prepared.prefix
+            ? prepared.prefix.latestReminder
+            : createLatestReminder({
+                locale: getLocale(),
+                locationLabel: host.getLocationLabel(getLocale()),
+                platform: host.platform === 'desktop' ? 'App' : 'Web',
+              })
+          reply = { ...reply, latestReminder }
+          host.updateReply(sessionId, reply)
+          host.persist(sessionId)
+          if (toolRound > 0) {
+            await uploadToolImages()
+          }
+          const enabledCapabilities = initial.enabledCapabilities ?? {}
+          const declaredTools = host.tools.declare({
+            questionText: prepared.question.content,
+            enabledCapabilities,
+          })
+          const declaredClientNames = new Set(declaredTools.map((tool) => tool.name))
+          const systemParts = [
+            SYSTEM_PROMPT,
+            ...host.tools.instructions(declaredClientNames, 'reply'),
+          ]
+          const messages = toRequestMessages(
+            prepared.history,
+            prepared.question,
+            toolRound > 0 ? undefined : prepared.prefix,
+            initial.thinking ?? false,
+            latestReminder,
+            toolRound > 0 ? reply : undefined,
+            declaredClientNames
+          )
+          if (host.onStreamTrace) {
+            tracer = createStreamTracer(toolRound, Date.now())
+          }
+          const system = systemParts.join('\n\n')
+          const model = initial.model ?? DEFAULT_MODEL
+          const safetyCheck =
+            initial.thinking || declaredTools.length === 0 ? SAFETY_CHECK : undefined
+          lastTurnContext = {
+            model,
+            system,
+            tools: declaredTools,
+            safetyCheck,
+            history: prepared.history,
+            question: prepared.question,
+            declaredClientNames,
+          }
+          const events = host.apiClient.streamMessage(
+            host.getApiKey() ?? '',
+            {
+              model,
+              system,
+              messages,
+              thinking: { type: initial.thinking ? 'enabled' : 'disabled' },
+              ...(safetyCheck ? { safety_check: safetyCheck } : {}),
+              tools: declaredTools,
+              ...(host.hasTitleRequest(controller) ? { title: { enabled: true } } : {}),
+            },
+            controller.signal
+          )
+          const blockIndexes = new Map<number, number>()
+          try {
+            for await (const event of events) {
+              tracer?.record(event, Date.now())
+              receivedContent ||= event.type === 'content_block_start'
+              if (
+                event.type === 'message_delta' &&
+                (event.delta.stop_reason === 'end_turn' ||
+                  event.delta.stop_reason === 'max_tokens') &&
+                event.delta.title?.trim() &&
+                host.hasTitleRequest(controller) &&
+                !controller.signal.aborted &&
+                !host.isImportingHistory()
+              ) {
+                const title = event.delta.title.trim()
+                host.updateSession(sessionId, (session) =>
+                  session.title ? session : { ...session, title }
+                )
+                host.trackTitleRequest(controller, false)
+              }
+              reply = applyEvent(reply, event, Date.now(), blockIndexes)
+              if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+                flush()
+              } else {
+                frame ||= requestAnimationFrame(flush)
+              }
+            }
+          } catch (error) {
+            if (!(error instanceof ApiError && error.kind === 'interrupted' && reply.stopReason)) {
+              throw error
+            }
+            finishTrace(error)
+          }
+          finishTrace()
+          if (reply.stopReason !== 'refusal' && pendingToolCalls(reply).length > 0) {
+            attempt = -1
+            continue
+          }
+          // Let capability turn hooks request a synthetic continuation call (e.g. auto-wait for running subagents).
+          if (reply.stopReason !== 'refusal') {
+            let syntheticCall: ToolCallPart | null = null
+            for (const { capabilityId, hooks } of host.tools.turnHooks) {
+              const hookRes = hooks.onTurnEndWithoutToolCalls?.({
+                sessionId,
+                replyId: reply.id,
+                readReplyState: () => readCapState(capabilityId),
+                writeReplyState: (next, opts) => writeCapState(capabilityId, next, opts),
+              })
+              if (hookRes?.syntheticCall) {
+                syntheticCall = {
+                  type: 'tool_use',
+                  id: hookRes.syntheticCall.id,
+                  name: hookRes.syntheticCall.name,
+                  input: hookRes.syntheticCall.input,
+                  ...(hookRes.syntheticCall.inputJson !== undefined
+                    ? { inputJson: hookRes.syntheticCall.inputJson }
+                    : {}),
+                }
+                break
+              }
+            }
+            if (syntheticCall) {
+              if (toolRound >= toolRoundLimit) {
+                settledByRoundLimit = true
+                settleTurnHooks('roundLimit')
+                reply = settleReply(reply, 'error', Date.now(), {
+                  kind: 'protocol',
+                  message: `Stopped after ${toolRoundLimit} rounds of tool calls in one reply.`,
+                })
+                break
+              }
+              reply = {
+                ...reply,
+                prefix: false,
+                blocks: [...reply.blocks, syntheticCall],
+              }
+              flush()
+              attempt = -1
+              continue
+            }
+          }
+          reply = settleReply(reply, 'done', Date.now())
+          break
+        } catch (error) {
+          finishTrace(error)
+          if (controller.signal.aborted) {
+            settleTurnHooks('user')
+            reply = settleReply(reply, 'stopped', Date.now())
+            break
+          }
+          if (preparing) {
+            reply = settleReply(reply, 'error', Date.now(), {
+              kind: 'upload',
+              message: '',
+              localMessage: describeUploadError(error),
+              retryable: isRetryableApiError(error),
+            })
+            break
+          }
+          if (
+            attempt < host.params.fileReuploadLimit &&
+            !receivedContent &&
+            reuploadInvalidatedFiles(sessionId, request, error)
+          ) {
+            await waitForRetry(attempt, controller.signal)
+            if (controller.signal.aborted) {
+              reply = settleReply(reply, 'stopped', Date.now())
+              break
+            }
+            continue
+          }
+          if (
+            error instanceof ApiError &&
+            error.kind === 'network' &&
+            !receivedContent &&
+            networkRetries < host.params.networkRetryLimit
+          ) {
+            await waitForRetry(networkRetries, controller.signal)
+            networkRetries += 1
+            if (controller.signal.aborted) {
+              reply = settleReply(reply, 'stopped', Date.now())
+              break
+            }
+            attempt -= 1
+            continue
+          }
+          if (error instanceof ApiError) {
+            reply = settleReply(reply, 'error', Date.now(), {
+              kind: error.kind,
+              message: error.message,
+              status: error.status,
+              localMessage: error.localMessage,
+            })
+          } else {
+            reply = settleReply(reply, 'error', Date.now(), {
+              kind: 'protocol',
+              message: error instanceof Error ? error.message : String(error),
+            })
+          }
+          break
+        }
+      }
+    } finally {
+      const reason = settledByRoundLimit
+        ? 'roundLimit'
+        : reply.status === 'done'
+          ? 'done'
+          : controller.signal.aborted
+            ? 'user'
+            : 'interrupted'
+      settleTurnHooks(reason)
+      host.trackTitleRequest(controller, false)
+      host.registerFlush(sessionId, null)
+      cancelAnimationFrame(frame)
+      host.updateReply(sessionId, reply)
+      host.setStreaming(sessionId, null)
+      host.persist(sessionId)
+      host.log.publish<ReplyLifecycleChanged>({
+        type: 'ReplyLifecycleChanged',
+        sessionId,
+        messageId: reply.id,
+        phase: 'settled',
+      })
+      if (
+        reply.status === 'done' &&
+        reply.stopReason !== 'refusal' &&
+        !controller.signal.aborted &&
+        lastTurnContext
+      ) {
+        host.onAutoTitle({ sessionId, epoch, reply, ...lastTurnContext })
+      }
+    }
+  }
+
+  return { streamReply }
+}

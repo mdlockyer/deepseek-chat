@@ -1,7 +1,3 @@
-import { useLocale } from '@deepseek-chat/spine/i18n'
-import clsx from 'clsx'
-import { memo, useState } from 'react'
-import { useTranslate } from '../../messages.js'
 import {
   IconButton,
   IconEditOutline16,
@@ -10,10 +6,13 @@ import {
   Menu,
   hoverGlideItem,
 } from '@deepseek-chat/lib-ui'
-import { renameSession, selectSession } from '../../store.js'
-import { type SessionSummary } from '../../types.js'
+import { useLocale } from '@deepseek-chat/spine/i18n'
+import clsx from 'clsx'
+import { memo, useState } from 'react'
+import { useConversations } from '../../context.js'
 import { formatClock, sessionTitle } from '../../format.js'
-import { closeMobileSider } from './mobileSiderState.js'
+import { useTranslate } from '../../messages.js'
+import { type SessionSummary } from '../../types.js'
 import styles from './SessionItem.module.css'
 
 export const SessionItem = memo(function SessionItem({
@@ -29,6 +28,7 @@ export const SessionItem = memo(function SessionItem({
 }) {
   const t = useTranslate()
   const locale = useLocale()
+  const { renameSession, selectSession, closeMobileSider } = useConversations()
   const [editing, setEditing] = useState(false)
   const untitled = !session.title
   const displayTitle = sessionTitle(session, t('untitledChat'))

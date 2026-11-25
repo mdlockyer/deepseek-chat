@@ -1,10 +1,10 @@
-import { useTranslate as useConversationsTranslate } from '../../messages.js'
+import { IconCloseFill14, IconRefreshOutline16, Tooltip } from '@deepseek-chat/lib-ui'
 import clsx from 'clsx'
 import { memo } from 'react'
-import { useTranslate } from '../../messages.js'
-import { useUploads, type UploadTask } from '../../attachments.js'
+import { type UploadTask } from '../../attachments.js'
+import { useConversations } from '../../context.js'
 import { type DraftAttachment } from '../../drafts.js'
-import { IconCloseFill14, IconRefreshOutline16, Tooltip } from '@deepseek-chat/lib-ui'
+import { useTranslate, useTranslate as useConversationsTranslate } from '../../messages.js'
 import { FileCard } from '../files/FileCard.js'
 import styles from './ChatInput.module.css'
 
@@ -37,7 +37,6 @@ export const DraftAttachments = memo(function DraftAttachments({
   )
 })
 
-/** 输入框里的文件：图片显示缩略图，其余显示文件卡片 */
 const AttachmentItem = ({
   item,
   onRetry,
@@ -49,14 +48,13 @@ const AttachmentItem = ({
 }) => {
   const t = useTranslate()
   const tc = useConversationsTranslate()
-  const task = useUploads((state) => state.tasks[item.id] ?? UPLOADING)
+  const { uploads } = useConversations()
+  const task = uploads.useUploads((state) => state.tasks[item.id] ?? UPLOADING)
   const status = task.status
   const error = task.status === 'error' ? tc(task.error.key, task.error.params) : undefined
-  // 过大、格式不支持等重试无效的失败只提示原因，需删除后再发送
   const retry = task.status === 'error' && task.retryable ? onRetry : undefined
   const failed = status === 'error'
   const retryLabel = t('uploadRetry', { message: error ?? t('uploadFileStatusFailed') })
-  // 「上传失败」只显示重试图标，其余原因写在图片上：可重试时在图标下方，不可重试时贴底
   const showReason = failed && error !== undefined && error !== t('uploadFileStatusFailed')
   return item.previewUrl ? (
     <div

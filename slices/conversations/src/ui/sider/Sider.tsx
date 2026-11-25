@@ -11,13 +11,10 @@ import {
 import { PANEL_DURATION_MS } from '@deepseek-chat/spine/design'
 import clsx from 'clsx'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { deps } from '../../env.js'
+import { useConversations } from '../../context.js'
 import { useTranslate, useTranslate as useConversationsTranslate } from '../../messages.js'
-import { showNotice } from '../../notice.js'
 import { groupSessions } from '../../sessionGroups.js'
-import { newChat, removeSession, useChatStore } from '../../store.js'
 import { type SessionSummary } from '../../types.js'
-import { closeMobileSider, useMobileSider } from './mobileSiderState.js'
 import { NewChatIcon } from './NewChatIcon.js'
 import { SessionItem } from './SessionItem.js'
 import styles from './Sider.module.css'
@@ -35,13 +32,14 @@ export const Sider = ({
   controlsLanding?: boolean
 }) => {
   const t = useTranslate()
+  const tc = useConversationsTranslate()
+  const { deps, useChatStore, newChat, removeSession, closeMobileSider, showNotice } =
+    useConversations()
   const sessions = useChatStore((state) => state.sessions)
   const activeId = useChatStore((state) => state.activeId)
   const [now, setNow] = useState(Date.now)
-  const tc = useConversationsTranslate()
   const groups = useMemo(() => groupSessions(sessions, now, tc), [sessions, now, tc])
   const [deleting, setDeleting] = useState<SessionSummary | null>(null)
-  // 退场淡出期间 deleting 已清空，保留最后一条供确认弹窗播放退场
   const lastDeletingRef = useRef(deleting)
   if (deleting) {
     lastDeletingRef.current = deleting
@@ -74,7 +72,6 @@ export const Sider = ({
     }
   }, [])
 
-  // 无 scroll-driven animations 时用哨兵监听底部是否还有可滚动内容，驱动 --sider-fade-end
   useEffect(() => {
     const scroller = hoverGlide.containerRef.current
     if (
@@ -106,7 +103,6 @@ export const Sider = ({
     }
   }, [hoverGlide.containerRef])
 
-  // 首屏列表逐条落入的 stagger 上限 8 条；移动端抽屉里不 stagger，随抽屉一起落
   let enterIndex = 0
 
   return (
@@ -129,7 +125,7 @@ export const Sider = ({
             tooltipPlacement="bottom"
             tooltipDisabled={controlsHidden}
             data-sider-toggle
-            onClick={() => (mobile ? closeMobileSider() : deps().ui.setSiderCollapsed(true))}
+            onClick={() => (mobile ? closeMobileSider() : deps.ui.setSiderCollapsed(true))}
           />
         </div>
         <button
@@ -172,7 +168,7 @@ export const Sider = ({
           <button
             type="button"
             className={styles.settings}
-            onClick={() => deps().ui.openSettings('general')}
+            onClick={() => deps.ui.openSettings('general')}
           >
             <span className={styles.settingsIcon}>
               <IconSettingsOutline16 />
@@ -228,6 +224,7 @@ export const Sider = ({
 
 /** 移动端抽屉：浮在页面上方，点空白区域关闭；滑入滑出与遮罩淡入淡出 */
 export const MobileSider = () => {
+  const { useMobileSider, closeMobileSider } = useConversations()
   const open = useMobileSider((state) => state.open)
   const { mounted, exiting } = usePresence(open, PANEL_DURATION_MS)
   useOverlayLock(mounted)

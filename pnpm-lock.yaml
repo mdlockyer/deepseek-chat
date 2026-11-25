@@ -315,6 +315,9 @@ importers:
       '@deepseek-chat/lib-agent':
         specifier: workspace:*
         version: link:../../libs/agent
+      '@deepseek-chat/lib-tools':
+        specifier: workspace:*
+        version: link:../../libs/tools
       '@deepseek-chat/lib-ui':
         specifier: workspace:*
         version: link:../../libs/ui

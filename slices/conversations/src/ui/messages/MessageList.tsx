@@ -1,18 +1,13 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useIsMobile } from '@deepseek-chat/lib-ui'
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { buildMessageVersions, getVisibleMessages, type MessageVersions } from '../../branches.js'
-import { selectMessageVersion } from '../../store.js'
-import { type Session } from '../../types.js'
-import { closeActivityPanel } from '../activity/activityPanelState.js'
+import { useConversations } from '../../context.js'
+import { type Message, type Session } from '../../types.js'
 import { AssistantMessage } from './AssistantMessage.js'
+import styles from './MessageList.module.css'
 import { ScrollToBottomContext } from './scrollContext.js'
 import { UserMessage } from './UserMessage.js'
-import { type Message } from '../../types.js'
 
-/**
- * 会话共用可重试的附件上传失败入口，覆盖当前提问与历史消息中的附件。
- * 点击后按失败的回答重新补传附件并请求。
- */
 const getUploadRetryId = (messages: Message[], streaming: boolean) => {
   const last = messages.at(-1)
   return !streaming &&
@@ -23,9 +18,7 @@ const getUploadRetryId = (messages: Message[], streaming: boolean) => {
     ? last.id
     : null
 }
-import styles from './MessageList.module.css'
 
-/** 距底部小于该值时视为在底部，流式内容增长时跟随 */
 const STICKY_THRESHOLD = 40
 const EMPTY_VERSIONS: MessageVersions = { ids: [], index: -1 }
 
@@ -39,6 +32,7 @@ export const MessageList = ({
   footer: React.ReactNode
 }) => {
   const isMobile = useIsMobile()
+  const { selectMessageVersion } = useConversations()
   const scrollRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
   const stickyRef = useRef(true)
@@ -64,7 +58,6 @@ export const MessageList = ({
     }
   }, [])
 
-  // 内容、键盘和输入框高度变化时，继续遵循当前跟随状态。
   useLayoutEffect(() => {
     const content = contentRef.current
     const scroll = scrollRef.current
@@ -77,7 +70,6 @@ export const MessageList = ({
     return () => observer.disconnect()
   }, [isMobile, scrollToBottom])
 
-  // 切换版本后将选择器留在原位置，避免回答长短变化导致操作区跳出视口。
   useLayoutEffect(() => {
     const anchor = restoreScrollRef.current
     const scroll = scrollRef.current
@@ -95,8 +87,6 @@ export const MessageList = ({
     scrollToBottom()
   }, [session.id, lastMessageId, scrollToBottom])
 
-  useEffect(closeActivityPanel, [session.id, lastMessageId])
-
   const selectVersion = useCallback(
     (messageId: string, anchorTop: number) => {
       if (streaming) {
@@ -104,13 +94,11 @@ export const MessageList = ({
       }
       restoreScrollRef.current = { messageId, top: anchorTop }
       stickyRef.current = false
-      closeActivityPanel()
       selectMessageVersion(session.id, messageId)
     },
-    [session.id, streaming]
+    [selectMessageVersion, session.id, streaming]
   )
 
-  // 跨移动端断点时切换滚动层，并保持输入框及当前阅读位置。
   useLayoutEffect(() => {
     const el = scrollRef.current
     if (!el) {
@@ -123,7 +111,6 @@ export const MessageList = ({
     }
     const onScroll = () => {
       const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < STICKY_THRESHOLD
-      // 仅在用户向上滚动时停止跟随底部，布局或内容增高时保持跟随状态。
       if (nearBottom) {
         stickyRef.current = true
       } else if (el.scrollTop < scrollTopRef.current) {

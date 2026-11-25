@@ -2,58 +2,66 @@ import { MarkdownTheme } from '@deepseek-chat/lib-markdown'
 import { ToastViewport, UiProvider, usePresence } from '@deepseek-chat/lib-ui'
 import { PANEL_DURATION_MS } from '@deepseek-chat/spine/design'
 import { useLocale } from '@deepseek-chat/spine/i18n'
-import { useEffect } from 'react'
 import clsx from 'clsx'
-import { translate } from './i18n/index.js'
-import { useLayout } from './layout.js'
-import { useTheme } from './theme.js'
-import { useIsMobile, useMobileViewport, usePreventPageScroll } from './viewport.js'
-import { RightPanel } from './rightPanel/RightPanel.js'
-import { ensureApiKey, openSettingsFromShortcut } from './settings/settingsDialogState.js'
-import { SettingsDialog } from './settings/SettingsDialog.js'
-import { account, browser, notices, overlays } from './composition.js'
-import { conversations } from './conversations.js'
-import { isDesktopApp, onOpenSettings } from './platform/desktop.js'
+import { useEffect } from 'react'
 import { AppErrorBoundary } from './AppErrorBoundary.js'
 import styles from './App.module.css'
+import { translate } from './i18n/index.js'
+import { RightPanel } from './rightPanel/RightPanel.js'
+import { useAppRuntime } from './RuntimeContext.js'
+import { SettingsDialog } from './settings/SettingsDialog.js'
+import { useRuntimeTheme } from './theme.js'
+import { useIsMobile, useMobileViewport, usePreventPageScroll } from './viewport.js'
 
-const { ChatMain, ChatSaveBanner, CollapsedSider, MobileSider, Sider } = conversations
+/**
+ * Pure App Shell component bound to the nearest `<AppRuntimeProvider>`.
+ * Supports both full-window production rendering and embedded multi-instance rendering
+ * (e.g. side-by-side instances in the dev SSA Workbench).
+ */
+export const App = ({ embedded = false }: { embedded?: boolean }) => {
+  const runtime = useAppRuntime()
+  const { account, browser, conversations, preferences } = runtime.slices
+  const { ChatMain, ChatSaveBanner, CollapsedSider, MobileSider, Sider } = conversations
 
-export const App = () => {
-  const isMobile = useIsMobile()
-  const dark = useTheme() === 'dark'
+  const isMobile = useIsMobile() && !embedded
+  const dark = useRuntimeTheme(preferences) === 'dark'
   const locale = useLocale()
   const desktopSettingsReady = account.useState().status === 'ready'
-  // 移动端侧边栏以独立抽屉管理开合状态
-  const siderCollapsed = useLayout((state) => state.siderCollapsed) && !isMobile
+  const siderCollapsed = runtime.layout.useStore((state) => state.siderCollapsed) && !isMobile
   const frameRef = useMobileViewport(isMobile)
   const activeId = conversations.useActiveSessionId()
-  // 收起后的按钮组退场淡出期间保持挂载
   const { mounted: showCollapsedSider, exiting: collapsedSiderExiting } = usePresence(
     siderCollapsed,
     PANEL_DURATION_MS
   )
 
-  usePreventPageScroll(isMobile)
+  usePreventPageScroll(isMobile && !embedded)
 
   useEffect(() => {
+    if (embedded) {
+      return
+    }
     document.documentElement.lang = locale
     document.title = translate('appName')
-  }, [locale])
+  }, [embedded, locale])
 
   conversations.useChatLifecycle()
-  useEffect(() => browser.start(), [])
 
-  // 桌面版须等原生配置加载完成后再检查 API Key，避免超时先渲染时误弹设置窗口
+  useEffect(() => (browser ? browser.start() : undefined), [browser])
+
   useEffect(() => {
-    if (desktopSettingsReady) {
-      ensureApiKey()
+    if (runtime.autoPromptApiKey && desktopSettingsReady) {
+      runtime.settingsDialog.ensureApiKey()
     }
-  }, [desktopSettingsReady])
+  }, [desktopSettingsReady, runtime])
 
-  // macOS Cmd+, 打开设置（菜单栏触发 + webview 键盘兜底）
   useEffect(() => {
-    const unlisten = onOpenSettings(openSettingsFromShortcut)
+    if (embedded) {
+      return
+    }
+    const unlisten = runtime.onOpenSettingsShortcut
+      ? runtime.onOpenSettingsShortcut(runtime.settingsDialog.openFromShortcut)
+      : () => {}
     const onKeyDown = (event: KeyboardEvent) => {
       if (
         event.metaKey &&
@@ -63,7 +71,7 @@ export const App = () => {
         event.key === ','
       ) {
         event.preventDefault()
-        openSettingsFromShortcut()
+        runtime.settingsDialog.openFromShortcut()
       }
     }
     window.addEventListener('keydown', onKeyDown)
@@ -71,12 +79,19 @@ export const App = () => {
       unlisten()
       window.removeEventListener('keydown', onKeyDown)
     }
-  }, [])
+  }, [embedded, runtime])
 
   return (
-    <UiProvider notices={notices} overlay={overlays}>
+    <UiProvider notices={runtime.notices} overlay={runtime.overlays}>
       <MarkdownTheme dark={dark}>
-        <div ref={frameRef} className={clsx(styles.frame, isDesktopApp && styles.desktop)}>
+        <div
+          ref={embedded ? undefined : frameRef}
+          data-app-shell
+          className={clsx(
+            styles.frame,
+            runtime.platform === 'desktop' && !embedded && styles.desktop
+          )}
+        >
           {isMobile ? (
             <MobileSider />
           ) : (
@@ -100,7 +115,7 @@ export const App = () => {
           <RightPanel />
         </div>
         <SettingsDialog />
-        <ToastViewport />
+        {embedded ? null : <ToastViewport />}
       </MarkdownTheme>
     </UiProvider>
   )

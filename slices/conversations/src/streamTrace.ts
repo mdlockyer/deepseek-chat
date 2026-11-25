@@ -20,7 +20,7 @@ export type StreamTrace = {
 
 export type StreamTraceBlock = {
   readonly index: number
-  /** Block type, plus the tool name for tool calls (`tool_use:present_file`). */
+  /** Block type, plus the tool name for tool calls (`tool_use:lookup`). */
   readonly type: string
   readonly startMs: number
   readonly firstDeltaMs: number | null

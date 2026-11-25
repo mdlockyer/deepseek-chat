@@ -640,14 +640,35 @@ export const createWebResearchSlice = (deps: WebResearchDeps): WebResearchSlice 
         const raw =
           call.input && typeof call.input === 'object' ? (call.input as { url?: unknown }) : null
         const rawUrl = typeof raw?.url === 'string' ? raw.url.trim() : ''
+        const scrapedUrl = outcome.scrapedPage?.url ?? rawUrl
+        const scrapedTitle = outcome.scrapedPage?.title ?? null
+        let siteName: string | null = null
+        try {
+          siteName = new URL(scrapedUrl).hostname.replace(/^www\./, '') || null
+        } catch {
+          siteName = null
+        }
         return {
           content: outcome.content,
           status: outcome.status,
           durationMs,
+          ...(outcome.scrapedPage
+            ? {
+                sources: [
+                  {
+                    url: scrapedUrl,
+                    title: scrapedTitle || scrapedUrl,
+                    snippet: '',
+                    siteName,
+                    publishedAt: null,
+                  },
+                ],
+              }
+            : {}),
           payload: {
             kind: 'scrape',
-            url: outcome.scrapedPage?.url ?? rawUrl,
-            title: outcome.scrapedPage?.title ?? null,
+            url: scrapedUrl,
+            title: scrapedTitle,
           },
         }
       }

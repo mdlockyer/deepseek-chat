@@ -1,16 +1,38 @@
+import { ensureKatex } from '@deepseek-chat/lib-markdown'
+import { createIndexedDbSessionStore, type StreamTrace } from '@deepseek-chat/slice-conversations'
+import '@deepseek-chat/spine/tokens.css'
+import '@fontsource-variable/google-sans-flex'
 import { createRoot } from 'react-dom/client'
 import { App } from './App.js'
 import { AppErrorBoundary } from './AppErrorBoundary.js'
-import { account, browser, overlays, webResearch } from './composition.js'
-// 首屏渲染前创建 conversations slice（安装其端口）
-import './conversations.js'
-import { acquireSidePanelOverlayLock } from './rightPanel/state.js'
-import { setupTheme } from './theme.js'
-import { isDesktopApp, openExternalLinksInBrowser } from './platform/desktop.js'
-import { ensureKatex } from '@deepseek-chat/lib-markdown'
-import '@fontsource-variable/google-sans-flex'
-import '@deepseek-chat/spine/tokens.css'
 import './global.css'
+import {
+  desktopBrowserHost,
+  desktopFetch,
+  desktopPreviewHost,
+  desktopScrape,
+  isDesktopApp,
+  loadFirecrawlApiKey,
+  loadKeychainApiKey,
+  onOpenSettings,
+  onPythonPhase,
+  openExternalLinksInBrowser,
+  openExternalUrl,
+  pythonInterrupt,
+  pythonReset,
+  pythonRun,
+  pythonRuntimeReset,
+  pythonRuntimeStatus,
+  pythonStageUpload,
+  saveFirecrawlApiKey,
+  saveKeychainApiKey,
+} from './platform/desktop.js'
+import { createAppRuntime } from './runtime.js'
+import { AppRuntimeProvider } from './RuntimeContext.js'
+import { saveFile } from './saveFile.js'
+import { localStore } from './storage.js'
+import { createIndexedDbBlobStore } from './storage/indexedDbBlobStore.js'
+import { setupDocumentTheme } from './theme.js'
 
 const rootElement = document.getElementById('root') as HTMLElement
 
@@ -20,36 +42,69 @@ if (__DEV__ && new URLSearchParams(window.location.search).get('workbench') === 
   })
 } else {
   ensureKatex()
-  setupTheme()
-  // 原生浏览器与预览视图画在页面之上，任何 HTML 浮层（菜单、弹窗）打开时通过统一 PanelSlot 让位
-  let releaseUiOverlay: (() => void) | null = null
-  overlays.subscribe((open) => {
-    if (open) {
-      if (!releaseUiOverlay) {
-        releaseUiOverlay = acquireSidePanelOverlayLock()
-      }
-    } else {
-      releaseUiOverlay?.()
-      releaseUiOverlay = null
-    }
+
+  const runtime = createAppRuntime({
+    store: localStore,
+    blobs: createIndexedDbBlobStore(),
+    sessions: createIndexedDbSessionStore(),
+    fetch: isDesktopApp ? desktopFetch : (url, init) => fetch(url, init),
+    apiOrigin: __API_ORIGIN__,
+    platform: isDesktopApp ? 'desktop' : 'web',
+    browserLanguage: typeof navigator === 'undefined' ? 'zh' : navigator.language,
+    saveFile,
+    syncDocumentTheme: true,
+    autoPromptApiKey: true,
+    desktop: isDesktopApp
+      ? {
+          browserHost: desktopBrowserHost,
+          previewHost: desktopPreviewHost,
+          pythonNative: {
+            run: pythonRun,
+            interrupt: pythonInterrupt,
+            reset: pythonReset,
+            stageUpload: pythonStageUpload,
+            onPhase: onPythonPhase,
+            runtimeStatus: pythonRuntimeStatus,
+            resetRuntime: pythonRuntimeReset,
+          },
+          localScrape: desktopScrape,
+          accountSecret: { load: loadKeychainApiKey, save: saveKeychainApiKey },
+          firecrawlSecret: { load: loadFirecrawlApiKey, save: saveFirecrawlApiKey },
+          openExternal: openExternalUrl,
+          onOpenSettings,
+        }
+      : { openExternal: openExternalUrl },
+    ...(__DEV__
+      ? {
+          onStreamTrace: (trace: StreamTrace) => {
+            void fetch('/__dev/stream-trace', {
+              method: 'POST',
+              body: JSON.stringify({ at: new Date().toISOString(), ...trace }),
+            }).catch(() => undefined)
+          },
+        }
+      : {}),
   })
-  if (isDesktopApp) {
+
+  setupDocumentTheme(runtime.slices.preferences)
+
+  if (isDesktopApp && runtime.slices.browser) {
+    const browserSlice = runtime.slices.browser
     openExternalLinksInBrowser((url) => {
-      void browser.openUrl(url, { initiator: 'user' })
+      void browserSlice.openUrl(url, { initiator: 'user' })
     })
   }
 
   const render = () =>
     createRoot(rootElement).render(
       <AppErrorBoundary fullScreen>
-        <App />
+        <AppRuntimeProvider runtime={runtime}>
+          <App />
+        </AppRuntimeProvider>
       </AppErrorBoundary>
     )
 
-  // 桌面版先从原生私有存储读入密钥（API Key 与 Firecrawl Key），避免首屏误判为未设置；网页版立即返回。
-  // 原生读取无响应或失败时最多等 2 秒，之后按未设置进入界面，避免白屏。
-  void Promise.race([
-    Promise.all([account.hydrate(), webResearch.hydrate()]),
-    new Promise((resolve) => setTimeout(resolve, 2000)),
-  ]).then(render)
+  void Promise.race([runtime.hydrate(), new Promise((resolve) => setTimeout(resolve, 2000))]).then(
+    render
+  )
 }

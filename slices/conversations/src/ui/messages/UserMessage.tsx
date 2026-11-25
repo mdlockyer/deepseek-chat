@@ -1,17 +1,16 @@
-import { useTranslate } from '../../messages.js'
+import { Button, IconButton, IconEditOutline16, useIsMobile } from '@deepseek-chat/lib-ui'
 import clsx from 'clsx'
 import { memo, useLayoutEffect, useRef, useState } from 'react'
-import { Button, IconButton, IconEditOutline16, useIsMobile } from '@deepseek-chat/lib-ui'
-import { editMessage, retryUpload } from '../../store.js'
+import { useConversations } from '../../context.js'
+import { useTranslate } from '../../messages.js'
 import { type UserMessage as UserMessageType } from '../../types.js'
-import { deps, ensureApiKey } from '../../env.js'
 import {
   BranchSwitcher,
   type MessageVersions,
   type SelectMessageVersion,
 } from './BranchSwitcher.js'
-import { MessageFile } from './MessageFile.js'
 import { CopyButton } from './CopyButton.js'
+import { MessageFile } from './MessageFile.js'
 import styles from './UserMessage.module.css'
 
 export const UserMessage = memo(function UserMessage({
@@ -35,6 +34,7 @@ export const UserMessage = memo(function UserMessage({
   onSelectVersion: SelectMessageVersion
 }) {
   const t = useTranslate()
+  const { editMessage, retryUpload, ensureApiKey } = useConversations()
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(message.content)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -51,7 +51,6 @@ export const UserMessage = memo(function UserMessage({
 
   const sendEdit = () => {
     if (canSend && ensureApiKey() && editMessage(sessionId, message.id, draft.trim())) {
-      deps().ui.voice.stopReadAloud()
       setEditing(false)
     }
   }

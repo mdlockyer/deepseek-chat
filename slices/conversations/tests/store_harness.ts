@@ -1,22 +1,26 @@
 /**
- * Store-level test environment: the real slice over fake IndexedDB, a scripted DeepSeek API, and a
- * recording tool gateway. Import first in a test file; the slice is created once per process.
+ * Store-level test environment: an isolated conversations slice over in-memory stores,
+ * a scripted DeepSeek API, and a recording ToolCapability.
  */
-import 'fake-indexeddb/auto'
-import { memoryStore } from '@deepseek-chat/spine/ports'
+import {
+  createToolRegistry,
+  type ToolCallRecord,
+  type ToolCapability,
+  type ToolEffect,
+  type ToolProgress,
+  type ToolRunContext,
+  type ToolRunResult,
+  type ToolStepPresenter,
+  type TurnLifecycleHooks,
+} from '@deepseek-chat/lib-tools'
+import { memoryBlobStore, memoryStore } from '@deepseek-chat/spine/ports'
 import { EventLog } from '@deepseek-chat/spine/runtime'
-import type {
-  AgentProfile,
-  ConversationsParams,
-  StreamTrace,
-  ToolCallPart,
-  ToolCaller,
-  ToolEffect,
-  ToolKind,
-  ToolResult,
-  ToolRunContext,
+import {
+  memorySessionStore,
+  type ConversationsParams,
+  type StreamTrace,
 } from '@deepseek-chat/slice-conversations'
-import { installTestSlice } from './harness.js'
+import { createTestSlice } from './harness.js'
 
 // A hidden page: the store writes each streamed event straight away instead of per frame.
 Object.assign(globalThis, {
@@ -27,7 +31,6 @@ Object.assign(globalThis, {
 
 // ---------- the scripted API ----------
 
-/** What a request asked for, as the API sees it. */
 export type ApiRequest = {
   readonly model: string
   readonly system: string
@@ -37,12 +40,6 @@ export type ApiRequest = {
   readonly thinking?: { type: string }
 }
 
-/**
- * One scripted reply: text, tool calls (each `{ name, input }`), an HTTP error status, or a
- * connection that fails before any response. `dropMessageStop` ends the stream right after
- * `message_delta`, as a dropped connection would. `cutAfterContent` ends a text stream right after
- * its first text arrived, before any stop reason.
- */
 export type ApiReply =
   | {
       readonly text: string
@@ -114,12 +111,10 @@ const sseResponse = (events: unknown[]) =>
     { headers: { 'Content-Type': 'text/event-stream' } }
   )
 
-/** How the Files API answers one upload: the new file's id, or an HTTP error. */
 export type UploadReply =
   | { readonly id: string }
   | { readonly errorStatus: number; readonly errorMessage: string }
 
-/** The server's answer when a request names a file it no longer has. */
 export const fileGoneError = (fileId: string): ApiReply => ({
   errorStatus: 400,
   errorMessage: `file_ids do not exist or are not created under your account: ${fileId}`,
@@ -128,39 +123,23 @@ export const fileGoneError = (fileId: string): ApiReply => ({
 const jsonResponse = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
 
-// ---------- the recording gateway ----------
+// ---------- the recording tool capability ----------
 
-export type GatewayRun = {
-  readonly call: ToolCallPart
-  /** The call's own running result, as the context showed it when the run started. */
-  readonly runningPhase: string | undefined
+export type RecordedRun = {
+  readonly call: ToolCallRecord
+  readonly initialPhase: string | undefined
   readonly context: ToolRunContext
-}
-
-const effectForKind = (kind: ToolKind | null): ToolEffect => {
-  switch (kind) {
-    case 'web_search':
-    case 'web_scrape':
-    case 'read_file':
-      return 'read'
-    case 'subagent':
-      return 'spawn'
-    case 'present_file':
-    case 'edit_file':
-      return 'artifact'
-    case 'ask_user':
-      return 'interactive'
-    default:
-      return 'session'
-  }
 }
 
 export const createStoreEnv = (
   options: {
-    kinds?: Record<string, ToolKind>
-    effects?: Record<string, ToolEffect>
-    profiles?: Record<string, AgentProfile>
-    instructions?: (names: ReadonlySet<string>, audience: ToolCaller['kind']) => string[]
+    toolNames?: readonly string[]
+    effects?: Readonly<Record<string, ToolEffect>>
+    initialProgress?: (name: string) => ToolProgress | undefined
+    instructions?: (names: ReadonlySet<string>) => string | null
+    presenter?: ToolStepPresenter
+    turnHooks?: TurnLifecycleHooks
+    extraCapabilities?: readonly ToolCapability[]
     autoTitle?: boolean
     params?: Partial<ConversationsParams>
   } = {}
@@ -169,28 +148,62 @@ export const createStoreEnv = (
   let respond: (
     request: ApiRequest,
     signal?: AbortSignal
-  ) => ApiReply | Promise<ApiReply> = () => ({
-    text: 'ok',
-  })
+  ) => ApiReply | Promise<ApiReply> = () => ({ text: 'ok' })
   let callCounter = 0
-  const runs: GatewayRun[] = []
-  let runTool: (call: ToolCallPart, context: ToolRunContext) => Promise<ToolResult> = async (
+  const runs: RecordedRun[] = []
+  let runTool: (call: ToolCallRecord, context: ToolRunContext) => Promise<ToolRunResult> = async (
     call
   ) => ({ content: `ran ${call.name}`, status: 'ok' })
+
   const log = new EventLog()
-  const kinds = options.kinds ?? {}
+  const blobs = memoryBlobStore()
+  const sessions = memorySessionStore()
+  const store = memoryStore()
+  const toolNames = options.toolNames ?? []
   const effects = options.effects ?? {}
-  const profiles = options.profiles ?? {}
   const traces: StreamTrace[] = []
-  /** File names in upload order. */
   const uploads: string[] = []
   let respondToUpload: (name: string, index: number) => UploadReply | Promise<UploadReply> = (
     _name,
     index
   ) => ({ id: `file-api-${index + 1}` })
 
-  const slice = installTestSlice({
+  const recordedCap: ToolCapability = {
+    id: 'test-tools',
+    initialProgress: options.initialProgress,
+    declareTools: () =>
+      toolNames.map((name) => ({
+        name,
+        description: name,
+        input_schema: { type: 'object', properties: {} },
+      })),
+    instructions: (names) => (options.instructions ? options.instructions(names) : null),
+    handles: (name) => toolNames.includes(name) || Object.hasOwn(effects, name),
+    effectOf: (name) => effects[name] ?? 'session',
+    run: async (call, context) => {
+      const turn = slice.getTurnSnapshot(context.sessionId, context.replyId)
+      const running = turn?.blocks.find(
+        (b) => b.type === 'tool_result' && b.tool_use_id === call.id
+      )
+      runs.push({
+        call,
+        initialPhase: running?.type === 'tool_result' ? running.progress?.phase : undefined,
+        context,
+      })
+      return runTool(call, context)
+    },
+    presenter: options.presenter,
+    turnHooks: options.turnHooks,
+  }
+
+  const tools = createToolRegistry([recordedCap, ...(options.extraCapabilities ?? [])])
+
+  const slice = createTestSlice({
     log,
+    store,
+    blobs,
+    sessions,
+    tools,
     autoTitle: options.autoTitle ?? false,
     params: options.params,
     onStreamTrace: (trace) => {
@@ -232,51 +245,26 @@ export const createStoreEnv = (
       }
       return sseResponse(toEvents(reply, () => `call${++callCounter}`))
     },
-    store: memoryStore(),
-    tools: {
-      declare: () =>
-        Object.keys(kinds).map((name) => ({ name, description: name, input_schema: {} })),
-      instructions: options.instructions ?? (() => []),
-      describe: (name) =>
-        Object.hasOwn(kinds, name) ? { name, description: name, input_schema: {} } : null,
-      kindOf: (name) => kinds[name] ?? null,
-      effectOf: (name) => effects[name] ?? effectForKind(kinds[name] ?? null),
-      agentProfile: (name) => (Object.hasOwn(profiles, name) ? profiles[name] : null),
-      fenceLanguage: () => 'text',
-      run: (call, context) => {
-        const running = context.replyBlocks.find(
-          (block) => block.type === 'tool_result' && block.tool_use_id === call.id
-        )
-        runs.push({
-          call,
-          runningPhase: running?.type === 'tool_result' ? running.phase : undefined,
-          context,
-        })
-        return runTool(call, context)
-      },
-    },
   })
 
   return {
     slice,
     log,
+    blobs,
+    sessions,
+    tools,
     requests,
     runs,
-    /** Stream traces reported through `onStreamTrace`, in order. */
     traces,
-    /** Names of the files uploaded to the Files API, in order (re-uploads included). */
     uploads,
-    /** Sets how the Files API answers each upload (`index` counts every upload from 0). */
     respondToUploadsWith: (fn: typeof respondToUpload) => {
       respondToUpload = fn
     },
-    /** Sets how the API answers each request. */
     respondWith: (
       fn: (request: ApiRequest, signal?: AbortSignal) => ApiReply | Promise<ApiReply>
     ) => {
       respond = fn
     },
-    /** Sets how the gateway runs each call. */
     runToolsWith: (fn: typeof runTool) => {
       runTool = fn
     },
@@ -292,7 +280,6 @@ export const createStoreEnv = (
 
 export type StoreEnv = ReturnType<typeof createStoreEnv>
 
-/** Sends `text` in `sessionId` (null: a new chat) and waits for the reply to finish. */
 export const say = async (env: StoreEnv, sessionId: string | null, text: string) => {
   env.slice.commands.setDraft(sessionId, text)
   const sent = env.slice.commands.send(sessionId)
@@ -300,7 +287,6 @@ export const say = async (env: StoreEnv, sessionId: string | null, text: string)
   return sent
 }
 
-/** A tiny seeded PRNG (mulberry32) for reproducible randomized invariants. */
 export const seeded = (seed: number) => {
   let a = seed >>> 0
   return () => {
@@ -312,7 +298,6 @@ export const seeded = (seed: number) => {
   }
 }
 
-/** Sends the chat's draft once its uploads have finished, then waits for the reply to finish. */
 export const sendWhenUploaded = async (env: StoreEnv, sessionId: string | null) => {
   for (let tries = 0; tries < 200; tries += 1) {
     if (env.slice.commands.send(sessionId)) {

@@ -1,26 +1,35 @@
+import type { PreferencesSlice, ThemePreference } from '@deepseek-chat/slice-preferences'
 import { applyDocumentTheme, type ThemeMode } from '@deepseek-chat/spine/design'
 import { useSyncExternalStore } from 'react'
-import type { ThemePreference } from '@deepseek-chat/slice-preferences'
-import { preferences } from './composition.js'
 
 export type Theme = ThemeMode
 
-const query = window.matchMedia('(prefers-color-scheme: dark)')
+const getMediaQuery = (): MediaQueryList | null =>
+  typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+    ? window.matchMedia('(prefers-color-scheme: dark)')
+    : null
 
 const subscribeOsTheme = (listener: () => void) => {
+  const query = getMediaQuery()
+  if (!query) {
+    return () => {}
+  }
   query.addEventListener('change', listener)
   return () => query.removeEventListener('change', listener)
 }
 
-const getOsTheme = (): Theme => (query.matches ? 'dark' : 'light')
+const getOsTheme = (): Theme => (getMediaQuery()?.matches ? 'dark' : 'light')
 
 const resolveTheme = (preference: ThemePreference, osTheme: Theme): Theme =>
   preference === 'system' ? osTheme : preference
 
-/** 当前实际生效的深浅色：手动选择优先，「跟随系统」时取系统设置 */
-export const useTheme = (): Theme => {
-  const preference = preferences.useThemePreference()
-  const osTheme = useSyncExternalStore(subscribeOsTheme, getOsTheme)
+const useSystemPreference = (): ThemePreference => 'system'
+
+/** Current effective theme for a given runtime (`preferences` may be null when omitted). */
+export const useRuntimeTheme = (preferences: PreferencesSlice | null): Theme => {
+  const usePref = preferences ? preferences.useThemePreference : useSystemPreference
+  const preference = usePref()
+  const osTheme = useSyncExternalStore<Theme>(subscribeOsTheme, getOsTheme, () => 'light')
   return resolveTheme(preference, osTheme)
 }
 
@@ -30,13 +39,10 @@ const syncPageBackground = () => {
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', backgroundColor)
 }
 
-/** 同步页面主题、根画布背景和支持 theme-color 的浏览器栏。 */
 const applyTheme = (theme: Theme) => {
   const body = document.body
-  // 主题切换帧禁用过渡，使页面颜色同步更新
   body.classList.add('change-theme')
   applyDocumentTheme(document.documentElement, theme)
-  // 首次背景色同步在样式表加载完成后执行，适配 WebKit 的 defer 脚本执行顺序。
   if (document.readyState === 'complete') {
     syncPageBackground()
   }
@@ -45,22 +51,27 @@ const applyTheme = (theme: Theme) => {
   }, 0)
 }
 
-let appliedTheme: Theme | null = null
-
-const syncTheme = () => {
-  const theme = resolveTheme(preferences.getThemePreference(), getOsTheme())
-  if (theme !== appliedTheme) {
-    appliedTheme = theme
-    applyTheme(theme)
+/** Syncs the document root theme once and whenever preference or OS dark mode changes. */
+export const setupDocumentTheme = (preferences: PreferencesSlice | null): (() => void) => {
+  let appliedTheme: Theme | null = null
+  const sync = () => {
+    const pref = preferences?.getThemePreference() ?? 'system'
+    const theme = resolveTheme(pref, getOsTheme())
+    if (theme !== appliedTheme) {
+      appliedTheme = theme
+      applyTheme(theme)
+    }
   }
-}
-
-/** 首屏渲染前同步应用一次，之后随主题设置与系统深浅色变化更新 */
-export const setupTheme = () => {
-  syncTheme()
+  sync()
+  const onLoad = () => syncPageBackground()
   if (document.readyState !== 'complete') {
-    window.addEventListener('load', syncPageBackground, { once: true })
+    window.addEventListener('load', onLoad, { once: true })
   }
-  query.addEventListener('change', syncTheme)
-  preferences.subscribe(syncTheme)
+  const unsubOs = subscribeOsTheme(sync)
+  const unsubPref = preferences ? preferences.subscribe(sync) : () => {}
+  return () => {
+    window.removeEventListener('load', onLoad)
+    unsubOs()
+    unsubPref()
+  }
 }

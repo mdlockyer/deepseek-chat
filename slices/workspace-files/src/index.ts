@@ -348,6 +348,8 @@ export const createWorkspaceFilesSlice = (deps: WorkspaceFilesDeps) => {
     /** React: a chat's preview state. */
     useSession: (sessionId: string | null): SessionPreviewState =>
       state.usePreviewStore((current) => state.getSessionPreview(current, sessionId)),
+    /** React: whether the chat has any uploads or delivered files in its visible branch. */
+    useHasFiles: (sessionId: string | null): boolean => useSessionFiles(sessionId).length > 0,
     /** Refreshes the still image shown while the native preview is hidden. */
     refreshSnapshot: state.triggerNativePreviewSnapshot,
 

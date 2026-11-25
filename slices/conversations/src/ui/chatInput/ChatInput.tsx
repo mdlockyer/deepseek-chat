@@ -1,63 +1,86 @@
-import { showNotice as showConversationsNotice } from '../../notice.js'
-import clsx from 'clsx'
-import { memo, useCallback, useEffect, useRef } from 'react'
+import type { ToolRegistry } from '@deepseek-chat/lib-tools'
 import {
-  IconBrowserOutline14,
-  IconCodeOutline14,
-  IconGlobeLanguageOutline14,
   IconSendOutline16,
   IconStopFill16,
   IconThinkOutline16,
   useIsMobile,
 } from '@deepseek-chat/lib-ui'
-import {
-  setBrowser,
-  setPython,
-  setSearch,
-  setThinking,
-  useComposerOptions,
-} from '../../composerOptions.js'
-import { sendMessage, stopReply, useChatStore } from '../../store.js'
-import {
-  addDraftFiles,
-  EMPTY_DRAFT,
-  getDraft,
-  prepareDraftMessage,
-  removeDraftAttachment,
-  retryDraftAttachment,
-  setDraftText,
-  useDrafts,
-} from '../../drafts.js'
-import { deps, ensureApiKey } from '../../env.js'
-import { ComposerMenu, isUploadShortcut, type ComposerToolSwitch } from './ComposerMenu.js'
-import { DragMask, useFileDrop } from './DragMask.js'
-import { ACCEPT, useUploads } from '../../attachments.js'
-import { DraftAttachments } from './DraftAttachments.js'
+import clsx from 'clsx'
+import { memo, useCallback, useEffect, useRef, useState } from 'react'
+import { ACCEPT } from '../../attachments.js'
+import { useConversations } from '../../context.js'
+import { EMPTY_DRAFT, prepareDraftMessage } from '../../drafts.js'
 import { useTranslate } from '../../messages.js'
 import styles from './ChatInput.module.css'
+import { ComposerMenu, isUploadShortcut, type ComposerToolSwitch } from './ComposerMenu.js'
+import { DraftAttachments } from './DraftAttachments.js'
+import { DragMask, useFileDrop } from './DragMask.js'
 
-/** 输入框：自适应高度的文本框 + 文件 + 深度思考与智能搜索开关 + 语音输入 + 发送 / 停止 */
+const NO_VOICE = {
+  status: 'idle' as const,
+  seconds: 0,
+  available: false,
+  getAnalyser: () => null,
+  toggle: () => {},
+  cancel: () => {},
+}
+
+const useNoVoiceInput = () => NO_VOICE
+
+const useCapabilityToggles = (tools: ToolRegistry): ComposerToolSwitch[] => {
+  const [, setVersion] = useState(0)
+  useEffect(() => {
+    const unsubs = tools.toggles.map((toggle) => toggle.subscribe(() => setVersion((v) => v + 1)))
+    return () => {
+      for (const unsub of unsubs) {
+        unsub()
+      }
+    }
+  }, [tools])
+
+  return tools.toggles.map((toggle) => ({
+    key: toggle.id,
+    label: toggle.label(),
+    icon: toggle.icon,
+    checked: toggle.isEnabled(),
+    onToggle: () => toggle.setEnabled(!toggle.isEnabled()),
+  }))
+}
+
+/** 输入框：自适应高度的文本框 + 文件 + 深度思考与已挂载能力开关 + 语音输入（可选） + 发送 / 停止 */
 export const ChatInput = memo(function ChatInput({ sessionId }: { sessionId: string | null }) {
-  // 切换目标时释放录音、转写和 DOM 状态；文字与附件由草稿服务保留。
   return <Input key={sessionId === null ? 'new' : `session:${sessionId}`} sessionId={sessionId} />
 })
 
 const Input = ({ sessionId }: { sessionId: string | null }) => {
   const t = useTranslate()
-  const { useVoiceInput, VoiceButton, Spectrum, stopReadAloud } = deps().ui.voice
-  const draft = useDrafts((state) => state.drafts.get(sessionId) ?? EMPTY_DRAFT)
+  const {
+    deps,
+    tools,
+    useChatStore,
+    useThinkingStore,
+    setThinking,
+    drafts,
+    uploads,
+    sendMessage,
+    stopReply,
+    ensureApiKey,
+    showNotice,
+  } = useConversations()
+
+  const voiceViews = deps.ui.voice
+  const useVoiceInput = voiceViews ? voiceViews.useVoiceInput : useNoVoiceInput
+  const draft = drafts.useDrafts((state) => state.drafts.get(sessionId) ?? EMPTY_DRAFT)
   const { text, attachments } = draft
-  const setText = (value: string) => setDraftText(sessionId, value)
-  const draftReady = useUploads((state) => prepareDraftMessage(draft, state.tasks) !== null)
+  const setText = (value: string) => drafts.setDraftText(sessionId, value)
+  const draftReady = uploads.useUploads((state) => prepareDraftMessage(draft, state.tasks) !== null)
   const streaming = useChatStore(
     (state) => sessionId !== null && Object.hasOwn(state.streaming, sessionId)
   )
-  const thinking = useComposerOptions((state) => state.thinking)
+  const thinking = useThinkingStore((state) => state.thinking)
   const importingHistory = useChatStore((state) => state.importingHistory)
   const isMobile = useIsMobile()
-  const search = useComposerOptions((state) => state.search)
-  const python = useComposerOptions((state) => state.python)
-  const browser = useComposerOptions((state) => state.browser)
+  const capabilitySwitches = useCapabilityToggles(tools)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
@@ -65,39 +88,38 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
     if (!useChatStore.getState().importingHistory && ensureApiKey()) {
       fileInputRef.current?.click()
     }
-  }, [])
+  }, [ensureApiKey, useChatStore])
 
   const acceptFiles = (files: File[]) => {
     if (files.length === 0 || useChatStore.getState().importingHistory || !ensureApiKey()) {
       return
     }
-    const error = addDraftFiles(sessionId, files, deps().getApiKey() ?? '')
+    const error = drafts.addDraftFiles(sessionId, files, deps.getApiKey() ?? '')
     if (error) {
-      showConversationsNotice(error)
+      showNotice(error)
     }
   }
   const retryFile = useCallback(
     (id: string) => {
       if (!useChatStore.getState().importingHistory && ensureApiKey()) {
-        retryDraftAttachment(sessionId, id, deps().getApiKey() ?? '')
+        drafts.retryDraftAttachment(sessionId, id, deps.getApiKey() ?? '')
       }
     },
-    [sessionId]
+    [deps, drafts, ensureApiKey, sessionId, useChatStore]
   )
   const removeFile = useCallback(
     (id: string) => {
       if (!useChatStore.getState().importingHistory) {
-        removeDraftAttachment(sessionId, id)
+        drafts.removeDraftAttachment(sessionId, id)
       }
     },
-    [sessionId]
+    [drafts, sessionId, useChatStore]
   )
   const dragging = useFileDrop(acceptFiles)
 
-  /** 转写结果插入到光标处，并把光标移到插入内容之后 */
   const voice = useVoiceInput((transcript) => {
     const textarea = textareaRef.current
-    const current = getDraft(sessionId).text
+    const current = drafts.getDraft(sessionId).text
     const start = textarea?.selectionStart ?? current.length
     const end = textarea?.selectionEnd ?? current.length
     setText(current.slice(0, start) + transcript + current.slice(end))
@@ -107,7 +129,6 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
     })
   })
 
-  // 欢迎页导入后会话 ID 不变，不能依赖卸载取消语音；订阅开始事件也覆盖快速完成的导入。
   const cancelVoice = voice.cancel
   useEffect(
     () =>
@@ -116,28 +137,23 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
           cancelVoice()
         }
       }),
-    [cancelVoice]
+    [cancelVoice, useChatStore]
   )
 
-  // 移动端录音时用频谱替代输入框内容
   const recording = voice.status === 'recording'
-
-  // 排队、上传中或上传失败的附件都留在输入框，全部上传成功后才能发送
   const canSend = !importingHistory && !streaming && voice.status === 'idle' && draftReady
 
   const send = () => {
     if (
       useChatStore.getState().importingHistory ||
       voice.status !== 'idle' ||
-      !prepareDraftMessage(getDraft(sessionId), useUploads.getState().tasks)
+      !prepareDraftMessage(drafts.getDraft(sessionId), uploads.useUploads.getState().tasks)
     ) {
       return
     }
-    // 文本与上传完成态由提交动作读取最新快照，不使用上一次渲染的草稿。
     if (!ensureApiKey() || !sendMessage(sessionId)) {
       return
     }
-    stopReadAloud()
     if (isMobile) {
       textareaRef.current?.blur()
     } else {
@@ -153,31 +169,7 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
       checked: thinking,
       onToggle: () => setThinking(!thinking),
     },
-    {
-      key: 'search',
-      label: t('search'),
-      icon: <IconGlobeLanguageOutline14 />,
-      checked: search,
-      onToggle: () => setSearch(!search),
-    },
-    {
-      key: 'python',
-      label: t('runCode'),
-      icon: <IconCodeOutline14 />,
-      checked: python,
-      onToggle: () => setPython(!python),
-    },
-    ...(deps().browserAvailable
-      ? [
-          {
-            key: 'browser',
-            label: t('browserSwitch'),
-            icon: <IconBrowserOutline14 />,
-            checked: browser,
-            onToggle: () => setBrowser(!browser),
-          },
-        ]
-      : []),
+    ...capabilitySwitches,
   ]
 
   return (
@@ -202,13 +194,11 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
           className={clsx(styles.textarea, recording && isMobile && styles.textareaHidden)}
           placeholder={t('chatInputPlaceholderChat')}
           rows={2}
-          // 移动端不自动聚焦，避免一打开就弹出键盘
           autoFocus={!isMobile}
           disabled={importingHistory}
           value={text}
           onChange={(event) => setText(event.target.value)}
           onMouseDown={(event) => {
-            // 首次点击时手动聚焦，避免 Safari 把整个页面滚到输入框位置。
             if (isMobile && event.button === 0 && document.activeElement !== event.currentTarget) {
               event.preventDefault()
               event.currentTarget.focus({ preventScroll: true })
@@ -228,7 +218,9 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
             }
           }}
         />
-        {recording && isMobile ? <Spectrum getAnalyser={voice.getAnalyser} /> : null}
+        {recording && isMobile && voiceViews ? (
+          <voiceViews.Spectrum getAnalyser={voice.getAnalyser} />
+        ) : null}
         <div className={styles.mirror} aria-hidden>
           {`${text}\n`}
         </div>
@@ -251,28 +243,27 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
           }}
         />
         <div className={styles.right}>
-          <VoiceButton
-            status={voice.status}
-            disabled={!voice.available}
-            seconds={voice.seconds}
-            onClick={() => {
-              if (
-                voice.status !== 'idle' ||
-                (!useChatStore.getState().importingHistory && ensureApiKey())
-              ) {
-                void voice.toggle()
-              }
-            }}
-          />
+          {voiceViews ? (
+            <voiceViews.VoiceButton
+              status={voice.status}
+              disabled={!voice.available}
+              seconds={voice.seconds}
+              onClick={() => {
+                if (
+                  voice.status !== 'idle' ||
+                  (!useChatStore.getState().importingHistory && ensureApiKey())
+                ) {
+                  void voice.toggle()
+                }
+              }}
+            />
+          ) : null}
           {streaming && sessionId ? (
             <button
               type="button"
               className={styles.sendButton}
               aria-label={t('chatInputStopButtonTooltip')}
-              onClick={() => {
-                stopReadAloud()
-                stopReply(sessionId)
-              }}
+              onClick={() => stopReply(sessionId)}
             >
               <IconStopFill16 />
             </button>

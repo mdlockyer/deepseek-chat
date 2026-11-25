@@ -170,6 +170,9 @@ export const createAccount = (deps: AccountDeps) => {
     setApiKey,
     verifyKey,
     storage: secret ? ('device' as const) : ('browser' as const),
+    dispose: () => {
+      listeners.clear()
+    },
   }
 }
 

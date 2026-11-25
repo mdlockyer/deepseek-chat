@@ -1,43 +1,57 @@
-import { useCallback, useRef } from 'react'
 import {
   Chip,
   IconBrowseOutline16,
   IconGlobeLanguageOutline16,
   IconSearchOutline16,
 } from '@deepseek-chat/lib-ui'
-import { browser } from '../composition.js'
-import { conversations } from '../conversations.js'
+import { useCallback, useRef } from 'react'
 import { useTranslate } from '../i18n/index.js'
-import { isDesktopApp } from '../platform/desktop.js'
-import { useSessionFileRecords } from '../useSessionFileRecords.js'
-import { workspaceFiles } from '../workspaceFiles.js'
+import { useAppRuntime } from '../RuntimeContext.js'
 import { SidePanel } from './SidePanel.js'
-import {
-  getActiveRightPanel,
-  getPreviousRightPanel,
-  openRightPanel,
-  useSidePanelStore,
-  type RightPanelKind,
-} from './state.js'
+import { getActiveRightPanel, getPreviousRightPanel, type RightPanelKind } from './state.js'
+
+const useFalse = () => false
 
 /** 右侧面板统一宿主：在同一 SidePanel 壳层内切换文件预览、内置浏览器与本轮活动/来源检查器 */
 export const RightPanel = () => {
   const t = useTranslate()
-  const activeSessionId = useSidePanelStore((state) => state.activeSessionId)
-  const activePanels = useSidePanelStore((state) => state.activePanels)
-  const previousPanels = useSidePanelStore((state) => state.previousPanels)
+  const runtime = useAppRuntime()
+  const { rightPanel, slices, platform } = runtime
+  const { browser, workspaceFiles, activityInspector } = slices
+
+  const activeSessionId = rightPanel.useStore((state) => state.activeSessionId)
+  const activePanels = rightPanel.useStore((state) => state.activePanels)
+  const previousPanels = rightPanel.useStore((state) => state.previousPanels)
   const activeKind = getActiveRightPanel(activeSessionId, { activePanels })
   const previousKind = getPreviousRightPanel(activeSessionId, { previousPanels })
-  const effectiveKind = activeKind === 'browser' && !isDesktopApp ? null : activeKind
 
-  const fileRecords = useSessionFileRecords(activeSessionId)
-  const hasLastActivity = conversations.useHasLastActivity()
+  const canShowKind = (kind: RightPanelKind | null): boolean => {
+    if (kind === 'browser') {
+      return Boolean(browser?.available)
+    }
+    if (kind === 'preview') {
+      return workspaceFiles !== null
+    }
+    if (kind === 'activity') {
+      return activityInspector !== null
+    }
+    return false
+  }
+
+  const effectiveKind = canShowKind(activeKind) ? activeKind : null
+
+  const useHasFiles = workspaceFiles ? workspaceFiles.useHasFiles : useFalse
+  const hasFiles = useHasFiles(activeSessionId)
+  const useHasLastActivity = activityInspector ? activityInspector.useHasLastActivity : useFalse
+  const hasLastActivity = useHasLastActivity()
 
   const lastKindRef = useRef<RightPanelKind | null>(effectiveKind)
   if (effectiveKind !== null) {
     lastKindRef.current = effectiveKind
   }
-  const shownKind = effectiveKind ?? lastKindRef.current
+  const shownKind = canShowKind(effectiveKind ?? lastKindRef.current)
+    ? (effectiveKind ?? lastKindRef.current)
+    : null
 
   const lastHoverSnapshotAtRef = useRef(0)
   const handleResizeHoverStart = useCallback(() => {
@@ -45,22 +59,21 @@ export const RightPanel = () => {
     if (now - lastHoverSnapshotAtRef.current <= 800) {
       return
     }
-    if (effectiveKind === 'browser') {
+    if (effectiveKind === 'browser' && browser) {
       lastHoverSnapshotAtRef.current = now
       void browser.refreshSnapshot()
-    } else if (effectiveKind === 'preview' && isDesktopApp) {
+    } else if (effectiveKind === 'preview' && workspaceFiles && platform === 'desktop') {
       lastHoverSnapshotAtRef.current = now
       workspaceFiles.refreshSnapshot()
     }
-  }, [effectiveKind])
+  }, [browser, effectiveKind, platform, workspaceFiles])
 
-  // Contextual one-click return chip when one right-hand panel displaced another on this session.
   const returnAction = (() => {
     if (!activeSessionId || !shownKind) {
       return null
     }
     if (shownKind === 'preview' || shownKind === 'browser') {
-      if (!hasLastActivity) {
+      if (!activityInspector || !hasLastActivity) {
         return null
       }
       return (
@@ -68,32 +81,32 @@ export const RightPanel = () => {
           icon={<IconSearchOutline16 />}
           title={t('rightPanelBackToActivity')}
           aria-label={t('rightPanelBackToActivity')}
-          onClick={conversations.restoreLastActivityPanel}
+          onClick={activityInspector.restoreLastActivity}
         >
           {t('rightPanelBackToActivity')}
         </Chip>
       )
     }
     if (shownKind === 'activity') {
-      if (previousKind === 'preview' && fileRecords.length > 0) {
+      if (previousKind === 'preview' && workspaceFiles && hasFiles) {
         return (
           <Chip
             icon={<IconBrowseOutline16 />}
             title={t('rightPanelBackToFiles')}
             aria-label={t('rightPanelBackToFiles')}
-            onClick={() => openRightPanel(activeSessionId, 'preview')}
+            onClick={() => rightPanel.openPanel(activeSessionId, 'preview')}
           >
             {t('rightPanelBackToFiles')}
           </Chip>
         )
       }
-      if (previousKind === 'browser' && isDesktopApp) {
+      if (previousKind === 'browser' && browser?.available) {
         return (
           <Chip
             icon={<IconGlobeLanguageOutline16 />}
             title={t('rightPanelBackToBrowser')}
             aria-label={t('rightPanelBackToBrowser')}
-            onClick={() => openRightPanel(activeSessionId, 'browser')}
+            onClick={() => rightPanel.openPanel(activeSessionId, 'browser')}
           >
             {t('rightPanelBackToBrowser')}
           </Chip>
@@ -105,12 +118,12 @@ export const RightPanel = () => {
 
   return (
     <SidePanel open={effectiveKind !== null} onResizeHoverStart={handleResizeHoverStart}>
-      {shownKind === 'browser' ? (
+      {shownKind === 'browser' && browser ? (
         <browser.BrowserPanel topActions={returnAction} />
-      ) : shownKind === 'preview' ? (
-        <workspaceFiles.PreviewPanel records={fileRecords} topActions={returnAction} />
-      ) : shownKind === 'activity' ? (
-        <conversations.ActivityPanel topActions={returnAction} />
+      ) : shownKind === 'preview' && workspaceFiles ? (
+        <workspaceFiles.PreviewPanel topActions={returnAction} />
+      ) : shownKind === 'activity' && activityInspector ? (
+        <activityInspector.ActivityPanel topActions={returnAction} />
       ) : null}
     </SidePanel>
   )

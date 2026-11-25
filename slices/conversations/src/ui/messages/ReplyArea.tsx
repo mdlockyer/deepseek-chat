@@ -1,22 +1,28 @@
-import clsx from 'clsx'
-import { memo, useEffect, useState } from 'react'
+import type { DeliveredFileRef } from '@deepseek-chat/lib-tools'
 import {
   IconCheckedOutline14,
   IconChevronRightOutline14,
   IconCloseFill14,
   IconWarningOutline16,
 } from '@deepseek-chat/lib-ui'
-import { buildTurnWorkStrip, getFrontStageAsks } from '../../activityView.js'
+import clsx from 'clsx'
+import { memo, useEffect, useState } from 'react'
 import { formatSize, getExtension } from '../../attachments.js'
-import { loadFile } from '../../db.js'
-import { deps } from '../../env.js'
+import { useConversations } from '../../context.js'
 import { useTranslate } from '../../messages.js'
-import type { AssistantMessage, PresentedFileRef } from '../../types.js'
-import type { AskStep, ReplyView } from '../../view.js'
-import { toggleActivityPanel, useActivityPanel } from '../activity/activityPanelState.js'
+import type { AssistantMessage } from '../../types.js'
+import type { ReplyView } from '../../view.js'
+import {
+  buildTurnWorkStrip,
+  getFrontStageNotes,
+  type FrontStageNoteEntry,
+} from '../../workStrip.js'
 import { FileCard } from '../files/FileCard.js'
 import styles from './ReplyArea.module.css'
 import { WhaleLoader } from './WhaleLoader.js'
+
+const useNoInspection = () => null
+const useNotShown = () => false
 
 const useTicker = (active: boolean, interval: number) => {
   const [tick, setTick] = useState(0)
@@ -32,10 +38,10 @@ const useTicker = (active: boolean, interval: number) => {
 
 /**
  * Front Stage Turn Work Strip:
- * - While working: bounded 2-line live ticker (<= 4 compact lines for parallel subagents),
+ * - While working: bounded 2-line live ticker (<= 4 compact lines for parallel tracks),
  *   so completed tool calls never accumulate as a wall pushing the user's question off-screen.
  * - Once answered or finished: collapses automatically to a single quiet summary button that
- *   opens the unified right-hand Activity & Sources panel.
+ *   publishes `TurnInspectionRequested` on the Spine EventLog.
  */
 export const ReplyArea = memo(function ReplyArea({
   sessionId,
@@ -53,7 +59,9 @@ export const ReplyArea = memo(function ReplyArea({
   hasResponse: boolean
 }) {
   const t = useTranslate()
-  const target = useActivityPanel((state) => state.target)
+  const { deps, requestTurnInspection } = useConversations()
+  const useActiveInspection = deps.ui.useActiveInspectionTarget ?? useNoInspection
+  const target = useActiveInspection()
   const isInspecting =
     target !== null &&
     target.sessionId === sessionId &&
@@ -69,9 +77,9 @@ export const ReplyArea = memo(function ReplyArea({
     stalled,
     hasResponse
   )
-  const asks = getFrontStageAsks(view)
+  const notes = getFrontStageNotes(view)
 
-  if (strip.mode === 'hidden' && asks.length === 0) {
+  if (strip.mode === 'hidden' && notes.length === 0) {
     return null
   }
 
@@ -91,7 +99,7 @@ export const ReplyArea = memo(function ReplyArea({
             className={clsx(styles.stripButton, isInspecting && styles.stripButtonActive)}
             aria-pressed={isInspecting}
             aria-label={t('activityInspectLabel')}
-            onClick={() => toggleActivityPanel(sessionId, message.id, 'activity')}
+            onClick={() => requestTurnInspection(sessionId, message.id, 'activity')}
           >
             <span className={styles.iconSlot}>
               {strip.waitingForUser ? (
@@ -109,28 +117,28 @@ export const ReplyArea = memo(function ReplyArea({
             </span>
           </button>
 
-          {strip.liveAgents.length > 0 ? (
+          {strip.liveTracks.length > 0 ? (
             <div className={styles.liveAgents} role="status" aria-live="polite">
-              {strip.liveAgents.map((agent) => (
-                <div key={agent.runId} className={styles.liveAgentRow}>
+              {strip.liveTracks.map((track) => (
+                <div key={track.id} className={styles.liveAgentRow}>
                   <span className={styles.liveAgentStatus} aria-hidden="true">
-                    {agent.status === 'running' ? (
+                    {track.status === 'running' ? (
                       <span className={styles.liveAgentDot} />
-                    ) : agent.status === 'failed' || agent.status === 'stopped' ? (
+                    ) : track.status === 'failed' || track.status === 'stopped' ? (
                       <IconCloseFill14 />
                     ) : (
                       <IconCheckedOutline14 />
                     )}
                   </span>
-                  <span className={styles.liveAgentLabel}>{agent.label}</span>
-                  {agent.detail ? (
-                    <span className={styles.liveAgentDetail}>— {agent.detail}</span>
+                  <span className={styles.liveAgentLabel}>{track.label}</span>
+                  {track.detail ? (
+                    <span className={styles.liveAgentDetail}>— {track.detail}</span>
                   ) : null}
                 </div>
               ))}
-              {strip.overflowAgents > 0 ? (
+              {strip.overflowTracks > 0 ? (
                 <div className={styles.liveAgentOverflow}>
-                  {t('activityMoreAgents', { count: strip.overflowAgents })}
+                  {t('activityMoreTracks', { count: strip.overflowTracks })}
                 </div>
               ) : null}
             </div>
@@ -149,7 +157,7 @@ export const ReplyArea = memo(function ReplyArea({
             isInspecting && styles.stripButtonActive
           )}
           aria-pressed={isInspecting}
-          onClick={() => toggleActivityPanel(sessionId, message.id, 'activity')}
+          onClick={() => requestTurnInspection(sessionId, message.id, 'activity')}
         >
           <span
             className={clsx(
@@ -167,41 +175,37 @@ export const ReplyArea = memo(function ReplyArea({
         </button>
       ) : null}
 
-      {asks.length > 0 ? <FrontStageAsks asks={asks} /> : null}
+      {notes.length > 0 ? <FrontStageNotes notes={notes} /> : null}
     </div>
   )
 })
 
-const FrontStageAsks = ({ asks }: { asks: AskStep[] }) => {
+const FrontStageNotes = ({ notes }: { notes: readonly FrontStageNoteEntry[] }) => {
   const t = useTranslate()
   return (
     <div className={styles.frontAsks}>
-      {asks.map((step) => {
-        const ask = step.askAction
-        if (!ask) {
-          return null
-        }
-        if (ask.status === 'skipped') {
+      {notes.map(({ key, note }) => {
+        if (note.status === 'skipped') {
           return (
-            <div key={step.key} className={styles.frontAskRow}>
+            <div key={key} className={styles.frontAskRow}>
               <IconCheckedOutline14 />
-              <span>{t('askSkipped')}</span>
+              <span>{t('noteSkipped')}</span>
             </div>
           )
         }
-        const answered = ask.items.filter((item) =>
-          Array.isArray(item.answer) ? item.answer.length > 0 : Boolean(item.answer)
+        const answered = note.items.filter((item) =>
+          Array.isArray(item.value) ? item.value.length > 0 : Boolean(item.value)
         )
         if (answered.length === 0) {
           return null
         }
         return (
-          <div key={step.key} className={styles.frontAskRow}>
+          <div key={key} className={styles.frontAskRow}>
             {answered.map((item) => (
               <span key={item.id} className={styles.askEntry}>
-                <span className={styles.askEntryKey}>{item.header}:</span>
+                <span className={styles.askEntryKey}>{item.label}:</span>
                 <span className={styles.askEntryVal}>
-                  {Array.isArray(item.answer) ? item.answer.join(', ') : item.answer}
+                  {Array.isArray(item.value) ? item.value.join(', ') : item.value}
                 </span>
               </span>
             ))}
@@ -212,29 +216,36 @@ const FrontStageAsks = ({ asks }: { asks: AskStep[] }) => {
   )
 }
 
-/** 从 IndexedDB 读取原件交给应用保存（桌面端保存对话框，网页端下载）；原件缺失时返回 false */
-const downloadStoredFile = async (file: PresentedFileRef): Promise<boolean> => {
-  const blob = await loadFile(file.id)
-  if (!blob) {
-    return false
-  }
-  await deps().ui.saveFile(file.name, blob)
-  return true
-}
-
-/** 统一的可预览与下载文件卡片：点击在右侧文件面板预览，右侧按钮可直接保存 */
-export const PresentedFileCard = ({
+/** 统一的可预览与下载文件卡片：点击在右侧文件面板预览（未挂载预览切片时直接保存），右侧按钮可直接保存 */
+export const DeliveredFileCard = ({
   sessionId,
   file,
 }: {
   sessionId: string
-  file: PresentedFileRef
+  file: DeliveredFileRef
 }) => {
   const t = useTranslate()
+  const { blobs, deps } = useConversations()
   const [missing, setMissing] = useState(false)
-  const { files } = deps().ui.panels
-  const shownFile = { kind: 'presented', file } as const
-  const isOpen = files.useIsShown(sessionId, shownFile)
+  const shownFile = { kind: 'delivered', file } as const
+  const useIsFileShown = deps.ui.useIsFileShown ?? useNotShown
+  const isOpen = useIsFileShown(sessionId, shownFile)
+
+  const downloadStoredFile = async (): Promise<boolean> => {
+    const blob = await blobs.get(file.id)
+    if (!blob) {
+      return false
+    }
+    await deps.ui.saveFile(file.name, blob)
+    return true
+  }
+
+  const triggerDownload = () => {
+    void downloadStoredFile().then(
+      (ok) => setMissing(!ok),
+      () => setMissing(true)
+    )
+  }
 
   const ext = getExtension(file.name)
   const versionTag = file.version !== undefined && file.version > 1 ? `v${file.version}` : undefined
@@ -245,17 +256,12 @@ export const PresentedFileCard = ({
       name={file.name}
       title={file.title}
       size={file.size}
-      subtitle={missing ? t('pythonFileMissing') : subtitle}
+      subtitle={missing ? t('fileUnavailable') : subtitle}
       status={missing ? 'error' : 'done'}
-      error={missing ? t('pythonFileMissing') : undefined}
+      error={missing ? t('fileUnavailable') : undefined}
       active={isOpen}
-      onOpen={() => files.open(sessionId, shownFile)}
-      onDownload={() => {
-        void downloadStoredFile(file).then(
-          (ok) => setMissing(!ok),
-          () => setMissing(true)
-        )
-      }}
+      onOpen={deps.ui.openFile ? () => deps.ui.openFile?.(sessionId, shownFile) : triggerDownload}
+      onDownload={triggerDownload}
     />
   )
 }

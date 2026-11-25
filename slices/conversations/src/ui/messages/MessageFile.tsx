@@ -1,22 +1,22 @@
-import { useTranslate as useConversationsTranslate } from '../../messages.js'
+import { IconPhotoErrorFill20, IconRefreshOutline16, Tooltip } from '@deepseek-chat/lib-ui'
 import clsx from 'clsx'
 import { useEffect, useState } from 'react'
-import { useTranslate } from '../../messages.js'
-import { useUploads } from '../../attachments.js'
-import { loadFile } from '../../db.js'
+import { useConversations } from '../../context.js'
+import { useTranslate, useTranslate as useConversationsTranslate } from '../../messages.js'
 import { type FileAttachment } from '../../types.js'
-import { deps } from '../../env.js'
-import { IconPhotoErrorFill20, IconRefreshOutline16, Tooltip } from '@deepseek-chat/lib-ui'
 import { FileCard } from '../files/FileCard.js'
 import styles from './MessageFile.module.css'
 
-/** 原件从 IndexedDB 读出并生成本地地址；undefined 表示加载中，null 表示原件缺失。 */
+const useNotShown = () => false
+
+/** 原件从 BlobStore 读出并生成本地地址；undefined 表示加载中，null 表示原件缺失。 */
 const useFileUrl = (id: string) => {
+  const { blobs } = useConversations()
   const [fileUrl, setFileUrl] = useState<{ id: string; url: string | null } | null>(null)
   useEffect(() => {
     let objectUrl: string | null = null
     let cancelled = false
-    loadFile(id).then((blob) => {
+    void blobs.get(id).then((blob) => {
       if (!cancelled) {
         objectUrl = blob ? URL.createObjectURL(blob) : null
         setFileUrl({ id, url: objectUrl })
@@ -28,19 +28,21 @@ const useFileUrl = (id: string) => {
         URL.revokeObjectURL(objectUrl)
       }
     }
-  }, [id])
+  }, [blobs, id])
   return fileUrl?.id === id ? fileUrl.url : undefined
 }
 
 /** 历史或失效附件的补传状态：只在还没有 serverId 时显示 */
-const useUploadState = (file: FileAttachment) =>
-  useUploads((state) => {
+const useUploadState = (file: FileAttachment) => {
+  const { uploads } = useConversations()
+  return uploads.useUploads((state) => {
     if (file.serverId) {
       return null
     }
     const task = state.tasks[file.id]
     return task?.status === 'uploading' || task?.status === 'error' ? task : null
   })
+}
 
 /**
  * 消息里的附件：
@@ -60,6 +62,7 @@ export const MessageFile = ({
 }) => {
   const t = useTranslate()
   const tc = useConversationsTranslate()
+  const { blobs, deps } = useConversations()
   const url = useFileUrl(file.id)
   const [failedUrl, setFailedUrl] = useState<string | null>(null)
   const upload = useUploadState(file)
@@ -67,12 +70,23 @@ export const MessageFile = ({
   const failed = upload?.status === 'error'
   const retryable = failed && upload.retryable
   const errorText = failed ? tc(upload.error.key, upload.error.params) : undefined
-  const { files } = deps().ui.panels
   const shownFile = { kind: 'upload', fileId: file.id } as const
-  const isPreviewOpen = files.useIsShown(sessionId, shownFile)
+  const useIsFileShown = deps.ui.useIsFileShown ?? useNotShown
+  const isPreviewOpen = useIsFileShown(sessionId, shownFile)
 
   const retry = retryable ? onRetry : null
-  const openInPreview = url && !upload ? () => files.open(sessionId, shownFile) : undefined
+  const openInPreview =
+    url && !upload
+      ? deps.ui.openFile
+        ? () => deps.ui.openFile?.(sessionId, shownFile)
+        : () => {
+            void blobs.get(file.id).then((blob) => {
+              if (blob) {
+                void deps.ui.saveFile(file.name, blob)
+              }
+            })
+          }
+      : undefined
 
   if (file.isImage && url !== null) {
     const preview = url ? (
@@ -85,7 +99,6 @@ export const MessageFile = ({
       )
     ) : null
 
-    // 上传中：本地原件已在 IndexedDB，先垫在蒙层下显示，避免只有一块灰色占位
     if (uploading) {
       return (
         <div className={clsx(styles.image, styles.imageThumb)} title={file.name}>
@@ -97,13 +110,11 @@ export const MessageFile = ({
       )
     }
 
-    // 「上传失败」只显示状态，其余原因写在图片底部的渐变上
     const reason =
       errorText && errorText !== t('uploadFileStatusFailed') ? (
         <span className={styles.reason}>{errorText}</span>
       ) : null
 
-    // 上传失败不可重试：保留缩略图，底部渐变显示原因
     if (failed && !retry) {
       return (
         <div
@@ -121,7 +132,6 @@ export const MessageFile = ({
       )
     }
 
-    // 上传失败可重试：缩略图 + 红色描边 + 蒙层重试图标，原因在底部
     if (failed && retry) {
       const retryLabel = t('uploadRetry', { message: errorText ?? t('uploadFileStatusFailed') })
       return (
@@ -142,7 +152,6 @@ export const MessageFile = ({
       )
     }
 
-    // 正常态：点击在文件预览面板打开
     return url ? (
       <button
         type="button"
@@ -154,7 +163,6 @@ export const MessageFile = ({
         {preview}
       </button>
     ) : (
-      // 原件还没加载出来（极短暂）
       <div className={styles.image} />
     )
   }

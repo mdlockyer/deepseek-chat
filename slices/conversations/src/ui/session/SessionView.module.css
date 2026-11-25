@@ -27,11 +27,6 @@
     margin-left: auto;
   }
 
-  .browserButtonActive {
-    color: var(--ui-text-accent);
-    background: var(--ui-accent-soft);
-  }
-
   .title {
     max-width: 480px;
     padding: 0 var(--ui-space-3);

@@ -26,6 +26,7 @@ export const createPreferencesSlice = (deps: PreferencesDeps) => {
     ThemeSetting: views.ThemeSetting,
     LocaleSetting: views.LocaleSetting,
     LocationSetting: views.LocationSetting,
+    dispose: preferences.dispose,
   }
 }
 

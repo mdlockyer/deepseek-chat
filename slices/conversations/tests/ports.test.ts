@@ -1,36 +1,14 @@
+import 'fake-indexeddb/auto'
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
+import { createToolRegistry, type ToolCapability } from '@deepseek-chat/lib-tools'
 import { memoryStore } from '@deepseek-chat/spine/ports'
 import {
   buildReplyView,
-  setBrowser,
-  setThinking,
-  useComposerOptions,
+  createIndexedDbSessionStore,
   type AssistantMessage,
-  type ToolKind,
 } from '@deepseek-chat/slice-conversations'
-import { installTestSlice } from './harness.js'
-
-// Names deliberately unlike the real tools: classification must come from the gateway alone.
-const KINDS: Record<string, ToolKind> = {
-  find_web: 'web_search',
-  make_doc: 'present_file',
-  run_code: 'python',
-}
-const store = memoryStore({ 'chat-demo:search': 'true', 'chat-demo:python': 'false' })
-const slice = installTestSlice({
-  store,
-  tools: {
-    declare: () => [],
-    instructions: () => [],
-    describe: () => null,
-    kindOf: (name) => KINDS[name] ?? null,
-    effectOf: (name) => (KINDS[name] === 'web_search' ? 'read' : 'session'),
-    agentProfile: () => null,
-    fenceLanguage: (path) => (path.endsWith('.lisp') ? 'lisp' : 'text'),
-    run: async () => ({ content: '', status: 'ok' }),
-  },
-})
+import { createTestSlice } from './harness.js'
 
 const reply = (blocks: AssistantMessage['blocks']): AssistantMessage => ({
   id: 'a1',
@@ -42,68 +20,130 @@ const reply = (blocks: AssistantMessage['blocks']): AssistantMessage => ({
   blocks,
 })
 
-describe('conversations: one instance per app', () => {
-  it('refuses to be created twice', () => {
-    assert.equal(typeof slice.stopReply, 'function')
-    assert.throws(() => installTestSlice(), /created once per app/)
+describe('conversations: multi-instance isolation & dispose', () => {
+  it('supports multiple isolated instances in the same process without cross-talk', async () => {
+    const storeA = memoryStore({ 'chat-demo:thinking': 'true' })
+    const storeB = memoryStore({ 'chat-demo:thinking': 'false' })
+    const sliceA = createTestSlice({ store: storeA })
+    const sliceB = createTestSlice({ store: storeB })
+
+    assert.equal(sliceA.getThinking(), true)
+    assert.equal(sliceB.getThinking(), false)
+
+    sliceA.setThinking(false)
+    sliceB.setThinking(true)
+    assert.equal(storeA.get('chat-demo:thinking'), 'false')
+    assert.equal(storeB.get('chat-demo:thinking'), 'true')
+    assert.equal(sliceA.getThinking(), false)
+    assert.equal(sliceB.getThinking(), true)
+
+    await sliceA.commands.init()
+    await sliceB.commands.init()
+    await sliceA.replaceSessions(async () => ({
+      sessions: [
+        {
+          id: 'only-in-a',
+          title: 'Session A',
+          createdAt: 1,
+          updatedAt: 1,
+          messages: [],
+          rootMessageId: null,
+        },
+      ],
+      blobs: [],
+    }))
+    assert.deepEqual(
+      sliceA.getState().sessions.map((s) => s.id),
+      ['only-in-a']
+    )
+    assert.deepEqual(sliceB.getState().sessions, [])
+
+    sliceA.dispose()
+    sliceB.dispose()
   })
 })
 
-describe('conversations: composer toggles', () => {
-  it('load from the store and save each change under its chat-demo key', () => {
-    assert.deepEqual(useComposerOptions.getState(), {
-      thinking: false,
-      search: true,
-      python: false,
-      browser: false,
-    })
-    setThinking(true)
-    setBrowser(true)
-    assert.equal(store.get('chat-demo:thinking'), 'true')
-    assert.equal(store.get('chat-demo:browser'), 'true')
-    assert.equal(useComposerOptions.getState().thinking, true)
-    setThinking(false)
-    assert.equal(store.get('chat-demo:thinking'), 'false')
-  })
-})
-
-describe('conversations: tool steps follow the gateway', () => {
-  it('shows a call classified as web_search as a search step with its results', () => {
+describe('conversations: tool presentation delegates to ToolRegistry', () => {
+  it('summarizes tool steps through the owning capability presenter and stays generic without one', () => {
+    const customCap: ToolCapability = {
+      id: 'calc',
+      declareTools: () => [],
+      instructions: () => null,
+      handles: (name) => name === 'compute_sum',
+      effectOf: () => 'read',
+      run: async () => ({ content: '42', status: 'ok' }),
+      presenter: {
+        summarize: (_call, result) => ({
+          lane: 'math',
+          liveVerb: 'Computing',
+          detail: result?.content ?? 'working',
+          tally: { key: 'math', count: 1, label: (n) => `${n} calc` },
+        }),
+        renderActivity: () => null,
+      },
+    }
+    const registry = createToolRegistry([customCap])
     const view = buildReplyView(
       reply([
-        { type: 'tool_use', id: 't1', name: 'find_web', input: { query: 'ssa' } },
+        { type: 'tool_use', id: 'c1', name: 'compute_sum', input: { a: 20, b: 22 } },
+        { type: 'tool_result', tool_use_id: 'c1', capability: 'calc', content: '42', status: 'ok' },
+        { type: 'tool_use', id: 'c2', name: 'unknown_tool', input: {} },
+      ]),
+      false,
+      registry
+    )
+
+    assert.equal(view.steps[0]?.type, 'tool')
+    if (view.steps[0]?.type === 'tool') {
+      assert.equal(view.steps[0].summary?.lane, 'math')
+      assert.equal(view.steps[0].summary?.detail, '42')
+    }
+    assert.equal(view.steps[1]?.type, 'tool')
+    if (view.steps[1]?.type === 'tool') {
+      assert.equal(view.steps[1].summary, null)
+    }
+  })
+})
+
+describe('conversations: IndexedDB session store', () => {
+  it('saves, renames, reloads, and deletes sessions with orphaned blob detection', async () => {
+    const store = createIndexedDbSessionStore(`deepseek-sessions-test-${Date.now()}`)
+    const session = {
+      id: 's-idb',
+      title: 'Original',
+      createdAt: 100,
+      updatedAt: 200,
+      rootMessageId: 'u1',
+      messages: [
         {
-          type: 'tool_result',
-          tool_use_id: 't1',
-          content: 'ok',
-          status: 'ok',
-          searchResults: [
+          id: 'u1',
+          role: 'user' as const,
+          content: 'hi',
+          files: [
             {
-              url: 'https://a.example/',
-              title: 'A',
-              snippet: 's',
-              siteName: null,
-              publishedAt: null,
+              id: 'blob-u1',
+              serverId: null,
+              name: 'doc.txt',
+              size: 4,
+              isImage: false,
+              mimeType: 'text/plain',
             },
           ],
+          createdAt: 100,
         },
-      ]),
-      false
-    )
-    const step = view.steps[0]
-    assert.equal(step?.type, 'search')
-    assert.deepEqual(step?.type === 'search' ? step.queries : null, ['ssa'])
-    assert.deepEqual(
-      view.searchResults.map((source) => source.url),
-      ['https://a.example/']
-    )
-  })
+      ],
+    }
 
-  it('shows the real web tool name as code when the gateway does not classify it', () => {
-    const view = buildReplyView(
-      reply([{ type: 'tool_use', id: 't1', name: 'web_search', input: { query: 'ssa' } }]),
-      false
-    )
-    assert.equal(view.steps[0]?.type, 'python')
+    await store.saveSession(session)
+    assert.equal((await store.loadSummaries()).length, 1)
+    await store.renameSession('s-idb', 'Renamed', true)
+    const reloaded = await store.loadSession('s-idb')
+    assert.equal(reloaded?.title, 'Renamed')
+    assert.equal(reloaded?.titleLocked, true)
+
+    const orphaned = await store.deleteSession('s-idb')
+    assert.deepEqual(orphaned, ['blob-u1'])
+    assert.deepEqual(await store.loadSummaries(), [])
+    store.close?.()
   })
 })

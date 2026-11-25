@@ -1,19 +1,18 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
-  buildActivityTimeline,
+  createToolRegistry,
+  type DeliveredFileRef,
+  type ToolCapability,
+} from '@deepseek-chat/lib-tools'
+import {
   buildReplyView,
   buildTurnWorkStrip,
   getAreaTitle,
-  getFrontStageAsks,
+  getFrontStageNotes,
   needsWorkingIndicator,
-  WAIT_TOOL_NAME,
   type AssistantMessage,
-  type PresentedFileRef,
 } from '@deepseek-chat/slice-conversations'
-import { installTestSlice } from './harness.js'
-
-installTestSlice()
 
 const replyWith = (blocks: AssistantMessage['blocks'], thinking = false): AssistantMessage => ({
   id: 'a1',
@@ -21,485 +20,245 @@ const replyWith = (blocks: AssistantMessage['blocks'], thinking = false): Assist
   createdAt: 1_000,
   model: 'deepseek-flash',
   thinking,
-  search: true,
   prefix: false,
   status: 'done',
   blocks,
 })
 
-describe('buildReplyView for Firecrawl client tools', () => {
-  it('maps Firecrawl web_search and web_scrape blocks to SearchStep, OpenStep, and deduplicated sources', () => {
+const testRegistry = createToolRegistry([
+  {
+    id: 'search-cap',
+    declareTools: () => [],
+    instructions: () => null,
+    handles: (name) => name === 'lookup' || name === 'fetch_page',
+    effectOf: () => 'read',
+    run: async () => ({ content: 'ok', status: 'ok' }),
+    presenter: {
+      summarize: (call, result) => ({
+        lane: 'research',
+        liveVerb: call.name === 'lookup' ? 'Searching' : 'Reading',
+        tally: {
+          key: call.name === 'lookup' ? 'searches' : 'pages',
+          count: 1,
+          label: (n) => (call.name === 'lookup' ? `${n} searches` : `${n} pages`),
+        },
+        stillRunning: !result || result.status === 'running',
+        failed: result?.status === 'error',
+      }),
+      renderActivity: () => null,
+    },
+  } satisfies ToolCapability,
+  {
+    id: 'parallel-cap',
+    declareTools: () => [],
+    instructions: () => null,
+    handles: (name) => name === 'spawn_worker' || name === 'wait_workers',
+    effectOf: (name) => (name === 'spawn_worker' ? 'spawn' : 'session'),
+    run: async () => ({ content: 'ok', status: 'ok' }),
+    presenter: {
+      summarize: (call, result, { capabilityState }) => {
+        const tracks =
+          (
+            capabilityState as
+              | {
+                  tracks?: { id: string; label: string; detail: string | null; status: 'running' }[]
+                }
+              | undefined
+          )?.tracks ?? []
+        return {
+          lane: 'workers',
+          liveVerb: 'Running workers',
+          liveTracks: tracks,
+          hiddenInTimeline: call.name === 'wait_workers',
+          stillRunning: !result || result.status === 'running',
+        }
+      },
+      renderActivity: () => null,
+    },
+  } satisfies ToolCapability,
+  {
+    id: 'ask-cap',
+    declareTools: () => [],
+    instructions: () => null,
+    handles: (name) => name === 'clarify',
+    effectOf: () => 'interactive',
+    run: async () => ({ content: 'ok', status: 'ok' }),
+    presenter: {
+      summarize: (_call, result) => ({
+        lane: 'clarify',
+        liveVerb: 'Waiting for answer',
+        waitingForUser: !result || result.status === 'running',
+        stillRunning: !result || result.status === 'running',
+      }),
+      renderActivity: () => null,
+    },
+  } satisfies ToolCapability,
+])
+
+describe('buildReplyView (domain-blind projection)', () => {
+  it('deduplicates sources across tool results in call order and tracks cited indexes', () => {
     const view = buildReplyView(
       replyWith([
-        { type: 'tool_use', id: 's1', name: 'web_search', input: { query: 'firecrawl keyless' } },
+        { type: 'tool_use', id: 's1', name: 'lookup', input: { summary: 'Checking docs' } },
         {
           type: 'tool_result',
           tool_use_id: 's1',
-          content: '[1] Firecrawl\nURL: https://firecrawl.dev',
+          capability: 'search-cap',
+          content: '[1] Alpha\n[2] Beta',
           status: 'ok',
-          searchResults: [
+          sources: [
             {
-              url: 'https://firecrawl.dev',
-              title: 'Firecrawl',
-              snippet: 'Keyless search API',
-              siteName: 'firecrawl.dev',
+              url: 'https://alpha.example',
+              title: 'Alpha',
+              snippet: 'A snippet',
+              siteName: 'alpha.example',
               publishedAt: null,
             },
             {
-              url: 'https://docs.firecrawl.dev',
-              title: 'Docs',
-              snippet: 'Reference',
-              siteName: 'docs.firecrawl.dev',
+              url: 'https://beta.example',
+              title: 'Beta',
+              snippet: 'B snippet',
+              siteName: 'beta.example',
               publishedAt: null,
             },
           ],
         },
-        {
-          type: 'tool_use',
-          id: 's2',
-          name: 'web_search',
-          input: { query: 'firecrawl rate limits' },
-        },
+        { type: 'tool_use', id: 's2', name: 'fetch_page', input: { url: 'https://gamma.example' } },
         {
           type: 'tool_result',
           tool_use_id: 's2',
-          content: '[2] Docs\n[3] Rate Limits',
+          capability: 'search-cap',
+          content: 'Gamma page',
           status: 'ok',
-          searchResults: [
+          sources: [
             {
-              url: 'https://docs.firecrawl.dev',
-              title: 'Docs',
-              snippet: 'Reference',
-              siteName: 'docs.firecrawl.dev',
+              url: 'https://beta.example',
+              title: 'Beta Duplicate',
+              snippet: '',
+              siteName: 'beta.example',
               publishedAt: null,
             },
             {
-              url: 'https://docs.firecrawl.dev/rate-limits',
-              title: 'Rate Limits',
-              snippet: 'Daily caps',
-              siteName: 'docs.firecrawl.dev',
+              url: 'https://gamma.example',
+              title: 'Gamma',
+              snippet: '',
+              siteName: 'gamma.example',
               publishedAt: null,
             },
           ],
         },
-        {
-          type: 'tool_use',
-          id: 'p1',
-          name: 'web_scrape',
-          input: { url: 'https://docs.firecrawl.dev/rate-limits' },
-        },
-        {
-          type: 'tool_result',
-          tool_use_id: 'p1',
-          content: 'Title: Rate Limits | Firecrawl\n...',
-          status: 'ok',
-          scrapedPage: {
-            url: 'https://docs.firecrawl.dev/rate-limits',
-            title: 'Rate Limits | Firecrawl',
-          },
-        },
-        { type: 'text', text: 'Keyless search is free[citation:1] with daily limits[citation:3].' },
+        { type: 'text', text: 'Confirmed by Gamma[ref:3] and Alpha[citation:1].' },
       ]),
-      false
+      false,
+      testRegistry
     )
 
-    assert.equal(view.sources.length, 3)
     assert.deepEqual(
       view.sources.map((s) => [s.index, s.url]),
       [
-        [1, 'https://firecrawl.dev'],
-        [2, 'https://docs.firecrawl.dev'],
-        [3, 'https://docs.firecrawl.dev/rate-limits'],
+        [1, 'https://alpha.example'],
+        [2, 'https://beta.example'],
+        [3, 'https://gamma.example'],
       ]
     )
-    assert.equal(view.searchResults.length, 3)
-
-    const searchSteps = view.steps.filter((step) => step.type === 'search')
-    assert.equal(searchSteps.length, 1)
-    assert.deepEqual(searchSteps[0].queries, ['firecrawl keyless', 'firecrawl rate limits'])
-    assert.equal(searchSteps[0].results.length, 3)
-
-    const openStep = view.steps.find((step) => step.type === 'open')
-    assert.ok(openStep)
-    assert.equal(openStep.pages[0]?.title, 'Rate Limits | Firecrawl')
-    assert.equal(openStep.pages[0]?.status, 'done')
-    assert.match(view.answer?.markdown ?? '', /\[citation:1\]/)
+    assert.deepEqual(view.citedSourceIndexes, [3, 1])
+    assert.equal(view.answer?.text, 'Confirmed by Gamma and Alpha.')
   })
 
-  it('groups consecutive browser_* tool calls into a BrowserStep with status and metadata', () => {
+  it('extracts streaming partial summary JSON for live getAreaTitle', () => {
+    const view = buildReplyView(
+      replyWith(
+        [
+          {
+            type: 'tool_use',
+            id: 'f1',
+            name: 'lookup',
+            input: {},
+            inputJson: '{"summary":"Drafting the quarterly summary","body":"<!doctype html>',
+          },
+        ],
+        true
+      ),
+      true,
+      testRegistry
+    )
+
+    assert.equal(view.steps[0]?.type, 'tool')
+    assert.equal(getAreaTitle(view, true, 2_000, false), 'Drafting the quarterly summary')
+  })
+
+  it('promotes tool images without previewImages to view.images while keeping previewImages backstage', () => {
     const view = buildReplyView(
       replyWith([
-        {
-          type: 'tool_use',
-          id: 'b1',
-          name: 'browser_set_viewport',
-          input: { preset: 'desktop' },
-        },
+        { type: 'tool_use', id: 'chart', name: 'plot', input: {} },
         {
           type: 'tool_result',
-          tool_use_id: 'b1',
-          content: 'Viewport set to 1280x720',
+          tool_use_id: 'chart',
+          content: 'plotted',
           status: 'ok',
-          durationMs: 90,
-          browserAction: {
-            tool: 'browser_set_viewport',
-            summary: 'Viewport 1280×720 (42%)',
-          },
+          images: ['data:image/png;base64,chart1', 'data:image/png;base64,chart1'],
         },
-        {
-          type: 'tool_use',
-          id: 'b2',
-          name: 'browser_navigate',
-          input: { action: 'goto', url: 'https://example.com' },
-        },
+        { type: 'tool_use', id: 'snap', name: 'capture', input: {} },
         {
           type: 'tool_result',
-          tool_use_id: 'b2',
-          content: 'Navigated to https://example.com',
-          status: 'ok',
-          durationMs: 420,
-          browserAction: {
-            tool: 'browser_navigate',
-            summary: 'Opening example.com',
-            url: 'https://example.com',
-            title: 'Example Domain',
-          },
-        },
-        {
-          type: 'tool_use',
-          id: 'b3',
-          name: 'browser_click',
-          input: { ref: 'e1' },
-        },
-        {
-          type: 'tool_result',
-          tool_use_id: 'b3',
-          content: 'Clicked link',
-          status: 'ok',
-          durationMs: 280,
-          images: ['data:image/jpeg;base64,abc'],
-          browserAction: {
-            tool: 'browser_click',
-            summary: 'Clicking [e1]',
-            url: 'https://example.com/more',
-            title: 'More Info',
-          },
-        },
-        { type: 'text', text: 'Done browsing.' },
-      ]),
-      false
-    )
-
-    const browserSteps = view.steps.filter((step) => step.type === 'browser')
-    assert.equal(browserSteps.length, 1)
-    assert.equal(browserSteps[0].status, 'done')
-    assert.equal(browserSteps[0].actions.length, 3)
-    assert.equal(browserSteps[0].actions[0]?.summary, 'Viewport 1280×720 (42%)')
-    assert.equal(browserSteps[0].actions[1]?.summary, 'Opening example.com')
-    assert.equal(browserSteps[0].actions[2]?.images?.[0], 'data:image/jpeg;base64,abc')
-    assert.equal(view.answer?.text, 'Done browsing.')
-  })
-
-  it('groups consecutive present_file and edit_file calls into a FileStep and exposes live title', () => {
-    const streamingView = buildReplyView(
-      replyWith(
-        [
-          {
-            type: 'tool_use',
-            id: 'f1',
-            name: 'present_file',
-            input: {},
-            inputJson: '{"path":"chart.html","title":"Sales Chart"',
-          },
-        ],
-        true
-      ),
-      true
-    )
-
-    assert.equal(streamingView.steps.length, 1)
-    assert.equal(streamingView.steps[0]?.type, 'file')
-    assert.equal(streamingView.steps[0]?.status, 'wip')
-    assert.match(getAreaTitle(streamingView, true, 2_000, false), /Sales Chart/)
-
-    const doneView = buildReplyView(
-      replyWith([
-        {
-          type: 'tool_use',
-          id: 'f1',
-          name: 'present_file',
-          input: { path: 'chart.html', content: '<h1>1</h1>' },
-        },
-        {
-          type: 'tool_result',
-          tool_use_id: 'f1',
-          content: 'Presented chart.html',
-          status: 'ok',
-          durationMs: 12,
-          fileAction: { tool: 'present_file', path: 'chart.html', version: 1 },
-          files: [
-            {
-              id: 'blob-1',
-              name: 'chart.html',
-              path: 'chart.html',
-              size: 10,
-              mimeType: 'text/html',
-              version: 1,
-              source: 'model',
-            },
-          ],
-        },
-        {
-          type: 'tool_use',
-          id: 'f2',
-          name: 'edit_file',
-          input: { path: 'chart.html', edits: [] },
-        },
-        {
-          type: 'tool_result',
-          tool_use_id: 'f2',
-          content: 'Updated chart.html',
-          status: 'ok',
-          durationMs: 8,
-          fileAction: { tool: 'edit_file', path: 'chart.html', version: 2 },
-          files: [
-            {
-              id: 'blob-2',
-              name: 'chart.html',
-              path: 'chart.html',
-              size: 10,
-              mimeType: 'text/html',
-              version: 2,
-              source: 'model',
-            },
-          ],
-        },
-        { type: 'text', text: 'Chart is ready.' },
-      ]),
-      false
-    )
-
-    const fileSteps = doneView.steps.filter((s) => s.type === 'file')
-    assert.equal(fileSteps.length, 1)
-    assert.equal(fileSteps[0].status, 'done')
-    assert.equal(fileSteps[0].actions.length, 2)
-    assert.equal(fileSteps[0].actions[0]?.files?.[0]?.id, 'blob-1')
-    assert.equal(fileSteps[0].actions[1]?.version, 2)
-    assert.equal(doneView.answer?.text, 'Chart is ready.')
-  })
-
-  it('surfaces streaming and settled tool summaries in steps and getAreaTitle', () => {
-    // Partial JSON with summary first, while a large payload is still streaming.
-    const streamingFile = buildReplyView(
-      replyWith(
-        [
-          {
-            type: 'tool_use',
-            id: 'f1',
-            name: 'present_file',
-            input: {},
-            inputJson:
-              '{"summary":"Building the Northstar landing page with pricing toggle","path":"index.html","content":"<!doctype html>...',
-          },
-        ],
-        true
-      ),
-      true
-    )
-    assert.equal(
-      getAreaTitle(streamingFile, true, 2_000, false),
-      'Building the Northstar landing page with pricing toggle'
-    )
-    assert.equal(
-      streamingFile.steps[0]?.type === 'file' ? streamingFile.steps[0].actions[0]?.summary : null,
-      'Building the Northstar landing page with pricing toggle'
-    )
-
-    // Streaming Python with summary.
-    const streamingPython = buildReplyView(
-      replyWith(
-        [
-          {
-            type: 'tool_use',
-            id: 'p1',
-            name: 'python',
-            input: {},
-            inputJson: '{"summary":"Plotting monthly churn by cohort","code":"import matplotlib',
-          },
-        ],
-        true
-      ),
-      true
-    )
-    assert.equal(
-      getAreaTitle(streamingPython, true, 2_000, false),
-      'Plotting monthly churn by cohort'
-    )
-
-    // Settled browser + search + scrape prefer model summary over generic fallbacks.
-    const settled = buildReplyView(
-      replyWith([
-        {
-          type: 'tool_use',
-          id: 's1',
-          name: 'web_search',
-          input: { summary: 'Checking Firecrawl rate limit tiers', query: 'firecrawl limits' },
-        },
-        { type: 'tool_result', tool_use_id: 's1', content: 'ok', status: 'ok', searchResults: [] },
-        {
-          type: 'tool_use',
-          id: 'o1',
-          name: 'web_scrape',
-          input: {
-            summary: 'Reading pricing table from Firecrawl docs',
-            url: 'https://firecrawl.dev/pricing',
-          },
-        },
-        {
-          type: 'tool_result',
-          tool_use_id: 'o1',
-          content: 'ok',
-          status: 'ok',
-          scrapedPage: { url: 'https://firecrawl.dev/pricing', title: 'Pricing' },
-        },
-        {
-          type: 'tool_use',
-          id: 'b1',
-          name: 'browser_click',
-          input: { summary: 'Switching pricing toggle to annual billing', ref: 'e4' },
-        },
-        {
-          type: 'tool_result',
-          tool_use_id: 'b1',
-          content: 'Clicked',
+          tool_use_id: 'snap',
+          content: 'captured',
           status: 'ok',
           images: ['data:image/jpeg;base64,annotated'],
           previewImages: ['data:image/jpeg;base64,clean'],
-          browserAction: { tool: 'browser_click', summary: 'Clicking [e4]' },
         },
+        { type: 'text', text: 'Here is the chart.' },
       ]),
       false
     )
 
-    const search = settled.steps.find((s) => s.type === 'search')
-    const open = settled.steps.find((s) => s.type === 'open')
-    const browserStep = settled.steps.find((s) => s.type === 'browser')
-    assert.equal(search?.summary, 'Checking Firecrawl rate limit tiers')
-    assert.equal(open?.pages[0]?.summary, 'Reading pricing table from Firecrawl docs')
-    assert.equal(browserStep?.actions[0]?.summary, 'Switching pricing toggle to annual billing')
-    assert.deepEqual(browserStep?.actions[0]?.images, ['data:image/jpeg;base64,clean'])
-  })
-
-  it('maps ask_user calls into AskStep while waiting and after user answers', () => {
-    const waitingView = buildReplyView(
-      replyWith(
-        [
-          {
-            type: 'tool_use',
-            id: 'a1',
-            name: 'ask_user',
-            input: { summary: 'Checking preferred landing page theme' },
-          },
-          { type: 'tool_result', tool_use_id: 'a1', content: '', status: 'running' },
-        ],
-        true
-      ),
-      true
-    )
-    assert.equal(waitingView.steps[0]?.type, 'ask')
-    assert.equal(waitingView.steps[0]?.status, 'wip')
-    assert.equal(
-      getAreaTitle(waitingView, true, 2_000, false),
-      'Checking preferred landing page theme'
-    )
-    assert.equal(needsWorkingIndicator(waitingView), false)
-
-    const settledView = buildReplyView(
-      replyWith([
-        {
-          type: 'tool_use',
-          id: 'a1',
-          name: 'ask_user',
-          input: { summary: 'Checking preferred landing page theme' },
-        },
-        {
-          type: 'tool_result',
-          tool_use_id: 'a1',
-          content: '{"status":"answered","answers":{"theme":"Dark"}}',
-          status: 'ok',
-          askAction: {
-            status: 'answered',
-            items: [{ id: 'theme', header: 'Theme', question: 'Which theme?', answer: 'Dark' }],
-          },
-        },
-      ]),
-      false
-    )
-    const askStep = settledView.steps.find((s) => s.type === 'ask')
-    assert.equal(askStep?.status, 'done')
-    assert.equal(askStep?.askAction?.items[0]?.answer, 'Dark')
+    assert.deepEqual(view.images, ['data:image/png;base64,chart1'])
   })
 })
 
-describe('needsWorkingIndicator (SPEC invariant 16)', () => {
-  // Views as they look while the reply is still streaming.
+describe('needsWorkingIndicator', () => {
   const streamingView = (blocks: AssistantMessage['blocks']) =>
-    buildReplyView({ ...replyWith(blocks, true), status: 'streaming' }, true)
+    buildReplyView({ ...replyWith(blocks, true), status: 'streaming' }, true, testRegistry)
   const thought = { type: 'thinking', thinking: 'plan', startedAt: 1, endedAt: 2 } as const
-  const fileCall = { type: 'tool_use', id: 'f1', name: 'present_file', input: {} } as const
+  const call = { type: 'tool_use', id: 'f1', name: 'lookup', input: {} } as const
 
-  it('shows when the last content is finished and nothing else is running', () => {
-    // The captured case: thinking done, a sentence, then silence while the server writes a tool call.
-    assert.equal(
-      needsWorkingIndicator(streamingView([thought, { type: 'text', text: 'I will build it.' }])),
-      true
-    )
-    // Thinking finished, nothing else yet.
-    assert.equal(needsWorkingIndicator(streamingView([thought])), true)
-    // A tool finished; the next request has not answered yet.
+  it('shows after completed steps or open thinking blocks, hides when empty or tool is running', () => {
+    assert.equal(needsWorkingIndicator(streamingView([])), false)
+    assert.equal(needsWorkingIndicator(streamingView([thought, call])), false)
     assert.equal(
       needsWorkingIndicator(
         streamingView([
-          fileCall,
+          call,
+          { type: 'tool_result', tool_use_id: 'f1', content: '', status: 'running' },
+        ])
+      ),
+      false
+    )
+    assert.equal(needsWorkingIndicator(streamingView([thought])), true)
+    assert.equal(
+      needsWorkingIndicator(
+        streamingView([thought, { type: 'thinking', thinking: 'still thinking', startedAt: 3 }])
+      ),
+      true
+    )
+    assert.equal(
+      needsWorkingIndicator(
+        streamingView([
+          call,
           { type: 'tool_result', tool_use_id: 'f1', content: 'ok', status: 'ok' },
         ])
       ),
       true
     )
   })
-
-  it('stays hidden while the reply has nothing yet or its last step shows it is running', () => {
-    assert.equal(needsWorkingIndicator(streamingView([])), false)
-    // A tool call without its result: its row already shows it is running.
-    assert.equal(needsWorkingIndicator(streamingView([thought, fileCall])), false)
-    assert.equal(
-      needsWorkingIndicator(
-        streamingView([
-          { type: 'tool_use', id: 'p1', name: 'python', input: { code: '1' } },
-          { type: 'tool_result', tool_use_id: 'p1', content: '', status: 'running' },
-        ])
-      ),
-      false
-    )
-  })
-
-  it('shows during a stall even while a thinking block is still open', () => {
-    // The captured case: thinking stayed open for 15 s (its signature came with the file) while
-    // the server held back the whole tool call; no thinking text was arriving.
-    assert.equal(
-      needsWorkingIndicator(
-        streamingView([
-          thought,
-          { type: 'thinking', thinking: 'I need to include content.', startedAt: 3 },
-        ])
-      ),
-      true
-    )
-  })
 })
 
-describe('reply files (SPEC invariant 17)', () => {
-  const file = (id: string, name: string, extra: Partial<PresentedFileRef> = {}) => ({
+describe('delivered files projection', () => {
+  const file = (
+    id: string,
+    name: string,
+    extra: Partial<DeliveredFileRef> = {}
+  ): DeliveredFileRef => ({
     id,
     name,
     size: 10,
@@ -507,7 +266,7 @@ describe('reply files (SPEC invariant 17)', () => {
     ...extra,
   })
   const call = (id: string, name: string) => ({ type: 'tool_use', id, name, input: {} }) as const
-  const result = (id: string, files?: PresentedFileRef[], status: 'ok' | 'error' = 'ok') =>
+  const result = (id: string, files?: DeliveredFileRef[], status: 'ok' | 'error' = 'ok') =>
     ({
       type: 'tool_result',
       tool_use_id: id,
@@ -516,374 +275,119 @@ describe('reply files (SPEC invariant 17)', () => {
       ...(files ? { files } : {}),
     }) as const
 
-  it('lists one card per file in first-seen order, each at its latest version', () => {
-    const view = buildReplyView(
-      replyWith([
-        call('c1', 'present_file'),
-        result('c1', [file('f1', 'chart.html', { path: 'site/chart.html', version: 1 })]),
-        call('c2', 'python'),
-        result('c2', [file('f2', 'data.csv', { source: 'python' })]),
-        call('c3', 'edit_file'),
-        result('c3', [file('f3', 'chart.html', { path: 'site/chart.html', version: 2 })]),
-        // A failed edit produces no file and leaves the latest version alone.
-        call('c4', 'edit_file'),
-        result('c4', undefined, 'error'),
-        { type: 'text', text: 'Here is your chart.' },
-      ]),
-      false
-    )
+  it('lists one card per file by path or name in first-seen order at latest version when settled', () => {
+    const blocks: AssistantMessage['blocks'] = [
+      call('c1', 'write'),
+      result('c1', [file('f1', 'chart.html', { path: 'site/chart.html', version: 1 })]),
+      call('c2', 'export'),
+      result('c2', [file('f2', 'data.csv')]),
+      call('c3', 'update'),
+      result('c3', [file('f3', 'chart.html', { path: 'site/chart.html', version: 2 })]),
+      call('c4', 'update'),
+      result('c4', undefined, 'error'),
+      { type: 'text', text: 'Here is your chart.' },
+    ]
+    const streaming = buildReplyView({ ...replyWith(blocks), status: 'streaming' }, true)
+    assert.deepEqual(streaming.files, [])
+
+    const settled = buildReplyView(replyWith(blocks), false)
     assert.deepEqual(
-      view.files.map((f) => [f.id, f.name, f.version]),
+      settled.files.map((f) => [f.id, f.name, f.version]),
       [
         ['f3', 'chart.html', 2],
         ['f2', 'data.csv', undefined],
       ]
     )
-    // The answer is still the answer.
-    assert.equal(view.answer?.text, 'Here is your chart.')
-  })
-
-  it('tells files apart by path, and by name only when there is no path', () => {
-    const view = buildReplyView(
-      replyWith([
-        call('c1', 'present_file'),
-        result('c1', [
-          file('a', 'index.html', { path: 'one/index.html' }),
-          file('b', 'index.html', { path: 'two/index.html' }),
-        ]),
-        call('c2', 'python'),
-        result('c2', [file('c', 'out.png')]),
-        call('c3', 'python'),
-        result('c3', [file('d', 'out.png')]),
-      ]),
-      false
-    )
-    assert.deepEqual(
-      view.files.map((f) => f.id),
-      ['a', 'b', 'd']
-    )
-  })
-
-  it('has no files for a reply without file results', () => {
-    const view = buildReplyView(replyWith([{ type: 'text', text: 'Just text.' }]), false)
-    assert.deepEqual(view.files, [])
-  })
-
-  it('shows no cards while the reply streams, and the final version once it ends', () => {
-    const blocks: AssistantMessage['blocks'] = [
-      call('c1', 'present_file'),
-      result('c1', [file('f1', 'page.html', { path: 'page.html', version: 1 })]),
-      call('c2', 'edit_file'),
-      result('c2', [file('f2', 'page.html', { path: 'page.html', version: 2 })]),
-      { type: 'thinking', thinking: 'checking it once more', startedAt: 1 },
-    ]
-    const streaming = buildReplyView({ ...replyWith(blocks, true), status: 'streaming' }, true)
-    assert.deepEqual(streaming.files, [])
-    // Stopped mid-turn counts as finished: the cards show.
-    const stopped = buildReplyView({ ...replyWith(blocks, true), status: 'stopped' }, false)
-    assert.deepEqual(
-      stopped.files.map((f) => [f.id, f.version]),
-      [['f2', 2]]
-    )
-  })
-
-  it('promotes Python visual outputs to view.images without leaking browser screenshots', () => {
-    const view = buildReplyView(
-      replyWith([
-        { type: 'tool_use', id: 'py1', name: 'python', input: { code: 'plot()' } },
-        {
-          type: 'tool_result',
-          tool_use_id: 'py1',
-          content: 'plotted',
-          status: 'ok',
-          images: ['data:image/png;base64,chart1', 'data:image/png;base64,chart1'],
-        },
-        { type: 'tool_use', id: 'b1', name: 'browser_click', input: { ref: 'e1' } },
-        {
-          type: 'tool_result',
-          tool_use_id: 'b1',
-          content: 'clicked',
-          status: 'ok',
-          images: ['data:image/jpeg;base64,browser-shot'],
-        },
-        { type: 'text', text: 'Here is the chart.' },
-      ]),
-      false
-    )
-    assert.deepEqual(view.images, ['data:image/png;base64,chart1'])
   })
 })
 
-describe('buildActivityTimeline & buildTurnWorkStrip (SPEC invariants 11, 17, 19)', () => {
-  it('merges consecutive web searches and page reads across hidden thinking blocks and orders cited sources first', () => {
+describe('buildTurnWorkStrip & getFrontStageNotes', () => {
+  it('aggregates presenter tallies, errors, and thinking duration in settled mode', () => {
     const reply = replyWith(
       [
-        { type: 'thinking', thinking: 'Check weekly releases.', startedAt: 0, endedAt: 3_000 },
-        {
-          type: 'tool_use',
-          id: 's1',
-          name: 'web_search',
-          input: { summary: 'Searching weekly AI news', query: 'AI LLM releases Nov 2026' },
-        },
+        { type: 'thinking', thinking: 'plan', startedAt: 0, endedAt: 5_000 },
+        { type: 'tool_use', id: 's1', name: 'lookup', input: {} },
         {
           type: 'tool_result',
           tool_use_id: 's1',
+          capability: 'search-cap',
           content: 'ok',
           status: 'ok',
-          searchResults: [
-            {
-              url: 'https://first.example',
-              title: 'First',
-              snippet: 's1',
-              siteName: 'first.example',
-              publishedAt: null,
-            },
-            {
-              url: 'https://second.example',
-              title: 'Second',
-              snippet: 's2',
-              siteName: 'second.example',
-              publishedAt: null,
-            },
-          ],
         },
-        { type: 'thinking', thinking: 'Read the news tracker.', startedAt: 3_000, endedAt: 5_000 },
-        {
-          type: 'tool_use',
-          id: 'o1',
-          name: 'web_scrape',
-          input: { summary: 'Reading tracker', url: 'https://second.example' },
-        },
-        {
-          type: 'tool_result',
-          tool_use_id: 'o1',
-          content: 'page',
-          status: 'ok',
-          scrapedPage: { url: 'https://second.example', title: 'Second Tracker' },
-        },
-        { type: 'thinking', thinking: 'Run another query.', startedAt: 5_000, endedAt: 8_000 },
-        {
-          type: 'tool_use',
-          id: 's2',
-          name: 'web_search',
-          input: { summary: 'Checking Nvidia news', query: 'Nvidia CEO status' },
-        },
+        { type: 'tool_use', id: 's2', name: 'fetch_page', input: {} },
         {
           type: 'tool_result',
           tool_use_id: 's2',
-          content: 'ok',
-          status: 'ok',
-          searchResults: [
-            {
-              url: 'https://third.example',
-              title: 'Third',
-              snippet: 's3',
-              siteName: 'third.example',
-              publishedAt: null,
-            },
-          ],
+          capability: 'search-cap',
+          content: 'fail',
+          status: 'error',
         },
-        { type: 'text', text: 'Confirmed by tracker[ref:2] and CNN[ref:3].' },
+        { type: 'text', text: 'Final answer.' },
       ],
       true
     )
 
-    const view = buildReplyView(reply, false)
-    assert.equal(view.answer?.text, 'Confirmed by tracker and CNN.')
-    const timeline = buildActivityTimeline(view, 10_000)
-
-    // Interleaved thinking blocks never fragment consecutive web research into separate rows.
-    assert.equal(timeline.phases.length, 1)
-    assert.equal(timeline.phases[0]?.type, 'research')
-    if (timeline.phases[0]?.type === 'research') {
-      assert.deepEqual(timeline.phases[0].queries, [
-        'AI LLM releases Nov 2026',
-        'Nvidia CEO status',
-      ])
-      assert.equal(timeline.phases[0].pages.length, 1)
-      assert.equal(timeline.phases[0].searchCount, 2)
-    }
-
-    assert.equal(timeline.thinkingBlocks.length, 3)
-    assert.equal(timeline.thinkingSeconds, 8)
-    assert.equal(timeline.thinkingOnly, false)
-
-    // Cited sources appear first in citation order; uncited results follow cleanly.
-    assert.deepEqual(
-      timeline.citedSources.map((s) => s.url),
-      ['https://second.example', 'https://third.example']
-    )
-    assert.deepEqual(
-      timeline.otherSources.map((s) => s.url),
-      ['https://first.example']
-    )
-
+    const view = buildReplyView(reply, false, testRegistry)
     const strip = buildTurnWorkStrip(reply, view, false, 10_000, false, true)
     assert.equal(strip.mode, 'settled')
     if (strip.mode === 'settled') {
-      assert.equal(strip.stopped, false)
-      assert.equal(strip.errorCount, 0)
-      assert.equal(strip.hasSources, true)
-      assert.match(strip.label, /2/)
-      assert.match(strip.label, /1/)
-      assert.match(strip.label, /8/)
+      assert.equal(strip.errorCount, 1)
+      assert.match(strip.label, /1 searches/)
+      assert.match(strip.label, /1 pages/)
+      assert.match(strip.label, /5/)
     }
   })
 
-  it('folds wait plumbing out of activity phases and attaches board notes to subagents', () => {
+  it('caps live parallel tracks at 3 with overflow count and extracts settled FrontStageNotes', () => {
     const reply: AssistantMessage = {
       ...replyWith(
         [
-          {
-            type: 'tool_use',
-            id: 'ag1',
-            name: 'research',
-            input: { summary: 'Check OpenAI updates' },
-          },
-          { type: 'tool_result', tool_use_id: 'ag1', content: 'runId: r1', status: 'ok' },
-          { type: 'tool_use', id: 'w1', name: WAIT_TOOL_NAME, input: { until: 'all' } },
-          { type: 'tool_result', tool_use_id: 'w1', content: 'done', status: 'ok' },
-          { type: 'text', text: 'Summary complete.' },
-        ],
-        true
-      ),
-      agents: [
-        {
-          runId: 'r1',
-          profile: 'research',
-          label: 'Researcher',
-          summary: 'Check OpenAI updates',
-          startedBy: 'ag1',
-          state: { status: 'finished', result: { content: 'Done', sources: [] } },
-          blocks: [],
-        },
-      ],
-      board: [
-        {
-          kind: 'finding',
-          id: 'p1',
-          author: { kind: 'agent', runId: 'r1' },
-          text: 'API batch pricing dropped',
-          url: 'https://openai.example',
-        },
-      ],
-    }
-
-    const view = buildReplyView(reply, false)
-    const timeline = buildActivityTimeline(view, 5_000)
-
-    assert.equal(timeline.phases.length, 1)
-    assert.equal(timeline.phases[0]?.type, 'subagents')
-    if (timeline.phases[0]?.type === 'subagents') {
-      assert.equal(timeline.phases[0].agents.length, 1)
-      assert.equal(timeline.phases[0].notes.length, 1)
-      assert.equal(timeline.phases[0].notes[0]?.kind, 'finding')
-    }
-  })
-
-  it('caps live parallel subagent tracks at 3 with overflow count and keeps answered asks Front Stage', () => {
-    const makeAgent = (n: number) => ({
-      runId: `r${n}`,
-      profile: 'research',
-      label: `Agent ${n}`,
-      summary: `Topic ${n}`,
-      startedBy: `call-${n}`,
-      state: { status: 'running' as const, round: 1 },
-      blocks: [],
-    })
-    const reply: AssistantMessage = {
-      ...replyWith(
-        [
-          {
-            type: 'tool_use',
-            id: 'ask1',
-            name: 'ask_user',
-            input: { summary: 'Confirm depth' },
-          },
+          { type: 'tool_use', id: 'ask1', name: 'clarify', input: {} },
           {
             type: 'tool_result',
             tool_use_id: 'ask1',
-            content: '{}',
+            capability: 'ask-cap',
+            content: 'answered',
             status: 'ok',
-            askAction: {
-              status: 'answered',
-              items: [{ id: 'd', header: 'Depth', question: 'How deep?', answer: 'Brief' }],
+            frontStageNote: {
+              status: 'done',
+              items: [{ id: 'theme', label: 'Theme', value: 'Editorial' }],
             },
           },
-          ...[1, 2, 3, 4].flatMap((n) => [
-            {
-              type: 'tool_use' as const,
-              id: `call-${n}`,
-              name: 'research',
-              input: { summary: `Topic ${n}` },
-            },
-            {
-              type: 'tool_result' as const,
-              tool_use_id: `call-${n}`,
-              content: `r${n}`,
-              status: 'ok' as const,
-            },
-          ]),
-        ],
-        true
-      ),
-      status: 'streaming',
-      agents: [1, 2, 3, 4].map(makeAgent),
-    }
-
-    const view = buildReplyView(reply, true)
-    assert.equal(getFrontStageAsks(view).length, 1)
-    assert.equal(getFrontStageAsks(view)[0]?.askAction?.items[0]?.answer, 'Brief')
-
-    const liveStrip = buildTurnWorkStrip(reply, view, true, 5_000, true, false)
-    assert.equal(liveStrip.mode, 'live')
-    if (liveStrip.mode === 'live') {
-      assert.equal(liveStrip.waitingForUser, false)
-      assert.equal(liveStrip.liveAgents.length, 3)
-      assert.equal(liveStrip.overflowAgents, 1)
-      assert.equal(liveStrip.detail, null)
-    }
-  })
-
-  it('keeps live strip bounded to headline + single detail line while streaming and folds to settled on answer', () => {
-    const streamingReply: AssistantMessage = {
-      ...replyWith(
-        [
+          { type: 'tool_use', id: 'sp1', name: 'spawn_worker', input: {} },
           {
-            type: 'tool_use',
-            id: 's1',
-            name: 'web_search',
-            input: { summary: 'Checking major AI releases this week', query: 'AI releases' },
+            type: 'tool_result',
+            tool_use_id: 'sp1',
+            capability: 'parallel-cap',
+            content: 'started',
+            status: 'running',
           },
         ],
         true
       ),
       status: 'streaming',
-    }
-    const liveView = buildReplyView(streamingReply, true)
-    const liveStrip = buildTurnWorkStrip(streamingReply, liveView, true, 2_000, false, false)
-    assert.equal(liveStrip.mode, 'live')
-    if (liveStrip.mode === 'live') {
-      assert.equal(liveStrip.detail, 'Checking major AI releases this week')
-      assert.equal(liveStrip.liveAgents.length, 0)
+      capabilityState: {
+        'parallel-cap': {
+          tracks: [1, 2, 3, 4, 5].map((n) => ({
+            id: `w${n}`,
+            label: `Worker ${n}`,
+            detail: `Topic ${n}`,
+            status: 'running' as const,
+          })),
+        },
+      },
     }
 
-    // Thinking-only turn marks thinkingOnly=true so ActivityPanel opens reasoning expanded.
-    const thinkReply = replyWith(
-      [
-        { type: 'thinking', thinking: 'Let me reason through this.', startedAt: 0, endedAt: 4_000 },
-        { type: 'text', text: 'Here is the answer.' },
-      ],
-      true
-    )
-    const thinkView = buildReplyView(thinkReply, false)
-    const thinkTimeline = buildActivityTimeline(thinkView, 5_000)
-    assert.equal(thinkTimeline.thinkingOnly, true)
-    const thinkStrip = buildTurnWorkStrip(thinkReply, thinkView, false, 5_000, false, true)
-    assert.equal(thinkStrip.mode, 'settled')
-    if (thinkStrip.mode === 'settled') {
-      assert.equal(thinkStrip.thinkingOnly, true)
-      assert.equal(thinkStrip.hasSources, false)
+    const view = buildReplyView(reply, true, testRegistry)
+    const strip = buildTurnWorkStrip(reply, view, true, 5_000, false, false)
+    assert.equal(strip.mode, 'live')
+    if (strip.mode === 'live') {
+      assert.equal(strip.liveTracks.length, 3)
+      assert.equal(strip.overflowTracks, 2)
     }
+
+    const notes = getFrontStageNotes(view)
+    assert.equal(notes.length, 1)
+    assert.equal(notes[0]?.note.items[0]?.value, 'Editorial')
   })
 })

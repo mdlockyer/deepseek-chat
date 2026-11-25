@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { before, describe, it } from 'node:test'
-import type { AssistantMessage, ToolKind } from '@deepseek-chat/slice-conversations'
+import type { AssistantMessage } from '@deepseek-chat/slice-conversations'
 import {
   createStoreEnv,
   fileGoneError,
@@ -10,14 +10,12 @@ import {
   type ApiRequest,
 } from './store_harness.js'
 
-// Limits unlike the shipped ones, so these tests follow the parameters instead of pinning them.
 const NETWORK_RETRY_LIMIT = 3
 const FILE_REUPLOAD_LIMIT = 1
 
-const KINDS: Record<string, ToolKind> = { find_web: 'web_search' }
-
 const env = createStoreEnv({
-  kinds: KINDS,
+  toolNames: ['find_web'],
+  effects: { find_web: 'read' },
   params: {
     networkRetryLimit: NETWORK_RETRY_LIMIT,
     fileReuploadLimit: FILE_REUPLOAD_LIMIT,
@@ -27,7 +25,6 @@ const env = createStoreEnv({
 
 const NETWORK_LOST: ApiReply = { networkError: 'The network connection was lost.' }
 
-/** The reply on screen after a turn. */
 const lastReply = (): AssistantMessage => {
   const { activeId } = env.slice.getState()
   assert.ok(activeId, 'a chat is on screen')
@@ -38,7 +35,6 @@ const lastReply = (): AssistantMessage => {
 const replyText = (reply: AssistantMessage) =>
   reply.blocks.map((block) => (block.type === 'text' ? block.text : '')).join('')
 
-/** Starts a new chat with `text` (and `files`), sends it, and returns the requests it made. */
 const turn = async (
   respond: (index: number, request: ApiRequest) => ApiReply,
   files: File[] = []
@@ -57,7 +53,7 @@ const turn = async (
 const mentions = (request: ApiRequest, fileId: string) =>
   JSON.stringify(request.messages).includes(fileId)
 
-describe('conversations store: reply requests (SPEC invariant 8a)', () => {
+describe('conversations store: reply requests (SPEC invariant 8)', () => {
   before(() => env.slice.commands.init())
 
   it('sends a request again after network errors before any content, up to the limit', async () => {
@@ -83,8 +79,7 @@ describe('conversations store: reply requests (SPEC invariant 8a)', () => {
   it('counts network retries for the whole turn, across tool rounds', async () => {
     const random = seeded(81)
     for (let trial = 0; trial < 6; trial += 1) {
-      // Split a budget over the request before the tool round and the one after it.
-      const total = NETWORK_RETRY_LIMIT + (trial % 2) // even trials fit, odd ones go one past
+      const total = NETWORK_RETRY_LIMIT + (trial % 2)
       const before = 1 + Math.floor(random() * (total - 1))
       const after = total - before
       const requests = await turn((index) => {
@@ -131,7 +126,6 @@ describe('conversations store: reply requests (SPEC invariant 8a)', () => {
   it('uploads a dropped file again and resends, counting re-uploads per request', async () => {
     const firstUpload = env.uploads.length
     const idOfUpload = (n: number) => `file-api-${firstUpload + n + 1}`
-    // The request before the tool round and the one after it each lose the file once.
     const requests = await turn(
       (index) => {
         switch (index) {

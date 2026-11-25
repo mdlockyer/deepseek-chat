@@ -1,12 +1,12 @@
 import { IconButton, IconMenuOutline20, IconNewChatOutline20 } from '@deepseek-chat/lib-ui'
+import { useConversations } from '../../context.js'
 import { useTranslate } from '../../messages.js'
-import { newChat } from '../../store.js'
-import { openMobileSider } from '../sider/mobileSiderState.js'
 import styles from './MobileHeader.module.css'
 
 /** 移动端顶栏：左侧菜单打开侧边栏；会话页再显示标题与开启新对话 */
 export const MobileHeader = ({ title }: { title?: string }) => {
   const t = useTranslate()
+  const { newChat, openMobileSider } = useConversations()
   return (
     <div className={styles.header} data-tauri-drag-region="deep">
       <IconButton

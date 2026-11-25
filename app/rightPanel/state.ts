@@ -1,9 +1,15 @@
+import type {
+  ActiveSessionChanged,
+  SessionDeleted,
+  SessionHistoryReplaced,
+} from '@deepseek-chat/spine/facts/session'
+import type { KeyValueStore, PanelLayout, PanelSlot } from '@deepseek-chat/spine/ports'
+import type { EventLog } from '@deepseek-chat/spine/runtime'
 import { create } from 'zustand'
-import { localStore } from '../storage.js'
 
 export type RightPanelKind = 'preview' | 'browser' | 'activity'
 
-type SidePanelState = {
+export type SidePanelState = {
   activeSessionId: string | null
   activePanels: Record<string, RightPanelKind | null>
   /** Last panel displaced on the same session, powering one-click return chips. */
@@ -12,13 +18,13 @@ type SidePanelState = {
   panelResizing: boolean
   overlayLocks: number
   stageSize: { width: number; height: number } | null
-  /** 面板宽度（px），跨会话共享并存 localStorage */
+  /** Panel width (px), persisted under `chat-demo:browser-panel-width`. */
   width: number
 }
 
 export const DEFAULT_SIDE_PANEL_WIDTH = 540
 
-/** 沿用原有键名（原属内置浏览器设置），已保存的宽度不丢失 */
+/** App-shell layout key kept from the original app so saved panel width survives upgrades. */
 const WIDTH_KEY = 'chat-demo:browser-panel-width'
 
 const clampStoredWidth = (value: number) =>
@@ -26,66 +32,22 @@ const clampStoredWidth = (value: number) =>
     ? Math.min(Math.max(Math.round(value), 360), 1100)
     : DEFAULT_SIDE_PANEL_WIDTH
 
-const initialWidth = (): number => {
-  const parsed = Number(localStore.get(WIDTH_KEY))
-  return parsed > 0 ? clampStoredWidth(parsed) : DEFAULT_SIDE_PANEL_WIDTH
-}
-
 export const clampSidePanelResizeWidth = (proposedWidth: number, windowWidth: number): number => {
   const maxWidth = Math.max(360, Math.min(windowWidth - 360, Math.floor(windowWidth * 0.72)))
   return Math.round(Math.min(maxWidth, Math.max(360, proposedWidth)))
 }
 
-export const useSidePanelStore = create<SidePanelState>(() => ({
-  activeSessionId: null,
-  activePanels: {},
-  previousPanels: {},
-  panelAnimating: false,
-  panelResizing: false,
-  overlayLocks: 0,
-  stageSize: null,
-  width: initialWidth(),
-}))
-
-const { getState: get, setState: set } = useSidePanelStore
-
-type OverlayListener = (locked: boolean) => void
-const overlayListeners = new Set<OverlayListener>()
-
-export const registerOverlayLockListener = (listener: OverlayListener): (() => void) => {
-  overlayListeners.add(listener)
-  return () => {
-    overlayListeners.delete(listener)
-  }
-}
-
-export const acquireSidePanelOverlayLock = (): (() => void) => {
-  const wasUnlocked = get().overlayLocks === 0
-  set((state) => ({ overlayLocks: state.overlayLocks + 1 }))
-  if (wasUnlocked) {
-    for (const listener of overlayListeners) {
-      listener(true)
-    }
-  }
-  let released = false
-  return () => {
-    if (released) {
-      return
-    }
-    released = true
-    const next = Math.max(0, get().overlayLocks - 1)
-    set({ overlayLocks: next })
-    if (next === 0) {
-      for (const listener of overlayListeners) {
-        listener(false)
-      }
-    }
-  }
-}
+const toLayout = (state: SidePanelState): PanelLayout => ({
+  activeSessionId: state.activeSessionId,
+  animating: state.panelAnimating,
+  resizing: state.panelResizing,
+  overlayLocked: state.overlayLocks > 0,
+  width: state.width,
+})
 
 export const getActiveRightPanel = (
   sessionId: string | null | undefined,
-  state: Pick<SidePanelState, 'activePanels'> = get()
+  state: Pick<SidePanelState, 'activePanels'>
 ): RightPanelKind | null => {
   if (!sessionId) {
     return null
@@ -95,7 +57,7 @@ export const getActiveRightPanel = (
 
 export const getPreviousRightPanel = (
   sessionId: string | null | undefined,
-  state: Pick<SidePanelState, 'previousPanels'> = get()
+  state: Pick<SidePanelState, 'previousPanels'>
 ): RightPanelKind | null => {
   if (!sessionId) {
     return null
@@ -103,106 +65,220 @@ export const getPreviousRightPanel = (
   return Object.hasOwn(state.previousPanels, sessionId) ? state.previousPanels[sessionId] : null
 }
 
-export const setActiveSidePanelSession = (sessionId: string | null) => {
-  const state = get()
-  if (state.activeSessionId === sessionId) {
-    return
-  }
-  const prevOpen = getActiveRightPanel(state.activeSessionId, state) !== null
-  const nextOpen = getActiveRightPanel(sessionId, state) !== null
-  set({
-    activeSessionId: sessionId,
-    panelAnimating: prevOpen !== nextOpen,
-  })
-}
+/**
+ * Factory-scoped coordinator for the shared right-hand side panel.
+ * Subscribes to Spine session facts and issues isolated `PanelSlot` handles to slices.
+ */
+export const createRightPanelController = (store: KeyValueStore, log: EventLog) => {
+  const parsed = Number(store.get(WIDTH_KEY))
+  const initialWidth = parsed > 0 ? clampStoredWidth(parsed) : DEFAULT_SIDE_PANEL_WIDTH
 
-export const openRightPanel = (sessionId: string, kind: RightPanelKind) => {
-  const state = get()
-  const prev = getActiveRightPanel(sessionId, state)
-  if (prev === kind) {
-    return
-  }
-  const isViewing = state.activeSessionId === sessionId
-  set({
-    activePanels: { ...state.activePanels, [sessionId]: kind },
-    previousPanels:
-      prev !== null ? { ...state.previousPanels, [sessionId]: prev } : state.previousPanels,
-    ...(isViewing && prev === null ? { panelAnimating: true } : {}),
-  })
-}
-
-export const closeRightPanel = (sessionId: string, kind?: RightPanelKind) => {
-  const state = get()
-  const prev = getActiveRightPanel(sessionId, state)
-  if (prev === null || (kind !== undefined && prev !== kind)) {
-    return
-  }
-  const isViewing = state.activeSessionId === sessionId
-  set({
-    activePanels: { ...state.activePanels, [sessionId]: null },
-    previousPanels: { ...state.previousPanels, [sessionId]: null },
-    ...(isViewing ? { panelAnimating: false } : {}),
-  })
-}
-
-export const closeActiveRightPanelKind = (kind: RightPanelKind) => {
-  const state = get()
-  const sessionId = state.activeSessionId
-  if (sessionId) {
-    closeRightPanel(sessionId, kind)
-  }
-}
-
-export const setRightPanelAnimating = (animating: boolean) => {
-  if (get().panelAnimating !== animating) {
-    set({ panelAnimating: animating })
-  }
-}
-
-export const setRightPanelResizing = (resizing: boolean) => {
-  if (get().panelResizing !== resizing) {
-    set({ panelResizing: resizing })
-  }
-}
-
-export const setRightPanelStageSize = (size: { width: number; height: number }) => {
-  const prev = get().stageSize
-  if (
-    prev &&
-    Math.abs(prev.width - size.width) < 0.5 &&
-    Math.abs(prev.height - size.height) < 0.5
-  ) {
-    return
-  }
-  set({ stageSize: size })
-}
-
-export const disposeSidePanelSession = (sessionId: string) => {
-  set((state) => ({
-    activePanels: Object.fromEntries(
-      Object.entries(state.activePanels).filter(([key]) => key !== sessionId)
-    ),
-    previousPanels: Object.fromEntries(
-      Object.entries(state.previousPanels).filter(([key]) => key !== sessionId)
-    ),
-    ...(state.activeSessionId === sessionId
-      ? { activeSessionId: null, panelAnimating: false }
-      : {}),
-  }))
-}
-
-export const clearAllSidePanelSessions = () => {
-  set({
+  const useStore = create<SidePanelState>(() => ({
     activeSessionId: null,
     activePanels: {},
     previousPanels: {},
     panelAnimating: false,
     panelResizing: false,
+    overlayLocks: 0,
+    stageSize: null,
+    width: initialWidth,
+  }))
+
+  const { getState: get, setState: set } = useStore
+  const overlayListeners = new Set<(locked: boolean) => void>()
+
+  const registerOverlayLockListener = (listener: (locked: boolean) => void): (() => void) => {
+    overlayListeners.add(listener)
+    return () => {
+      overlayListeners.delete(listener)
+    }
+  }
+
+  const acquireOverlayLock = (): (() => void) => {
+    const wasUnlocked = get().overlayLocks === 0
+    set((state) => ({ overlayLocks: state.overlayLocks + 1 }))
+    if (wasUnlocked) {
+      for (const listener of [...overlayListeners]) {
+        listener(true)
+      }
+    }
+    let released = false
+    return () => {
+      if (released) {
+        return
+      }
+      released = true
+      const next = Math.max(0, get().overlayLocks - 1)
+      set({ overlayLocks: next })
+      if (next === 0) {
+        for (const listener of [...overlayListeners]) {
+          listener(false)
+        }
+      }
+    }
+  }
+
+  const getActivePanel = (sessionId: string | null | undefined) =>
+    getActiveRightPanel(sessionId, get())
+
+  const getPreviousPanel = (sessionId: string | null | undefined) =>
+    getPreviousRightPanel(sessionId, get())
+
+  const setActiveSession = (sessionId: string | null) => {
+    const state = get()
+    if (state.activeSessionId === sessionId) {
+      return
+    }
+    const prevOpen = getActiveRightPanel(state.activeSessionId, state) !== null
+    const nextOpen = getActiveRightPanel(sessionId, state) !== null
+    set({
+      activeSessionId: sessionId,
+      panelAnimating: prevOpen !== nextOpen,
+    })
+  }
+
+  const openPanel = (sessionId: string, kind: RightPanelKind) => {
+    const state = get()
+    const prev = getActiveRightPanel(sessionId, state)
+    if (prev === kind) {
+      return
+    }
+    const isViewing = state.activeSessionId === sessionId
+    set({
+      activePanels: { ...state.activePanels, [sessionId]: kind },
+      previousPanels:
+        prev !== null ? { ...state.previousPanels, [sessionId]: prev } : state.previousPanels,
+      ...(isViewing && prev === null ? { panelAnimating: true } : {}),
+    })
+  }
+
+  const closePanel = (sessionId: string, kind?: RightPanelKind) => {
+    const state = get()
+    const prev = getActiveRightPanel(sessionId, state)
+    if (prev === null || (kind !== undefined && prev !== kind)) {
+      return
+    }
+    const isViewing = state.activeSessionId === sessionId
+    set({
+      activePanels: { ...state.activePanels, [sessionId]: null },
+      previousPanels: { ...state.previousPanels, [sessionId]: null },
+      ...(isViewing ? { panelAnimating: false } : {}),
+    })
+  }
+
+  const closeActivePanelKind = (kind: RightPanelKind) => {
+    const sessionId = get().activeSessionId
+    if (sessionId) {
+      closePanel(sessionId, kind)
+    }
+  }
+
+  const setAnimating = (animating: boolean) => {
+    if (get().panelAnimating !== animating) {
+      set({ panelAnimating: animating })
+    }
+  }
+
+  const setResizing = (resizing: boolean) => {
+    if (get().panelResizing !== resizing) {
+      set({ panelResizing: resizing })
+    }
+  }
+
+  const setStageSize = (size: { width: number; height: number }) => {
+    const prev = get().stageSize
+    if (
+      prev &&
+      Math.abs(prev.width - size.width) < 0.5 &&
+      Math.abs(prev.height - size.height) < 0.5
+    ) {
+      return
+    }
+    set({ stageSize: size })
+  }
+
+  const disposeSession = (sessionId: string) => {
+    set((state) => ({
+      activePanels: Object.fromEntries(
+        Object.entries(state.activePanels).filter(([key]) => key !== sessionId)
+      ),
+      previousPanels: Object.fromEntries(
+        Object.entries(state.previousPanels).filter(([key]) => key !== sessionId)
+      ),
+      ...(state.activeSessionId === sessionId
+        ? { activeSessionId: null, panelAnimating: false }
+        : {}),
+    }))
+  }
+
+  const clearAllSessions = () => {
+    set({
+      activeSessionId: null,
+      activePanels: {},
+      previousPanels: {},
+      panelAnimating: false,
+      panelResizing: false,
+    })
+  }
+
+  const setWidth = (width: number) => {
+    const clamped = clampStoredWidth(width)
+    store.set(WIDTH_KEY, String(clamped))
+    set({ width: clamped })
+  }
+
+  const createSlot = (kind: RightPanelKind): PanelSlot => ({
+    useStageSize: () => useStore((state) => state.stageSize),
+    setStageSize,
+    setResizing,
+    isResizing: () => get().panelResizing,
+    isOpen: (sessionId) => getActivePanel(sessionId) === kind,
+    open: (sessionId) => openPanel(sessionId, kind),
+    close: (sessionId) => closePanel(sessionId, kind),
+    setAnimating,
+    getLayout: () => toLayout(get()),
+    subscribe: (listener) => useStore.subscribe(() => listener()),
+    useLayout: (select) => useStore((state) => select(toLayout(state))),
   })
+
+  const unsubscribers = [
+    log.subscribe<ActiveSessionChanged>(
+      'ActiveSessionChanged',
+      ({ fact }) => {
+        setActiveSession(fact.sessionId)
+      },
+      { replaySticky: true }
+    ),
+    log.subscribe<SessionDeleted>('SessionDeleted', ({ fact }) => {
+      disposeSession(fact.sessionId)
+    }),
+    log.subscribe<SessionHistoryReplaced>('SessionHistoryReplaced', () => {
+      clearAllSessions()
+    }),
+  ]
+
+  return {
+    useStore,
+    getActivePanel,
+    getPreviousPanel,
+    setActiveSession,
+    openPanel,
+    closePanel,
+    closeActivePanelKind,
+    setAnimating,
+    setResizing,
+    setStageSize,
+    setWidth,
+    acquireOverlayLock,
+    registerOverlayLockListener,
+    createSlot,
+    dispose: () => {
+      overlayListeners.clear()
+      for (const unsubscribe of unsubscribers) {
+        unsubscribe()
+      }
+    },
+  }
 }
 
-export const setSidePanelWidth = (width: number) => {
-  const clamped = clampStoredWidth(width)
-  localStore.set(WIDTH_KEY, String(clamped))
-  set({ width: clamped })
-}
+export type RightPanelController = ReturnType<typeof createRightPanelController>

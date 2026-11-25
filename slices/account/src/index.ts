@@ -19,6 +19,7 @@ export const createAccountSlice = (deps: AccountDeps) => {
     verifyKey: account.verifyKey,
     useKeyEditor: createUseKeyEditor(account),
     KeySettings: createKeySettings(account),
+    dispose: account.dispose,
   }
 }
 

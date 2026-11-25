@@ -9,79 +9,156 @@ import {
   Tabs,
   useIsMobile,
 } from '@deepseek-chat/lib-ui'
+import type { SettingsSection } from '@deepseek-chat/slice-conversations'
+import type {
+  DataSettingsController,
+  HistoryBackupSlice,
+} from '@deepseek-chat/slice-history-backup'
+import type { WebResearchSlice } from '@deepseek-chat/slice-web-research'
 import { useEffect, useState, type ReactNode } from 'react'
-import { account, browser, preferences, python, voice, webResearch } from '../composition.js'
-import { historyBackup } from '../historyBackup.js'
 import { useTranslate, type TranslationKey } from '../i18n/index.js'
-import { isDesktopApp } from '../platform/desktop.js'
-import { closeSettings, useSettingsDialog, type SettingsSection } from './settingsDialogState.js'
+import { useAppRuntime } from '../RuntimeContext.js'
 import styles from './Settings.module.css'
-
-const sections: { value: SettingsSection; label: TranslationKey; icon: ReactNode }[] = [
-  {
-    value: 'general',
-    label: 'settingDialogAsideGeneralOptionLabel',
-    icon: <IconSettingsOutline16 />,
-  },
-  {
-    value: 'apiKey',
-    label: 'settingDialogAsideApiKeyOptionLabel',
-    icon: <IconKeyOutline16 />,
-  },
-  { value: 'data', label: 'settingDialogAsideDataOptionLabel', icon: <IconDataOutline16 /> },
-]
 
 /**
  * 设置弹窗壳层：分「通用设置」、「API 密钥」与「数据管理」，每个分组的行与弹窗完全由各自 slice 拥有。
+ * 未挂载的切片自动省略其行或分组。
  */
 export const SettingsDialog = () => {
-  const t = useTranslate()
-  const open = useSettingsDialog((state) => state.open)
-  const initialSection = useSettingsDialog((state) => state.section)
-  const dataSettings = historyBackup.useDataSettings()
+  const { slices } = useAppRuntime()
+  if (slices.historyBackup) {
+    return <SettingsDialogWithBackup historyBackup={slices.historyBackup} />
+  }
+  return <SettingsDialogFrame dataSettings={null} historyBackup={null} />
+}
 
+const SettingsDialogWithBackup = ({ historyBackup }: { historyBackup: HistoryBackupSlice }) => {
+  const dataSettings = historyBackup.useDataSettings()
   return (
     <>
-      <Dialog
-        open={open}
-        title={t('settings')}
-        closable
-        dismissible={!dataSettings.deletingBusy}
-        sheetOnMobile
-        size="lg"
-        className={styles.dialog}
-        mainClassName={styles.dialogMain}
-        onClose={() => {
-          if (!dataSettings.deletingBusy) {
-            closeSettings()
-          }
-        }}
-      >
-        <SettingsContent initialSection={initialSection} dataSettings={dataSettings} />
-      </Dialog>
+      <SettingsDialogFrame dataSettings={dataSettings} historyBackup={historyBackup} />
       <historyBackup.DataModals controller={dataSettings} />
     </>
   )
 }
 
+const SettingsDialogFrame = ({
+  dataSettings,
+  historyBackup,
+}: {
+  dataSettings: DataSettingsController | null
+  historyBackup: HistoryBackupSlice | null
+}) => {
+  const t = useTranslate()
+  const { settingsDialog } = useAppRuntime()
+  const open = settingsDialog.useStore((state) => state.open)
+  const initialSection = settingsDialog.useStore((state) => state.section)
+  const busy = dataSettings?.deletingBusy ?? false
+
+  return (
+    <Dialog
+      open={open}
+      title={t('settings')}
+      closable
+      dismissible={!busy}
+      sheetOnMobile
+      size="lg"
+      className={styles.dialog}
+      mainClassName={styles.dialogMain}
+      onClose={() => {
+        if (!busy) {
+          settingsDialog.close()
+        }
+      }}
+    >
+      <SettingsContent
+        initialSection={initialSection}
+        dataSettings={dataSettings}
+        historyBackup={historyBackup}
+      />
+    </Dialog>
+  )
+}
+
+const WebResearchKeyPanel = ({ webResearch }: { webResearch: WebResearchSlice }) => {
+  const editor = webResearch.useKeyEditor()
+  return <webResearch.KeySettings editor={editor} />
+}
+
 const SettingsContent = ({
   initialSection,
   dataSettings,
+  historyBackup,
 }: {
   initialSection: SettingsSection
-  dataSettings: ReturnType<typeof historyBackup.useDataSettings>
+  dataSettings: DataSettingsController | null
+  historyBackup: HistoryBackupSlice | null
 }) => {
   const t = useTranslate()
   const isMobile = useIsMobile()
-  const [section, setSection] = useState<SettingsSection>(initialSection)
+  const { platform, slices } = useAppRuntime()
+  const { account, browser, preferences, python, voice, webResearch } = slices
+
+  const hasGeneral = Boolean(
+    preferences || voice || (platform === 'desktop' && (browser || python))
+  )
+  const availableSections: { value: SettingsSection; label: TranslationKey; icon: ReactNode }[] = [
+    ...(hasGeneral
+      ? [
+          {
+            value: 'general' as const,
+            label: 'settingDialogAsideGeneralOptionLabel' as const,
+            icon: <IconSettingsOutline16 />,
+          },
+        ]
+      : []),
+    {
+      value: 'apiKey',
+      label: 'settingDialogAsideApiKeyOptionLabel',
+      icon: <IconKeyOutline16 />,
+    },
+    ...(historyBackup && dataSettings
+      ? [
+          {
+            value: 'data' as const,
+            label: 'settingDialogAsideDataOptionLabel' as const,
+            icon: <IconDataOutline16 />,
+          },
+        ]
+      : []),
+  ]
+
+  const hasData = Boolean(historyBackup && dataSettings)
+  const resolveSection = (wanted: SettingsSection): SettingsSection => {
+    if (wanted === 'general' && hasGeneral) {
+      return 'general'
+    }
+    if (wanted === 'data' && hasData) {
+      return 'data'
+    }
+    if (wanted === 'apiKey') {
+      return 'apiKey'
+    }
+    return hasGeneral ? 'general' : 'apiKey'
+  }
+
+  const [section, setSection] = useState<SettingsSection>(() => resolveSection(initialSection))
 
   useEffect(() => {
-    setSection(initialSection)
-  }, [initialSection])
+    setSection(
+      initialSection === 'general' && hasGeneral
+        ? 'general'
+        : initialSection === 'data' && hasData
+          ? 'data'
+          : initialSection === 'apiKey'
+            ? 'apiKey'
+            : hasGeneral
+              ? 'general'
+              : 'apiKey'
+    )
+  }, [hasData, hasGeneral, initialSection])
 
-  // 切换分组不丢失正在输入的密钥
   const accountEditor = account.useKeyEditor()
-  const firecrawlEditor = webResearch.useKeyEditor()
 
   return (
     <Tabs
@@ -91,31 +168,39 @@ const SettingsContent = ({
       className={styles.tabs}
     >
       <TabList ariaLabel={t('settings')} className={styles.navigation}>
-        {sections.map((item) => (
+        {availableSections.map((item) => (
           <Tab key={item.value} value={item.value} icon={item.icon} className={styles.navItem}>
             {t(item.label)}
           </Tab>
         ))}
       </TabList>
-      <TabPanel value="general" className={styles.content}>
-        <preferences.ThemeSetting />
-        <preferences.LocaleSetting />
-        <voice.VoiceSetting />
-        <preferences.LocationSetting />
-        {isDesktopApp ? (
-          <>
-            <browser.LocalhostSetting />
-            <python.RuntimeSetting />
-          </>
-        ) : null}
-      </TabPanel>
+      {hasGeneral ? (
+        <TabPanel value="general" className={styles.content}>
+          {preferences ? (
+            <>
+              <preferences.ThemeSetting />
+              <preferences.LocaleSetting />
+            </>
+          ) : null}
+          {voice ? <voice.VoiceSetting /> : null}
+          {preferences ? <preferences.LocationSetting /> : null}
+          {platform === 'desktop' ? (
+            <>
+              {browser ? <browser.LocalhostSetting /> : null}
+              {python ? <python.RuntimeSetting /> : null}
+            </>
+          ) : null}
+        </TabPanel>
+      ) : null}
       <TabPanel value="apiKey" className={styles.content}>
         <account.KeySettings editor={accountEditor} />
-        <webResearch.KeySettings editor={firecrawlEditor} />
+        {webResearch ? <WebResearchKeyPanel webResearch={webResearch} /> : null}
       </TabPanel>
-      <TabPanel value="data" className={styles.content}>
-        <historyBackup.DataSettings controller={dataSettings} />
-      </TabPanel>
+      {historyBackup && dataSettings ? (
+        <TabPanel value="data" className={styles.content}>
+          <historyBackup.DataSettings controller={dataSettings} />
+        </TabPanel>
+      ) : null}
     </Tabs>
   )
 }

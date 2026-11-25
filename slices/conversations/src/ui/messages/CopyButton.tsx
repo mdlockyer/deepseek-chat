@@ -1,11 +1,12 @@
-import { useEffect, useRef, useState } from 'react'
-import { useTranslate } from '../../messages.js'
 import { IconButton, IconCheckOutline16, IconCopyOutline16, copyText } from '@deepseek-chat/lib-ui'
-import { showNotice } from '../../notice.js'
+import { useEffect, useRef, useState } from 'react'
+import { useConversations } from '../../context.js'
+import { useTranslate } from '../../messages.js'
 
 /** 复制成功后图标换成对勾 1 秒，期间再次点击不重复复制 */
 export const CopyButton = ({ text }: { text: string }) => {
   const t = useTranslate()
+  const { showNotice } = useConversations()
   const [copied, setCopied] = useState(false)
   const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
   useEffect(() => () => clearTimeout(timerRef.current), [])

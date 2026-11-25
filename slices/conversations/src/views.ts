@@ -1,8 +1,7 @@
-import type { PanelSlot } from '@deepseek-chat/spine/ports'
+import type { DeliveredFileRef } from '@deepseek-chat/lib-tools'
 import type { ComponentType } from 'react'
-import type { PresentedFileRef, Session } from './types.js'
 
-/** Voice input in the composer and read-aloud on replies (the voice slice). */
+/** Voice input in the composer and read-aloud on replies (optional: null when voice slice is unmounted). */
 export type VoiceViews = {
   readonly useVoiceInput: (onTranscript: (text: string) => void) => {
     readonly status: 'idle' | 'recording' | 'transcribing'
@@ -20,51 +19,41 @@ export type VoiceViews = {
   }>
   readonly Spectrum: ComponentType<{ getAnalyser: () => AnalyserNode | null }>
   readonly ReadAloudButton: ComponentType<{ messageId: string; text: string }>
-  readonly stopReadAloud: () => void
 }
 
-/** A file shown in a chat: one a tool presented, or one the user attached. */
+/** A file shown in a chat: one a tool delivered, or one the user attached. */
 export type ChatFile =
-  | { readonly kind: 'presented'; readonly file: PresentedFileRef }
+  | { readonly kind: 'delivered'; readonly file: DeliveredFileRef }
   | { readonly kind: 'upload'; readonly fileId: string }
 
-/** The right-hand panels other slices show for a chat. */
-export type ChatPanels = {
-  readonly files: {
-    /** Whether the file panel currently shows this file. */
-    readonly useIsShown: (sessionId: string, file: ChatFile) => boolean
-    readonly open: (sessionId: string, file: ChatFile) => void
-    /** The header toggle: hidden when the chat has no files and the panel was never opened. */
-    readonly useToggle: (session: Session) => {
-      readonly visible: boolean
-      readonly open: boolean
-      readonly toggle: () => void
-    }
-  }
-  /** The built-in browser's header toggle; `null` where there is no browser (web). */
-  readonly browser: {
-    readonly useToggle: (sessionId: string) => {
-      readonly open: boolean
-      readonly toggle: () => void
-    }
-  } | null
-  /** This slice's slot for the unified turn activity & sources inspector. */
-  readonly activity: PanelSlot
+export type InspectionTarget = {
+  readonly sessionId: string
+  readonly messageId: string
+  readonly tab: 'activity' | 'sources'
 }
 
 export type SettingsSection = 'general' | 'apiKey' | 'data'
 
-/** What the chat UI needs from the app around it. */
+/** What the chat UI needs from the app shell around it. Optional ports degrade cleanly when omitted. */
 export type ConversationsViewDeps = {
-  readonly voice: VoiceViews
-  readonly panels: ChatPanels
+  readonly voice: VoiceViews | null
+  /** Optional header toggle buttons contributed by mounted slices (e.g. files, browser). */
+  readonly headerActions?: readonly ComponentType<{ readonly sessionId: string }>[]
+  /** Optional interactive dock rendered in place of the composer when active (e.g. ask-user). */
+  readonly composerDock?: ComponentType<{
+    readonly sessionId: string
+    readonly onStopReply: () => void
+  }>
+  readonly useHasComposerDock?: (sessionId: string) => boolean
+  /** Optional preview opener for delivered/uploaded files; falls back to `saveFile` when absent. */
+  readonly openFile?: (sessionId: string, file: ChatFile) => void
+  readonly useIsFileShown?: (sessionId: string, file: ChatFile) => boolean
+  /** Optional reactive readout of the active inspector target so triggers can show pressed state. */
+  readonly useActiveInspectionTarget?: () => InspectionTarget | null
   readonly openSettings: (section: SettingsSection) => void
-  /** Opens a link inside the app (desktop: the built-in browser); `null`: ordinary links. */
+  /** Opens a link inside the app (desktop: built-in browser); `null`: ordinary links. */
   readonly openInApp: ((url: string) => void) | null
   /** Saves a file for the user (desktop: save dialog; web: download). */
   readonly saveFile: (name: string, blob: Blob) => Promise<void>
   readonly setSiderCollapsed: (collapsed: boolean) => void
-  /** Optional interactive dock rendered in place of the composer when active (e.g. ask-user). */
-  readonly composerDock?: ComponentType<{ sessionId: string; onStopReply: () => void }>
-  readonly useHasComposerDock?: (sessionId: string) => boolean
 }

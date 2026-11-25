@@ -1,4 +1,3 @@
-import type { TranslationMessage } from './messages.js'
 import type {
   ApiErrorKind,
   ChatModel,
@@ -8,9 +7,16 @@ import type {
   StopReason,
   TextCitation,
 } from '@deepseek-chat/lib-agent'
+import type {
+  CitedSourceMeta,
+  DeliveredFileRef,
+  FrontStageNote,
+  ToolProgress,
+} from '@deepseek-chat/lib-tools'
+import type { TranslationMessage } from './messages.js'
 
 /**
- * 消息附件。id 是本地标识（IndexedDB files 表的主键，原件按它存储，所有引用同一 id 的消息共用一份），
+ * 消息附件。id 是本地标识（BlobStore 主键，原件按它存储，所有引用同一 id 的消息共用一份），
  * 导入的附件沿用导出产物里的文件 ID；本地没有原件的附件只展示文件名，不进入请求。
  * serverId 是 Files API 返回的 file_id，导入的数据或尚未上传成功的文件为 null，发送前补传。
  */
@@ -62,9 +68,7 @@ export type TextPart = {
   isTemplate?: boolean
 }
 
-/** 客户端工具调用（python、web_search、web_scrape）。input 在流式过程中由 input_json_delta 拼接到 inputJson，
- * content_block_stop 时解析为 input。
- */
+/** 客户端工具调用；input 在流式过程中由 input_json_delta 拼接到 inputJson，stop 时解析为 input。 */
 export type ToolCallPart = {
   type: 'tool_use'
   id: string
@@ -73,125 +77,38 @@ export type ToolCallPart = {
   inputJson?: string
 }
 
-export type PresentedFileRef = {
-  id: string
-  name: string
-  size: number
-  mimeType: string
-  /** 逻辑路径，用于跨轮次编辑按同一文件聚合版本 */
-  path?: string
-  /** 可选展示标题 */
-  title?: string
-  /** 所属分支内的版本号（从 1 开始） */
-  version?: number
-  /** 来源：模型工具或 Python present_file() */
-  source?: 'model' | 'python'
-}
-
-export type WebSearchSourceMeta = {
-  url: string
-  title: string
-  snippet: string
-  siteName: string | null
-  publishedAt: string | null
-}
-
-export type AskActionItem = {
-  id: string
-  header: string
-  question: string
-  answer?: string | string[]
-}
-
-export type AskActionMeta = {
-  status: 'answered' | 'skipped'
-  items: AskActionItem[]
-}
-
-/** 浏览器本地执行客户端工具后的结果；content 原样作为 tool_result 回传给模型 */
+/** 通用客户端工具结果：conversations 对具体工具领域完全无知，所有展示与归档元数据均按标准字段传递。 */
 export type ToolResultPart = {
   type: 'tool_result'
   tool_use_id: string
+  /** Capability ID that executed this call. */
+  capability?: string
   /** 回传给模型的文本 */
   content: string
   status: 'running' | 'ok' | 'error' | 'aborted'
-  /** 运行中的阶段：installing 为首次配置环境，starting 为启动内核或加载包，running 为执行代码 */
-  phase?: 'installing' | 'starting' | 'running'
+  /** Live execution phase reported by the capability while running. */
+  progress?: ToolProgress
   /** 开始执行的时间，用于运行中显示用时 */
   startedAt?: number
-  /** 代码生成的图片（data URL），展示给用户，并经 Files API 上传后附给模型 */
+  durationMs?: number
+  /** 工具产出的图片（data URL），经 Files API 上传后附给模型；无 previewImages 时也提升至正文区展示 */
   images?: string[]
-  /** 仅用于界面展示的干净预览图（如不含 [eN] 标记的浏览器截图）；缺省时回退到 images，不回传给模型 */
+  /** 仅用于活动面板展示的干净预览图；缺省时回退到 images，不回传给模型，且不提升至正文区 */
   previewImages?: string[]
-  /** present_file() 交给用户下载的文件；原件存在 IndexedDB 的 files 表，按 id 读取 */
-  files?: PresentedFileRef[]
+  /** 工具交付给用户的文件引用；原件存于 Spine BlobStore，按 id 读取 */
+  files?: DeliveredFileRef[]
   /** 与 images 一一对应的 Files API file_id；undefined 为尚未上传，null 为上传失败 */
   imageFileIds?: (string | null)[]
-  /** Firecrawl 搜索返回的来源列表，用于界面卡片与引用角标展示 */
-  searchResults?: WebSearchSourceMeta[]
-  /** Firecrawl 抓取页面返回的元信息，用于界面展示 */
-  scrapedPage?: { url: string; title: string | null }
-  /** 内置浏览器执行动作的元信息，用于时间线展示 */
-  browserAction?: { tool: string; summary: string; url?: string; title?: string | null }
-  /** 文件展示/编辑动作的元信息，用于时间线展示 */
-  fileAction?: {
-    tool: 'present_file' | 'edit_file' | 'read_file'
-    path: string
-    title?: string
-    version?: number
-  }
-  /** 澄清提问的结果元信息，用于在时间线展示用户选择 */
-  askAction?: AskActionMeta
-  durationMs?: number
+  /** 可引用来源列表，由工具按编号提供，用于正文引用角标与来源面板 */
+  sources?: CitedSourceMeta[]
+  /** 完成后需要保留在正文前台的决策摘要 */
+  frontStageNote?: FrontStageNote
+  /** 能力私有结构化载荷，仅由对应能力 presenter / serializer 解释 */
+  payload?: unknown
 }
 
 /** 服务端工具调用与结果块按协议原样保存；历史请求只回传 read_link 调用与结果 */
 export type ReplyBlock = ThinkingPart | TextPart | ServerToolBlock | ToolCallPart | ToolResultPart
-
-export type AgentRunState =
-  | { status: 'running'; round: number }
-  | { status: 'finished'; result: AgentRunResult }
-  /**
-   * Ended without a proper finish: a round or tool-call limit, or (`noFinishCall`) the child ended
-   * its turn without calling its finish tool and ignored the one nudge to do so.
-   */
-  | { status: 'exhausted'; limit: 'rounds' | 'toolCalls' | 'noFinishCall'; result: AgentRunResult }
-  | { status: 'failed'; error: { kind: ApiErrorKind; message: string } }
-  | { status: 'stopped'; reason: 'user' | 'interrupted' | 'roundLimit' }
-
-export type AgentRun = {
-  runId: string
-  profile: string
-  label?: string
-  startedBy: string
-  summary?: string
-  state: AgentRunState
-  blocks: ReplyBlock[]
-  usage?: MessageUsage
-}
-
-/** One source a child's answer cites as [n]; conversations assigns the final number. */
-export type AgentSource = {
-  n: number
-  url: string
-  title: string
-  verification: 'verified' | 'unverified'
-}
-
-/**
- * What a finished or exhausted child handed back, before reply-wide citation numbering. Saved on
- * its state so that a reply continued after Stop or an error can still deliver a result no `wait`
- * collected.
- */
-export type AgentRunResult = { content: string; sources: AgentSource[] }
-
-export type PostAuthor = { kind: 'lead' } | { kind: 'agent'; runId: string }
-export type PostAudience = { kind: 'all' } | { kind: 'agent'; runId: string }
-
-export type BoardPost =
-  | { kind: 'finding'; id: string; author: PostAuthor; text: string; url: string }
-  | { kind: 'question'; id: string; author: PostAuthor; question: string; assumption: string }
-  | { kind: 'direction'; id: string; author: { kind: 'lead' }; to: PostAudience; text: string }
 
 /**
  * pending：已发出请求，还没收到事件；streaming：正在接收；
@@ -207,12 +124,10 @@ export type AssistantMessage = MessageBranch & {
   model: ChatModel | null
   /** 请求时是否开启深度思考 */
   thinking?: boolean
-  /** 请求时是否开启联网搜索 */
-  search?: boolean
-  /** 请求时是否允许运行 Python 代码 */
-  python?: boolean
-  /** 请求时是否允许控制内置浏览器 */
-  browser?: boolean
+  /** 请求时各能力开关快照（key 为 capability id） */
+  enabledCapabilities?: Record<string, boolean>
+  /** 各能力附着在本条回复上的持久化 JSON 状态（key 为 capability id） */
+  capabilityState?: Record<string, unknown>
   /** 本轮请求的系统信息快照；各回答版本独立保存，续写沿用。历史消息中缺省的快照保持为空。 */
   latestReminder?: string
   /** 是否允许作为续写前缀；仍需满足回复状态与内容限制。 */
@@ -220,10 +135,6 @@ export type AssistantMessage = MessageBranch & {
   status: ReplyStatus
   /** 可识别的内容块按接收顺序排列；续写产生的块追加在已有块之后 */
   blocks: ReplyBlock[]
-  /** Child subagent runs spawned during this reply, persisted alongside the reply. */
-  agents?: AgentRun[]
-  /** Shared message board posts for this reply, persisted alongside the reply. */
-  board?: BoardPost[]
   stopReason?: StopReason
   stopDetails?: StopDetails
   /** 最近一次请求的用量，续写后更新 */

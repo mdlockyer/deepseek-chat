@@ -241,14 +241,14 @@ export const pickImageResults = (blocks: ReplyBlock[]): ToolResult[] => {
 
 const plural = (count: number, one: string, many: string) => (count === 1 ? one : many)
 
-/** 工具结果的文字：附带图片时说明图片在结果之后，不附带时提示重新 show() */
+/** 工具结果的文字：附带图片时说明图片在结果之后，不附带时提示重新输出图片 */
 const toToolResultText = (block: ToolResult, attached: number): string => {
   const count = block.images?.length ?? 0
   if (count === 0) {
     return block.content
   }
   if (attached === 0) {
-    return `${block.content}\n[The ${count} ${plural(count, 'image is', 'images are')} no longer attached; re-run show() or browser_observe with screenshot=true to see ${plural(count, 'it', 'them')}.]`
+    return `${block.content}\n[The ${count} ${plural(count, 'image is', 'images are')} no longer attached; re-run the tool with image output enabled to see ${plural(count, 'it', 'them')}.]`
   }
   const failed = count - attached
   return `${block.content}\n[${attached} ${plural(attached, 'image', 'images')} from this call ${plural(attached, 'follows', 'follow')} the tool results${failed ? `; ${failed} could not be uploaded` : ''}.]`

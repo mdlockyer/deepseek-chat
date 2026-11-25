@@ -28,7 +28,6 @@ const assistant = (
   createdAt: 2_000,
   model: 'deepseek-flash',
   thinking: true,
-  search: false,
   prefix: true,
   status: 'done',
   blocks,

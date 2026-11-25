@@ -85,6 +85,9 @@ export const createPreferences = ({ store, browserLanguage }: PreferencesDeps) =
         listeners.delete(listener)
       }
     },
+    dispose: () => {
+      listeners.clear()
+    },
   }
 }
 

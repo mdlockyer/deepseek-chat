@@ -2,9 +2,8 @@ import { IconButton, IconPanelLeftOutline16 } from '@deepseek-chat/lib-ui'
 import { PANEL_DURATION_MS } from '@deepseek-chat/spine/design'
 import clsx from 'clsx'
 import { useLayoutEffect, useRef } from 'react'
-import { deps } from '../../env.js'
+import { useConversations } from '../../context.js'
 import { useTranslate } from '../../messages.js'
-import { newChat } from '../../store.js'
 import { NewChatIcon } from './NewChatIcon.js'
 import styles from './Sider.module.css'
 
@@ -13,12 +12,11 @@ const COLLAPSED_PILL_WIDTH = 78
 const SINGLE_BUTTON_WIDTH = 40
 
 /**
- * 收起后标题行上的按钮组：
- * 收起时从侧边栏右上角切换按钮的 40×40 圆形位置出发，沿顶栏水平滑至交通灯右侧并顺滑展开为 78px 胶囊，
- * 新对话按钮从右侧胶囊内轻柔显露；展开时先收拢为 40×40 圆形再随侧边栏右缘滑回并无缝交接。
+ * 收起后标题行上的按钮组：沿顶栏水平滑至交通灯右侧并顺滑展开为 78px 胶囊。
  */
 export const CollapsedSider = ({ exiting = false }: { exiting?: boolean }) => {
   const t = useTranslate()
+  const { deps, newChat } = useConversations()
   const groupRef = useRef<HTMLDivElement | null>(null)
   const toggleRef = useRef<HTMLSpanElement | null>(null)
   const wasMountedRef = useRef(false)
@@ -27,14 +25,15 @@ export const CollapsedSider = ({ exiting = false }: { exiting?: boolean }) => {
     const isFreshMount = !wasMountedRef.current
     wasMountedRef.current = true
 
-    const sider = document.querySelector<HTMLElement>('[data-sider-root]')
     const group = groupRef.current
     const toggle = toggleRef.current
+    const sider =
+      group?.closest('[data-app-shell]')?.querySelector<HTMLElement>('[data-sider-root]') ??
+      document.querySelector<HTMLElement>('[data-sider-root]')
     const source = sider?.querySelector<HTMLElement>(TOGGLE_SELECTOR)
     if (!sider || !group || !toggle || !source) {
       return
     }
-    // 首屏即处于收起状态时无需播放从侧边栏滑出的入场动画
     if (isFreshMount && !exiting && getComputedStyle(sider).visibility !== 'visible') {
       group.classList.add(styles.collapsedStatic)
       return
@@ -47,7 +46,6 @@ export const CollapsedSider = ({ exiting = false }: { exiting?: boolean }) => {
     const currentTransform = computed.transform
     const currentWidth = computed.width
 
-    // 临时重置到终态尺寸与位置，测量收起按钮与展开按钮之间的精确水平位移
     group.style.transition = 'none'
     group.style.transform = 'none'
     group.style.width = `${COLLAPSED_PILL_WIDTH}px`
@@ -91,7 +89,7 @@ export const CollapsedSider = ({ exiting = false }: { exiting?: boolean }) => {
             tooltip={t('expandSiderbarButton')}
             tooltipPlacement="bottom"
             tooltipDisabled={exiting}
-            onClick={() => deps().ui.setSiderCollapsed(false)}
+            onClick={() => deps.ui.setSiderCollapsed(false)}
           />
         </span>
         <span className={styles.newChatSlot}>

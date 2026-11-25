@@ -1,18 +1,8 @@
 import { Button, useIsMobile } from '@deepseek-chat/lib-ui'
 import { useEffect } from 'react'
-import { onUploadNotice } from '../../attachments.js'
-import { deps } from '../../env.js'
+import { useConversations } from '../../context.js'
 import { useTranslate } from '../../messages.js'
-import { showNotice } from '../../notice.js'
-import {
-  bindChatPersistence,
-  initChat,
-  retrySaveSessions,
-  selectSession,
-  useChatStore,
-} from '../../store.js'
-import { closeActivityPanel } from '../activity/activityPanelState.js'
-import { closeMobileSider } from '../sider/mobileSiderState.js'
+import type { ConversationsRuntime } from '../../runtime.js'
 import styles from './ChatMain.module.css'
 import { MobileHeader } from './MobileHeader.js'
 import { SessionView } from './SessionView.js'
@@ -21,6 +11,7 @@ import { Welcome } from './Welcome.js'
 /** 保存失败时的提示条，可重试 */
 export const ChatSaveBanner = () => {
   const t = useTranslate()
+  const { useChatStore, retrySaveSessions } = useConversations()
   const saveError = useChatStore((state) => Object.values(state.sessionSaveErrors).some(Boolean))
   const importingHistory = useChatStore((state) => state.importingHistory)
   return saveError ? (
@@ -33,38 +24,32 @@ export const ChatSaveBanner = () => {
   ) : null
 }
 
-/**
- * 聊天的启动与随当前会话切换的清理。由应用在错误边界之外调用一次，内容区出错时仍保持运行。
- */
-export const useChatLifecycle = () => {
-  const isMobile = useIsMobile()
-  const activeId = useChatStore((state) => state.activeId)
+/** Factory-bound lifecycle hooks for a specific conversations slice instance. */
+export const createChatHooks = (runtime: ConversationsRuntime) => {
+  const useChatLifecycle = () => {
+    const isMobile = useIsMobile()
+    const activeId = runtime.useChatStore((state) => state.activeId)
 
-  // 文件数、存储空间达到上限时，附件上只显示「上传失败」，原因用 toast 说明
-  useEffect(() => onUploadNotice(showNotice), [])
-  useEffect(bindChatPersistence, [])
-  // 活动与来源面板只属于当前会话
-  useEffect(closeActivityPanel, [activeId])
-  // 右侧面板（浏览器标签页等）绑定到当前会话
-  useEffect(() => {
-    deps().onActiveSessionChange(activeId)
-  }, [activeId])
-  // 切换会话时停止朗读
-  useEffect(() => deps().ui.voice.stopReadAloud(), [activeId])
-  // 移动端选中会话、切换布局后收起抽屉
-  useEffect(closeMobileSider, [activeId, isMobile])
-  useEffect(() => {
-    void initChat()
-  }, [])
+    useEffect(() => runtime.uploads.onUploadNotice(runtime.showNotice), [])
+    useEffect(() => runtime.bindChatPersistence(), [])
+    useEffect(() => {
+      runtime.closeMobileSider()
+    }, [activeId, isMobile])
+    useEffect(() => {
+      void runtime.initChat()
+    }, [])
+  }
+
+  const useActiveSessionId = () => runtime.useChatStore((state) => state.activeId)
+
+  return { useChatLifecycle, useActiveSessionId }
 }
-
-/** 当前会话 ID（null 为新对话页） */
-export const useActiveSessionId = () => useChatStore((state) => state.activeId)
 
 /** 主区域：加载中/失败、会话页或欢迎页 */
 export const ChatMain = ({ siderCollapsed }: { siderCollapsed: boolean }) => {
   const t = useTranslate()
   const isMobile = useIsMobile()
+  const { useChatStore, initChat, selectSession } = useConversations()
   const ready = useChatStore((state) => state.ready)
   const initError = useChatStore((state) => state.initError)
   const session = useChatStore((state) =>

@@ -1,18 +1,9 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import type { ToolEffect, ToolKind } from '@deepseek-chat/slice-conversations'
+import type { ToolEffect } from '@deepseek-chat/lib-tools'
 import { createStoreEnv, seeded, type ApiReply, type ApiRequest } from './store_harness.js'
 
 const MAX_PARALLEL = 3
-
-const KINDS: Record<string, ToolKind> = {
-  r_search: 'web_search',
-  r_scrape: 'web_scrape',
-  r_file: 'read_file',
-  w_file: 'present_file',
-  s_py: 'python',
-  i_ask: 'ask_user',
-}
 
 const EFFECTS: Record<string, ToolEffect> = {
   r_search: 'read',
@@ -23,10 +14,10 @@ const EFFECTS: Record<string, ToolEffect> = {
   i_ask: 'interactive',
 }
 
-const TOOL_NAMES = Object.keys(KINDS)
+const TOOL_NAMES = Object.keys(EFFECTS)
 
 const env = createStoreEnv({
-  kinds: KINDS,
+  toolNames: TOOL_NAMES,
   effects: EFFECTS,
   params: { maxParallelReadCalls: MAX_PARALLEL },
 })
@@ -60,7 +51,7 @@ const turn = async (text: string) => {
   await env.slice.commands.whenIdle()
 }
 
-describe('conversations store: tool effects and concurrency (SPEC invariant 2)', () => {
+describe('conversations store: tool effects and concurrency (SPEC invariant 3)', () => {
   it('writes tool_results in call order under random completion delays and saves each when it ends', async () => {
     await env.slice.commands.init()
 
@@ -101,7 +92,6 @@ describe('conversations store: tool effects and concurrency (SPEC invariant 2)',
       )
     }
 
-    // Verify a fast later read result is written to state before a slow earlier read finishes.
     let releaseSlow!: () => void
     const slowGate = new Promise<void>((resolve) => {
       releaseSlow = resolve

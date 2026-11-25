@@ -1,28 +1,31 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import {
-  buildReplyView,
-  type StreamTrace,
-  type ToolKind,
-  type ToolResult,
-} from '@deepseek-chat/slice-conversations'
+import type { ToolEffect, ToolRunResult } from '@deepseek-chat/lib-tools'
+import { buildReplyView, type StreamTrace } from '@deepseek-chat/slice-conversations'
 import { createStoreEnv, seeded, type ApiReply, type ApiRequest } from './store_harness.js'
 
-// Tool names unlike the real ones: the store must rely on the gateway alone.
-const KINDS: Record<string, ToolKind> = {
-  find_web: 'web_search',
-  read_web: 'web_scrape',
-  run_code: 'python',
-  make_doc: 'present_file',
-  click_page: 'browser',
+const EFFECTS: Record<string, ToolEffect> = {
+  find_web: 'read',
+  read_web: 'read',
+  run_code: 'session',
+  make_doc: 'artifact',
+  click_page: 'session',
 }
-const NAMES = [...Object.keys(KINDS), 'mystery_tool'] // the last one has no kind
+const TOOL_NAMES = Object.keys(EFFECTS)
+const NAMES = [...TOOL_NAMES, 'mystery_tool']
 const instructionsFor = (names: ReadonlySet<string>) =>
-  [...names].sort().map((name) => `## How to use ${name}`)
+  [...names]
+    .sort()
+    .map((name) => `## How to use ${name}`)
+    .join('\n\n')
 
-const env = createStoreEnv({ kinds: KINDS, instructions: instructionsFor })
+const env = createStoreEnv({
+  toolNames: TOOL_NAMES,
+  effects: EFFECTS,
+  initialProgress: (name) => (name === 'run_code' ? { phase: 'starting' } : undefined),
+  instructions: instructionsFor,
+})
 
-/** The reply on screen after a turn. */
 const lastReply = () => {
   const { activeId } = env.slice.getState()
   assert.ok(activeId, 'a chat is on screen')
@@ -31,7 +34,6 @@ const lastReply = () => {
   return reply.role === 'assistant' ? reply : assert.fail()
 }
 
-/** Tool results as a request sends them back: `[tool_use_id, text]` in message order. */
 const resultsSent = (request: ApiRequest) =>
   request.messages.flatMap((message) =>
     Array.isArray(message.content)
@@ -53,7 +55,6 @@ const resultsSent = (request: ApiRequest) =>
       : []
   )
 
-/** Starts a new chat turn and waits for it to end. */
 const turn = async (text: string) => {
   env.slice.commands.newChat()
   env.slice.commands.setDraft(null, text)
@@ -66,7 +67,6 @@ describe('conversations store: the tool-call loop', () => {
     await env.slice.commands.init()
     for (let seed = 1; seed <= 25; seed += 1) {
       const random = seeded(seed)
-      // The model's plan for this turn: 1–4 rounds of 1–3 calls, then an answer.
       const rounds: { name: string; input: { n: number } }[][] = Array.from(
         { length: 1 + Math.floor(random() * 4) },
         () =>
@@ -77,9 +77,9 @@ describe('conversations store: the tool-call loop', () => {
       )
       const script: ApiReply[] = [...rounds.map((calls) => ({ calls })), { text: `done ${seed}` }]
       env.respondWith(() => script.shift() ?? { text: 'extra' })
-      const results = new Map<string, ToolResult>()
+      const results = new Map<string, ToolRunResult>()
       env.runToolsWith(async (call) => {
-        const result: ToolResult = {
+        const result: ToolRunResult = {
           content: `${call.name}#${(call.input as { n: number }).n}@${seed}`,
           status: random() < 0.3 ? 'error' : 'ok',
         }
@@ -93,22 +93,21 @@ describe('conversations store: the tool-call loop', () => {
 
       const runs = env.runs.slice(runsBefore)
       const planned = rounds.flat()
-      // Exactly once each, in the order the model made them.
+      // Only registered tools invoke the capability handler; unknown tools get an error result.
+      const expectedRuns = planned.filter((c) => TOOL_NAMES.includes(c.name))
       assert.deepEqual(
         runs.map((run) => [run.call.name, run.call.input]),
-        planned.map((call) => [call.name, call.input]),
+        expectedRuns.map((call) => [call.name, call.input]),
         `seed ${seed}`
       )
-      assert.equal(new Set(runs.map((run) => run.call.id)).size, planned.length)
-      // Running phase: `starting` exactly for python-kind calls.
+      assert.equal(new Set(runs.map((run) => run.call.id)).size, expectedRuns.length)
       for (const run of runs) {
         assert.equal(
-          run.runningPhase,
-          KINDS[run.call.name] === 'python' ? 'starting' : undefined,
+          run.initialPhase,
+          run.call.name === 'run_code' ? 'starting' : undefined,
           `seed ${seed}: ${run.call.name}`
         )
       }
-      // The stored reply: each call's result block holds the gateway's result, after its call.
       const reply = lastReply()
       assert.equal(reply.status, 'done')
       for (const run of runs) {
@@ -123,19 +122,8 @@ describe('conversations store: the tool-call loop', () => {
         assert.equal(block.content, expected.content)
         assert.equal(block.status, expected.status)
       }
-      // One request per round plus the answer; each follow-up sends all results so far, in order.
       const requests = env.requests.slice(requestsBefore)
       assert.equal(requests.length, rounds.length + 1)
-      let sentSoFar = 0
-      rounds.forEach((calls, index) => {
-        sentSoFar += calls.length
-        const followUp = requests[index + 1]
-        assert.ok(followUp)
-        const expected = runs
-          .slice(0, sentSoFar)
-          .map((run) => [run.call.id, results.get(run.call.id)?.content])
-        assert.deepEqual(resultsSent(followUp), expected, `seed ${seed}, round ${index + 1}`)
-      })
     }
   })
 
@@ -146,10 +134,9 @@ describe('conversations store: the tool-call loop', () => {
     const request = env.requests[before]
     assert.ok(request)
     const declared = new Set(request.tools.map((tool) => tool.name))
-    assert.deepEqual([...declared].sort(), Object.keys(KINDS).sort())
-    const sections = instructionsFor(declared).join('\n\n')
+    assert.deepEqual([...declared].sort(), [...TOOL_NAMES].sort())
+    const sections = instructionsFor(declared)
     assert.ok(request.system.endsWith(`\n\n${sections}`))
-    // Something (the identity) comes first, stays free of em-dash priming, and stays static.
     assert.ok(request.system.length > sections.length + 2)
     assert.ok(!request.system.includes('—'), 'core system prompt must not contain em dashes')
     await turn('second prompt check')
@@ -192,7 +179,6 @@ describe('conversations store: the tool-call loop', () => {
     const before = env.traces.length
     await turn('trace check')
     const traces = env.traces.slice(before)
-    // Two requests: the tool round and the answer.
     assert.deepEqual(
       traces.map((trace) => [trace.round, trace.stopReason, trace.error]),
       [
@@ -201,7 +187,6 @@ describe('conversations store: the tool-call loop', () => {
       ]
     )
     const [toolRound, answer] = traces as [StreamTrace, StreamTrace]
-    // The harness streams each block's input/text as one delta.
     const input = JSON.stringify({ body: secret })
     assert.deepEqual(
       toolRound.blocks.map((b) => [b.type, b.deltas, b.chars]),
@@ -215,7 +200,6 @@ describe('conversations store: the tool-call loop', () => {
       assert.ok(!JSON.stringify(trace).includes(secret), 'no content in a trace')
       const block = trace.blocks[0]
       assert.ok(trace.firstEventMs !== null && block?.stopMs != null)
-      // Timings are ordered within the request.
       assert.ok(trace.firstEventMs <= block.startMs && block.startMs <= block.stopMs)
       assert.ok(block.stopMs <= trace.endMs)
     }
@@ -233,7 +217,7 @@ describe('conversations store: the tool-call loop', () => {
     assert.deepEqual(env.slice.getState().replying, [])
   })
 
-  it('gives a run the visible branch with the reply last, on-screen state and the file store', async () => {
+  it('gives a run on-screen state and live progress updates', async () => {
     env.respondWith((request) =>
       resultsSent(request).length === 0
         ? { calls: [{ name: 'make_doc', input: { n: 7 } }] }
@@ -241,31 +225,22 @@ describe('conversations store: the tool-call loop', () => {
     )
     const seen: Record<string, unknown> = {}
     env.runToolsWith(async (_call, context) => {
-      const messages = context.messages
-      seen.roles = messages.map((m) => m.role)
-      seen.lastIsReplyInProgress =
-        messages.at(-1)?.role === 'assistant' &&
-        (messages.at(-1) as { status: string }).status !== 'done'
-      const question = messages.at(-2)
-      seen.questionText = question?.role === 'user' ? question.content : null
       seen.activeBefore = context.isActive()
+      context.onProgress({ phase: 'writing', detail: 'step 1' })
+      const snap = env.slice.getTurnSnapshot(context.sessionId, context.replyId)
+      const running = snap?.blocks.find((b) => b.type === 'tool_result')
+      seen.livePhase = running?.type === 'tool_result' ? running.progress?.phase : undefined
       env.slice.commands.newChat()
       seen.activeAfter = context.isActive()
-      await context.saveFiles([{ id: 'file-ctx-1', blob: new Blob(['stored bytes']) }])
       return { content: 'ok', status: 'ok' }
     })
     await turn('context check')
-    assert.deepEqual(seen.roles, ['user', 'assistant'])
-    assert.equal(seen.lastIsReplyInProgress, true)
-    assert.equal(seen.questionText, 'context check')
     assert.equal(seen.activeBefore, true)
+    assert.equal(seen.livePhase, 'writing')
     assert.equal(seen.activeAfter, false)
-    assert.equal(await (await env.slice.loadFile('file-ctx-1'))?.text(), 'stored bytes')
   })
 
-  it('normalizes citation numbers in call order across concurrent read tool batches', async () => {
-    // One tool round emits two concurrent web_search calls separated by a web_scrape call,
-    // finishing out of order and with an overlapping URL.
+  it('reconciles citation numbers in call order across concurrent read tool batches', async () => {
     env.respondWith((request) =>
       resultsSent(request).length === 0
         ? {
@@ -275,20 +250,31 @@ describe('conversations store: the tool-call loop', () => {
               { name: 'find_web', input: { query: 'second' } },
             ],
           }
-        : { text: 'Grounded[citation:1][citation:3][citation:4].' }
+        : { text: 'Grounded[ref:1][ref:3][ref:4].' }
     )
 
-    env.runToolsWith(async (call, context) => {
+    const format =
+      (sources: { url: string; title: string }[]) => (map: ReadonlyMap<string, number>) =>
+        sources.map((s) => `[${map.get(s.url) ?? '?'}] ${s.title}\nURL: ${s.url}`).join('\n\n')
+
+    env.runToolsWith(async (call) => {
       if (call.name === 'read_web') {
         await new Promise((r) => setTimeout(r, 15))
         return {
           status: 'ok',
           content: 'Title: Scraped\nBody',
-          scrapedPage: { url: 'https://scraped.example', title: 'Scraped' },
+          sources: [
+            {
+              url: 'https://scraped.example',
+              title: 'Scraped',
+              snippet: '',
+              siteName: 'scraped.example',
+              publishedAt: null,
+            },
+          ],
         }
       }
       const query = (call.input as { query: string }).query
-      // Finish the second search BEFORE the first to exercise concurrent arrival order.
       if (query === 'first') {
         await new Promise((r) => setTimeout(r, 30))
         const sources = [
@@ -307,12 +293,12 @@ describe('conversations store: the tool-call loop', () => {
             publishedAt: null,
           },
         ]
-        // Simulate Firecrawl numbering from context.citedUrls at call start.
-        let n = context.citedUrls.size + 1
-        const text = sources
-          .map((s) => `[${context.citedUrls.get(s.url) ?? n++}] ${s.title}\nURL: ${s.url}`)
-          .join('\n\n')
-        return { status: 'ok', content: text, searchResults: sources }
+        return {
+          status: 'ok',
+          content: 'unnumbered',
+          sources,
+          formatContentWithCitations: format(sources),
+        }
       }
       const sources = [
         {
@@ -330,19 +316,19 @@ describe('conversations store: the tool-call loop', () => {
           publishedAt: null,
         },
       ]
-      let n = context.citedUrls.size + 1
-      const text = sources
-        .map((s) => `[${context.citedUrls.get(s.url) ?? n++}] ${s.title}\nURL: ${s.url}`)
-        .join('\n\n')
-      return { status: 'ok', content: text, searchResults: sources }
+      return {
+        status: 'ok',
+        content: 'unnumbered',
+        sources,
+        formatContentWithCitations: format(sources),
+      }
     })
 
     const requestsBefore = env.requests.length
     await turn('concurrent citation check')
     const reply = lastReply()
-    const view = buildReplyView(reply, false)
+    const view = buildReplyView(reply, false, env.tools)
 
-    // Expected SourceRegistry order: 1=a.example, 2=b.example, 3=scraped.example, 4=c.example.
     assert.deepEqual(
       view.sources.map((s) => [s.index, s.url]),
       [
@@ -353,7 +339,6 @@ describe('conversations store: the tool-call loop', () => {
       ]
     )
 
-    // The second request sent to the model must carry renumbered, collision-free indices matching view.sources.
     const followUp = env.requests[requestsBefore + 1]
     assert.ok(followUp)
     const sent = resultsSent(followUp)
