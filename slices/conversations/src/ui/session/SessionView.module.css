@@ -65,23 +65,29 @@
   }
 
   .inputContainer {
-    position: sticky;
-    bottom: 0;
+    position: relative;
     z-index: var(--ui-z-sticky);
     display: flex;
     flex-direction: column;
     align-items: center;
+    flex-shrink: 0;
     box-sizing: border-box;
     width: calc(var(--message-list-max-width) - var(--message-list-padding-horizontal) * 2);
     max-width: calc(100% - var(--ui-space-8));
-    margin: auto auto 0;
-    padding-top: 14px;
-    background: linear-gradient(
-      to bottom,
-      transparent 0%,
-      var(--ui-surface-canvas) 38%,
-      var(--ui-surface-canvas) 100%
-    );
+    margin: 0 auto;
+    padding-top: var(--ui-space-2);
+    background: var(--ui-surface-canvas);
+  }
+
+  .inputContainer::before {
+    content: '';
+    position: absolute;
+    bottom: 100%;
+    left: 0;
+    right: 0;
+    height: 18px;
+    pointer-events: none;
+    background: linear-gradient(to bottom, transparent, var(--ui-surface-canvas));
   }
 
   .caveat {
@@ -96,10 +102,6 @@
 
   @media not all and (min-width: 768px) {
     .inputContainer {
-      position: relative;
-      bottom: auto;
-      flex-shrink: 0;
-      margin: 0 auto;
       padding-bottom: env(safe-area-inset-bottom);
     }
   }

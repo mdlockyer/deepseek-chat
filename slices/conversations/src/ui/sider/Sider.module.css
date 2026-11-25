@@ -156,6 +156,7 @@
     margin: 0 calc(var(--ui-space-0-5) * -1);
     padding: 0 var(--ui-space-0-5);
     overflow-y: auto;
+    overscroll-behavior: contain;
     scrollbar-color: var(--ui-scrollbar-thumb) transparent;
     --hover-glide-bg: var(--ui-surface-rail-hover);
     --hover-glide-radius: var(--ui-radius-md);

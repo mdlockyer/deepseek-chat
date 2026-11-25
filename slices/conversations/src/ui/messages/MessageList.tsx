@@ -1,4 +1,3 @@
-import { useIsMobile } from '@deepseek-chat/lib-ui'
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { buildMessageVersions, getVisibleMessages, type MessageVersions } from '../../branches.js'
 import { useConversations } from '../../context.js'
@@ -31,7 +30,6 @@ export const MessageList = ({
   streaming: boolean
   footer: React.ReactNode
 }) => {
-  const isMobile = useIsMobile()
   const { selectMessageVersion } = useConversations()
   const scrollRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
@@ -68,7 +66,7 @@ export const MessageList = ({
     observer.observe(content)
     observer.observe(scroll)
     return () => observer.disconnect()
-  }, [isMobile, scrollToBottom])
+  }, [scrollToBottom])
 
   useLayoutEffect(() => {
     const anchor = restoreScrollRef.current
@@ -120,14 +118,14 @@ export const MessageList = ({
     }
     el.addEventListener('scroll', onScroll, { passive: true })
     return () => el.removeEventListener('scroll', onScroll)
-  }, [isMobile, scrollToBottom])
+  }, [scrollToBottom])
 
   const lastIndex = messages.length - 1
   const uploadRetryId = getUploadRetryId(messages, streaming)
   return (
     <ScrollToBottomContext.Provider value={scrollToBottom}>
-      <div ref={isMobile ? undefined : scrollRef} className={styles.container}>
-        <div ref={isMobile ? scrollRef : undefined} className={styles.scroll}>
+      <div className={styles.container}>
+        <div ref={scrollRef} className={styles.scroll}>
           <div ref={contentRef} className={styles.column}>
             {messages.map((message, index) =>
               message.role === 'user' ? (

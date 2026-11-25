@@ -86,6 +86,7 @@
     flex: 1;
     min-height: 0;
     overflow-y: auto;
+    overscroll-behavior: contain;
     padding: var(--ui-space-4);
     scrollbar-color: var(--ui-scrollbar-thumb) transparent;
   }

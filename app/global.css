@@ -11,8 +11,15 @@
     }
   }
 
-  body {
+  html,
+  body,
+  #root {
+    height: 100%;
     overflow: hidden;
+    overscroll-behavior: none;
+  }
+
+  body {
     margin: 0;
     word-break: break-word;
     font-family: var(--ui-font-sans);
@@ -41,16 +48,6 @@
       transition-duration: 0.01ms !important;
       transition-delay: 0s !important;
       scroll-behavior: auto !important;
-    }
-  }
-
-  @media not all and (min-width: 768px) {
-    html,
-    body,
-    #root {
-      height: 100%;
-      overflow: hidden;
-      overscroll-behavior-y: none;
     }
   }
 }
