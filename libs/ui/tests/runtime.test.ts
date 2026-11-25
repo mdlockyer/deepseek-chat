@@ -214,11 +214,17 @@ describe('lib-ui HoverGlide state machine & geometry', () => {
   })
 })
 
-const installMinimalDom = () => {
-  const prevWindow = globalThis.window
-  const prevDocument = globalThis.document
-  const prevHtmlElement = globalThis.HTMLElement
-  const prevActEnv = (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT
+const installMinimalDom = ({ reducedMotion = false }: { reducedMotion?: boolean } = {}) => {
+  const globals = globalThis as Record<string, unknown>
+  const savedKeys = ['window', 'document', 'HTMLElement', 'IS_REACT_ACT_ENVIRONMENT'] as const
+  const saved = new Map<string, { hadOwn: boolean; value: unknown }>()
+  for (const key of savedKeys) {
+    saved.set(key, { hadOwn: Object.hasOwn(globals, key), value: globals[key] })
+  }
+
+  let now = 0
+  let nextTimerId = 1
+  const pendingTimers = new Map<number, { at: number; callback: () => void }>()
 
   const FakeIFrame = function FakeIFrame() {}
   class FakeNode {
@@ -291,9 +297,17 @@ const installMinimalDom = () => {
   }
 
   const win = {
-    setTimeout: (...args: Parameters<typeof setTimeout>) => globalThis.setTimeout(...args),
-    clearTimeout: (...args: Parameters<typeof clearTimeout>) => globalThis.clearTimeout(...args),
-    matchMedia: () => ({ matches: false }),
+    setTimeout(callback: () => void, delay = 0) {
+      const id = nextTimerId++
+      pendingTimers.set(id, { at: now + Math.max(0, delay), callback })
+      return id
+    },
+    clearTimeout(id: number) {
+      pendingTimers.delete(id)
+    },
+    matchMedia: (query: string) => ({
+      matches: reducedMotion && query === '(prefers-reduced-motion: reduce)',
+    }),
     addEventListener() {},
     removeEventListener() {},
     navigator: { userAgent: '' },
@@ -320,35 +334,45 @@ const installMinimalDom = () => {
   doc.documentElement = doc.createElement('html')
   doc.body = doc.createElement('body')
 
-  Object.assign(globalThis, {
-    window: win,
-    document: doc,
-    HTMLElement: FakeNode,
-    IS_REACT_ACT_ENVIRONMENT: true,
-  })
+  globals.window = win
+  globals.document = doc
+  globals.HTMLElement = FakeNode
+  globals.IS_REACT_ACT_ENVIRONMENT = true
 
   return {
     container: doc.createElement('div') as unknown as HTMLElement,
+    advance(ms: number) {
+      now += ms
+      for (const [id, timer] of [...pendingTimers.entries()]) {
+        if (timer.at <= now) {
+          pendingTimers.delete(id)
+          timer.callback()
+        }
+      }
+    },
+    pendingTimerCount: () => pendingTimers.size,
     restore() {
-      Object.assign(globalThis, {
-        window: prevWindow,
-        document: prevDocument,
-        HTMLElement: prevHtmlElement,
-        IS_REACT_ACT_ENVIRONMENT: prevActEnv,
-      })
+      pendingTimers.clear()
+      for (const [key, entry] of saved) {
+        if (entry.hadOwn) {
+          globals[key] = entry.value
+        } else {
+          Reflect.deleteProperty(globals, key)
+        }
+      }
     },
   }
 }
 
-describe('lib-ui usePresence', () => {
-  it('stays in sync with useSyncExternalStore across repeated open/close cycles returning to prior snapshots', async () => {
+describe('lib-ui usePresence (SPEC 10)', () => {
+  it('mounts synchronously, holds exit for durationMs, cancels mid-exit reopen, and stays in sync with useSyncExternalStore', async () => {
     const dom = installMinimalDom()
-    const EXPANDED = { mode: 'expanded' as const }
-    let snapshot: { readonly mode: 'expanded' | 'collapsed' } = EXPANDED
+    const CLOSED = { open: false as const }
+    let snapshot: { readonly open: boolean } = CLOSED
     const listeners = new Set<() => void>()
     const store = {
       getState: () => snapshot,
-      setState: (next: { readonly mode: 'expanded' | 'collapsed' }) => {
+      setState: (next: { readonly open: boolean }) => {
         snapshot = next
         for (const listener of listeners) {
           listener()
@@ -364,8 +388,8 @@ describe('lib-ui usePresence', () => {
 
     const Probe = () => {
       const current = useSyncExternalStore(store.subscribe, store.getState)
-      const { mounted, exiting } = usePresence(current.mode === 'collapsed', 25)
-      return createElement('div', null, `${current.mode}:${mounted}:${exiting}`)
+      const { mounted, exiting } = usePresence(current.open, 200)
+      return createElement('div', null, `${current.open}:${mounted}:${exiting}`)
     }
 
     const root = createRoot(dom.container)
@@ -373,41 +397,89 @@ describe('lib-ui usePresence', () => {
       await act(async () => {
         root.render(createElement(Probe))
       })
-      assert.equal(dom.container.textContent, 'expanded:false:false')
+      assert.equal(dom.container.textContent, 'false:false:false')
 
-      // Transition to collapsed: mounted turns true immediately without stalling external store state.
+      // Opening mounts immediately without render-phase setState stalling external-store commits.
       await act(async () => {
-        store.setState({ mode: 'collapsed' })
+        store.setState({ open: true })
       })
-      assert.equal(dom.container.textContent, 'collapsed:true:false')
+      assert.equal(dom.container.textContent, 'true:true:false')
 
-      // Transition back to the exact prior snapshot reference (EXPANDED): must re-render and enter exit phase.
+      // Returning to the exact prior CLOSED snapshot reference must re-render and enter exit phase.
       await act(async () => {
-        store.setState(EXPANDED)
+        store.setState(CLOSED)
       })
-      assert.equal(dom.container.textContent, 'expanded:true:true')
+      assert.equal(dom.container.textContent, 'false:true:true')
 
-      // After exit duration elapses, unmounts cleanly.
+      // Stays mounted until the full exit duration elapses.
       await act(async () => {
-        await new Promise((resolve) => setTimeout(resolve, 40))
+        dom.advance(199)
       })
-      assert.equal(dom.container.textContent, 'expanded:false:false')
-
-      // Second close -> reopen cycle must work identically.
-      await act(async () => {
-        store.setState({ mode: 'collapsed' })
-      })
-      assert.equal(dom.container.textContent, 'collapsed:true:false')
+      assert.equal(dom.container.textContent, 'false:true:true')
 
       await act(async () => {
-        store.setState(EXPANDED)
+        dom.advance(1)
       })
-      assert.equal(dom.container.textContent, 'expanded:true:true')
+      assert.equal(dom.container.textContent, 'false:false:false')
+
+      // Reopening mid-exit cancels the unmount timer and keeps the surface mounted.
+      await act(async () => {
+        store.setState({ open: true })
+      })
+      assert.equal(dom.container.textContent, 'true:true:false')
+
+      await act(async () => {
+        store.setState(CLOSED)
+      })
+      assert.equal(dom.container.textContent, 'false:true:true')
+
+      await act(async () => {
+        dom.advance(100)
+        store.setState({ open: true })
+      })
+      assert.equal(dom.container.textContent, 'true:true:false')
+      assert.equal(dom.pendingTimerCount(), 0)
+
+      await act(async () => {
+        dom.advance(500)
+      })
+      assert.equal(dom.container.textContent, 'true:true:false')
     } finally {
       await act(async () => {
         root.unmount()
       })
       dom.restore()
+    }
+  })
+
+  it('unmounts immediately without scheduling timers when reduced motion is preferred or durationMs <= 0', async () => {
+    for (const scenario of [
+      { reducedMotion: true, durationMs: 200 },
+      { reducedMotion: false, durationMs: 0 },
+    ]) {
+      const dom = installMinimalDom({ reducedMotion: scenario.reducedMotion })
+      const Probe = ({ open }: { open: boolean }) => {
+        const { mounted, exiting } = usePresence(open, scenario.durationMs)
+        return createElement('div', null, `${mounted}:${exiting}`)
+      }
+      const root = createRoot(dom.container)
+      try {
+        await act(async () => {
+          root.render(createElement(Probe, { open: true }))
+        })
+        assert.equal(dom.container.textContent, 'true:false')
+
+        await act(async () => {
+          root.render(createElement(Probe, { open: false }))
+        })
+        assert.equal(dom.container.textContent, 'false:false')
+        assert.equal(dom.pendingTimerCount(), 0)
+      } finally {
+        await act(async () => {
+          root.unmount()
+        })
+        dom.restore()
+      }
     }
   })
 })

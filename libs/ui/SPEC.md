@@ -72,6 +72,12 @@ every slice's UI and pass the full gate with zero slice edits.
    cleanly between viewport and scroll-content coordinates.
 9. **Buttons & loading states.** `Button` defaults to `type="button"`, preserves label visibility
    and width under `loading` (`aria-busy="true"`), and never omits accessible text on `IconButton`.
+10. **Presence lifecycle (`usePresence`).** Mounts synchronously (`mounted: true`, `exiting: false`)
+    on the render where `open` becomes `true` without performing render-phase state updates (so
+    sibling `useSyncExternalStore` hooks stay in sync across repeated cycles returning to prior
+    snapshots). When `open` becomes `false`, stays `mounted: true, exiting: true` for `durationMs`
+    before unmounting, cancels pending exit timers if reopened mid-exit, and unmounts immediately
+    when `durationMs <= 0` or `(prefers-reduced-motion: reduce)` matches.
 
 ## Tunable Parameters
 
