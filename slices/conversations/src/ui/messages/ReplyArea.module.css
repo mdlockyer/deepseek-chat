@@ -55,7 +55,6 @@
   }
 
   .stripButtonActive {
-    background: var(--ui-interactive-active);
     color: var(--ui-text-primary);
   }
 
