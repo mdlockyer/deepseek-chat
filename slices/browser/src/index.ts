@@ -95,6 +95,7 @@ export const createBrowserSlice = (deps: BrowserSliceDeps) => {
   }
 
   const takeOver = (sessionId: string) => {
+    state.clearBrowserControlling(sessionId)
     deps.log.publish<BrowserControlTakenOver>({
       type: 'BrowserControlTakenOver',
       sessionId,
@@ -163,7 +164,9 @@ export const createBrowserSlice = (deps: BrowserSliceDeps) => {
     handles: (name) => BROWSER_TOOL_NAMES.has(name),
     effectOf: () => 'session',
     run: async (call, ctx) => {
-      const outcome = await tools.runBrowserTool(call.name, call.input, ctx.signal, ctx.sessionId)
+      const outcome = await tools.runBrowserTool(call.name, call.input, ctx.signal, ctx.sessionId, {
+        holdControl: ctx.caller.kind === 'reply',
+      })
       return {
         content: outcome.text,
         status: outcome.status,
@@ -172,6 +175,11 @@ export const createBrowserSlice = (deps: BrowserSliceDeps) => {
         ...(outcome.previewImages?.length ? { previewImages: outcome.previewImages } : {}),
         payload: outcome.meta,
       }
+    },
+    turnHooks: {
+      onTurnSettled: ({ sessionId }) => {
+        state.clearBrowserControlling(sessionId)
+      },
     },
     presenter: browserPresenter,
     serializeForArchive: serializeBrowserForArchive,

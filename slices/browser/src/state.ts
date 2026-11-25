@@ -1164,6 +1164,21 @@ export const createBrowserState = (deps: BrowserStateDeps) => {
     })
   }
 
+  const clearBrowserControlling = (sessionId?: string) => {
+    const state = get()
+    if (!state.controlling) {
+      return
+    }
+    if (sessionId !== undefined && state.controllingSessionId !== sessionId) {
+      return
+    }
+    set({
+      controlling: false,
+      controllingAction: null,
+      controllingSessionId: null,
+    })
+  }
+
   const getActiveBrowserTab = (sessionId?: string | null): BrowserTab | null => {
     const state = get()
     const targetSessionId = sessionId === undefined ? state.activeSessionId : sessionId
@@ -1198,6 +1213,7 @@ export const createBrowserState = (deps: BrowserStateDeps) => {
     openBrowserTabDevtools,
     waitForTabLoad,
     setBrowserControlling,
+    clearBrowserControlling,
     getActiveBrowserTab,
   }
 }

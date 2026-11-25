@@ -100,6 +100,7 @@ export const createBrowserPanel = (state: BrowserState, deps: BrowserPanelDeps) 
     const activeUrl = activeTab && isHttpUrl(activeTab.url) ? activeTab.url : ''
     const activeViewport = activeTab?.viewport ?? null
     const hasCustomViewport = activeViewport !== null
+    const showAgentBar = controlling && controllingSessionId === activeSessionId
     const stageWidth = stageSize?.width ?? null
     const stageHeight = stageSize?.height ?? null
     const currentFit = useMemo(() => {
@@ -211,6 +212,7 @@ export const createBrowserPanel = (state: BrowserState, deps: BrowserPanelDeps) 
       currentFit?.boxWidth,
       currentFit?.boxHeight,
       resolvedZoom,
+      showAgentBar,
     ])
 
     if (!deps.desktop) {
@@ -359,24 +361,6 @@ export const createBrowserPanel = (state: BrowserState, deps: BrowserPanelDeps) 
               />
               {activeTab?.isLoading ? <span className={styles.loadProgress} /> : null}
             </form>
-            {controlling && controllingSessionId === activeSessionId ? (
-              <button
-                type="button"
-                className={styles.agentPill}
-                title={controllingAction ?? t('browserControlling')}
-                onClick={() => {
-                  if (controllingSessionId) {
-                    deps.takeOver(controllingSessionId)
-                  }
-                }}
-              >
-                <span className={styles.agentDot} />
-                <span className={styles.agentLabel}>
-                  {controllingAction || t('browserControlling')}
-                </span>
-                <span className={styles.agentStop}>{t('browserTakeOver')}</span>
-              </button>
-            ) : null}
             <ViewportMenu
               host={deps.panel}
               viewport={activeViewport}
@@ -427,6 +411,32 @@ export const createBrowserPanel = (state: BrowserState, deps: BrowserPanelDeps) 
               )}
             </Menu>
           </div>
+          {showAgentBar ? (
+            <div className={styles.agentBar}>
+              <div
+                className={styles.agentStatus}
+                role="status"
+                aria-live="polite"
+                title={controllingAction || t('browserControlling')}
+              >
+                <span className={styles.agentDot} aria-hidden="true" />
+                <span className={styles.agentLabel}>
+                  {controllingAction || t('browserControlling')}
+                </span>
+              </div>
+              <button
+                type="button"
+                className={styles.takeOverBtn}
+                onClick={() => {
+                  if (controllingSessionId) {
+                    deps.takeOver(controllingSessionId)
+                  }
+                }}
+              >
+                {t('browserTakeOver')}
+              </button>
+            </div>
+          ) : null}
         </div>
 
         <StageFrame
