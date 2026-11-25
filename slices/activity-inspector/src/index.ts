@@ -1,5 +1,5 @@
 import { IconActivityOutline16, IconButton } from '@deepseek-chat/lib-ui'
-import { createElement, type ComponentType } from 'react'
+import { createElement, useCallback, useRef, useSyncExternalStore, type ComponentType } from 'react'
 import { createActivityPanel } from './ActivityPanel.js'
 import headerToggleStyles from './HeaderToggle.module.css'
 import { activityInspectorMessages } from './messages.js'
@@ -9,10 +9,11 @@ import { extractTurnSources, type ExtractedTurnSources } from './sources.js'
 import { createActivityPanelState } from './state.js'
 import {
   buildActivityTimeline,
+  type ActivityFailedStep,
   type ActivityLanePhase,
-  type ActivityPreamblePhase,
   type ActivityServerSearchPhase,
   type ActivityStepRecord,
+  type ActivityThinkingRound,
   type ActivityTimeline,
   type ActivityTimelinePhase,
   type ActivityVisualItem,
@@ -35,15 +36,16 @@ import type {
 
 export { SiteLogo, SourceCard, buildActivityTimeline, extractTurnSources }
 export type {
+  ActivityFailedStep,
   ActivityInspectorDeps,
   ActivityLanePhase,
-  ActivityPreamblePhase,
   ActivitySelection,
   ActivityServerSearchPhase,
   ActivitySource,
   ActivityStepRecord,
   ActivityTab,
   ActivityTarget,
+  ActivityThinkingRound,
   ActivityTimeline,
   ActivityTimelinePhase,
   ActivityVisualItem,
@@ -56,6 +58,45 @@ export type {
   TurnThinkingBlock,
   TurnToolResultBlock,
   TurnToolUseBlock,
+}
+
+const resolveLatestMessageId = (
+  turnSource: TurnSnapshotSource,
+  sessionId: string
+): string | null => {
+  const turns = turnSource.listTurns?.(sessionId)
+  if (!turns || turns.length === 0) {
+    return null
+  }
+  const activeTurns = turns.filter((item) => item.hasActivity || item.streaming)
+  const streamingTurn = [...activeTurns].reverse().find((item) => item.streaming)
+  return streamingTurn?.messageId ?? activeTurns.at(-1)?.messageId ?? null
+}
+
+const resolveDisplayedTarget = (
+  selection: ActivitySelection | null,
+  panelOpen: boolean,
+  turnSource: TurnSnapshotSource
+): ActivityTarget | null => {
+  if (!panelOpen || !selection) {
+    return null
+  }
+  if (selection.kind === 'pinned') {
+    return {
+      sessionId: selection.sessionId,
+      messageId: selection.messageId,
+      tab: selection.tab,
+    }
+  }
+  const messageId = resolveLatestMessageId(turnSource, selection.sessionId)
+  if (!messageId) {
+    return null
+  }
+  return {
+    sessionId: selection.sessionId,
+    messageId,
+    tab: selection.tab,
+  }
 }
 
 export const createActivityInspectorSlice = (deps: ActivityInspectorDeps) => {
@@ -77,26 +118,44 @@ export const createActivityInspectorSlice = (deps: ActivityInspectorDeps) => {
     })
   }
 
+  const getTarget = (): ActivityTarget | null => {
+    const { selection, panelOpen } = state.useStore.getState()
+    return resolveDisplayedTarget(selection, panelOpen, deps.turnSource)
+  }
+
+  const useActiveTarget = (): ActivityTarget | null => {
+    const selection = state.useStore((s) => s.selection)
+    const panelOpen = state.useStore((s) => s.panelOpen)
+    const cachedRef = useRef<ActivityTarget | null>(null)
+
+    const getSnapshot = useCallback((): ActivityTarget | null => {
+      const next = resolveDisplayedTarget(selection, panelOpen, deps.turnSource)
+      const prev = cachedRef.current
+      if (
+        prev &&
+        next &&
+        prev.sessionId === next.sessionId &&
+        prev.messageId === next.messageId &&
+        prev.tab === next.tab
+      ) {
+        return prev
+      }
+      cachedRef.current = next
+      return next
+    }, [panelOpen, selection])
+
+    return useSyncExternalStore(deps.turnSource.subscribe, getSnapshot, getSnapshot)
+  }
+
   return {
     ActivityPanel,
     HeaderToggle,
     togglePanel: state.togglePanel,
     selectTurn: state.selectTurn,
     followLatest: state.followLatest,
-    useActiveTarget: (): ActivityTarget | null => {
-      const selection = state.useStore((s) => s.selection)
-      const panelOpen = state.useStore((s) => s.panelOpen)
-      if (!panelOpen || selection?.kind !== 'pinned') {
-        return null
-      }
-      return {
-        sessionId: selection.sessionId,
-        messageId: selection.messageId,
-        tab: selection.tab,
-      }
-    },
+    useActiveTarget,
     getSelection: (): ActivitySelection | null => state.useStore.getState().selection,
-    getTarget: state.getActiveTarget,
+    getTarget,
     close: state.close,
     dispose: state.dispose,
   }

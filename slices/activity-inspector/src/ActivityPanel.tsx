@@ -1,7 +1,8 @@
 import { Markdown } from '@deepseek-chat/lib-markdown'
+import type { ToolStepVisualArtifact } from '@deepseek-chat/lib-tools'
 import {
+  Badge,
   Button,
-  Chip,
   EmptyState,
   HoverGlide,
   IconActivityOutline16,
@@ -15,7 +16,6 @@ import {
   IconThinkOutline16,
   IconWarningOutline16,
   IconButton,
-  Select,
   Tab,
   TabList,
   TabPanel,
@@ -33,6 +33,7 @@ import {
   type MouseEvent,
   type ReactNode,
 } from 'react'
+import { EvidenceShelf } from './EvidenceShelf.js'
 import { GenericStepDetail } from './GenericStepView.js'
 import { activityInspectorMessages } from './messages.js'
 import { SourceCard } from './SourceCard.js'
@@ -42,9 +43,10 @@ import {
   buildActivityTimeline,
   type ActivityLanePhase,
   type ActivityStepRecord,
-  type ActivityTimeline,
+  type ActivityThinkingRound,
   type ActivityVisualItem,
 } from './timeline.js'
+import { TurnSwitcherMenu } from './TurnSwitcherMenu.js'
 import type {
   ActivityInspectorDeps,
   ActivitySelection,
@@ -52,48 +54,81 @@ import type {
   SessionTurnSummary,
   TurnSnapshot,
 } from './types.js'
+import { VisualLightbox } from './VisualLightbox.js'
 import styles from './ActivityPanel.module.css'
 
-type ActivityFilter = 'all' | 'visuals' | 'errors'
-
 const EMPTY_TURNS: readonly SessionTurnSummary[] = []
-const LONG_PREAMBLE_CHARS = 240
-const LONG_PREAMBLE_LINES = 3
-const MAX_EXPAND_ALL_STEPS = 12
-const STAGED_FILTER_MIN_STEPS = 8
+const EMPTY_VISUALS: readonly ActivityVisualItem[] = []
+const AUTO_SCROLL_THRESHOLD_PX = 48
 
-const useTicker = (active: boolean, interval: number) => {
-  const [tick, setTick] = useState(0)
+const useLiveElapsedSeconds = (active: boolean, startedAt: number | null): number | null => {
+  const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
-    if (!active) {
+    if (!active || startedAt === null) {
       return
     }
-    const timer = setInterval(() => setTick((value) => value + 1), interval)
+    setNow(Date.now())
+    const timer = setInterval(() => setNow(Date.now()), 1000)
     return () => clearInterval(timer)
-  }, [active, interval])
-  return tick
+  }, [active, startedAt])
+  if (!active || startedAt === null) {
+    return null
+  }
+  return Math.max(0, Math.round((now - startedAt) / 1000))
+}
+
+const LiveRunningStatus = ({
+  streaming,
+  startedAt,
+  verb,
+}: {
+  streaming: boolean
+  startedAt?: number
+  verb: string
+}) => {
+  const t = activityInspectorMessages.useTranslate()
+  const elapsed = useLiveElapsedSeconds(streaming, startedAt ?? null)
+  const label =
+    elapsed !== null && elapsed >= 2 ? t('stepRunningSeconds', { verb, seconds: elapsed }) : verb
+  return <span className={styles.statusRunning}>{label}</span>
 }
 
 const ReasoningSection = ({
   messageId,
-  markdown,
-  seconds,
+  rounds,
+  staticSeconds,
+  completedThinkingMs,
+  activeStartedAt,
   defaultOpen,
   loading,
+  onInspectStep,
 }: {
   messageId: string
-  markdown: string
-  seconds: number | null
+  rounds: readonly ActivityThinkingRound[]
+  staticSeconds: number | null
+  completedThinkingMs: number
+  activeStartedAt: number | null
   defaultOpen: boolean
   loading: boolean
+  onInspectStep: (callId: string) => void
 }) => {
   const t = activityInspectorMessages.useTranslate()
   const [open, setOpen] = useState(defaultOpen)
+  const liveDelta = useLiveElapsedSeconds(loading, activeStartedAt)
+  const liveTotalSeconds =
+    loading && liveDelta !== null
+      ? Math.max(1, Math.round(completedThinkingMs / 1000) + liveDelta)
+      : staticSeconds
+
   const heading = loading
-    ? t('reasoningStreaming')
-    : seconds !== null
-      ? t('reasoningSeconds', { seconds })
+    ? liveTotalSeconds !== null
+      ? t('reasoningStreamingSeconds', { seconds: liveTotalSeconds })
+      : t('reasoningStreaming')
+    : staticSeconds !== null
+      ? t('reasoningSeconds', { seconds: staticSeconds })
       : t('reasoningTitle')
+
+  const showRoundHeaders = rounds.length >= 2
 
   return (
     <div className={styles.reasoningBlock}>
@@ -116,52 +151,46 @@ const ReasoningSection = ({
       </button>
       {open ? (
         <div className={clsx(styles.stepDetail, 'ds-think-content')}>
-          <Markdown
-            content={markdown}
-            loading={loading}
-            cacheKey={`${messageId}-think`}
-            disableLink={false}
-          />
+          {showRoundHeaders ? (
+            <div className={styles.reasoningRounds}>
+              {rounds.map((round, roundIndex) => {
+                const isLast = roundIndex === rounds.length - 1
+                const stepCallId = round.nextStepCallId
+                const anchorText = round.nextStepLabel
+                  ? t('reasoningBeforeStep', { step: round.nextStepLabel })
+                  : t('reasoningBeforeReply')
+                return (
+                  <div key={round.key} className={styles.reasoningRound}>
+                    {stepCallId ? (
+                      <button
+                        type="button"
+                        className={styles.roundAnchorButton}
+                        onClick={() => onInspectStep(stepCallId)}
+                      >
+                        {anchorText}
+                      </button>
+                    ) : (
+                      <div className={styles.roundAnchorLabel}>{anchorText}</div>
+                    )}
+                    <Markdown
+                      content={round.markdown}
+                      loading={loading && isLast}
+                      cacheKey={`${messageId}-${round.key}`}
+                      disableLink={false}
+                    />
+                  </div>
+                )
+              })}
+            </div>
+          ) : rounds[0] ? (
+            <Markdown
+              content={rounds[0].markdown}
+              loading={loading}
+              cacheKey={`${messageId}-think`}
+              disableLink={false}
+            />
+          ) : null}
         </div>
-      ) : null}
-    </div>
-  )
-}
-
-const PreambleBeat = ({
-  cacheKey,
-  markdown,
-  hasPreviousContent,
-}: {
-  cacheKey: string
-  markdown: string
-  hasPreviousContent: boolean
-}) => {
-  const t = activityInspectorMessages.useTranslate()
-  const isLong =
-    markdown.length > LONG_PREAMBLE_CHARS || markdown.split('\n').length > LONG_PREAMBLE_LINES
-  const [expanded, setExpanded] = useState(false)
-
-  return (
-    <div className={clsx(styles.preambleBeat, hasPreviousContent && styles.beatGap)}>
-      <div
-        className={clsx(
-          styles.preambleBody,
-          'ds-think-content',
-          'ds-activity-preamble',
-          isLong && !expanded && styles.preambleClamped
-        )}
-      >
-        <Markdown content={markdown} loading={false} cacheKey={cacheKey} disableLink={false} />
-      </div>
-      {isLong ? (
-        <button
-          type="button"
-          className={styles.noteMoreButton}
-          onClick={() => setExpanded((value) => !value)}
-        >
-          {expanded ? t('showLessNote') : t('showMoreNote')}
-        </button>
       ) : null}
     </div>
   )
@@ -170,42 +199,65 @@ const PreambleBeat = ({
 const ServerSearchRow = ({
   queries,
   pages,
+  precedingNote,
+  cacheKey,
   openLink,
 }: {
   queries: readonly string[]
   pages: readonly { readonly url: string; readonly title: string }[]
+  precedingNote?: string
+  cacheKey: string
   openLink: (event: MouseEvent, url: string) => void
 }) => {
   const t = activityInspectorMessages.useTranslate()
   const [open, setOpen] = useState(false)
   const count = queries.length + pages.length
-  const hasDetails = count > 0
+  const hasDetails = count > 0 || Boolean(precedingNote)
+
+  const rowContent = (
+    <>
+      <span className={styles.rowIcon} aria-hidden="true">
+        <IconSearchOutline16 />
+      </span>
+      <span className={styles.rowLabel}>{t('serverSearchTitle')}</span>
+      <span className={styles.rowTrailing}>
+        {count > 0 ? <span className={styles.rowMeta}>{count}</span> : null}
+        {hasDetails ? (
+          <span className={styles.rowChevron} aria-hidden="true">
+            {open ? <IconChevronDownOutline14 /> : <IconChevronRightOutline14 />}
+          </span>
+        ) : null}
+      </span>
+    </>
+  )
 
   return (
     <div className={styles.stepBlock}>
-      <button
-        type="button"
-        className={styles.rowButton}
-        aria-expanded={open}
-        disabled={!hasDetails}
-        {...hoverGlideItem()}
-        onClick={() => setOpen((v) => !v)}
-      >
-        <span className={styles.rowIcon} aria-hidden="true">
-          <IconSearchOutline16 />
-        </span>
-        <span className={styles.rowLabel}>{t('serverSearchTitle')}</span>
-        <span className={styles.rowTrailing}>
-          {count > 0 ? <span className={styles.rowMeta}>{count}</span> : null}
-          {hasDetails ? (
-            <span className={styles.rowChevron} aria-hidden="true">
-              {open ? <IconChevronDownOutline14 /> : <IconChevronRightOutline14 />}
-            </span>
-          ) : null}
-        </span>
-      </button>
+      {hasDetails ? (
+        <button
+          type="button"
+          className={styles.rowButton}
+          aria-expanded={open}
+          {...hoverGlideItem()}
+          onClick={() => setOpen((v) => !v)}
+        >
+          {rowContent}
+        </button>
+      ) : (
+        <div className={styles.rowStatic}>{rowContent}</div>
+      )}
       {open && hasDetails ? (
         <div className={styles.stepDetail}>
+          {precedingNote ? (
+            <div className={clsx(styles.precedingNote, 'ds-activity-note')}>
+              <Markdown
+                content={precedingNote}
+                loading={false}
+                cacheKey={`${cacheKey}-note`}
+                disableLink={false}
+              />
+            </div>
+          ) : null}
           {queries.length > 0 ? (
             <div className={styles.queryList}>
               {queries.map((q) => (
@@ -243,26 +295,26 @@ const ActivityStepRow = ({
   phase,
   sessionId,
   streaming,
-  now,
   capabilityState,
   open,
   selected,
   onToggle,
   openLink,
   openFile,
+  openVisual,
   renderMarkdown,
 }: {
   item: ActivityStepRecord
   phase: ActivityLanePhase
   sessionId: string
   streaming: boolean
-  now: number
   capabilityState: unknown
   open: boolean
   selected: boolean
   onToggle: () => void
   openLink: (event: MouseEvent, url: string) => void
   openFile?: ActivityInspectorDeps['openFile']
+  openVisual: (visual: ToolStepVisualArtifact) => void
   renderMarkdown: (props: { readonly content: string; readonly cacheKey: string }) => ReactNode
 }) => {
   const t = activityInspectorMessages.useTranslate()
@@ -275,6 +327,8 @@ const ActivityStepRow = ({
       : visualCount > 1
         ? t('visualBadgeMany', { count: visualCount })
         : undefined
+  const runningVerb =
+    item.entry.result?.progress?.detail || item.summary?.liveVerb || t('stepStatusRunning')
 
   const rowContent = (
     <>
@@ -284,18 +338,24 @@ const ActivityStepRow = ({
       <span className={clsx(styles.rowLabel, item.status === 'running' && styles.rowLabelActive)}>
         {item.label}
       </span>
+      {visualTitle && item.status === 'ok' ? (
+        <span className={styles.srOnly}> ({visualTitle})</span>
+      ) : null}
       <span className={styles.rowTrailing}>
         {item.status === 'running' ? (
-          <span className={styles.statusRunning}>{t('stepStatusRunning')}</span>
+          <LiveRunningStatus
+            streaming={streaming}
+            startedAt={item.entry.result?.startedAt}
+            verb={runningVerb}
+          />
         ) : item.status === 'error' ? (
-          <span className={styles.statusError}>
-            <IconWarningOutline16 />
-            <span>{t('stepStatusFailed')}</span>
-          </span>
+          <Badge tone="danger" icon={<IconWarningOutline16 />}>
+            {t('stepStatusFailed')}
+          </Badge>
         ) : (
           <>
             {visualCount > 0 ? (
-              <span className={styles.visualTag} title={visualTitle} aria-label={visualTitle}>
+              <span className={styles.visualIndicator} title={visualTitle} aria-hidden="true">
                 <IconPhotoOutline14 />
                 {visualCount > 1 ? <span>{visualCount}</span> : null}
               </span>
@@ -337,64 +397,29 @@ const ActivityStepRow = ({
       )}
       {item.hasDetail && open ? (
         <div className={styles.stepDetail}>
+          {item.precedingNote ? (
+            <div className={clsx(styles.precedingNote, 'ds-activity-note')}>
+              <Markdown
+                content={item.precedingNote}
+                loading={false}
+                cacheKey={`${item.callId}-note`}
+                disableLink={false}
+              />
+            </div>
+          ) : null}
           <DetailView
             sessionId={sessionId}
             entry={item.entry}
             streaming={streaming}
-            now={now}
+            now={Date.now()}
             capabilityState={capabilityState}
             openLink={openLink}
             openFile={openFile}
+            openVisual={openVisual}
             renderMarkdown={renderMarkdown}
           />
         </div>
       ) : null}
-    </div>
-  )
-}
-
-const VisualStoryboard = ({
-  visuals,
-  onInspectStep,
-  onOpenLink,
-}: {
-  visuals: readonly ActivityVisualItem[]
-  onInspectStep: (callId: string) => void
-  onOpenLink: (event: MouseEvent, url: string) => void
-}) => {
-  const t = activityInspectorMessages.useTranslate()
-  return (
-    <div className={styles.storyboard}>
-      {visuals.map((visual) => {
-        const href = visual.href
-        return (
-          <figure key={visual.key} className={styles.storyboardCard}>
-            <img src={visual.src} alt={visual.alt} className={styles.storyboardImage} />
-            <figcaption className={styles.storyboardCaption}>
-              <button
-                type="button"
-                className={styles.storyboardStepLink}
-                title={t('viewStepInTimeline')}
-                onClick={() => onInspectStep(visual.callId)}
-              >
-                {visual.caption ?? visual.stepLabel}
-              </button>
-              {href ? (
-                <a
-                  className={styles.storyboardExternalLink}
-                  href={href}
-                  target="_blank"
-                  rel="noreferrer"
-                  aria-label={href}
-                  onClick={(event) => onOpenLink(event, href)}
-                >
-                  <IconOpenExternalOutline14 />
-                </a>
-              ) : null}
-            </figcaption>
-          </figure>
-        )
-      })}
     </div>
   )
 }
@@ -458,20 +483,6 @@ const SourcesView = ({
       ) : null}
     </div>
   )
-}
-
-const allExpandableCallIds = (timeline: ActivityTimeline): string[] => {
-  const ids: string[] = []
-  for (const phase of timeline.phases) {
-    if (phase.type === 'lane' && (!phase.presenter || phase.presenter.renderStepDetail)) {
-      for (const item of phase.items) {
-        if (item.hasDetail) {
-          ids.push(item.callId)
-        }
-      }
-    }
-  }
-  return ids
 }
 
 export const createActivityPanel = (state: ActivityPanelState, deps: ActivityInspectorDeps) => {
@@ -548,12 +559,10 @@ export const createActivityPanel = (state: ActivityPanelState, deps: ActivityIns
 
     const turn = useSyncExternalStore(deps.turnSource.subscribe, getSnapshot, getSnapshot)
     const live = Boolean(turn && turn.streaming && turn.status === 'streaming')
-    const tick = useTicker(live, 1000)
-    const now = Date.now() + tick * 0
 
     const timeline = useMemo(
-      () => (turn ? buildActivityTimeline(turn, deps.getPresenter, now) : null),
-      [turn, now]
+      () => (turn ? buildActivityTimeline(turn, deps.getPresenter) : null),
+      [turn]
     )
 
     const openLink = useCallback((event: MouseEvent, url: string) => {
@@ -569,8 +578,8 @@ export const createActivityPanel = (state: ActivityPanelState, deps: ActivityIns
       activeSelection?.kind === 'pinned' ? (activeSelection.focusedCallId ?? null) : null
     const focusNonce = activeSelection?.kind === 'pinned' ? (activeSelection.focusNonce ?? 0) : 0
     const contentRef = useRef<HTMLDivElement | null>(null)
+    const pinnedToBottomRef = useRef(true)
 
-    const [filter, setFilter] = useState<ActivityFilter>('all')
     const [openStepIds, setOpenStepIds] = useState<ReadonlySet<string>>(() =>
       focusedCallId ? new Set([focusedCallId]) : new Set()
     )
@@ -578,6 +587,10 @@ export const createActivityPanel = (state: ActivityPanelState, deps: ActivityIns
     const [scrollTarget, setScrollTarget] = useState<{ callId: string; nonce: number } | null>(() =>
       focusedCallId ? { callId: focusedCallId, nonce: focusNonce } : null
     )
+    const [lightboxState, setLightboxState] = useState<{
+      index: number
+      fallback?: ActivityVisualItem
+    } | null>(null)
     const localScrollNonceRef = useRef(0)
 
     const prevTurnIdRef = useRef<string | null>(turn?.messageId ?? null)
@@ -585,10 +598,11 @@ export const createActivityPanel = (state: ActivityPanelState, deps: ActivityIns
       const nextTurnId = turn?.messageId ?? null
       if (prevTurnIdRef.current !== nextTurnId) {
         prevTurnIdRef.current = nextTurnId
-        setFilter('all')
         setOpenStepIds(focusedCallId ? new Set([focusedCallId]) : new Set())
         setSelectedCallId(focusedCallId)
         setScrollTarget(focusedCallId ? { callId: focusedCallId, nonce: focusNonce } : null)
+        setLightboxState(null)
+        pinnedToBottomRef.current = true
       }
     }, [turn?.messageId, focusedCallId, focusNonce])
 
@@ -596,7 +610,6 @@ export const createActivityPanel = (state: ActivityPanelState, deps: ActivityIns
       if (!focusedCallId) {
         return
       }
-      setFilter('all')
       setSelectedCallId(focusedCallId)
       setOpenStepIds((prev) => {
         if (prev.has(focusedCallId)) {
@@ -609,15 +622,8 @@ export const createActivityPanel = (state: ActivityPanelState, deps: ActivityIns
       setScrollTarget({ callId: focusedCallId, nonce: focusNonce })
     }, [focusedCallId, focusNonce])
 
-    const activeFilter: ActivityFilter =
-      filter === 'visuals' && (timeline?.visuals.length ?? 0) === 0
-        ? 'all'
-        : filter === 'errors' && (timeline?.errorCount ?? 0) === 0
-          ? 'all'
-          : filter
-
     useEffect(() => {
-      if (!scrollTarget || effectiveTab !== 'activity' || activeFilter !== 'all') {
+      if (!scrollTarget || effectiveTab !== 'activity') {
         return
       }
       const container = contentRef.current
@@ -642,7 +648,31 @@ export const createActivityPanel = (state: ActivityPanelState, deps: ActivityIns
         found.scrollIntoView({ block: 'nearest', behavior: reducedMotion ? 'auto' : 'smooth' })
       })
       return () => cancelAnimationFrame(frameId)
-    }, [scrollTarget, effectiveTab, activeFilter, turn?.messageId])
+    }, [scrollTarget, effectiveTab, turn?.messageId])
+
+    const handleContentScroll = useCallback(() => {
+      const el = contentRef.current
+      if (!el) {
+        return
+      }
+      pinnedToBottomRef.current =
+        el.scrollHeight - el.scrollTop - el.clientHeight <= AUTO_SCROLL_THRESHOLD_PX
+    }, [])
+
+    const stepCount = timeline?.stepCount ?? 0
+    const prevStepCountRef = useRef(stepCount)
+    useEffect(() => {
+      const grew = stepCount > prevStepCountRef.current
+      prevStepCountRef.current = stepCount
+      if (!live || !grew || scrollTarget || !pinnedToBottomRef.current) {
+        return
+      }
+      const el = contentRef.current
+      if (!el) {
+        return
+      }
+      el.scrollTop = el.scrollHeight
+    }, [live, scrollTarget, stepCount])
 
     const toggleStep = useCallback((callId: string) => {
       setSelectedCallId(callId)
@@ -657,8 +687,7 @@ export const createActivityPanel = (state: ActivityPanelState, deps: ActivityIns
       })
     }, [])
 
-    const inspectStepFromStoryboard = useCallback((callId: string) => {
-      setFilter('all')
+    const inspectStep = useCallback((callId: string) => {
       setSelectedCallId(callId)
       setOpenStepIds((prev) => {
         const next = new Set(prev)
@@ -669,15 +698,39 @@ export const createActivityPanel = (state: ActivityPanelState, deps: ActivityIns
       setScrollTarget({ callId, nonce: -localScrollNonceRef.current })
     }, [])
 
-    const turnOptions = useMemo(
-      () =>
-        activityTurns.map((item) => ({
-          value: item.messageId,
-          label: item.promptExcerpt
-            ? t('turnOptionWithPrompt', { number: item.turnNumber, prompt: item.promptExcerpt })
-            : t('turnOptionLabel', { number: item.turnNumber }),
-        })),
-      [activityTurns, t]
+    const timelineVisuals = timeline?.visuals ?? EMPTY_VISUALS
+    const openVisualAt = useCallback((index: number) => {
+      setLightboxState({ index })
+    }, [])
+
+    const openVisualForStep = useCallback(
+      (callId: string, stepLabel: string, visual: ToolStepVisualArtifact) => {
+        const exact = timelineVisuals.findIndex(
+          (item) => item.callId === callId && item.src === visual.src
+        )
+        if (exact >= 0) {
+          setLightboxState({ index: exact })
+          return
+        }
+        const bySrc = timelineVisuals.findIndex((item) => item.src === visual.src)
+        if (bySrc >= 0) {
+          setLightboxState({ index: bySrc })
+          return
+        }
+        setLightboxState({
+          index: 0,
+          fallback: {
+            key: `${callId}-fallback`,
+            callId,
+            stepLabel,
+            src: visual.src,
+            alt: visual.alt,
+            ...(visual.caption ? { caption: visual.caption } : {}),
+            ...(visual.href ? { href: visual.href } : {}),
+          },
+        })
+      },
+      [timelineVisuals]
     )
 
     const isPinnedBehindLatest = Boolean(
@@ -685,40 +738,6 @@ export const createActivityPanel = (state: ActivityPanelState, deps: ActivityIns
       activeSelection?.kind === 'pinned' &&
       latestTurnId &&
       latestTurnId !== resolvedMessageId
-    )
-
-    const expandableIds = useMemo(
-      () => (timeline ? allExpandableCallIds(timeline) : []),
-      [timeline]
-    )
-    const openCount = useMemo(
-      () => expandableIds.filter((id) => openStepIds.has(id)).length,
-      [expandableIds, openStepIds]
-    )
-    const canExpandAll =
-      activeFilter === 'all' &&
-      expandableIds.length >= 2 &&
-      expandableIds.length <= MAX_EXPAND_ALL_STEPS &&
-      openCount < expandableIds.length
-    const canCollapseAll = activeFilter === 'all' && openCount >= 2
-
-    const hasSecondaryFilters = Boolean(
-      timeline && (timeline.visuals.length > 0 || timeline.errorCount > 0)
-    )
-    const showFilterToolbar = Boolean(
-      turn &&
-      timeline &&
-      effectiveTab === 'activity' &&
-      (hasSecondaryFilters ||
-        (timeline.stepCount >= STAGED_FILTER_MIN_STEPS && (canExpandAll || canCollapseAll)) ||
-        canCollapseAll)
-    )
-
-    const showContextRow = Boolean(
-      turn &&
-      timeline &&
-      effectiveTab === 'activity' &&
-      (turnOptions.length >= 2 || timeline.tallyLabel || isPinnedBehindLatest)
     )
 
     const renderActivityBody = () => {
@@ -734,7 +753,7 @@ export const createActivityPanel = (state: ActivityPanelState, deps: ActivityIns
           </div>
         )
       }
-      if (timeline.phases.length === 0 && timeline.thinkingBlocks.length === 0) {
+      if (timeline.phases.length === 0 && timeline.thinkingRounds.length === 0) {
         return (
           <div className={styles.emptyWrap}>
             <EmptyState
@@ -746,248 +765,108 @@ export const createActivityPanel = (state: ActivityPanelState, deps: ActivityIns
           </div>
         )
       }
-      if (activeFilter === 'visuals') {
-        return (
-          <VisualStoryboard
+
+      const hasReasoning = timeline.thinkingRounds.length > 0
+      const activeReasoning =
+        live &&
+        timeline.activeThinkingStartedAt !== null &&
+        timeline.thinkingBlocks.at(-1)?.endedAt === undefined
+
+      return (
+        <div className={styles.bodyStack}>
+          <EvidenceShelf
+            failedSteps={timeline.failedSteps}
             visuals={timeline.visuals}
-            onInspectStep={inspectStepFromStoryboard}
-            onOpenLink={openLink}
+            onInspectStep={inspectStep}
+            onOpenVisual={openVisualAt}
           />
-        )
-      }
-      if (activeFilter === 'errors') {
-        const failedRows: { phase: ActivityLanePhase; item: ActivityStepRecord }[] = []
-        for (const phase of timeline.phases) {
-          if (phase.type === 'lane') {
-            for (const item of phase.items) {
-              if (item.status === 'error') {
-                failedRows.push({ phase, item })
-              }
-            }
-          }
-        }
-        return (
+
           <HoverGlide className={styles.stream}>
-            {failedRows.map(({ phase, item }) => {
+            {hasReasoning ? (
+              <ReasoningSection
+                key={`${turn.messageId}-reasoning`}
+                messageId={turn.messageId}
+                rounds={timeline.thinkingRounds}
+                staticSeconds={timeline.thinkingSeconds}
+                completedThinkingMs={timeline.completedThinkingMs}
+                activeStartedAt={timeline.activeThinkingStartedAt}
+                defaultOpen={timeline.thinkingOnly}
+                loading={activeReasoning}
+                onInspectStep={inspectStep}
+              />
+            ) : null}
+
+            {timeline.phases.map((phase, index) => {
+              if (phase.type === 'server_search') {
+                return (
+                  <ServerSearchRow
+                    key={phase.key}
+                    queries={phase.queries}
+                    pages={phase.pages}
+                    precedingNote={phase.precedingNote}
+                    cacheKey={`${turn.messageId}-${phase.key}`}
+                    openLink={openLink}
+                  />
+                )
+              }
               const capState = phase.capabilityId
                 ? turn.capabilityState?.[phase.capabilityId]
                 : undefined
+              if (
+                phase.presenter &&
+                !phase.presenter.renderStepDetail &&
+                phase.presenter.renderActivity
+              ) {
+                const CustomView = phase.presenter.renderActivity
+                return (
+                  <div key={phase.key} className={styles.customPhase}>
+                    <CustomView
+                      sessionId={turn.sessionId}
+                      lane={phase.lane}
+                      entries={phase.entries}
+                      streaming={live}
+                      now={Date.now()}
+                      capabilityState={capState}
+                      openLink={openLink}
+                      openFile={deps.openFile}
+                      renderMarkdown={renderMarkdown}
+                      focusedCallId={focusedCallId}
+                      focusNonce={focusNonce}
+                    />
+                  </div>
+                )
+              }
+              const prevPhase = index > 0 ? timeline.phases[index - 1] : null
+              const laneShift = prevPhase?.type === 'lane' && prevPhase.lane !== phase.lane
               return (
-                <ActivityStepRow
-                  key={item.callId}
-                  item={item}
-                  phase={phase}
-                  sessionId={turn.sessionId}
-                  streaming={live}
-                  now={now}
-                  capabilityState={capState}
-                  open
-                  selected={selectedCallId === item.callId}
-                  onToggle={() => toggleStep(item.callId)}
-                  openLink={openLink}
-                  openFile={deps.openFile}
-                  renderMarkdown={renderMarkdown}
-                />
+                <div
+                  key={phase.key}
+                  className={clsx(styles.stepGroup, laneShift && styles.laneGap)}
+                >
+                  {phase.items.map((item) => (
+                    <ActivityStepRow
+                      key={item.callId}
+                      item={item}
+                      phase={phase}
+                      sessionId={turn.sessionId}
+                      streaming={live}
+                      capabilityState={capState}
+                      open={openStepIds.has(item.callId)}
+                      selected={selectedCallId === item.callId}
+                      onToggle={() => toggleStep(item.callId)}
+                      openLink={openLink}
+                      openFile={deps.openFile}
+                      openVisual={(visual) => openVisualForStep(item.callId, item.label, visual)}
+                      renderMarkdown={renderMarkdown}
+                    />
+                  ))}
+                </div>
               )
             })}
           </HoverGlide>
-        )
-      }
-
-      const hasPinnedReasoning = timeline.thinkingBlocks.length > 0
-
-      return (
-        <HoverGlide className={styles.stream}>
-          {hasPinnedReasoning ? (
-            <ReasoningSection
-              key={`${turn.messageId}-reasoning`}
-              messageId={turn.messageId}
-              markdown={timeline.thinkingBlocks.map((b) => b.thinking).join('\n\n')}
-              seconds={timeline.thinkingSeconds}
-              defaultOpen={timeline.thinkingOnly}
-              loading={
-                live &&
-                timeline.thinkingBlocks.at(-1)?.startedAt !== undefined &&
-                timeline.thinkingBlocks.at(-1)?.endedAt === undefined
-              }
-            />
-          ) : null}
-
-          {timeline.phases.map((phase, index) => {
-            const hasPreviousContent = hasPinnedReasoning || index > 0
-            if (phase.type === 'preamble') {
-              return (
-                <PreambleBeat
-                  key={phase.key}
-                  cacheKey={`${turn.messageId}-${phase.key}`}
-                  markdown={phase.markdown}
-                  hasPreviousContent={hasPreviousContent}
-                />
-              )
-            }
-            if (phase.type === 'server_search') {
-              return (
-                <ServerSearchRow
-                  key={phase.key}
-                  queries={phase.queries}
-                  pages={phase.pages}
-                  openLink={openLink}
-                />
-              )
-            }
-            const capState = phase.capabilityId
-              ? turn.capabilityState?.[phase.capabilityId]
-              : undefined
-            if (
-              phase.presenter &&
-              !phase.presenter.renderStepDetail &&
-              phase.presenter.renderActivity
-            ) {
-              const CustomView = phase.presenter.renderActivity
-              return (
-                <div key={phase.key} className={styles.customPhase}>
-                  <CustomView
-                    sessionId={turn.sessionId}
-                    lane={phase.lane}
-                    entries={phase.entries}
-                    streaming={live}
-                    now={now}
-                    capabilityState={capState}
-                    openLink={openLink}
-                    openFile={deps.openFile}
-                    renderMarkdown={renderMarkdown}
-                    focusedCallId={focusedCallId}
-                    focusNonce={focusNonce}
-                  />
-                </div>
-              )
-            }
-            const prevPhase = index > 0 ? timeline.phases[index - 1] : null
-            const laneShift = prevPhase?.type === 'lane' && prevPhase.lane !== phase.lane
-            return (
-              <div key={phase.key} className={clsx(styles.stepGroup, laneShift && styles.beatGap)}>
-                {phase.items.map((item) => (
-                  <ActivityStepRow
-                    key={item.callId}
-                    item={item}
-                    phase={phase}
-                    sessionId={turn.sessionId}
-                    streaming={live}
-                    now={now}
-                    capabilityState={capState}
-                    open={openStepIds.has(item.callId)}
-                    selected={selectedCallId === item.callId}
-                    onToggle={() => toggleStep(item.callId)}
-                    openLink={openLink}
-                    openFile={deps.openFile}
-                    renderMarkdown={renderMarkdown}
-                  />
-                ))}
-              </div>
-            )
-          })}
-        </HoverGlide>
+        </div>
       )
     }
-
-    const contextBars = (
-      <>
-        {showContextRow ? (
-          <div className={styles.contextBar}>
-            <div className={styles.contextMain}>
-              {sessionId && turnOptions.length >= 2 && resolvedMessageId ? (
-                <Select
-                  ariaLabel={t('turnSelectorLabel')}
-                  value={resolvedMessageId}
-                  options={turnOptions}
-                  className={styles.turnSelect}
-                  onChange={(nextMessageId) => state.selectTurn(sessionId, nextMessageId)}
-                />
-              ) : timeline?.tallyLabel ? (
-                <div className={styles.turnTally}>{timeline.tallyLabel}</div>
-              ) : null}
-            </div>
-            {isPinnedBehindLatest && sessionId ? (
-              <Button
-                variant="ghost"
-                size="s"
-                className={styles.followButton}
-                onClick={() => state.followLatest(sessionId)}
-              >
-                {t('followLatest')}
-              </Button>
-            ) : null}
-          </div>
-        ) : null}
-
-        {showFilterToolbar && timeline ? (
-          <div className={styles.filterBar}>
-            {hasSecondaryFilters ? (
-              <div className={styles.filterChips}>
-                <Chip
-                  ghost
-                  active={activeFilter === 'all'}
-                  aria-pressed={activeFilter === 'all'}
-                  className={styles.filterChip}
-                  onClick={() => setFilter('all')}
-                >
-                  <span>{t('filterAll')}</span>
-                  <span className={styles.chipCount}>{timeline.stepCount}</span>
-                </Chip>
-                {timeline.visuals.length > 0 ? (
-                  <Chip
-                    ghost
-                    active={activeFilter === 'visuals'}
-                    aria-pressed={activeFilter === 'visuals'}
-                    icon={<IconPhotoOutline14 />}
-                    className={styles.filterChip}
-                    onClick={() => setFilter('visuals')}
-                  >
-                    <span>{t('filterVisuals')}</span>
-                    <span className={styles.chipCount}>{timeline.visuals.length}</span>
-                  </Chip>
-                ) : null}
-                {timeline.errorCount > 0 ? (
-                  <Chip
-                    ghost
-                    active={activeFilter === 'errors'}
-                    aria-pressed={activeFilter === 'errors'}
-                    icon={<IconWarningOutline16 />}
-                    className={clsx(styles.filterChip, styles.errorFilterChip)}
-                    onClick={() => setFilter('errors')}
-                  >
-                    <span>{t('filterErrors')}</span>
-                    <span className={styles.chipCount}>{timeline.errorCount}</span>
-                  </Chip>
-                ) : null}
-              </div>
-            ) : (
-              <span />
-            )}
-
-            {canCollapseAll ? (
-              <Button
-                variant="ghost"
-                size="s"
-                className={styles.bulkAction}
-                onClick={() => setOpenStepIds(new Set())}
-              >
-                {t('collapseAll')}
-              </Button>
-            ) : canExpandAll ? (
-              <Button
-                variant="ghost"
-                size="s"
-                className={styles.bulkAction}
-                onClick={() => setOpenStepIds(new Set(expandableIds))}
-              >
-                {t('expandAll')}
-              </Button>
-            ) : null}
-          </div>
-        ) : null}
-      </>
-    )
 
     const liveBadge = live ? (
       <span className={styles.liveBadge} role="status" aria-live="polite">
@@ -996,50 +875,79 @@ export const createActivityPanel = (state: ActivityPanelState, deps: ActivityIns
       </span>
     ) : null
 
-    const closeButton = (
-      <div className={styles.topActions}>
-        {topActions}
-        <IconButton
-          size="xs"
-          icon={<IconCloseOutline16 />}
-          tooltip={t('close')}
-          tooltipPlacement="bottom"
-          aria-label={t('close')}
-          onClick={state.close}
-        />
-      </div>
-    )
+    const lightboxVisuals = lightboxState?.fallback ? [lightboxState.fallback] : timelineVisuals
 
-    if (hasSources && timeline) {
-      return (
-        <Tabs value={effectiveTab} onChange={state.setTab}>
-          <div className={styles.header} data-tauri-drag-region>
-            <div className={styles.headerLeading}>
-              <TabList ariaLabel={t('panelTitle')} className={styles.tabList}>
-                <Tab value="activity" className={styles.tab}>
-                  {t('tabSteps')}
-                </Tab>
-                <Tab
-                  value="sources"
-                  className={styles.tab}
-                  badge={<span className={styles.tabCount}>{timeline.sources.all.length}</span>}
+    return (
+      <Tabs value={effectiveTab} onChange={state.setTab} className={styles.root}>
+        <header className={styles.header} data-tauri-drag-region="">
+          <div className={styles.headerLeading} data-tauri-drag-region="">
+            {hasSources && timeline ? (
+              <>
+                <h2 className={styles.srOnly}>{t('panelTitle')}</h2>
+                <TabList
+                  ariaLabel={t('panelTitle')}
+                  variant="underline"
+                  className={styles.headerTabs}
                 >
-                  {t('tabSources')}
-                </Tab>
-              </TabList>
-              {liveBadge}
-            </div>
-            {closeButton}
+                  <Tab value="activity">{t('tabSteps')}</Tab>
+                  <Tab
+                    value="sources"
+                    badge={<span className={styles.tabCount}>{timeline.sources.all.length}</span>}
+                  >
+                    {t('tabSources')}
+                  </Tab>
+                </TabList>
+              </>
+            ) : (
+              <h2 className={styles.title} data-tauri-drag-region="">
+                {t('panelTitle')}
+              </h2>
+            )}
+
+            {sessionId && resolvedMessageId && activityTurns.length >= 2 ? (
+              <TurnSwitcherMenu
+                turns={activityTurns}
+                activeMessageId={resolvedMessageId}
+                onSelect={(nextMessageId) => state.selectTurn(sessionId, nextMessageId)}
+              />
+            ) : null}
+
+            {isPinnedBehindLatest && sessionId ? (
+              <Button
+                variant="ghost"
+                size="s"
+                className={styles.latestButton}
+                aria-label={t('followLatestLabel')}
+                onClick={() => state.followLatest(sessionId)}
+              >
+                {t('followLatest')}
+              </Button>
+            ) : null}
+
+            {liveBadge}
           </div>
 
-          {contextBars}
+          <div className={styles.topActions}>
+            {topActions}
+            <IconButton
+              size="xs"
+              icon={<IconCloseOutline16 />}
+              tooltip={t('close')}
+              tooltipPlacement="bottom"
+              aria-label={t('close')}
+              onClick={state.close}
+            />
+          </div>
+        </header>
 
-          <TabPanel value="activity" className={styles.tabPanel}>
-            <div ref={contentRef} className={styles.content}>
-              {renderActivityBody()}
-            </div>
-          </TabPanel>
-          <TabPanel value="sources" className={styles.tabPanel}>
+        <TabPanel value="activity" keepMounted plain={!hasSources} className={styles.tabPanel}>
+          <div ref={contentRef} className={styles.content} onScroll={handleContentScroll}>
+            {renderActivityBody()}
+          </div>
+        </TabPanel>
+
+        {hasSources && timeline ? (
+          <TabPanel value="sources" keepMounted className={styles.tabPanel}>
             <div className={styles.content}>
               <SourcesView
                 cited={timeline.sources.cited}
@@ -1049,28 +957,19 @@ export const createActivityPanel = (state: ActivityPanelState, deps: ActivityIns
               />
             </div>
           </TabPanel>
-        </Tabs>
-      )
-    }
+        ) : null}
 
-    return (
-      <>
-        <div className={styles.header} data-tauri-drag-region>
-          <div className={styles.headerLeading} data-tauri-drag-region>
-            <div role="heading" aria-level={2} className={styles.title} data-tauri-drag-region>
-              {t('panelTitle')}
-            </div>
-            {liveBadge}
-          </div>
-          {closeButton}
-        </div>
-
-        {contextBars}
-
-        <div ref={contentRef} className={styles.content}>
-          {renderActivityBody()}
-        </div>
-      </>
+        <VisualLightbox
+          visuals={lightboxVisuals}
+          activeIndex={lightboxState?.index ?? null}
+          onChangeIndex={(nextIndex) =>
+            setLightboxState((prev) => (prev ? { ...prev, index: nextIndex } : null))
+          }
+          onClose={() => setLightboxState(null)}
+          onInspectStep={inspectStep}
+          onOpenLink={openLink}
+        />
+      </Tabs>
     )
   }
 

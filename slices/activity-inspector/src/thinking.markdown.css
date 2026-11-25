@@ -2,6 +2,7 @@
   .ds-think-content .ds-markdown {
     font: var(--ui-type-small);
     color: var(--ui-text-secondary);
+    max-width: 62ch;
 
     h1,
     h2,
@@ -10,7 +11,7 @@
     h5,
     h6,
     .ds-markdown-paragraph {
-      margin: var(--ui-space-3) 0;
+      margin: var(--ui-space-2-5) 0;
     }
 
     h1,
@@ -20,6 +21,7 @@
     h5,
     h6 {
       font: var(--ui-type-small-strong);
+      color: var(--ui-text-primary);
     }
 
     code {
@@ -27,16 +29,16 @@
     }
 
     hr {
-      margin: var(--ui-space-6) 0;
+      margin: var(--ui-space-5) 0;
     }
 
     blockquote {
-      margin: var(--ui-space-3) 0 0;
+      margin: var(--ui-space-2-5) 0 0;
     }
 
     ul,
     ol {
-      margin: var(--ui-space-3) 0;
+      margin: var(--ui-space-2-5) 0;
     }
 
     th {
@@ -105,12 +107,13 @@
     }
   }
 
-  .ds-activity-preamble .ds-markdown {
+  .ds-activity-note .ds-markdown {
     font: var(--ui-type-caption);
-    color: var(--ui-text-muted);
+    color: var(--ui-text-secondary);
+    max-width: 62ch;
 
     .ds-markdown-paragraph {
-      margin: var(--ui-space-1) 0;
+      margin: var(--ui-space-1-5) 0;
     }
 
     > :first-child {

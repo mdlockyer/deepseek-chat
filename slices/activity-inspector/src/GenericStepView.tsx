@@ -1,5 +1,5 @@
 import type { ActivityStepDetailProps } from '@deepseek-chat/lib-tools'
-import { IconWarningOutline16 } from '@deepseek-chat/lib-ui'
+import { Banner, IconWarningOutline16 } from '@deepseek-chat/lib-ui'
 import { activityInspectorMessages } from './messages.js'
 import styles from './ActivityPanel.module.css'
 
@@ -7,7 +7,7 @@ import styles from './ActivityPanel.module.css'
  * Fallback expanded detail body used whenever a tool step has no registered `ToolStepPresenter`
  * (for example, historical turns loaded when an optional tool slice is unmounted).
  */
-export const GenericStepDetail = ({ entry }: ActivityStepDetailProps) => {
+export const GenericStepDetail = ({ entry, openVisual }: ActivityStepDetailProps) => {
   const t = activityInspectorMessages.useTranslate()
   const { call, result } = entry
   const failed = Boolean(result && result.status !== 'ok' && result.status !== 'running')
@@ -25,12 +25,9 @@ export const GenericStepDetail = ({ entry }: ActivityStepDetailProps) => {
       ) : null}
       {result?.content ? (
         failed ? (
-          <div className={styles.errorBox} role="note">
-            <span className={styles.errorBoxIcon} aria-hidden="true">
-              <IconWarningOutline16 />
-            </span>
+          <Banner tone="error" compact role="note" icon={<IconWarningOutline16 />}>
             <pre className={styles.errorBoxPre}>{result.content}</pre>
-          </div>
+          </Banner>
         ) : (
           <div className={styles.genericSection}>
             <div className={styles.genericSectionLabel}>{t('genericOutput')}</div>
@@ -38,9 +35,21 @@ export const GenericStepDetail = ({ entry }: ActivityStepDetailProps) => {
           </div>
         )
       ) : null}
-      {images.map((src, idx) => (
-        <img key={idx} src={src} alt={call.name} className={styles.genericImage} />
-      ))}
+      {images.map((src, idx) =>
+        openVisual ? (
+          <button
+            key={idx}
+            type="button"
+            className={styles.detailImageButton}
+            aria-label={t('inspectVisualLabel', { label: call.name })}
+            onClick={() => openVisual({ src, alt: call.name, caption: call.name })}
+          >
+            <img src={src} alt={call.name} className={styles.genericImage} />
+          </button>
+        ) : (
+          <img key={idx} src={src} alt={call.name} className={styles.genericImage} />
+        )
+      )}
     </div>
   )
 }

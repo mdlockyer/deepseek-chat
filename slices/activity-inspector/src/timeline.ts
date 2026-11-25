@@ -8,6 +8,21 @@ import { activityInspectorMessages } from './messages.js'
 import { extractTurnSources, type ExtractedTurnSources } from './sources.js'
 import type { TurnSnapshot, TurnThinkingBlock, TurnToolResultBlock } from './types.js'
 
+export type ActivityThinkingRound = {
+  readonly key: string
+  readonly index: number
+  readonly markdown: string
+  readonly seconds: number | null
+  readonly nextStepCallId: string | null
+  readonly nextStepLabel: string | null
+}
+
+export type ActivityFailedStep = {
+  readonly callId: string
+  readonly label: string
+  readonly preview: string | null
+}
+
 export type ActivityStepRecord = {
   readonly entry: ActivityStepEntry
   readonly callId: string
@@ -16,6 +31,8 @@ export type ActivityStepRecord = {
   readonly summary: ToolStepSummary | null
   readonly visuals: readonly ToolStepVisualArtifact[]
   readonly hasDetail: boolean
+  readonly precedingNote?: string
+  readonly errorPreview?: string
 }
 
 export type ActivityLanePhase = {
@@ -33,18 +50,10 @@ export type ActivityServerSearchPhase = {
   readonly key: string
   readonly queries: string[]
   readonly pages: { readonly url: string; readonly title: string }[]
+  readonly precedingNote?: string
 }
 
-export type ActivityPreamblePhase = {
-  readonly type: 'preamble'
-  readonly key: string
-  readonly markdown: string
-}
-
-export type ActivityTimelinePhase =
-  | ActivityLanePhase
-  | ActivityServerSearchPhase
-  | ActivityPreamblePhase
+export type ActivityTimelinePhase = ActivityLanePhase | ActivityServerSearchPhase
 
 export type ActivityVisualItem = {
   readonly key: string
@@ -59,11 +68,15 @@ export type ActivityVisualItem = {
 export type ActivityTimeline = {
   readonly phases: ActivityTimelinePhase[]
   readonly thinkingBlocks: TurnThinkingBlock[]
+  readonly thinkingRounds: readonly ActivityThinkingRound[]
   readonly thinkingSeconds: number | null
+  readonly completedThinkingMs: number
+  readonly activeThinkingStartedAt: number | null
   readonly thinkingOnly: boolean
   readonly sources: ExtractedTurnSources
   readonly stepCount: number
   readonly errorCount: number
+  readonly failedSteps: readonly ActivityFailedStep[]
   readonly tallyLabel: string | null
   readonly visuals: readonly ActivityVisualItem[]
 }
@@ -71,6 +84,15 @@ export type ActivityTimeline = {
 type TallyEntry = {
   count: number
   label: (count: number) => string
+}
+
+type MutableThinkingRound = {
+  key: string
+  index: number
+  markdown: string
+  seconds: number | null
+  nextStepCallId: string | null
+  nextStepLabel: string | null
 }
 
 const readCallSummary = (input: unknown, inputJson: string | undefined): string => {
@@ -107,19 +129,61 @@ const readCallSummary = (input: unknown, inputJson: string | undefined): string 
   return ''
 }
 
-const totalThinkingSeconds = (blocks: readonly TurnThinkingBlock[], now: number): number | null => {
-  let total = 0
+const firstErrorLine = (content: string | undefined): string | null => {
+  if (!content) {
+    return null
+  }
+  const line = content
+    .split('\n')
+    .map((part) => part.trim())
+    .find(Boolean)
+  if (!line) {
+    return null
+  }
+  return line.length > 140 ? `${line.slice(0, 139)}…` : line
+}
+
+const blockDurationSeconds = (block: TurnThinkingBlock, now: number): number | null => {
+  if (block.startedAt !== undefined) {
+    const end = block.endedAt ?? now
+    return Math.max(1, Math.round(Math.max(0, end - block.startedAt) / 1000))
+  }
+  if (block.elapsedSeconds !== undefined) {
+    return Math.max(1, Math.round(Math.max(0, block.elapsedSeconds)))
+  }
+  return null
+}
+
+const computeThinkingTiming = (blocks: readonly TurnThinkingBlock[], now: number) => {
+  let completedMs = 0
+  let totalMs = 0
   let hasDuration = false
+  let activeStartedAt: number | null = null
+
   for (const block of blocks) {
     if (block.startedAt !== undefined) {
-      total += Math.max(0, ((block.endedAt ?? now) - block.startedAt) / 1000)
       hasDuration = true
+      if (block.endedAt !== undefined) {
+        const delta = Math.max(0, block.endedAt - block.startedAt)
+        completedMs += delta
+        totalMs += delta
+      } else {
+        activeStartedAt = block.startedAt
+        totalMs += Math.max(0, now - block.startedAt)
+      }
     } else if (block.elapsedSeconds !== undefined) {
-      total += Math.max(0, block.elapsedSeconds)
       hasDuration = true
+      const delta = Math.max(0, block.elapsedSeconds) * 1000
+      completedMs += delta
+      totalMs += delta
     }
   }
-  return hasDuration ? Math.max(1, Math.round(total)) : null
+
+  return {
+    thinkingSeconds: hasDuration ? Math.max(1, Math.round(totalMs / 1000)) : null,
+    completedThinkingMs: completedMs,
+    activeThinkingStartedAt: activeStartedAt,
+  }
 }
 
 const formatTallies = (tallies: readonly TallyEntry[], maxItems = 3): string | null => {
@@ -153,13 +217,13 @@ const collectStepVisuals = (
 
 /**
  * Pure reducer turning a turn snapshot into chronological, capability-agnostic Activity phases,
- * unified step records (using the model's plain-prose `summary` first), natural tallies, and
- * extracted visual artifacts.
+ * unified step records (with inter-tool narration folded into `precedingNote`), round-linked
+ * reasoning, promoted failed-step summaries, and extracted visual artifacts.
  */
 export const buildActivityTimeline = (
   turn: TurnSnapshot,
   getPresenter: (capabilityId: string | undefined, toolName: string) => ToolStepPresenter | null,
-  now: number
+  now = Date.now()
 ): ActivityTimeline => {
   const toolResults = new Map<string, TurnToolResultBlock>()
   for (const block of turn.blocks) {
@@ -170,8 +234,11 @@ export const buildActivityTimeline = (
 
   const phases: ActivityTimelinePhase[] = []
   const thinkingBlocks: TurnThinkingBlock[] = []
+  const thinkingRounds: MutableThinkingRound[] = []
+  const pendingThinkingRounds: MutableThinkingRound[] = []
   const tallies = new Map<string, TallyEntry>()
   const visuals: ActivityVisualItem[] = []
+  const failedSteps: ActivityFailedStep[] = []
   let pendingText: string[] = []
   let stepCount = 0
   let errorCount = 0
@@ -185,12 +252,21 @@ export const buildActivityTimeline = (
     }
   }
 
-  const flushPreamble = (keyIndex: number) => {
+  const consumePendingNote = (): string | undefined => {
     const joined = pendingText.join('').trim()
     pendingText = []
-    if (joined) {
-      phases.push({ type: 'preamble', key: `preamble-${keyIndex}`, markdown: joined })
+    return joined || undefined
+  }
+
+  const linkPendingThinking = (callId: string | null, stepLabel: string) => {
+    if (pendingThinkingRounds.length === 0) {
+      return
     }
+    for (const round of pendingThinkingRounds) {
+      round.nextStepCallId = callId
+      round.nextStepLabel = stepLabel
+    }
+    pendingThinkingRounds.length = 0
   }
 
   turn.blocks.forEach((block, index) => {
@@ -201,20 +277,45 @@ export const buildActivityTimeline = (
       return
     }
     if (block.type === 'thinking') {
-      if (block.thinking) {
-        flushPreamble(index)
+      const trimmed = block.thinking.trim()
+      if (trimmed) {
         thinkingBlocks.push(block)
+        const round: MutableThinkingRound = {
+          key: `think-${index}`,
+          index: thinkingRounds.length + 1,
+          markdown: trimmed,
+          seconds: blockDurationSeconds(block, now),
+          nextStepCallId: null,
+          nextStepLabel: null,
+        }
+        thinkingRounds.push(round)
+        pendingThinkingRounds.push(round)
       }
       return
     }
     if (block.type === 'server_tool_use') {
-      flushPreamble(index)
+      const note = consumePendingNote()
+      linkPendingThinking(null, activityInspectorMessages.translate('serverSearchTitle'))
       const prev = phases.at(-1)
-      const phase: ActivityServerSearchPhase =
-        prev?.type === 'server_search'
-          ? prev
-          : { type: 'server_search', key: block.id, queries: [], pages: [] }
-      if (prev !== phase) {
+      let phase: ActivityServerSearchPhase
+      if (prev?.type === 'server_search') {
+        phase = note
+          ? {
+              ...prev,
+              precedingNote: prev.precedingNote ? `${prev.precedingNote}\n\n${note}` : note,
+            }
+          : prev
+        if (phase !== prev) {
+          phases[phases.length - 1] = phase
+        }
+      } else {
+        phase = {
+          type: 'server_search',
+          key: block.id,
+          queries: [],
+          pages: [],
+          ...(note ? { precedingNote: note } : {}),
+        }
         phases.push(phase)
         stepCount += 1
       }
@@ -250,7 +351,6 @@ export const buildActivityTimeline = (
       return
     }
     if (block.type === 'tool_use') {
-      flushPreamble(index)
       const result = toolResults.get(block.id)
       const capabilityId = result?.capability
       const presenter = getPresenter(capabilityId, block.name)
@@ -263,9 +363,12 @@ export const buildActivityTimeline = (
       if (summary?.hiddenInTimeline) {
         return
       }
+      const precedingNote = consumePendingNote()
       const lane = summary?.lane ?? capabilityId ?? block.name
       const rawSummary = readCallSummary(block.input, block.inputJson)
       const label = rawSummary || summary?.detail || summary?.liveVerb || block.name
+      linkPendingThinking(block.id, label)
+
       const running = summary
         ? Boolean(summary.stillRunning)
         : !result || result.status === 'running'
@@ -274,20 +377,30 @@ export const buildActivityTimeline = (
         : Boolean(result && result.status !== 'ok' && result.status !== 'running')
       const status: ActivityStepRecord['status'] = running ? 'running' : failed ? 'error' : 'ok'
       const stepVisuals = collectStepVisuals(label, summary, result)
+      const errorPreview = failed ? (firstErrorLine(result?.content) ?? undefined) : undefined
       const hasFallbackContent = Boolean(
+        precedingNote ||
         block.inputJson ||
         (block.input && typeof block.input === 'object' && Object.keys(block.input).length > 0) ||
         result?.content?.trim() ||
         stepVisuals.length > 0
       )
       const hasDetail = presenter?.renderStepDetail
-        ? (summary?.hasDetail ??
-          Boolean(stepVisuals.length > 0 || result?.content?.trim() || failed))
+        ? Boolean(
+            precedingNote ||
+            (summary?.hasDetail ??
+              Boolean(stepVisuals.length > 0 || result?.content?.trim() || failed))
+          )
         : hasFallbackContent
 
       stepCount += 1
       if (failed) {
         errorCount += 1
+        failedSteps.push({
+          callId: block.id,
+          label,
+          preview: errorPreview ?? null,
+        })
       }
       if (summary?.tally) {
         addTally(summary.tally.key, summary.tally.count, summary.tally.label)
@@ -313,6 +426,8 @@ export const buildActivityTimeline = (
         summary,
         visuals: stepVisuals,
         hasDetail,
+        ...(precedingNote ? { precedingNote } : {}),
+        ...(errorPreview ? { errorPreview } : {}),
       }
 
       const prev = phases.at(-1)
@@ -334,18 +449,24 @@ export const buildActivityTimeline = (
   })
 
   const sources = extractTurnSources(turn.blocks)
-  const thinkingSeconds =
-    thinkingBlocks.length > 0 ? totalThinkingSeconds(thinkingBlocks, now) : null
+  const { thinkingSeconds, completedThinkingMs, activeThinkingStartedAt } =
+    thinkingBlocks.length > 0
+      ? computeThinkingTiming(thinkingBlocks, now)
+      : { thinkingSeconds: null, completedThinkingMs: 0, activeThinkingStartedAt: null }
   const tallyLabel = formatTallies([...tallies.values()], 3)
 
   return {
     phases,
     thinkingBlocks,
+    thinkingRounds,
     thinkingSeconds,
+    completedThinkingMs,
+    activeThinkingStartedAt,
     thinkingOnly: phases.length === 0 && thinkingBlocks.length > 0,
     sources,
     stepCount,
     errorCount,
+    failedSteps,
     tallyLabel,
     visuals,
   }

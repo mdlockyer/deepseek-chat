@@ -15,6 +15,7 @@ import {
   buildActivityTimeline,
   createActivityInspectorSlice,
   extractTurnSources,
+  type SessionTurnSummary,
   type TurnSnapshot,
 } from '@deepseek-chat/slice-activity-inspector'
 
@@ -25,7 +26,7 @@ const fakePanel = () => {
     animating: false,
     resizing: false,
     overlayLocked: false,
-    width: 540,
+    width: 400,
   }
   const listeners = new Set<() => void>()
   const emit = () => {
@@ -72,19 +73,34 @@ const fakePanel = () => {
   }
 }
 
-describe('slice-activity-inspector: panel lifecycle & EventLog reactivity', () => {
-  it('supports header toggle (follow_latest), pinned TurnInspectionRequested, displacement isolation, and cleanup on facts', () => {
+describe('slice-activity-inspector: panel lifecycle, active target resolution, & EventLog reactivity', () => {
+  it('resolves active target in both follow_latest and pinned modes, isolates displacement, and cleans up on facts', () => {
     const log = new EventLog()
     const panel = fakePanel()
+    const turnsBySession: Record<string, readonly SessionTurnSummary[]> = {
+      s1: [
+        {
+          messageId: 'm-latest',
+          turnNumber: 1,
+          promptExcerpt: 'Latest prompt',
+          streaming: false,
+          hasActivity: true,
+        },
+      ],
+    }
     const slice = createActivityInspectorSlice({
       log,
       panel: panel.slot,
-      turnSource: { getTurn: () => null, subscribe: () => () => undefined },
+      turnSource: {
+        getTurn: () => null,
+        listTurns: (sid) => turnsBySession[sid] ?? [],
+        subscribe: () => () => undefined,
+      },
       getPresenter: () => null,
       openInApp: null,
     })
 
-    // First-class header toggle opens in follow_latest mode and closes on second click.
+    // First-class header toggle opens in follow_latest mode and reports the displayed turn target.
     slice.togglePanel('s1')
     assert.equal(panel.slot.isOpen('s1'), true)
     assert.deepEqual(slice.getSelection(), {
@@ -92,11 +108,17 @@ describe('slice-activity-inspector: panel lifecycle & EventLog reactivity', () =
       sessionId: 's1',
       tab: 'activity',
     })
-    assert.equal(slice.getTarget(), null, 'follow_latest has no pinned target')
+    assert.deepEqual(slice.getTarget(), {
+      sessionId: 's1',
+      messageId: 'm-latest',
+      tab: 'activity',
+    })
 
+    // Closing clears selection and active target.
     slice.togglePanel('s1')
     assert.equal(panel.slot.isOpen('s1'), false)
     assert.equal(slice.getSelection(), null)
+    assert.equal(slice.getTarget(), null)
 
     // Explicit TurnInspectionRequested pins a specific turn and tab.
     log.publish<TurnInspectionRequested>({
@@ -246,8 +268,8 @@ describe('slice-activity-inspector: panel lifecycle & EventLog reactivity', () =
   })
 })
 
-describe('slice-activity-inspector: lane coalescing, presenters, fallback, and sources', () => {
-  it('coalesces consecutive steps in the same lane across thinking, folds hidden steps, falls back cleanly, and separates cited vs other sources', () => {
+describe('slice-activity-inspector: timeline reduction, folded narration, round-linked thinking, and sources', () => {
+  it('coalesces lanes, folds inter-tool narration onto the following visible step, links thinking rounds to steps, and separates cited vs other sources', () => {
     const customPresenter: ToolStepPresenter = {
       summarize: (call) => ({
         lane: 'custom-lane',
@@ -263,7 +285,9 @@ describe('slice-activity-inspector: lane coalescing, presenters, fallback, and s
       status: 'done',
       streaming: false,
       blocks: [
-        { type: 'tool_use', id: 'c1', name: 'tool_a', input: { q: 'one' } },
+        { type: 'thinking', thinking: 'Initial plan', startedAt: 0, endedAt: 1000 },
+        { type: 'text', text: 'Let me check the first tool.' },
+        { type: 'tool_use', id: 'c1', name: 'tool_a', input: { summary: 'Checking first tool' } },
         {
           type: 'tool_result',
           tool_use_id: 'c1',
@@ -287,19 +311,21 @@ describe('slice-activity-inspector: lane coalescing, presenters, fallback, and s
             },
           ],
         },
-        { type: 'thinking', thinking: 'Reasoning...', startedAt: 1000, endedAt: 3500 },
-        { type: 'tool_use', id: 'c2', name: 'tool_b', input: { q: 'two' } },
-        {
-          type: 'tool_result',
-          tool_use_id: 'c2',
-          capability: 'cap-a',
-          content: 'ok',
-          status: 'ok',
-        },
+        { type: 'thinking', thinking: 'Re-evaluating next action', startedAt: 1000, endedAt: 3500 },
+        { type: 'text', text: 'That worked, moving to step two.' },
+        // Hidden plumbing step must not consume pending narration or thinking links.
         { type: 'tool_use', id: 'c3', name: 'hidden_step', input: {} },
         {
           type: 'tool_result',
           tool_use_id: 'c3',
+          capability: 'cap-a',
+          content: 'ok',
+          status: 'ok',
+        },
+        { type: 'tool_use', id: 'c2', name: 'tool_b', input: { summary: 'Running second tool' } },
+        {
+          type: 'tool_result',
+          tool_use_id: 'c2',
           capability: 'cap-a',
           content: 'ok',
           status: 'ok',
@@ -309,9 +335,10 @@ describe('slice-activity-inspector: lane coalescing, presenters, fallback, and s
           type: 'tool_result',
           tool_use_id: 'c4',
           capability: 'cap-missing',
-          content: '42',
-          status: 'ok',
+          content: 'boom error',
+          status: 'error',
         },
+        { type: 'thinking', thinking: 'Synthesizing final reply', startedAt: 4000, endedAt: 5000 },
         { type: 'text', text: 'Answer citing [ref:1].' },
       ],
     }
@@ -325,22 +352,35 @@ describe('slice-activity-inspector: lane coalescing, presenters, fallback, and s
     assert.equal(
       timeline.phases.length,
       2,
-      'c1+c2 coalesced across thinking, c3 folded out, c4 separate'
+      'c1+c2 coalesced across thinking and hidden step, zero standalone preamble phases'
     )
     assert.equal(timeline.phases[0]?.type, 'lane')
     if (timeline.phases[0]?.type === 'lane') {
       assert.equal(timeline.phases[0].entries.length, 2)
+      assert.equal(timeline.phases[0].items[0]?.precedingNote, 'Let me check the first tool.')
+      assert.equal(timeline.phases[0].items[1]?.precedingNote, 'That worked, moving to step two.')
       assert.equal(timeline.phases[0].presenter, customPresenter)
     }
     assert.equal(timeline.phases[1]?.type, 'lane')
     if (timeline.phases[1]?.type === 'lane') {
-      assert.equal(
-        timeline.phases[1].presenter,
-        null,
-        'falls back to generic renderer when slice unmounted'
-      )
+      assert.equal(timeline.phases[1].presenter, null, 'falls back to generic renderer')
     }
-    assert.equal(timeline.thinkingSeconds, 3)
+
+    assert.equal(timeline.thinkingSeconds, 5)
+    assert.equal(timeline.thinkingRounds.length, 3)
+    assert.equal(timeline.thinkingRounds[0]?.nextStepCallId, 'c1')
+    assert.equal(timeline.thinkingRounds[0]?.nextStepLabel, 'Checking first tool')
+    assert.equal(timeline.thinkingRounds[1]?.nextStepCallId, 'c2')
+    assert.equal(timeline.thinkingRounds[1]?.nextStepLabel, 'Running second tool')
+    assert.equal(timeline.thinkingRounds[2]?.nextStepCallId, null)
+    assert.equal(timeline.thinkingRounds[2]?.nextStepLabel, null)
+
+    assert.equal(timeline.failedSteps.length, 1)
+    assert.deepEqual(timeline.failedSteps[0], {
+      callId: 'c4',
+      label: 'unmounted_tool',
+      preview: 'boom error',
+    })
 
     const sources = extractTurnSources(turn.blocks)
     assert.deepEqual(
@@ -354,18 +394,19 @@ describe('slice-activity-inspector: lane coalescing, presenters, fallback, and s
   })
 })
 
-describe('slice-activity-inspector: ActivityPanel rendering', () => {
-  it('renders thinking-only turns expanded by default and pins reasoning above tool steps (collapsed) on tool turns', () => {
+describe('slice-activity-inspector: redesigned ActivityPanel rendering', () => {
+  it('expands reasoning on thinking-only turns, collapses on tool turns, and groups multi-round reasoning inside', () => {
     const log = new EventLog()
     const panel = fakePanel()
     const thinkingOnlyBlocks: TurnSnapshot['blocks'] = [
       { type: 'thinking', thinking: 'First **reasoning** step', startedAt: 1000, endedAt: 4000 },
+      { type: 'thinking', thinking: 'Second **reasoning** round', startedAt: 4000, endedAt: 6000 },
       { type: 'text', text: 'Final answer' },
     ]
     const mixedBlocks: TurnSnapshot['blocks'] = [
+      { type: 'thinking', thinking: 'Hidden **mixed** thought', startedAt: 1000, endedAt: 3000 },
       { type: 'tool_use', id: 'c1', name: 'custom_a', input: { summary: 'Inspecting page' } },
       { type: 'tool_result', tool_use_id: 'c1', content: 'OK', status: 'ok' },
-      { type: 'thinking', thinking: 'Hidden **mixed** thought', startedAt: 1000, endedAt: 3000 },
       { type: 'text', text: 'Final answer' },
     ]
     const turnMap: Record<string, TurnSnapshot> = {
@@ -406,12 +447,14 @@ describe('slice-activity-inspector: ActivityPanel rendering', () => {
       tab: 'activity',
     })
     const thinkingOnlyHtml = renderToStaticMarkup(createElement(slice.ActivityPanel))
-    assert.match(thinkingOnlyHtml, /Thought for 3s/)
+    assert.match(thinkingOnlyHtml, /<h2\b[^>]*>Activity<\/h2>/, 'exposes accessible panel heading')
+    assert.match(thinkingOnlyHtml, /Thought for 5s/)
     assert.match(thinkingOnlyHtml, /aria-expanded="true"/)
+    assert.match(thinkingOnlyHtml, /<strong><span>reasoning<\/span><\/strong>/)
     assert.match(
       thinkingOnlyHtml,
-      /<strong><span>reasoning<\/span><\/strong>/,
-      'thinking-only turns expand reasoning immediately'
+      /Before final reply/,
+      'multi-round reasoning labels each round cleanly'
     )
 
     log.publish<TurnInspectionRequested>({
@@ -423,7 +466,7 @@ describe('slice-activity-inspector: ActivityPanel rendering', () => {
     const mixedHtml = renderToStaticMarkup(createElement(slice.ActivityPanel))
     const reasoningIdx = mixedHtml.indexOf('Thought for 2s')
     const stepIdx = mixedHtml.indexOf('Inspecting page')
-    assert.ok(reasoningIdx >= 0 && stepIdx > reasoningIdx, 'reasoning is pinned above tool steps')
+    assert.ok(reasoningIdx >= 0 && stepIdx > reasoningIdx, 'reasoning stays pinned above steps')
     assert.doesNotMatch(
       mixedHtml,
       /<strong><span>mixed<\/span><\/strong>/,
@@ -432,7 +475,7 @@ describe('slice-activity-inspector: ActivityPanel rendering', () => {
     slice.dispose()
   })
 
-  it('renders tool steps collapsed by default, prefers human call.input.summary, and expands/selects only the focused callId', () => {
+  it('promotes errors & visuals in the Evidence Shelf (without filter chips), folds narration into expanded step details, and preserves h2 + Tabs with keepMounted', () => {
     const log = new EventLog()
     const panel = fakePanel()
     const presenter: ToolStepPresenter = {
@@ -443,7 +486,14 @@ describe('slice-activity-inspector: ActivityPanel rendering', () => {
         meta: '0.4s',
         visuals:
           call.id === 'c2'
-            ? [{ src: 'data:image/png;base64,AA==', alt: 'Screenshot of DuckDuckGo' }]
+            ? [
+                {
+                  src: 'data:image/png;base64,AA==',
+                  alt: 'Screenshot of DuckDuckGo',
+                  caption: 'Second human step',
+                  href: 'https://duckduckgo.com/',
+                },
+              ]
             : undefined,
         failed: result?.status === 'error',
         hasDetail: true,
@@ -452,14 +502,16 @@ describe('slice-activity-inspector: ActivityPanel rendering', () => {
         createElement('div', null, entry.result?.content ?? 'NO_RESULT'),
     }
     const blocks: TurnSnapshot['blocks'] = [
+      { type: 'text', text: 'NARRATION_BEFORE_C1' },
       { type: 'tool_use', id: 'c1', name: 'custom_a', input: { summary: 'First human step' } },
       {
         type: 'tool_result',
         tool_use_id: 'c1',
         capability: 'demo',
-        content: 'ALPHA_OUTPUT',
+        content: 'PRIVATE_IP_BLOCKED',
         status: 'error',
       },
+      { type: 'text', text: 'NARRATION_BEFORE_C2' },
       { type: 'tool_use', id: 'c2', name: 'custom_b', input: { summary: 'Second human step' } },
       {
         type: 'tool_result',
@@ -502,20 +554,45 @@ describe('slice-activity-inspector: ActivityPanel rendering', () => {
       tab: 'activity',
     })
     const collapsedHtml = renderToStaticMarkup(createElement(slice.ActivityPanel))
+    assert.match(collapsedHtml, /<h2\b[^>]*>Activity<\/h2>/, 'tabbed view keeps an h2 heading')
     assert.match(collapsedHtml, /data-activity-call-id="c1"/)
     assert.match(collapsedHtml, /data-activity-call-id="c2"/)
     assert.match(collapsedHtml, /First human step/)
     assert.match(collapsedHtml, /Second human step/)
     assert.doesNotMatch(collapsedHtml, /RAW_FALLBACK_/, 'human input.summary beats fallback detail')
-    assert.match(collapsedHtml, /Failed/, 'failed steps expose a non-color-only Failed label')
-    assert.match(collapsedHtml, /Visuals/, 'visual artifacts surface the Visuals filter chip')
-    assert.match(collapsedHtml, /Errors/, 'failed steps surface the Errors filter chip')
+    assert.match(collapsedHtml, /Failed/, 'failed steps expose non-color-only Failed badge')
+    assert.match(
+      collapsedHtml,
+      /PRIVATE_IP_BLOCKED/,
+      'Evidence Shelf surfaces failed error preview'
+    )
+    assert.match(collapsedHtml, /Inspect/, 'Evidence Shelf provides direct Inspect jump button')
+    assert.match(
+      collapsedHtml,
+      /Visuals \(1\)/,
+      'Evidence Shelf surfaces visual filmstrip directly'
+    )
+    assert.match(
+      collapsedHtml,
+      /Inspect visual: Second human step/,
+      'filmstrip thumbnails are named buttons'
+    )
+    assert.doesNotMatch(
+      collapsedHtml,
+      /NARRATION_BEFORE_C1|NARRATION_BEFORE_C2/,
+      'inter-tool narration is folded out of the collapsed timeline'
+    )
+    assert.doesNotMatch(collapsedHtml, /BETA_OUTPUT/, 'untargeted steps start collapsed')
     assert.match(collapsedHtml, /role="tablist"/, 'uses accessible Tabs when sources exist')
     assert.match(collapsedHtml, /role="tabpanel"/, 'links tablist to accessible tabpanel')
     assert.match(collapsedHtml, /aria-controls="/, 'tabs wire aria-controls to tabpanels')
-    assert.doesNotMatch(collapsedHtml, /ALPHA_OUTPUT/, 'untargeted steps start collapsed')
-    assert.doesNotMatch(collapsedHtml, /BETA_OUTPUT/, 'untargeted steps start collapsed')
+    assert.match(
+      collapsedHtml,
+      /hidden=""[^>]*>[\s\S]*Example/,
+      'Sources tab stays mounted via keepMounted so switching preserves Activity scroll'
+    )
 
+    // Targeting c2 expands it immediately AND reveals its folded preceding narration inside the detail.
     log.publish<TurnInspectionRequested>({
       type: 'TurnInspectionRequested',
       sessionId: 's1',
@@ -524,8 +601,17 @@ describe('slice-activity-inspector: ActivityPanel rendering', () => {
       callId: 'c2',
     })
     const focusedHtml = renderToStaticMarkup(createElement(slice.ActivityPanel))
-    assert.doesNotMatch(focusedHtml, /ALPHA_OUTPUT/, 'non-targeted step remains collapsed')
     assert.match(focusedHtml, /BETA_OUTPUT/, 'focused callId expands immediately')
+    assert.match(
+      focusedHtml,
+      /NARRATION_BEFORE_C2/,
+      'folded preceding narration is preserved inside the expanded step'
+    )
+    assert.doesNotMatch(
+      focusedHtml,
+      /NARRATION_BEFORE_C1/,
+      'unexpanded step keeps its folded narration hidden'
+    )
     assert.match(
       focusedHtml,
       /data-activity-call-id="c2" data-activity-selected="true"/,
@@ -534,7 +620,7 @@ describe('slice-activity-inspector: ActivityPanel rendering', () => {
     slice.dispose()
   })
 
-  it('follows the latest turn via HeaderToggle, exposes Follow latest when pinned behind, and formats turn switcher without middots', () => {
+  it('follows the latest turn via HeaderToggle, renders compact header turn switcher on multi-turn chats, and exposes Latest when pinned behind', () => {
     const log = new EventLog()
     const panel = fakePanel()
     const turns = [
@@ -584,13 +670,22 @@ describe('slice-activity-inspector: ActivityPanel rendering', () => {
     slice.togglePanel('s1')
     const latestHtml = renderToStaticMarkup(createElement(slice.ActivityPanel))
     assert.match(latestHtml, /Thought for 5s/, 'follow_latest displays the newest active turn')
-    assert.match(latestHtml, /Turn 2: Second question/, 'shows turn switcher without middot')
-    assert.doesNotMatch(latestHtml, /Follow latest/, 'follow_latest hides Follow latest button')
+    assert.match(latestHtml, /Turn 2/, 'compact turn switcher shows active turn in header')
+    assert.doesNotMatch(latestHtml, /·/, 'never renders middot separators')
+    assert.doesNotMatch(
+      latestHtml,
+      /aria-label="Follow latest turn"/,
+      'hides Latest button when live'
+    )
 
     slice.selectTurn('s1', 'm1')
     const pinnedHtml = renderToStaticMarkup(createElement(slice.ActivityPanel))
     assert.match(pinnedHtml, /Thought for 2s/, 'selectTurn switches to the chosen earlier turn')
-    assert.match(pinnedHtml, /Follow latest/, 'pinned older turn surfaces Follow latest action')
+    assert.match(
+      pinnedHtml,
+      /aria-label="Follow latest turn"/,
+      'pinned older turn surfaces compact Latest return button'
+    )
 
     slice.followLatest('s1')
     assert.deepEqual(slice.getSelection(), {
@@ -598,12 +693,17 @@ describe('slice-activity-inspector: ActivityPanel rendering', () => {
       sessionId: 's1',
       tab: 'activity',
     })
+    assert.deepEqual(slice.getTarget(), {
+      sessionId: 's1',
+      messageId: 'm2',
+      tab: 'activity',
+    })
     const resumedHtml = renderToStaticMarkup(createElement(slice.ActivityPanel))
     assert.match(resumedHtml, /Thought for 5s/, 'followLatest resumes tracking newest turn')
     slice.dispose()
   })
 
-  it('renders a structured EmptyState when opened on a brand-new chat with no activity', () => {
+  it('renders a calm outcome-oriented EmptyState on a brand-new chat with zero activity', () => {
     const log = new EventLog()
     const panel = fakePanel()
     const slice = createActivityInspectorSlice({
@@ -619,9 +719,10 @@ describe('slice-activity-inspector: ActivityPanel rendering', () => {
     })
 
     slice.togglePanel('s1')
+    assert.equal(slice.getTarget(), null, 'brand-new chat has no displayed turn target')
     const html = renderToStaticMarkup(createElement(slice.ActivityPanel))
     assert.match(html, /No activity yet/)
-    assert.match(html, /Tool steps, code runs, screenshots, reasoning, and sources/)
+    assert.match(html, /inspect the steps and evidence here/)
     slice.dispose()
   })
 })

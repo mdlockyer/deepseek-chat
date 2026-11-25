@@ -164,11 +164,19 @@ export const Tab = ({ value, icon, badge, disabled = false, className, children 
 export type TabPanelProps = {
   value: string
   keepMounted?: boolean
+  /** When true, omits ARIA tabpanel attributes while preserving the exact DOM wrapper for stable mounts. */
+  plain?: boolean
   className?: string
   children?: ReactNode
 }
 
-export const TabPanel = ({ value, keepMounted = false, className, children }: TabPanelProps) => {
+export const TabPanel = ({
+  value,
+  keepMounted = false,
+  plain = false,
+  className,
+  children,
+}: TabPanelProps) => {
   const ctx = useTabsContext()
   const selected = ctx.value === value
   if (!selected && !keepMounted) {
@@ -176,9 +184,9 @@ export const TabPanel = ({ value, keepMounted = false, className, children }: Ta
   }
   return (
     <div
-      role="tabpanel"
-      id={`${ctx.baseId}-panel-${value}`}
-      aria-labelledby={`${ctx.baseId}-tab-${value}`}
+      role={plain ? undefined : 'tabpanel'}
+      id={plain ? undefined : `${ctx.baseId}-panel-${value}`}
+      aria-labelledby={plain ? undefined : `${ctx.baseId}-tab-${value}`}
       hidden={!selected}
       className={clsx(styles.panel, className)}
     >
