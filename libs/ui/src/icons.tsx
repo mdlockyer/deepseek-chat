@@ -1120,3 +1120,43 @@ export const IconPhotoOutline14 = () => (
     />
   </svg>
 )
+
+export const IconPanelExpandOutline14 = () => (
+  <svg
+    aria-hidden="true"
+    focusable="false"
+    width={14}
+    height={14}
+    viewBox="0 0 14 14"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <path
+      d="M5.75 4.25L3 7L5.75 9.75M3.4 7H10.6M11.5 3V11"
+      stroke="currentColor"
+      strokeWidth="1.25"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+)
+
+export const IconPanelContractOutline14 = () => (
+  <svg
+    aria-hidden="true"
+    focusable="false"
+    width={14}
+    height={14}
+    viewBox="0 0 14 14"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <path
+      d="M8.25 4.25L11 7L8.25 9.75M10.6 7H3.4M2.5 3V11"
+      stroke="currentColor"
+      strokeWidth="1.25"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+)

@@ -231,6 +231,7 @@ export type ActivityStepDetailProps = {
   readonly capabilityState?: unknown
   readonly openLink: (event: MouseEvent, url: string) => void
   readonly openFile?: (sessionId: string, file: DeliveredFileRef) => void
+  readonly openVisual?: (visual: ToolStepVisualArtifact) => void
   readonly renderMarkdown: (props: {
     readonly content: string
     readonly cacheKey: string

@@ -83,13 +83,18 @@ describe('spine/design tokens.css contract', () => {
       ['--ui-text-primary', '--ui-surface-rail'],
       ['--ui-text-secondary', '--ui-surface-canvas'],
       ['--ui-text-secondary', '--ui-surface-popover'],
+      ['--ui-text-secondary', '--ui-surface-sunken'],
+      ['--ui-text-secondary', '--ui-surface-control'],
+      ['--ui-text-secondary', '--ui-surface-tag'],
       ['--ui-text-muted', '--ui-surface-canvas'],
       ['--ui-text-muted', '--ui-surface-rail'],
+      ['--ui-text-muted', '--ui-surface-sunken'],
       ['--ui-text-placeholder', '--ui-surface-input'],
       ['--ui-text-accent', '--ui-surface-canvas'],
       ['--ui-text-accent', '--ui-accent-soft'],
       ['--ui-text-danger', '--ui-surface-canvas'],
       ['--ui-text-danger', '--ui-surface-elevated'],
+      ['--ui-text-danger', '--ui-danger-soft'],
       ['--ui-text-on-accent', '--ui-accent-fill'],
       ['--ui-text-on-accent', '--ui-accent-hover'],
       ['--ui-text-on-danger', '--ui-danger-fill'],
@@ -105,6 +110,8 @@ describe('spine/design tokens.css contract', () => {
       ['--ui-focus-ring', '--ui-surface-canvas'],
       ['--ui-focus-ring', '--ui-surface-popover'],
       ['--ui-border-focus-neutral', '--ui-surface-input'],
+      ['--ui-border-accent', '--ui-surface-canvas'],
+      ['--ui-border-danger', '--ui-surface-canvas'],
       ['--ui-handle-fill', '--ui-surface-code'],
     ]
 
@@ -130,6 +137,30 @@ describe('spine/design tokens.css contract', () => {
           `[${themeName}] UI contrast ${fgVar} (${fg}) on ${bgVar} (${bg}) = ${ratio.toFixed(2)}:1 (< 3.0:1)`
         )
       }
+    }
+  })
+
+  it('maintains a perceptible three-tier text hierarchy (primary > secondary > muted) in light and dark themes', () => {
+    for (const [themeName, themeMap] of [
+      ['light', lightVars],
+      ['dark', darkVars],
+    ] as const) {
+      const primary = resolveVar('--ui-text-primary', themeMap, lightVars)
+      const secondary = resolveVar('--ui-text-secondary', themeMap, lightVars)
+      const muted = resolveVar('--ui-text-muted', themeMap, lightVars)
+      const canvas = resolveVar('--ui-surface-canvas', themeMap, lightVars)
+      const primaryVsCanvas = contrastRatio(primary, canvas)
+      const secondaryVsCanvas = contrastRatio(secondary, canvas)
+      const mutedVsCanvas = contrastRatio(muted, canvas)
+      assert.ok(
+        primaryVsCanvas > secondaryVsCanvas && secondaryVsCanvas > mutedVsCanvas,
+        `[${themeName}] text tiers must step down monotonically (${primaryVsCanvas.toFixed(2)} > ${secondaryVsCanvas.toFixed(2)} > ${mutedVsCanvas.toFixed(2)})`
+      )
+      const secondaryVsMuted = contrastRatio(secondary, muted)
+      assert.ok(
+        secondaryVsMuted >= 1.4,
+        `[${themeName}] secondary (${secondary}) vs muted (${muted}) separation = ${secondaryVsMuted.toFixed(2)}:1 (< 1.4:1)`
+      )
     }
   })
 })

@@ -76,6 +76,7 @@ export {
   TabPanel,
   Tabs,
   type TabListProps,
+  type TabListVariant,
   type TabPanelProps,
   type TabProps,
   type TabsProps,

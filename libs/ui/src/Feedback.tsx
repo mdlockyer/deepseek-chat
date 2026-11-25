@@ -33,6 +33,8 @@ export type BannerProps = {
   tone?: BannerTone
   icon?: ReactNode
   action?: ReactNode
+  compact?: boolean
+  role?: 'alert' | 'status' | 'note'
   className?: string
   children?: ReactNode
 }
@@ -44,12 +46,29 @@ const BANNER_TONE_CLASS: Record<BannerTone, string> = {
   success: styles.bannerSuccess,
 }
 
-export const Banner = ({ tone = 'info', icon, action, className, children }: BannerProps) => (
+export const Banner = ({
+  tone = 'info',
+  icon,
+  action,
+  compact = false,
+  role,
+  className,
+  children,
+}: BannerProps) => (
   <div
-    role={tone === 'error' ? 'alert' : 'status'}
-    className={clsx(styles.banner, BANNER_TONE_CLASS[tone], className)}
+    role={role ?? (tone === 'error' ? 'alert' : 'status')}
+    className={clsx(
+      styles.banner,
+      BANNER_TONE_CLASS[tone],
+      compact && styles.bannerCompact,
+      className
+    )}
   >
-    {icon ? <span className={styles.bannerIcon}>{icon}</span> : null}
+    {icon ? (
+      <span className={styles.bannerIcon} aria-hidden="true">
+        {icon}
+      </span>
+    ) : null}
     <div className={styles.bannerBody}>{children}</div>
     {action ? <div className={styles.bannerAction}>{action}</div> : null}
   </div>

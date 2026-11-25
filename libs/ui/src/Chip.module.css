@@ -52,6 +52,7 @@
     color: var(--ui-text-accent);
     border-color: var(--ui-border-accent);
     background-color: var(--ui-accent-soft);
+    font-weight: 600;
 
     @media (hover: hover) {
       &:hover:not(:disabled) {

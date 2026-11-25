@@ -57,13 +57,16 @@ export const Tabs = <T extends string = string>({
   )
 }
 
+export type TabListVariant = 'pill' | 'underline'
+
 export type TabListProps = {
   ariaLabel?: string
+  variant?: TabListVariant
   className?: string
   children?: ReactNode
 }
 
-export const TabList = ({ ariaLabel, className, children }: TabListProps) => {
+export const TabList = ({ ariaLabel, variant = 'pill', className, children }: TabListProps) => {
   const { orientation } = useTabsContext()
   const listRef = useRef<HTMLDivElement>(null)
 
@@ -113,6 +116,7 @@ export const TabList = ({ ariaLabel, className, children }: TabListProps) => {
       className={clsx(
         styles.list,
         orientation === 'vertical' ? styles.vertical : styles.horizontal,
+        variant === 'underline' && styles.underline,
         className
       )}
       onKeyDown={onKeyDown}

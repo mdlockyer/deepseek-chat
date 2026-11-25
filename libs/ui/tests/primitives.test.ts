@@ -131,16 +131,26 @@ describe('lib-ui primitives semantic & accessibility contracts', () => {
         { value: 'a', onChange: () => undefined },
         createElement(
           TabList,
-          { ariaLabel: 'Sections' },
+          { ariaLabel: 'Sections', variant: 'underline' },
           createElement(Tab, { value: 'a' }, 'First'),
           createElement(Tab, { value: 'b' }, 'Second')
         ),
-        createElement(TabPanel, { value: 'a' }, 'Panel A')
+        createElement(TabPanel, { value: 'a', keepMounted: true }, 'Panel A'),
+        createElement(TabPanel, { value: 'b', keepMounted: true }, 'Panel B')
       )
     )
     assert.match(tabsHtml, /role="tablist"/)
     assert.match(tabsHtml, /role="tab"[^>]*aria-selected="true"/)
     assert.match(tabsHtml, /role="tabpanel"/)
+    assert.match(tabsHtml, /hidden=""[^>]*>Panel B</)
+  })
+
+  it('supports compact Banner with explicit role="note" for non-interruptive inline errors', () => {
+    const html = renderToStaticMarkup(
+      createElement(Banner, { tone: 'error', compact: true, role: 'note' }, 'Refused private IP')
+    )
+    assert.match(html, /role="note"/)
+    assert.match(html, /Refused private IP/)
   })
 
   it('renders Dialog as a native <dialog> without redundant role="dialog" or aria-modal', () => {

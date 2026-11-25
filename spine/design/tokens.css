@@ -108,7 +108,7 @@
 
     /* Text & foreground */
     --ui-text-primary: var(--_p-neutral-1000);
-    --ui-text-secondary: var(--_p-neutral-700);
+    --ui-text-secondary: var(--_p-neutral-750);
     --ui-text-muted: var(--_p-neutral-550);
     --ui-text-placeholder: var(--_p-neutral-550);
     --ui-text-disabled: var(--_p-neutral-400);
@@ -120,7 +120,7 @@
     --ui-text-on-toast: var(--_p-neutral-50);
     --ui-text-on-toast-link: var(--_p-blue-300);
     --ui-text-accent: var(--_p-blue-550);
-    --ui-text-danger: var(--_p-red-600);
+    --ui-text-danger: var(--_p-red-700);
     --ui-text-success: var(--_p-green-600);
     --ui-text-warning: var(--_p-amber-700);
 
@@ -132,7 +132,7 @@
     --ui-border-inverse: rgba(15, 17, 21, 0);
     --ui-border-hover-neutral: var(--_p-neutral-300);
     --ui-border-focus-neutral: var(--_p-neutral-600);
-    --ui-border-accent: var(--_p-blue-300);
+    --ui-border-accent: var(--_p-blue-450);
     --ui-border-danger: var(--_p-red-600);
     --ui-border-on-scrim: rgba(255, 255, 255, 0.4);
 
