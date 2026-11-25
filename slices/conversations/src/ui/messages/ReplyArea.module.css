@@ -380,50 +380,33 @@
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: var(--ui-space-2);
+    gap: var(--ui-space-1);
     padding-top: var(--ui-space-0-5);
   }
 
-  .traceFooterButton,
-  .inspectButton {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--ui-space-1-5);
-    min-height: 26px;
-    padding: var(--ui-space-0-5) var(--ui-space-2);
-    border: none;
-    border-radius: var(--ui-radius-xs);
-    background: transparent;
+  .traceFooterAction {
     color: var(--ui-text-muted);
-    font: var(--ui-type-caption-strong);
-    cursor: pointer;
-    transition:
-      background-color var(--ui-duration-fast) var(--ui-ease-standard),
-      color var(--ui-duration-fast) var(--ui-ease-standard);
 
-    > svg {
-      width: 14px;
-      height: 14px;
-      flex-shrink: 0;
-    }
-
-    &:hover {
-      background: var(--ui-interactive-hover);
-      color: var(--ui-text-primary);
-    }
-
-    &:focus-visible {
-      outline: 2px solid var(--ui-focus-ring);
-      outline-offset: 1px;
+    @media (hover: hover) {
+      &:hover {
+        color: var(--ui-text-primary);
+      }
     }
   }
 
   .traceFooter > :first-child {
-    margin-left: calc(var(--ui-space-2) * -1);
+    margin-left: calc(var(--ui-space-3) * -1);
   }
 
   .inspectButtonActive {
     background: var(--ui-accent-soft);
     color: var(--ui-text-accent);
+
+    @media (hover: hover) {
+      &:hover {
+        background: var(--ui-accent-soft-hover);
+        color: var(--ui-text-accent);
+      }
+    }
   }
 }

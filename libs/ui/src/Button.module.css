@@ -40,12 +40,6 @@
   .m {
     height: var(--ui-control-md);
     gap: var(--ui-space-1);
-
-    svg {
-      width: 14px;
-      height: 14px;
-      flex-shrink: 0;
-    }
   }
 
   .s {
@@ -53,6 +47,15 @@
     min-width: 58px;
     padding: 0 var(--ui-space-3);
     font: var(--ui-type-caption-strong);
+  }
+
+  .m,
+  .s {
+    svg {
+      width: 14px;
+      height: 14px;
+      flex-shrink: 0;
+    }
   }
 
   .block {

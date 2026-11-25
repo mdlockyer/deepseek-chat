@@ -62,7 +62,19 @@ export const MessageList = ({
     if (!content || !scroll) {
       return
     }
-    const observer = new ResizeObserver(scrollToBottom)
+    let lastContentHeight = content.offsetHeight
+    let lastScrollHeight = scroll.clientHeight
+    const observer = new ResizeObserver(() => {
+      const nextContentHeight = content.offsetHeight
+      const nextScrollHeight = scroll.clientHeight
+      const grew = nextContentHeight > lastContentHeight
+      const viewportChanged = nextScrollHeight !== lastScrollHeight
+      lastContentHeight = nextContentHeight
+      lastScrollHeight = nextScrollHeight
+      if (grew || viewportChanged) {
+        scrollToBottom()
+      }
+    })
     observer.observe(content)
     observer.observe(scroll)
     return () => observer.disconnect()

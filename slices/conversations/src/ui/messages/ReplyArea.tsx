@@ -1,12 +1,13 @@
 import type { DeliveredFileRef, LiveTrack } from '@deepseek-chat/lib-tools'
 import {
+  Button,
   IconCheckedOutline14,
   IconChevronDownOutline14,
   IconChevronRightOutline14,
   IconPanelRightOutline16,
 } from '@deepseek-chat/lib-ui'
 import clsx from 'clsx'
-import { memo, useEffect, useState } from 'react'
+import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { formatSize, getExtension } from '../../attachments.js'
 import { useConversations } from '../../context.js'
 import { useTranslate } from '../../messages.js'
@@ -243,6 +244,16 @@ export const ReplyArea = memo(function ReplyArea({
   )
 })
 
+const findScrollParent = (el: HTMLElement): HTMLElement | null => {
+  for (let node = el.parentElement; node; node = node.parentElement) {
+    const { overflowY } = getComputedStyle(node)
+    if ((overflowY === 'auto' || overflowY === 'scroll') && node.scrollHeight > node.clientHeight) {
+      return node
+    }
+  }
+  return null
+}
+
 const InlineTraceInlay = ({
   messageId,
   trace,
@@ -260,6 +271,34 @@ const InlineTraceInlay = ({
 }) => {
   const t = useTranslate()
   const [showAll, setShowAll] = useState(false)
+  const toggleMoreRef = useRef<HTMLButtonElement | null>(null)
+  const collapseAnchorRef = useRef<{ scrollEl: HTMLElement; top: number } | null>(null)
+
+  useLayoutEffect(() => {
+    const anchor = collapseAnchorRef.current
+    if (!anchor) {
+      return
+    }
+    collapseAnchorRef.current = null
+    const button = toggleMoreRef.current
+    if (!button) {
+      return
+    }
+    const delta = button.getBoundingClientRect().top - anchor.top
+    if (delta !== 0) {
+      anchor.scrollEl.scrollTop += delta
+    }
+  }, [showAll])
+
+  const collapseSteps = () => {
+    const button = toggleMoreRef.current
+    const scrollEl = button ? findScrollParent(button) : null
+    if (button && scrollEl) {
+      collapseAnchorRef.current = { scrollEl, top: button.getBoundingClientRect().top }
+    }
+    setShowAll(false)
+  }
+
   const preview = showAll
     ? {
         entries: trace.items.map((item) => ({ item, gapBefore: false })),
@@ -315,9 +354,11 @@ const InlineTraceInlay = ({
       {showFooter ? (
         <div className={styles.traceFooter}>
           {preview.hiddenCount > 0 ? (
-            <button
-              type="button"
-              className={styles.traceFooterButton}
+            <Button
+              ref={toggleMoreRef}
+              variant="ghost"
+              size="s"
+              className={styles.traceFooterAction}
               onClick={() => setShowAll(true)}
             >
               {t(
@@ -326,26 +367,29 @@ const InlineTraceInlay = ({
                   : 'activityShowMoreStepsMany',
                 { count: preview.hiddenCount }
               )}
-            </button>
+            </Button>
           ) : canCollapseList ? (
-            <button
-              type="button"
-              className={styles.traceFooterButton}
-              onClick={() => setShowAll(false)}
+            <Button
+              ref={toggleMoreRef}
+              variant="ghost"
+              size="s"
+              className={styles.traceFooterAction}
+              onClick={collapseSteps}
             >
               {t('activityShowFewerSteps')}
-            </button>
+            </Button>
           ) : null}
           {trace.hasRichDetails ? (
-            <button
-              type="button"
-              className={clsx(styles.inspectButton, isInspecting && styles.inspectButtonActive)}
+            <Button
+              variant="ghost"
+              size="s"
+              icon={<IconPanelRightOutline16 />}
+              className={clsx(styles.traceFooterAction, isInspecting && styles.inspectButtonActive)}
               aria-pressed={isInspecting}
               onClick={onInspect}
             >
-              <IconPanelRightOutline16 />
-              <span>{isInspecting ? t('activityViewingInPanel') : t('activityOpenInPanel')}</span>
-            </button>
+              {isInspecting ? t('activityViewingInPanel') : t('activityOpenInPanel')}
+            </Button>
           ) : null}
         </div>
       ) : null}
