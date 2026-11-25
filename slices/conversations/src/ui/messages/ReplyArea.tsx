@@ -94,7 +94,8 @@ export const ReplyArea = memo(function ReplyArea({
   }
 
   const toggleExpanded = () => setExpanded((value) => !value)
-  const inspectActivity = () => requestTurnInspection(sessionId, message.id, 'activity')
+  const inspectActivity = (callId?: string) =>
+    requestTurnInspection(sessionId, message.id, 'activity', callId)
   const trace = expanded ? buildInlineTrace(view) : null
 
   const trackStatusLabel = (track: LiveTrack): string | null => {
@@ -191,7 +192,7 @@ export const ReplyArea = memo(function ReplyArea({
                 <button
                   type="button"
                   className={styles.liveTrackOverflow}
-                  onClick={inspectActivity}
+                  onClick={() => inspectActivity()}
                 >
                   {t('activityMoreTracks', { count: strip.overflowTracks })}
                 </button>
@@ -267,7 +268,7 @@ const InlineTraceInlay = ({
   streaming: boolean
   thinkingOnly: boolean
   isInspecting: boolean
-  onInspect: () => void
+  onInspect: (callId?: string) => void
 }) => {
   const t = useTranslate()
   const [showAll, setShowAll] = useState(false)
@@ -307,6 +308,7 @@ const InlineTraceInlay = ({
     : selectInlineTracePreview(trace.items)
   const canCollapseList = showAll && trace.items.length > INLINE_TRACE_PREVIEW_LIMIT
   const showFooter = preview.hiddenCount > 0 || canCollapseList || trace.hasRichDetails
+  const hasIcons = preview.entries.some(({ item }) => item.icon !== undefined && item.icon !== null)
 
   return (
     <div className={styles.inlineTrace}>
@@ -321,24 +323,51 @@ const InlineTraceInlay = ({
         </div>
       ) : trace.items.length > 0 ? (
         <ul className={styles.traceList}>
-          {preview.entries.map(({ item, gapBefore }) => (
-            <li
-              key={item.key}
-              className={clsx(
-                styles.traceItem,
-                gapBefore && styles.traceItemGap,
-                item.status === 'running' && styles.traceItemRunning
-              )}
-            >
-              <div className={styles.traceRow}>
-                <span className={styles.traceLabel}>{item.label}</span>
-                {item.status === 'running' ? (
-                  <span className={styles.traceRunningTag}>{t('activityTrackRunning')}</span>
-                ) : null}
-              </div>
-              {item.errorText ? <div className={styles.traceError}>{item.errorText}</div> : null}
-            </li>
-          ))}
+          {preview.entries.map(({ item, gapBefore }, index) => {
+            const prevLane = index > 0 ? preview.entries[index - 1].item.lane : undefined
+            const laneBreak =
+              !gapBefore &&
+              index > 0 &&
+              Boolean(item.lane) &&
+              Boolean(prevLane) &&
+              item.lane !== prevLane
+            return (
+              <li
+                key={item.key}
+                className={clsx(
+                  styles.traceItem,
+                  gapBefore && styles.traceItemGap,
+                  laneBreak && styles.traceItemLaneBreak,
+                  item.status === 'running' && styles.traceItemRunning
+                )}
+              >
+                <button
+                  type="button"
+                  className={styles.traceRowButton}
+                  onClick={() => onInspect(item.callId)}
+                >
+                  <span className={styles.traceRow}>
+                    {hasIcons ? (
+                      <span className={styles.traceIcon} aria-hidden="true">
+                        {item.icon}
+                      </span>
+                    ) : null}
+                    <span className={styles.traceLabel}>{item.label}</span>
+                    {item.status === 'running' ? (
+                      <span className={styles.traceRunningTag}>{t('activityTrackRunning')}</span>
+                    ) : null}
+                  </span>
+                  {item.errorText ? (
+                    <span
+                      className={clsx(styles.traceError, hasIcons && styles.traceErrorIndented)}
+                    >
+                      {item.errorText}
+                    </span>
+                  ) : null}
+                </button>
+              </li>
+            )
+          })}
         </ul>
       ) : trace.thinkingMarkdown ? (
         <div className={clsx(styles.inlineThinking, 'ds-think-content')}>
@@ -386,7 +415,7 @@ const InlineTraceInlay = ({
               icon={<IconPanelRightOutline16 />}
               className={clsx(styles.traceFooterAction, isInspecting && styles.inspectButtonActive)}
               aria-pressed={isInspecting}
-              onClick={onInspect}
+              onClick={() => onInspect()}
             >
               {isInspecting ? t('activityViewingInPanel') : t('activityOpenInPanel')}
             </Button>

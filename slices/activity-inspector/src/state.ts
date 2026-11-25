@@ -16,6 +16,17 @@ type ActivityPanelStoreState = {
 
 export const createActivityPanelState = (panel: PanelSlot, log: EventLog) => {
   const activeSessionId = () => panel.getLayout().activeSessionId
+  let nextFocusNonce = 0
+
+  const stripFocus = (selection: ActivitySelection): ActivitySelection =>
+    selection.kind === 'pinned'
+      ? {
+          kind: 'pinned',
+          sessionId: selection.sessionId,
+          messageId: selection.messageId,
+          tab: selection.tab,
+        }
+      : selection
 
   const useStore = create<ActivityPanelStoreState>(() => ({
     selection: null,
@@ -24,12 +35,12 @@ export const createActivityPanelState = (panel: PanelSlot, log: EventLog) => {
 
   const openForSession = (sessionId: string, tab?: ActivityTab) => {
     const prev = useStore.getState().selection
-    const next: ActivitySelection =
-      prev && prev.sessionId === sessionId
-        ? tab
-          ? { ...prev, tab }
-          : prev
-        : { kind: 'follow_latest', sessionId, tab: tab ?? 'activity' }
+    const cleanPrev = prev && prev.sessionId === sessionId ? stripFocus(prev) : null
+    const next: ActivitySelection = cleanPrev
+      ? tab
+        ? { ...cleanPrev, tab }
+        : cleanPrev
+      : { kind: 'follow_latest', sessionId, tab: tab ?? 'activity' }
     panel.open(sessionId)
     useStore.setState({ selection: next, panelOpen: panel.isOpen(sessionId) })
   }
@@ -43,9 +54,10 @@ export const createActivityPanelState = (panel: PanelSlot, log: EventLog) => {
     openForSession(sessionId)
   }
 
-  const toggleTurn = (sessionId: string, messageId: string, tab: ActivityTab) => {
+  const toggleTurn = (sessionId: string, messageId: string, tab: ActivityTab, callId?: string) => {
     const { selection } = useStore.getState()
     if (
+      !callId &&
       selection?.kind === 'pinned' &&
       selection.sessionId === sessionId &&
       selection.messageId === messageId &&
@@ -56,7 +68,16 @@ export const createActivityPanelState = (panel: PanelSlot, log: EventLog) => {
       useStore.setState({ selection: null, panelOpen: false })
       return
     }
-    const next: ActivitySelection = { kind: 'pinned', sessionId, messageId, tab }
+    const next: ActivitySelection = callId
+      ? {
+          kind: 'pinned',
+          sessionId,
+          messageId,
+          tab,
+          focusedCallId: callId,
+          focusNonce: ++nextFocusNonce,
+        }
+      : { kind: 'pinned', sessionId, messageId, tab }
     panel.open(sessionId)
     useStore.setState({ selection: next, panelOpen: panel.isOpen(sessionId) })
   }
@@ -131,7 +152,7 @@ export const createActivityPanelState = (panel: PanelSlot, log: EventLog) => {
       useStore.setState({ selection: null, panelOpen: false })
     }),
     log.subscribe<TurnInspectionRequested>('TurnInspectionRequested', ({ fact }) => {
-      toggleTurn(fact.sessionId, fact.messageId, fact.tab)
+      toggleTurn(fact.sessionId, fact.messageId, fact.tab, fact.callId)
     }),
   ]
 

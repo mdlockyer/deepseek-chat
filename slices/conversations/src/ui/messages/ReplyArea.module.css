@@ -327,53 +327,116 @@
   .traceList {
     display: flex;
     flex-direction: column;
-    gap: var(--ui-space-1-5);
+    gap: var(--ui-space-0-5);
     margin: 0;
-    padding: 0 0 0 var(--ui-space-3);
+    padding: 0;
     list-style: none;
   }
 
   .traceItem {
-    display: flex;
-    flex-direction: column;
-    gap: var(--ui-space-0-5);
-    font: var(--ui-type-caption);
+    display: block;
     color: var(--ui-text-secondary);
   }
 
   .traceItemGap {
-    margin-top: var(--ui-space-1);
+    margin-top: var(--ui-space-1-5);
     padding-top: var(--ui-space-1-5);
     border-top: 1px solid var(--ui-border-subtle);
+  }
+
+  .traceItemLaneBreak {
+    margin-top: var(--ui-space-2);
   }
 
   .traceItemRunning {
     color: var(--ui-text-primary);
   }
 
+  .traceRowButton {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ui-space-0-5);
+    width: 100%;
+    min-height: 32px;
+    padding: var(--ui-space-1-5) var(--ui-space-3);
+    border: none;
+    border-radius: var(--ui-radius-md);
+    background: transparent;
+    color: inherit;
+    font: var(--ui-type-caption);
+    text-align: left;
+    cursor: pointer;
+    transition:
+      background-color var(--ui-duration-fast) var(--ui-ease-standard),
+      color var(--ui-duration-fast) var(--ui-ease-standard);
+
+    &:hover {
+      background: var(--ui-interactive-hover);
+      color: var(--ui-text-primary);
+
+      .traceIcon {
+        color: var(--ui-text-secondary);
+      }
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--ui-focus-ring);
+      outline-offset: 1px;
+    }
+  }
+
+  @media (pointer: coarse) {
+    .traceRowButton {
+      min-height: var(--ui-control-xl);
+    }
+  }
+
   .traceRow {
     display: flex;
-    align-items: baseline;
-    gap: var(--ui-space-1-5);
+    align-items: flex-start;
+    gap: var(--ui-space-2);
+    width: 100%;
     min-width: 0;
   }
 
+  .traceIcon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 16px;
+    height: 20px;
+    color: var(--ui-text-muted);
+    transition: color var(--ui-duration-fast) var(--ui-ease-standard);
+
+    > svg {
+      width: 14px;
+      height: 14px;
+    }
+  }
+
   .traceLabel {
+    flex: 1;
     min-width: 0;
     overflow-wrap: anywhere;
   }
 
   .traceRunningTag {
     flex-shrink: 0;
+    padding-top: 2px;
     font: var(--ui-type-micro);
     color: var(--ui-text-muted);
   }
 
   .traceError {
-    padding-left: var(--ui-space-3);
+    display: block;
     font: var(--ui-type-micro);
     color: var(--ui-text-muted);
     overflow-wrap: anywhere;
+  }
+
+  .traceErrorIndented {
+    padding-left: calc(16px + var(--ui-space-2));
   }
 
   .traceFooter {

@@ -1,4 +1,8 @@
-import { IconChevronDownOutline14, IconChevronRightOutline14 } from '@deepseek-chat/lib-ui'
+import {
+  IconChevronDownOutline14,
+  IconChevronRightOutline14,
+  IconThinkOutline14,
+} from '@deepseek-chat/lib-ui'
 import type {
   ActivityStepRenderProps,
   ArchiveFragment,
@@ -8,7 +12,7 @@ import type {
   ToolStepPresenter,
 } from '@deepseek-chat/lib-tools'
 import clsx from 'clsx'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { subagentsMessages } from './messages.js'
 import { POST_TOOL_NAME, WAIT_TOOL_NAME } from './tools.js'
 import { isSubagentsReplyState, type AgentRun, type ChildBlock } from './types.js'
@@ -52,9 +56,25 @@ export const serializeSubagentForArchive = (
   return []
 }
 
-const SubagentRow = ({ agent }: { agent: AgentRun }) => {
+const SubagentRow = ({
+  agent,
+  focusedCallId,
+  focusNonce,
+}: {
+  agent: AgentRun
+  focusedCallId?: string | null
+  focusNonce?: number
+}) => {
   const t = subagentsMessages.useTranslate()
-  const [open, setOpen] = useState(false)
+  const isFocused = Boolean(focusedCallId && focusedCallId === agent.startedBy)
+  const [open, setOpen] = useState(isFocused)
+
+  useEffect(() => {
+    if (focusedCallId === agent.startedBy) {
+      setOpen(true)
+    }
+  }, [focusedCallId, focusNonce, agent.startedBy])
+
   const isRunning = agent.state.status === 'running'
   const isFailed = agent.state.status === 'failed'
   const statusKey = isRunning
@@ -90,7 +110,7 @@ const SubagentRow = ({ agent }: { agent: AgentRun }) => {
   )
 
   return (
-    <div className={styles.row}>
+    <div className={styles.row} data-activity-call-id={agent.startedBy}>
       {expandable ? (
         <button
           type="button"
@@ -131,7 +151,12 @@ const SubagentRow = ({ agent }: { agent: AgentRun }) => {
   )
 }
 
-const SubagentsActivityView = ({ entries, capabilityState }: ActivityStepRenderProps) => {
+const SubagentsActivityView = ({
+  entries,
+  capabilityState,
+  focusedCallId,
+  focusNonce,
+}: ActivityStepRenderProps) => {
   const t = subagentsMessages.useTranslate()
   const state = isSubagentsReplyState(capabilityState) ? capabilityState : null
   const callIds = new Set(entries.map((entry) => entry.call.id))
@@ -146,12 +171,17 @@ const SubagentsActivityView = ({ entries, capabilityState }: ActivityStepRenderP
     <div className={styles.root}>
       <div className={styles.header}>
         <span>{t('phaseTitle')}</span>
-        {agents.length > 0 ? <span className={styles.meta}>· {agents.length}</span> : null}
+        {agents.length > 0 ? <span className={styles.meta}>{agents.length}</span> : null}
       </div>
       {agents.length > 0 ? (
         <div className={styles.list}>
           {agents.map((agent) => (
-            <SubagentRow key={agent.runId} agent={agent} />
+            <SubagentRow
+              key={agent.runId}
+              agent={agent}
+              focusedCallId={focusedCallId}
+              focusNonce={focusNonce}
+            />
           ))}
         </div>
       ) : null}
@@ -206,6 +236,7 @@ export const subagentsPresenter: ToolStepPresenter = {
       : !result || result.status === 'running'
     return {
       lane: 'subagents',
+      icon: <IconThinkOutline14 />,
       liveVerb: subagentsMessages.translate('liveWorking'),
       stillRunning: running && streaming,
       failed: agent ? agent.state.status === 'failed' : Boolean(result && result.status !== 'ok'),

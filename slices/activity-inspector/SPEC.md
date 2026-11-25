@@ -34,16 +34,22 @@ Pure exports: `buildActivityTimeline`, `extractTurnSources`, `SiteLogo`, `Source
 1. **First-class header toggle.** Clicking `HeaderToggle` opens Activity in `follow_latest` mode
    (showing the currently streaming turn or latest turn with activity, or an explanatory empty
    state on a brand-new chat) and closes it when already open.
-2. **Turn pinning.** `TurnInspectionRequested` pins `(sessionId, messageId, tab)` and opens the
-   panel slot; repeating the exact same pinned request while open toggles closed.
+2. **Turn pinning & step targeting.** `TurnInspectionRequested` pins `(sessionId, messageId, tab)`
+   and opens the panel slot. When `callId` is omitted, repeating the exact same pinned request while
+   open toggles closed. When `callId` is provided, the panel always opens (or stays open), records
+   `focusedCallId` with a monotonically bumped `focusNonce`, passes them to every presenter, and
+   scrolls and briefly highlights the matching `[data-activity-call-id]` element.
 3. **Displacement isolation.** When another right-hand panel displaces Activity on the same
    session, `useActiveTarget()` / `getTarget()` reports `null` while hidden, and clicking
-   `HeaderToggle` again resumes that session's selection. Switching chats (`ActiveSessionChanged`),
-   deleting the chat (`SessionDeleted`), or replacing history (`SessionHistoryReplaced`) cleans up
-   non-matching selection state.
-4. **Zero sibling coupling.** Tool steps are grouped by `ToolStepSummary.lane` and rendered through
-   the owning capability's `ToolStepPresenter`. Steps marked `hiddenInTimeline` fold out; steps
-   whose capability slice is unmounted render via the built-in generic fallback view.
+   `HeaderToggle` again resumes that session's selection (clearing any stale `focusedCallId`).
+   Switching chats (`ActiveSessionChanged`), deleting the chat (`SessionDeleted`), or replacing
+   history (`SessionHistoryReplaced`) cleans up non-matching selection state.
+4. **Zero sibling coupling & collapsed-by-default items.** Tool steps are grouped by
+   `ToolStepSummary.lane` and rendered through the owning capability's `ToolStepPresenter`. Steps
+   marked `hiddenInTimeline` fold out; steps whose capability slice is unmounted render via the
+   built-in generic fallback view. Reasoning, server search, generic fallback rows, and slice
+   presenters start collapsed by default and expand only on user click or when `focusedCallId`
+   targets them.
 5. **Sources ordering.** Deduplicated sources preserve first-seen 1-based citation numbers; the
    `Sources` tab lists cited sources first followed by all remaining uncited sources.
 6. **Multi-instance isolation.** All Zustand state and subscriptions live inside the factory closure.

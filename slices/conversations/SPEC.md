@@ -106,8 +106,10 @@ The package also exports pure model functions (`branches`, `reply`, `view`, `wor
    by `ToolStepPresenter.summarize` and `result.frontStageNote`, emitting middot-free natural-language
    summaries (never appending thinking duration onto tool counts and never escalating recovered
    mid-turn tool errors into transcript-level warnings). `buildInlineTrace` and
-   `selectInlineTracePreview` project domain-blind plain-prose steps without step numbers or per-step
-   durations, and bounded previews always retain currently running steps in chronological order.
+   `selectInlineTracePreview` project domain-blind plain-prose steps (with optional `callId`,
+   `lane`, and presenter-supplied `icon`, and without step numbers or per-step durations); bounded
+   previews always retain currently running steps in chronological order, and clicking an inline
+   trace row publishes `TurnInspectionRequested` with that step's `callId`.
 10. **Living session titles.** After a reply finishes normally, if the title is unlocked and inline
     `delta.title` did not already name turn 1, a detached cache-riding fork updates the title
     without altering `session.messages` or `updatedAt`. Any user mutation cancels an in-flight fork.

@@ -70,7 +70,12 @@ const ReasoningSection = ({
       : t('reasoningTitle')
   return (
     <div className={styles.phase}>
-      <button type="button" className={styles.reasoningToggle} onClick={() => setOpen((v) => !v)}>
+      <button
+        type="button"
+        className={styles.reasoningToggle}
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+      >
         <IconThinkOutline16 />
         <span>{heading}</span>
         {open ? <IconChevronDownOutline14 /> : <IconChevronRightOutline14 />}
@@ -83,6 +88,37 @@ const ReasoningSection = ({
             cacheKey={`${messageId}-think`}
             disableLink={false}
           />
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+const ServerSearchSection = ({ queries }: { queries: readonly string[] }) => {
+  const t = activityInspectorMessages.useTranslate()
+  const [open, setOpen] = useState(false)
+  return (
+    <div className={styles.phase}>
+      <button
+        type="button"
+        className={styles.sectionToggle}
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <span className={styles.phaseTitle}>
+          <IconSearchOutline16 />
+          <span>{t('serverSearchTitle')}</span>
+          <span className={styles.sectionMeta}>{queries.length}</span>
+        </span>
+        <span className={styles.sectionChevron} aria-hidden="true">
+          {open ? <IconChevronDownOutline14 /> : <IconChevronRightOutline14 />}
+        </span>
+      </button>
+      {open ? (
+        <div className={styles.queryList}>
+          {queries.map((q) => (
+            <div key={q}>{q}</div>
+          ))}
         </div>
       ) : null}
     </div>
@@ -240,6 +276,54 @@ export const createActivityPanel = (state: ActivityPanelState, deps: ActivityIns
 
     const hasSources = (timeline?.sources.all.length ?? 0) > 0
     const effectiveTab = hasSources ? (activeSelection?.tab ?? 'activity') : 'activity'
+    const focusedCallId =
+      activeSelection?.kind === 'pinned' ? (activeSelection.focusedCallId ?? null) : null
+    const focusNonce = activeSelection?.kind === 'pinned' ? (activeSelection.focusNonce ?? 0) : 0
+    const contentRef = useRef<HTMLDivElement | null>(null)
+
+    useEffect(() => {
+      if (!focusedCallId || effectiveTab !== 'activity') {
+        return
+      }
+      const container = contentRef.current
+      if (!container) {
+        return
+      }
+      let highlightTimer: ReturnType<typeof setTimeout> | undefined
+      let targetEl: HTMLElement | null = null
+      const escapeAttr = (value: string) =>
+        typeof CSS !== 'undefined' && typeof CSS.escape === 'function'
+          ? CSS.escape(value)
+          : value.replace(/["\\]/g, '\\$&')
+      const frameId = requestAnimationFrame(() => {
+        const found = container.querySelector<HTMLElement>(
+          `[data-activity-call-id="${escapeAttr(focusedCallId)}"]`
+        )
+        if (!found) {
+          return
+        }
+        targetEl = found
+        const reducedMotion =
+          typeof window !== 'undefined' &&
+          typeof window.matchMedia === 'function' &&
+          window.matchMedia('(prefers-reduced-motion: reduce)').matches
+        found.scrollIntoView({ block: 'nearest', behavior: reducedMotion ? 'auto' : 'smooth' })
+        found.removeAttribute('data-activity-focused')
+        void found.offsetWidth
+        found.setAttribute('data-activity-focused', 'true')
+        highlightTimer = setTimeout(() => {
+          found.removeAttribute('data-activity-focused')
+        }, 1200)
+      })
+      return () => {
+        cancelAnimationFrame(frameId)
+        if (highlightTimer !== undefined) {
+          clearTimeout(highlightTimer)
+        }
+        targetEl?.removeAttribute('data-activity-focused')
+      }
+    }, [focusedCallId, focusNonce, effectiveTab, turn?.messageId])
+
     const turnOptions = useMemo(
       () =>
         activityTurns.map((item) => ({
@@ -305,7 +389,7 @@ export const createActivityPanel = (state: ActivityPanelState, deps: ActivityIns
           </div>
         ) : null}
 
-        <div className={styles.content}>
+        <div ref={contentRef} className={styles.content}>
           {!turn || !timeline ? (
             <div className={styles.empty}>
               {activityTurns.length === 0 ? t('emptySession') : t('empty')}
@@ -337,19 +421,7 @@ export const createActivityPanel = (state: ActivityPanelState, deps: ActivityIns
                   )
                 }
                 if (phase.type === 'server_search') {
-                  return (
-                    <div key={phase.key} className={styles.phase}>
-                      <div className={styles.phaseTitle}>
-                        <IconSearchOutline16 />
-                        <span>{t('serverSearchTitle')}</span>
-                      </div>
-                      <div className={styles.queryList}>
-                        {phase.queries.map((q) => (
-                          <div key={q}>{q}</div>
-                        ))}
-                      </div>
-                    </div>
-                  )
+                  return <ServerSearchSection key={phase.key} queries={phase.queries} />
                 }
                 const PresenterView = phase.presenter?.renderActivity ?? GenericStepView
                 const capState = phase.capabilityId
@@ -367,6 +439,8 @@ export const createActivityPanel = (state: ActivityPanelState, deps: ActivityIns
                       openLink={openLink}
                       openFile={deps.openFile}
                       renderMarkdown={renderMarkdown}
+                      focusedCallId={focusedCallId}
+                      focusNonce={focusNonce}
                     />
                   </div>
                 )
@@ -377,7 +451,7 @@ export const createActivityPanel = (state: ActivityPanelState, deps: ActivityIns
                   messageId={turn.messageId}
                   markdown={timeline.thinkingBlocks.map((b) => b.thinking).join('\n\n')}
                   seconds={timeline.thinkingSeconds}
-                  defaultOpen={timeline.thinkingOnly}
+                  defaultOpen={false}
                   loading={
                     live &&
                     timeline.thinkingBlocks.at(-1)?.startedAt !== undefined &&

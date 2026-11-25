@@ -1,4 +1,6 @@
 import type { FrontStageNote, LiveTrack } from '@deepseek-chat/lib-tools'
+import { IconGlobeLanguageOutline14, IconSearchOutline16 } from '@deepseek-chat/lib-ui'
+import { createElement, type ReactNode } from 'react'
 import { translate } from './messages.js'
 import type { AssistantMessage } from './types.js'
 import {
@@ -39,6 +41,9 @@ export type FrontStageNoteEntry = {
 
 export type InlineTraceItem = {
   readonly key: string
+  readonly callId?: string
+  readonly lane?: string
+  readonly icon?: ReactNode
   readonly label: string
   readonly status: 'running' | 'done' | 'failed'
   readonly errorText?: string
@@ -401,7 +406,13 @@ export const buildInlineTrace = (view: ReplyView): InlineTrace => {
       step.queries.forEach((query, index) => {
         const trimmed = query.trim()
         if (trimmed) {
-          items.push({ key: `${step.key}-q-${index}`, label: trimmed, status })
+          items.push({
+            key: `${step.key}-q-${index}`,
+            lane: 'search',
+            icon: createElement(IconSearchOutline16),
+            label: trimmed,
+            status,
+          })
         }
       })
       continue
@@ -410,7 +421,13 @@ export const buildInlineTrace = (view: ReplyView): InlineTrace => {
       for (const page of step.pages) {
         const label = page.title || page.url
         if (label) {
-          items.push({ key: page.id, label, status: mapServerStatus(page.status) })
+          items.push({
+            key: page.id,
+            lane: 'browse',
+            icon: createElement(IconGlobeLanguageOutline14),
+            label,
+            status: mapServerStatus(page.status),
+          })
         }
       }
       continue
@@ -419,7 +436,13 @@ export const buildInlineTrace = (view: ReplyView): InlineTrace => {
       for (const link of step.links) {
         const label = link.title || link.url
         if (label) {
-          items.push({ key: link.id, label, status: mapServerStatus(link.status) })
+          items.push({
+            key: link.id,
+            lane: 'browse',
+            icon: createElement(IconGlobeLanguageOutline14),
+            label,
+            status: mapServerStatus(link.status),
+          })
         }
       }
       continue
@@ -429,6 +452,8 @@ export const buildInlineTrace = (view: ReplyView): InlineTrace => {
         if (pattern.pattern) {
           items.push({
             key: pattern.id,
+            lane: 'search',
+            icon: createElement(IconSearchOutline16),
             label: pattern.pattern,
             status: mapServerStatus(pattern.status),
           })
@@ -450,6 +475,9 @@ export const buildInlineTrace = (view: ReplyView): InlineTrace => {
       const errorText = status === 'failed' ? firstErrorLine(step.result?.content) : undefined
       items.push({
         key: step.key,
+        callId: step.call.id,
+        ...(step.summary?.lane ? { lane: step.summary.lane } : {}),
+        ...(step.summary?.icon !== undefined ? { icon: step.summary.icon } : {}),
         label,
         status,
         ...(errorText ? { errorText } : {}),

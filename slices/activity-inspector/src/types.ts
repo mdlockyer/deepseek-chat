@@ -28,6 +28,8 @@ export type ActivitySelection =
       readonly sessionId: string
       readonly messageId: string
       readonly tab: ActivityTab
+      readonly focusedCallId?: string | null
+      readonly focusNonce?: number
     }
 
 export type SessionTurnSummary = {

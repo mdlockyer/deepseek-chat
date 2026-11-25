@@ -9,12 +9,37 @@ import {
   IconBrowserOutline14,
   IconChevronDownOutline14,
   IconChevronRightOutline14,
+  IconCodeOutline14,
+  IconEyeOutline16,
+  IconGlobeLanguageOutline14,
+  IconViewportOutline14,
 } from '@deepseek-chat/lib-ui'
-import { useState } from 'react'
+import { useEffect, useState, type MouseEvent } from 'react'
 import styles from './BrowserActivity.module.css'
 import { browserMessages } from './messages.js'
 import { isHttpUrl } from './state.js'
-import { BROWSER_NAVIGATE_TOOL_NAME, type BrowserActionMeta } from './tools.js'
+import {
+  BROWSER_EVAL_TOOL_NAME,
+  BROWSER_NAVIGATE_TOOL_NAME,
+  BROWSER_OBSERVE_TOOL_NAME,
+  BROWSER_SET_VIEWPORT_TOOL_NAME,
+  type BrowserActionMeta,
+} from './tools.js'
+
+const browserToolIcon = (toolName: string) => {
+  switch (toolName) {
+    case BROWSER_OBSERVE_TOOL_NAME:
+      return <IconEyeOutline16 />
+    case BROWSER_NAVIGATE_TOOL_NAME:
+      return <IconGlobeLanguageOutline14 />
+    case BROWSER_EVAL_TOOL_NAME:
+      return <IconCodeOutline14 />
+    case BROWSER_SET_VIEWPORT_TOOL_NAME:
+      return <IconViewportOutline14 />
+    default:
+      return <IconBrowserOutline14 />
+  }
+}
 
 const getSiteName = (url: string): string | null => {
   try {
@@ -80,77 +105,109 @@ export const serializeBrowserForArchive = (
   return [{ type: 'MARKDOWN', content: fence('text', body), separate: true }]
 }
 
-const BrowserActivityView = ({ entries, streaming, openLink }: ActivityStepRenderProps) => {
-  const t = browserMessages.useTranslate()
-  const [open, setOpen] = useState(true)
-  const isRunning =
-    streaming && entries.some(({ result }) => !result || result.status === 'running')
-  const totalMs = entries.reduce((acc, { result }) => acc + (result?.durationMs ?? 0), 0)
-  const lastMeta =
-    entries.length > 0
-      ? readMeta(entries[entries.length - 1].call, entries[entries.length - 1].result)
-      : null
-  const label = isRunning
-    ? lastMeta?.summary || t('browserStepRunning')
-    : entries.length === 1
-      ? lastMeta?.summary || t('browserStepOne')
-      : t('browserStepMany', { count: entries.length })
-  const seconds = !isRunning && totalMs > 0 ? ` · ${(totalMs / 1000).toFixed(1)}s` : ''
+const BrowserActionRow = ({
+  entry,
+  openLink,
+  focusedCallId,
+  focusNonce,
+}: {
+  entry: ActivityStepRenderProps['entries'][number]
+  openLink: (event: MouseEvent, url: string) => void
+  focusedCallId?: string | null
+  focusNonce?: number
+}) => {
+  const { call, result } = entry
+  const meta = readMeta(call, result)
+  const actionUrl = meta.url && isHttpUrl(meta.url) ? meta.url : null
+  const screenshots = result?.previewImages?.length ? result.previewImages : (result?.images ?? [])
+  const failed = Boolean(result && result.status !== 'ok' && result.status !== 'running')
+  const hasDetails = Boolean(actionUrl || (failed && result?.content) || screenshots.length > 0)
+  const isFocused = Boolean(focusedCallId && focusedCallId === call.id)
+  const [open, setOpen] = useState(isFocused)
+
+  useEffect(() => {
+    if (focusedCallId === call.id) {
+      setOpen(true)
+    }
+  }, [focusedCallId, focusNonce, call.id])
+
+  const icon = browserToolIcon(call.name)
 
   return (
-    <div className={styles.root}>
-      <button
-        type="button"
-        className={styles.toggleHeader}
-        aria-expanded={open}
-        onClick={() => setOpen((value) => !value)}
-      >
-        <span className={styles.title}>
-          <IconBrowserOutline14 />
-          <span>{label}</span>
-          {seconds ? <span className={styles.meta}>{seconds}</span> : null}
-        </span>
-        <span className={styles.chevron}>
-          {open ? <IconChevronDownOutline14 /> : <IconChevronRightOutline14 />}
-        </span>
-      </button>
-      {open ? (
-        <div className={styles.actions}>
-          {entries.map(({ call, result }, index) => {
-            const meta = readMeta(call, result)
-            const actionUrl = meta.url && isHttpUrl(meta.url) ? meta.url : null
-            const screenshots = result?.previewImages?.length
-              ? result.previewImages
-              : (result?.images ?? [])
-            const failed = Boolean(result && result.status !== 'ok' && result.status !== 'running')
-            return (
-              <div key={call.id} className={styles.actionRow}>
-                <div className={styles.actionLine}>
-                  <span className={styles.stepIndex}>{index + 1}.</span>
-                  <span>{meta.summary}</span>
-                  {actionUrl ? (
-                    <a
-                      className={styles.link}
-                      href={actionUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      onClick={(event) => openLink(event, actionUrl)}
-                    >
-                      {meta.title || actionUrl}
-                    </a>
-                  ) : null}
-                </div>
-                {failed && result?.content ? (
-                  <div className={styles.error}>{result.content}</div>
-                ) : null}
-                {screenshots.map((src, imgIndex) => (
-                  <img key={imgIndex} src={src} alt="" className={styles.screenshot} />
-                ))}
-              </div>
-            )
-          })}
+    <div className={styles.actionRow} data-activity-call-id={call.id}>
+      {hasDetails ? (
+        <button
+          type="button"
+          className={styles.actionToggle}
+          aria-expanded={open}
+          onClick={() => setOpen((value) => !value)}
+        >
+          <span className={styles.actionIcon} aria-hidden="true">
+            {icon}
+          </span>
+          <span className={styles.actionSummary}>{meta.summary}</span>
+          <span className={styles.chevron} aria-hidden="true">
+            {open ? <IconChevronDownOutline14 /> : <IconChevronRightOutline14 />}
+          </span>
+        </button>
+      ) : (
+        <div className={styles.actionStatic}>
+          <span className={styles.actionIcon} aria-hidden="true">
+            {icon}
+          </span>
+          <span className={styles.actionSummary}>{meta.summary}</span>
+        </div>
+      )}
+      {hasDetails && open ? (
+        <div className={styles.actionDetails}>
+          {actionUrl ? (
+            <a
+              className={styles.link}
+              href={actionUrl}
+              target="_blank"
+              rel="noreferrer"
+              onClick={(event) => openLink(event, actionUrl)}
+            >
+              {meta.title || actionUrl}
+            </a>
+          ) : null}
+          {failed && result?.content ? <div className={styles.error}>{result.content}</div> : null}
+          {screenshots.map((src, imgIndex) => (
+            <img key={imgIndex} src={src} alt="" className={styles.screenshot} />
+          ))}
         </div>
       ) : null}
+    </div>
+  )
+}
+
+const BrowserActivityView = ({
+  entries,
+  openLink,
+  focusedCallId,
+  focusNonce,
+}: ActivityStepRenderProps) => {
+  const t = browserMessages.useTranslate()
+  return (
+    <div className={styles.root}>
+      <div className={styles.laneHeader}>
+        <span className={styles.title}>
+          <IconBrowserOutline14 />
+          <span>{t('browserToggleLabel')}</span>
+        </span>
+        <span className={styles.meta}>{entries.length}</span>
+      </div>
+      <div className={styles.actions}>
+        {entries.map((entry) => (
+          <BrowserActionRow
+            key={entry.call.id}
+            entry={entry}
+            openLink={openLink}
+            focusedCallId={focusedCallId}
+            focusNonce={focusNonce}
+          />
+        ))}
+      </div>
     </div>
   )
 }
@@ -161,6 +218,7 @@ export const browserPresenter: ToolStepPresenter = {
     const running = !result || result.status === 'running'
     return {
       lane: 'browser',
+      icon: browserToolIcon(call.name),
       liveVerb: browserMessages.translate('browserStepRunning'),
       detail: meta.summary,
       stillRunning: running && streaming,

@@ -91,6 +91,31 @@
     scrollbar-color: var(--ui-scrollbar-thumb) transparent;
   }
 
+  .content [data-activity-focused='true'] {
+    border-radius: var(--ui-radius-md);
+    animation: activity-focus-flash 1.15s var(--ui-ease-standard) both;
+  }
+
+  @keyframes activity-focus-flash {
+    0% {
+      background-color: var(--ui-accent-soft);
+    }
+    60% {
+      background-color: var(--ui-accent-soft);
+    }
+    100% {
+      background-color: transparent;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .content [data-activity-focused='true'] {
+      animation: none;
+      outline: 1px solid var(--ui-accent-fill);
+      outline-offset: 2px;
+    }
+  }
+
   .empty {
     padding: var(--ui-space-8) var(--ui-space-4);
     text-align: center;
@@ -119,8 +144,42 @@
     display: inline-flex;
     align-items: center;
     gap: var(--ui-space-1-5);
+    min-width: 0;
     font: var(--ui-type-label-strong);
     color: var(--ui-text-primary);
+  }
+
+  .sectionToggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--ui-space-2);
+    width: 100%;
+    padding: 0;
+    border: none;
+    border-radius: var(--ui-radius-sm);
+    background: transparent;
+    color: var(--ui-text-primary);
+    text-align: left;
+    cursor: pointer;
+
+    &:focus-visible {
+      outline: 2px solid var(--ui-focus-ring);
+      outline-offset: 2px;
+    }
+  }
+
+  .sectionMeta {
+    font: var(--ui-type-micro);
+    font-variant-numeric: tabular-nums;
+    color: var(--ui-text-muted);
+  }
+
+  .sectionChevron {
+    display: inline-flex;
+    align-items: center;
+    color: var(--ui-text-muted);
+    flex-shrink: 0;
   }
 
   .queryList {
@@ -138,10 +197,16 @@
     gap: var(--ui-space-1-5);
     padding: 0;
     border: none;
+    border-radius: var(--ui-radius-sm);
     background: transparent;
     font: var(--ui-type-label-strong);
     color: var(--ui-text-primary);
     cursor: pointer;
+
+    &:focus-visible {
+      outline: 2px solid var(--ui-focus-ring);
+      outline-offset: 2px;
+    }
   }
 
   .reasoningBody {
@@ -180,24 +245,56 @@
   .genericCard {
     display: flex;
     flex-direction: column;
-    gap: var(--ui-space-1-5);
-    padding: var(--ui-space-2-5);
+    gap: var(--ui-space-2);
+    padding: var(--ui-space-2) var(--ui-space-2-5);
     border: 1px solid var(--ui-border-subtle);
     border-radius: var(--ui-radius-md);
     background: var(--ui-surface-sunken);
   }
 
-  .genericHeader {
+  .genericToggle {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: var(--ui-space-2);
+    width: 100%;
+    padding: 0;
+    border: none;
+    border-radius: var(--ui-radius-xs);
+    background: transparent;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+
+    &:focus-visible {
+      outline: 2px solid var(--ui-focus-ring);
+      outline-offset: 2px;
+    }
+  }
+
+  .genericHeaderMain {
+    display: flex;
+    align-items: baseline;
+    gap: var(--ui-space-2);
+    min-width: 0;
+    flex: 1;
+  }
+
+  .genericHeaderRight {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--ui-space-1-5);
+    flex-shrink: 0;
+    color: var(--ui-text-muted);
   }
 
   .genericName {
     font: var(--ui-type-caption-strong);
     font-family: var(--ui-font-mono);
     color: var(--ui-text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .genericStatus {
@@ -211,17 +308,21 @@
 
   .genericSummary {
     font: var(--ui-type-caption);
-    color: var(--ui-text-secondary);
+    color: var(--ui-text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
-  .genericDetails {
-    font: var(--ui-type-caption);
-    color: var(--ui-text-secondary);
+  .genericBody {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ui-space-2);
+  }
 
-    > summary {
-      cursor: pointer;
-      color: var(--ui-text-muted);
-    }
+  .genericSectionLabel {
+    font: var(--ui-type-micro);
+    color: var(--ui-text-muted);
   }
 
   .genericPre {

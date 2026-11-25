@@ -1054,13 +1054,15 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
   const requestTurnInspection = (
     sessionId: string,
     messageId: string,
-    tab: 'activity' | 'sources'
+    tab: 'activity' | 'sources',
+    callId?: string
   ) => {
     deps.log.publish<TurnInspectionRequested>({
       type: 'TurnInspectionRequested',
       sessionId,
       messageId,
       tab,
+      ...(callId ? { callId } : {}),
     })
   }
 

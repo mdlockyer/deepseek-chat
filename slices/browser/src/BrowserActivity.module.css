@@ -5,17 +5,12 @@
     gap: var(--ui-space-2);
   }
 
-  .toggleHeader {
+  .laneHeader {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    width: 100%;
-    padding: 0;
-    border: none;
-    background: transparent;
+    gap: var(--ui-space-2);
     color: var(--ui-text-primary);
-    cursor: pointer;
-    text-align: left;
   }
 
   .title {
@@ -28,41 +23,99 @@
 
   .meta {
     font: var(--ui-type-micro);
+    font-variant-numeric: tabular-nums;
     color: var(--ui-text-muted);
   }
 
   .chevron {
+    display: inline-flex;
+    align-items: center;
     color: var(--ui-text-muted);
     flex-shrink: 0;
+    height: 20px;
   }
 
   .actions {
     display: flex;
     flex-direction: column;
-    gap: var(--ui-space-2);
+    gap: var(--ui-space-1);
   }
 
   .actionRow {
     display: flex;
     flex-direction: column;
-    gap: var(--ui-space-1);
-  }
-
-  .actionLine {
-    display: flex;
-    align-items: baseline;
-    flex-wrap: wrap;
     gap: var(--ui-space-1-5);
-    font: var(--ui-type-caption);
-    color: var(--ui-text-secondary);
+    border-radius: var(--ui-radius-md);
   }
 
-  .stepIndex {
+  .actionToggle,
+  .actionStatic {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--ui-space-2);
+    width: 100%;
+    padding: var(--ui-space-1-5) var(--ui-space-2);
+    border: none;
+    border-radius: var(--ui-radius-md);
+    background: transparent;
+    color: var(--ui-text-secondary);
+    font: var(--ui-type-caption);
+    text-align: left;
+  }
+
+  .actionToggle {
+    cursor: pointer;
+    transition:
+      background-color var(--ui-duration-fast) var(--ui-ease-standard),
+      color var(--ui-duration-fast) var(--ui-ease-standard);
+
+    &:hover {
+      background: var(--ui-interactive-hover);
+      color: var(--ui-text-primary);
+
+      .actionIcon {
+        color: var(--ui-text-secondary);
+      }
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--ui-focus-ring);
+      outline-offset: 1px;
+    }
+  }
+
+  .actionIcon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 16px;
+    height: 20px;
     color: var(--ui-text-muted);
-    font-variant-numeric: tabular-nums;
+    transition: color var(--ui-duration-fast) var(--ui-ease-standard);
+
+    > svg {
+      width: 14px;
+      height: 14px;
+    }
+  }
+
+  .actionSummary {
+    flex: 1;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .actionDetails {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ui-space-2);
+    padding: 0 var(--ui-space-2) var(--ui-space-2)
+      calc(var(--ui-space-2) + 16px + var(--ui-space-2));
   }
 
   .link {
+    font: var(--ui-type-caption);
     color: var(--ui-text-accent);
     text-decoration: none;
     overflow: hidden;
@@ -81,6 +134,7 @@
     font: var(--ui-type-micro);
     color: var(--ui-text-danger);
     white-space: pre-wrap;
+    overflow-wrap: anywhere;
   }
 
   .screenshot {

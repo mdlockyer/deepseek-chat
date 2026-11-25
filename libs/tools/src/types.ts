@@ -186,6 +186,8 @@ export type ToolStepSummary = {
   readonly lane: string
   /** Short active verb shown while running (e.g. "Running code", "Searching the web"). */
   readonly liveVerb: string
+  /** Optional compact 14px outline icon representing this step in inline traces. */
+  readonly icon?: ReactNode
   /** Optional single-line fallback detail when the call has no `summary` argument. */
   readonly detail?: string
   /** Optional tally count contributed to the Work Strip summary. */
@@ -214,6 +216,10 @@ export type ActivityStepRenderProps = {
   readonly streaming: boolean
   readonly now: number
   readonly capabilityState?: unknown
+  /** Tool call ID explicitly targeted by the user (e.g. clicking an inline trace row). */
+  readonly focusedCallId?: string | null
+  /** Monotonic counter bumped on each explicit focus request so repeat clicks re-expand/scroll. */
+  readonly focusNonce?: number
   readonly openLink: (event: MouseEvent, url: string) => void
   readonly openFile?: (sessionId: string, file: DeliveredFileRef) => void
   readonly renderMarkdown: (props: {

@@ -314,6 +314,7 @@ const createDemoCalculatorCapability = (): ToolCapability => {
     presenter: {
       summarize: (_call, result) => ({
         lane: 'calculator',
+        icon: <IconCodeOutline14 />,
         liveVerb: 'Calculating',
         detail: result?.content ?? 'Computing product',
         tally: { key: 'calc', count: 1, label: (n) => `${n} calc` },
@@ -322,7 +323,7 @@ const createDemoCalculatorCapability = (): ToolCapability => {
       renderActivity: ({ entries }) => (
         <div>
           {entries.map((entry) => (
-            <div key={entry.call.id}>
+            <div key={entry.call.id} data-activity-call-id={entry.call.id}>
               <strong>{entry.call.name}</strong>: {entry.result?.content ?? 'running…'}
             </div>
           ))}

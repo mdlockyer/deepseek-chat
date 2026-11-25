@@ -157,6 +157,93 @@ describe('slice-activity-inspector: panel lifecycle & EventLog reactivity', () =
 
     slice.dispose()
   })
+
+  it('keeps panel open and bumps focusNonce on callId-targeted TurnInspectionRequested, clearing focus on HeaderToggle resume', () => {
+    const log = new EventLog()
+    const panel = fakePanel()
+    const slice = createActivityInspectorSlice({
+      log,
+      panel: panel.slot,
+      turnSource: { getTurn: () => null, subscribe: () => () => undefined },
+      getPresenter: () => null,
+      openInApp: null,
+    })
+
+    log.publish<TurnInspectionRequested>({
+      type: 'TurnInspectionRequested',
+      sessionId: 's1',
+      messageId: 'm1',
+      tab: 'activity',
+      callId: 'c1',
+    })
+    assert.equal(panel.slot.isOpen('s1'), true)
+    assert.deepEqual(slice.getSelection(), {
+      kind: 'pinned',
+      sessionId: 's1',
+      messageId: 'm1',
+      tab: 'activity',
+      focusedCallId: 'c1',
+      focusNonce: 1,
+    })
+
+    // Repeat click on the exact same callId stays open and bumps focusNonce.
+    log.publish<TurnInspectionRequested>({
+      type: 'TurnInspectionRequested',
+      sessionId: 's1',
+      messageId: 'm1',
+      tab: 'activity',
+      callId: 'c1',
+    })
+    assert.equal(panel.slot.isOpen('s1'), true)
+    assert.deepEqual(slice.getSelection(), {
+      kind: 'pinned',
+      sessionId: 's1',
+      messageId: 'm1',
+      tab: 'activity',
+      focusedCallId: 'c1',
+      focusNonce: 2,
+    })
+
+    // Clicking another row updates focusedCallId and keeps panel open.
+    log.publish<TurnInspectionRequested>({
+      type: 'TurnInspectionRequested',
+      sessionId: 's1',
+      messageId: 'm1',
+      tab: 'activity',
+      callId: 'c2',
+    })
+    assert.equal(panel.slot.isOpen('s1'), true)
+    assert.deepEqual(slice.getSelection(), {
+      kind: 'pinned',
+      sessionId: 's1',
+      messageId: 'm1',
+      tab: 'activity',
+      focusedCallId: 'c2',
+      focusNonce: 3,
+    })
+
+    // Displacing and resuming via HeaderToggle strips stale focusedCallId.
+    panel.displace('s1')
+    slice.togglePanel('s1')
+    assert.deepEqual(slice.getSelection(), {
+      kind: 'pinned',
+      sessionId: 's1',
+      messageId: 'm1',
+      tab: 'activity',
+    })
+
+    // Untargeted request for the same pinned turn toggles closed.
+    log.publish<TurnInspectionRequested>({
+      type: 'TurnInspectionRequested',
+      sessionId: 's1',
+      messageId: 'm1',
+      tab: 'activity',
+    })
+    assert.equal(panel.slot.isOpen('s1'), false)
+    assert.equal(slice.getSelection(), null)
+
+    slice.dispose()
+  })
 })
 
 describe('slice-activity-inspector: lane coalescing, presenters, fallback, and sources', () => {
@@ -268,7 +355,7 @@ describe('slice-activity-inspector: lane coalescing, presenters, fallback, and s
 })
 
 describe('slice-activity-inspector: ActivityPanel rendering', () => {
-  it('renders thinking-only turns expanded with reasoning markdown without crashing', () => {
+  it('renders thinking-only turns collapsed by default without expanding reasoning markdown', () => {
     const log = new EventLog()
     const panel = fakePanel()
     const blocks: TurnSnapshot['blocks'] = [
@@ -302,7 +389,65 @@ describe('slice-activity-inspector: ActivityPanel rendering', () => {
 
     const html = renderToStaticMarkup(createElement(slice.ActivityPanel))
     assert.match(html, /Thought for 3s/)
-    assert.match(html, /<strong><span>reasoning<\/span><\/strong>/)
+    assert.match(html, /aria-expanded="false"/)
+    assert.doesNotMatch(
+      html,
+      /<strong><span>reasoning<\/span><\/strong>/,
+      'reasoning body starts collapsed by default'
+    )
+    slice.dispose()
+  })
+
+  it('renders tool steps collapsed by default and expands only the focused callId', () => {
+    const log = new EventLog()
+    const panel = fakePanel()
+    const blocks: TurnSnapshot['blocks'] = [
+      { type: 'tool_use', id: 'c1', name: 'custom_a', input: { summary: 'First step' } },
+      { type: 'tool_result', tool_use_id: 'c1', content: 'ALPHA_OUTPUT', status: 'ok' },
+      { type: 'tool_use', id: 'c2', name: 'custom_b', input: { summary: 'Second step' } },
+      { type: 'tool_result', tool_use_id: 'c2', content: 'BETA_OUTPUT', status: 'ok' },
+    ]
+    const slice = createActivityInspectorSlice({
+      log,
+      panel: panel.slot,
+      turnSource: {
+        getTurn: (sessionId, messageId) => ({
+          sessionId,
+          messageId,
+          status: 'done',
+          streaming: false,
+          blocks,
+        }),
+        subscribe: () => () => undefined,
+      },
+      getPresenter: () => null,
+      openInApp: null,
+    })
+
+    log.publish<TurnInspectionRequested>({
+      type: 'TurnInspectionRequested',
+      sessionId: 's1',
+      messageId: 'm1',
+      tab: 'activity',
+    })
+    const collapsedHtml = renderToStaticMarkup(createElement(slice.ActivityPanel))
+    assert.match(collapsedHtml, /data-activity-call-id="c1"/)
+    assert.match(collapsedHtml, /data-activity-call-id="c2"/)
+    assert.match(collapsedHtml, /First step/)
+    assert.match(collapsedHtml, /Second step/)
+    assert.doesNotMatch(collapsedHtml, /ALPHA_OUTPUT/, 'untargeted steps start collapsed')
+    assert.doesNotMatch(collapsedHtml, /BETA_OUTPUT/, 'untargeted steps start collapsed')
+
+    log.publish<TurnInspectionRequested>({
+      type: 'TurnInspectionRequested',
+      sessionId: 's1',
+      messageId: 'm1',
+      tab: 'activity',
+      callId: 'c2',
+    })
+    const focusedHtml = renderToStaticMarkup(createElement(slice.ActivityPanel))
+    assert.doesNotMatch(focusedHtml, /ALPHA_OUTPUT/, 'non-targeted step remains collapsed')
+    assert.match(focusedHtml, /BETA_OUTPUT/, 'focused callId expands immediately')
     slice.dispose()
   })
 
@@ -355,12 +500,12 @@ describe('slice-activity-inspector: ActivityPanel rendering', () => {
 
     slice.togglePanel('s1')
     const latestHtml = renderToStaticMarkup(createElement(slice.ActivityPanel))
-    assert.match(latestHtml, /Beta thought/, 'follow_latest displays the newest active turn')
+    assert.match(latestHtml, /Thought for 5s/, 'follow_latest displays the newest active turn')
     assert.match(latestHtml, /Turn 2 · Second question/, 'shows turn switcher for multi-turn chat')
 
     slice.selectTurn('s1', 'm1')
     const pinnedHtml = renderToStaticMarkup(createElement(slice.ActivityPanel))
-    assert.match(pinnedHtml, /Alpha thought/, 'selectTurn switches to the chosen earlier turn')
+    assert.match(pinnedHtml, /Thought for 2s/, 'selectTurn switches to the chosen earlier turn')
     slice.dispose()
   })
 

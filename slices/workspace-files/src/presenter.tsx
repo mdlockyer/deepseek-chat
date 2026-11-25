@@ -1,4 +1,8 @@
-import { IconBrowseOutline16 } from '@deepseek-chat/lib-ui'
+import {
+  IconBrowseOutline16,
+  IconChevronDownOutline14,
+  IconChevronRightOutline14,
+} from '@deepseek-chat/lib-ui'
 import type {
   ActivityStepRenderProps,
   ArchiveFragment,
@@ -7,6 +11,7 @@ import type {
   ToolStepPresenter,
 } from '@deepseek-chat/lib-tools'
 import clsx from 'clsx'
+import { useEffect, useState } from 'react'
 import { getCodeLanguage } from './fileKinds.js'
 import { workspaceMessages } from './messages.js'
 import { EDIT_FILE_TOOL_NAME, PRESENT_FILE_TOOL_NAME, READ_FILE_TOOL_NAME } from './tools.js'
@@ -90,33 +95,78 @@ export const serializeWorkspaceFileForArchive = (
   return []
 }
 
-const FileActivityView = ({ entries, sessionId, openFile }: ActivityStepRenderProps) => {
+const FileActivityView = ({
+  entries,
+  sessionId,
+  openFile,
+  focusedCallId,
+  focusNonce,
+}: ActivityStepRenderProps) => {
   const t = workspaceMessages.useTranslate()
+  const hasFocused = Boolean(
+    focusedCallId && entries.some((entry) => entry.call.id === focusedCallId)
+  )
+  const [open, setOpen] = useState(hasFocused)
+
+  useEffect(() => {
+    if (hasFocused) {
+      setOpen(true)
+    }
+  }, [focusedCallId, focusNonce, hasFocused])
+
   return (
     <div className={styles.root}>
-      <div className={styles.title}>
-        <IconBrowseOutline16 />
-        <span>{t('activityFileTitle')}</span>
-      </div>
-      <div className={styles.list}>
-        {entries.map(({ call, result }) => {
-          const action = readAction(call, result)
-          const key =
-            action.tool === 'edit_file'
-              ? 'activityFileEdited'
-              : action.tool === 'read_file'
-                ? 'activityFileRead'
-                : 'activityFilePresented'
-          const label = t(key, { path: action.title || action.path })
-          const fileRef = result?.files?.[0]
-          const failed = Boolean(result && result.status !== 'ok' && result.status !== 'running')
-          if (fileRef && sessionId && openFile) {
+      <button
+        type="button"
+        className={styles.toggleHeader}
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <span className={styles.title}>
+          <IconBrowseOutline16 />
+          <span>{t('activityFileTitle')}</span>
+          <span className={styles.meta}>{entries.length}</span>
+        </span>
+        <span className={styles.chevron} aria-hidden="true">
+          {open ? <IconChevronDownOutline14 /> : <IconChevronRightOutline14 />}
+        </span>
+      </button>
+      {open ? (
+        <div className={styles.list}>
+          {entries.map(({ call, result }) => {
+            const action = readAction(call, result)
+            const key =
+              action.tool === 'edit_file'
+                ? 'activityFileEdited'
+                : action.tool === 'read_file'
+                  ? 'activityFileRead'
+                  : 'activityFilePresented'
+            const label = t(key, { path: action.title || action.path })
+            const fileRef = result?.files?.[0]
+            const failed = Boolean(result && result.status !== 'ok' && result.status !== 'running')
+            if (fileRef && sessionId && openFile) {
+              return (
+                <button
+                  key={call.id}
+                  type="button"
+                  data-activity-call-id={call.id}
+                  className={clsx(styles.row, styles.rowButton, failed && styles.rowError)}
+                  onClick={() => openFile(sessionId, fileRef)}
+                >
+                  <span className={styles.path}>{label}</span>
+                  {action.version ? (
+                    <span className={styles.meta}>
+                      {t('previewVersionLabel', { version: action.version })}
+                    </span>
+                  ) : null}
+                </button>
+              )
+            }
             return (
-              <button
+              <div
                 key={call.id}
-                type="button"
-                className={clsx(styles.row, styles.rowButton, failed && styles.rowError)}
-                onClick={() => openFile(sessionId, fileRef)}
+                data-activity-call-id={call.id}
+                className={clsx(styles.row, failed && styles.rowError)}
               >
                 <span className={styles.path}>{label}</span>
                 {action.version ? (
@@ -124,21 +174,11 @@ const FileActivityView = ({ entries, sessionId, openFile }: ActivityStepRenderPr
                     {t('previewVersionLabel', { version: action.version })}
                   </span>
                 ) : null}
-              </button>
+              </div>
             )
-          }
-          return (
-            <div key={call.id} className={clsx(styles.row, failed && styles.rowError)}>
-              <span className={styles.path}>{label}</span>
-              {action.version ? (
-                <span className={styles.meta}>
-                  {t('previewVersionLabel', { version: action.version })}
-                </span>
-              ) : null}
-            </div>
-          )
-        })}
-      </div>
+          })}
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -149,6 +189,7 @@ export const workspaceFilesPresenter: ToolStepPresenter = {
     const running = !result || result.status === 'running'
     return {
       lane: 'files',
+      icon: <IconBrowseOutline16 />,
       liveVerb: workspaceMessages.translate('activityFileWorking'),
       detail: action.title || action.path,
       stillRunning: running && streaming,

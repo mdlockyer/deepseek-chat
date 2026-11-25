@@ -70,4 +70,6 @@ export type TurnInspectionRequested = {
   readonly sessionId: string
   readonly messageId: string
   readonly tab: 'activity' | 'sources'
+  /** Optional tool call ID to expand and scroll into view inside the Activity panel. */
+  readonly callId?: string
 }

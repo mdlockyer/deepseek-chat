@@ -7,9 +7,13 @@ import type {
 } from '@deepseek-chat/lib-tools'
 import {
   IconBrowseOutline16,
+  IconChevronDownOutline14,
+  IconChevronRightOutline14,
+  IconGlobeLanguageOutline14,
   IconRightUpOutline14,
   IconSearchOutline16,
 } from '@deepseek-chat/lib-ui'
+import { useEffect, useState } from 'react'
 import { webResearchMessages } from './messages.js'
 import styles from './WebResearchActivity.module.css'
 
@@ -97,93 +101,136 @@ export const serializeWebResearchForArchive = (
   return []
 }
 
-const WebResearchActivityView = ({ entries, openLink }: ActivityStepRenderProps) => {
+const WebResearchActivityView = ({
+  entries,
+  openLink,
+  focusedCallId,
+  focusNonce,
+}: ActivityStepRenderProps) => {
   const t = webResearchMessages.useTranslate()
-  const queries: string[] = []
+  const queries: { id: string; query: string }[] = []
   const seenQueries = new Set<string>()
+  const searchCallIds = new Set<string>()
   const pages: { id: string; url: string; title: string | null; failed: boolean }[] = []
+  const pageCallIds = new Set<string>()
 
   for (const { call, result } of entries) {
     if (call.name === 'web_search') {
+      searchCallIds.add(call.id)
       const q = queryOf(call, result)
       if (q && !seenQueries.has(q)) {
         seenQueries.add(q)
-        queries.push(q)
+        queries.push({ id: call.id, query: q })
       }
     } else if (call.name === 'web_scrape') {
+      pageCallIds.add(call.id)
       const page = pageOf(call, result)
       const failed = Boolean(result && result.status !== 'ok' && result.status !== 'running')
       pages.push({ id: call.id, url: page.url, title: page.title, failed })
     }
   }
 
+  const matchesSearch = Boolean(focusedCallId && searchCallIds.has(focusedCallId))
+  const matchesPage = Boolean(focusedCallId && pageCallIds.has(focusedCallId))
+  const [queriesOpen, setQueriesOpen] = useState(matchesSearch)
+  const [pagesOpen, setPagesOpen] = useState(matchesPage)
+
+  useEffect(() => {
+    if (matchesSearch) {
+      setQueriesOpen(true)
+    }
+    if (matchesPage) {
+      setPagesOpen(true)
+    }
+  }, [focusedCallId, focusNonce, matchesSearch, matchesPage])
+
   return (
     <div className={styles.root}>
       {queries.length > 0 ? (
-        <>
-          <div className={styles.header}>
-            <IconSearchOutline16 />
-            <span>{t('activityWebSearchTitle')}</span>
-            <span className={styles.meta}>
-              ·{' '}
-              {t(
-                queries.length === 1 ? 'activityWebSearchCountOne' : 'activityWebSearchCountMany',
-                {
-                  count: queries.length,
-                }
-              )}
+        <div className={styles.section}>
+          <button
+            type="button"
+            className={styles.toggleHeader}
+            aria-expanded={queriesOpen}
+            onClick={() => setQueriesOpen((value) => !value)}
+          >
+            <span className={styles.header}>
+              <IconSearchOutline16 />
+              <span>{t('activityWebSearchTitle')}</span>
+              <span className={styles.meta}>
+                {t(
+                  queries.length === 1 ? 'activityWebSearchCountOne' : 'activityWebSearchCountMany',
+                  {
+                    count: queries.length,
+                  }
+                )}
+              </span>
             </span>
-          </div>
-          <div className={styles.queryList}>
-            {queries.map((query) => (
-              <div key={query} className={styles.queryItem}>
-                “{query}”
-              </div>
-            ))}
-          </div>
-        </>
+            <span className={styles.chevron} aria-hidden="true">
+              {queriesOpen ? <IconChevronDownOutline14 /> : <IconChevronRightOutline14 />}
+            </span>
+          </button>
+          {queriesOpen ? (
+            <div className={styles.queryList}>
+              {queries.map(({ id, query }) => (
+                <div key={id} className={styles.queryItem} data-activity-call-id={id}>
+                  “{query}”
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </div>
       ) : null}
 
       {pages.length > 0 ? (
-        <>
-          {queries.length > 0 ? (
-            <div className={styles.subHeading}>
-              {t('activityWebScrapeTitle')} · {pages.length}
-            </div>
-          ) : (
-            <div className={styles.header}>
+        <div className={styles.section}>
+          <button
+            type="button"
+            className={styles.toggleHeader}
+            aria-expanded={pagesOpen}
+            onClick={() => setPagesOpen((value) => !value)}
+          >
+            <span className={styles.header}>
               <IconBrowseOutline16 />
               <span>{t('activityWebScrapeTitle')}</span>
-              <span className={styles.meta}>· {pages.length}</span>
+              <span className={styles.meta}>{pages.length}</span>
+            </span>
+            <span className={styles.chevron} aria-hidden="true">
+              {pagesOpen ? <IconChevronDownOutline14 /> : <IconChevronRightOutline14 />}
+            </span>
+          </button>
+          {pagesOpen ? (
+            <div className={styles.pageList}>
+              {pages.map((page) => {
+                const domain = page.url ? getSiteName(page.url) : null
+                return (
+                  <div key={page.id} className={styles.pageItem} data-activity-call-id={page.id}>
+                    {page.failed || !page.url ? (
+                      <>
+                        <span className={styles.pageFailed}>{page.title || page.url}</span>
+                        <span className={styles.pageFailedMeta}>
+                          {t('activityWebScrapeFailed')}
+                        </span>
+                      </>
+                    ) : (
+                      <a
+                        className={styles.pageLink}
+                        href={page.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        onClick={(event) => openLink(event, page.url)}
+                      >
+                        <span className={styles.pageLinkText}>{page.title || page.url}</span>
+                        <IconRightUpOutline14 />
+                      </a>
+                    )}
+                    {domain ? <div className={styles.pageSub}>{domain}</div> : null}
+                  </div>
+                )
+              })}
             </div>
-          )}
-          <div className={styles.pageList}>
-            {pages.map((page) => {
-              const domain = page.url ? getSiteName(page.url) : null
-              return (
-                <div key={page.id} className={styles.pageItem}>
-                  {page.failed || !page.url ? (
-                    <span className={styles.pageFailed}>
-                      {page.title || page.url} · {t('activityWebScrapeFailed')}
-                    </span>
-                  ) : (
-                    <a
-                      className={styles.pageLink}
-                      href={page.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      onClick={(event) => openLink(event, page.url)}
-                    >
-                      <span className={styles.pageLinkText}>{page.title || page.url}</span>
-                      <IconRightUpOutline14 />
-                    </a>
-                  )}
-                  {domain ? <div className={styles.pageSub}>{domain}</div> : null}
-                </div>
-              )
-            })}
-          </div>
-        </>
+          ) : null}
+        </div>
       ) : null}
     </div>
   )
@@ -197,6 +244,7 @@ export const webResearchPresenter: ToolStepPresenter = {
       const page = pageOf(call, result)
       return {
         lane: 'research',
+        icon: <IconGlobeLanguageOutline14 />,
         liveVerb: webResearchMessages.translate('activityWebScrapeWorking'),
         detail: page.title || page.url || undefined,
         stillRunning: running && streaming,
@@ -215,6 +263,7 @@ export const webResearchPresenter: ToolStepPresenter = {
     const query = queryOf(call, result)
     return {
       lane: 'research',
+      icon: <IconSearchOutline16 />,
       liveVerb: webResearchMessages.translate('activityWebSearchWorking'),
       detail: query || undefined,
       stillRunning: running && streaming,
