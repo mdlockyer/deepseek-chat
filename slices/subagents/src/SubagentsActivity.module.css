@@ -1,0 +1,114 @@
+@layer slice {
+  .root {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ui-space-2-5);
+  }
+
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font: var(--ui-type-label-strong);
+    color: var(--ui-text-primary);
+  }
+
+  .list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ui-space-2);
+  }
+
+  .card {
+    border: 1px solid var(--ui-border-subtle);
+    border-radius: var(--ui-radius-md);
+    background: var(--ui-surface-sunken);
+    overflow: hidden;
+  }
+
+  .cardHeader {
+    display: flex;
+    align-items: center;
+    gap: var(--ui-space-2);
+    width: 100%;
+    padding: var(--ui-space-2) var(--ui-space-2-5);
+    border: none;
+    background: transparent;
+    color: var(--ui-text-primary);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+
+    &:hover {
+      background: var(--ui-interactive-hover);
+    }
+  }
+
+  .label {
+    font: var(--ui-type-caption-strong);
+    color: var(--ui-text-primary);
+  }
+
+  .summary {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font: var(--ui-type-caption);
+    color: var(--ui-text-secondary);
+  }
+
+  .status {
+    font: var(--ui-type-micro);
+    color: var(--ui-text-muted);
+    flex-shrink: 0;
+  }
+
+  .statusError {
+    color: var(--ui-text-danger);
+  }
+
+  .cardBody {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ui-space-1-5);
+    padding: 0 var(--ui-space-2-5) var(--ui-space-2-5);
+    border-top: 1px solid var(--ui-border-subtle);
+    font: var(--ui-type-caption);
+    color: var(--ui-text-secondary);
+  }
+
+  .stepRow {
+    padding-top: var(--ui-space-1);
+    word-break: break-word;
+  }
+
+  .board {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ui-space-1-5);
+    padding-top: var(--ui-space-1);
+  }
+
+  .boardHeading {
+    font: var(--ui-type-caption-strong);
+    color: var(--ui-text-muted);
+  }
+
+  .note {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ui-space-0-5);
+    padding: var(--ui-space-1-5) var(--ui-space-2);
+    border-radius: var(--ui-radius-sm);
+    background: var(--ui-surface-sunken);
+    font: var(--ui-type-caption);
+    color: var(--ui-text-secondary);
+  }
+
+  .noteKind {
+    font-weight: 500;
+    color: var(--ui-text-primary);
+  }
+}

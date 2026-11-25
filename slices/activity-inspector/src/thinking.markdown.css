@@ -1,0 +1,107 @@
+@layer slice {
+  .ds-think-content .ds-markdown {
+    font: var(--ui-type-small);
+    color: var(--ui-text-secondary);
+
+    h1,
+    h2,
+    h3,
+    h4,
+    h5,
+    h6,
+    .ds-markdown-paragraph {
+      margin: var(--ui-space-3) 0;
+    }
+
+    h1,
+    h2,
+    h3,
+    h4,
+    h5,
+    h6 {
+      font: var(--ui-type-small-strong);
+    }
+
+    code {
+      font: var(--ui-type-code-block);
+    }
+
+    hr {
+      margin: 28px 0;
+    }
+
+    blockquote {
+      margin: var(--ui-space-3) 0 0;
+    }
+
+    ul,
+    ol {
+      margin: var(--ui-space-3) 0;
+    }
+
+    th {
+      font: var(--ui-type-small-strong);
+    }
+
+    td {
+      font: var(--ui-type-small);
+    }
+
+    h3 + ul,
+    h4 + ul,
+    h5 + ul,
+    h6 + ul,
+    h3 + ol,
+    h4 + ol,
+    h5 + ol,
+    h6 + ol {
+      margin-top: var(--ui-space-1);
+    }
+
+    h3:has(+ ul),
+    h4:has(+ ul),
+    h5:has(+ ul),
+    h6:has(+ ul),
+    h3:has(+ ol),
+    h4:has(+ ol),
+    h5:has(+ ol),
+    h6:has(+ ol) {
+      margin-bottom: var(--ui-space-1);
+    }
+
+    .ds-markdown-paragraph + ul,
+    .ds-markdown-paragraph + ol {
+      margin-top: var(--ui-space-1);
+    }
+
+    .ds-markdown-paragraph:has(+ ul),
+    .ds-markdown-paragraph:has(+ ol) {
+      margin-bottom: var(--ui-space-1);
+    }
+
+    li > ul,
+    li > ol {
+      margin-top: var(--ui-space-0-5);
+    }
+
+    li > .ds-markdown-paragraph {
+      margin: var(--ui-space-0-5) 0;
+    }
+
+    li:not(:first-child) {
+      margin-top: var(--ui-space-0-5);
+    }
+
+    li > *:first-child {
+      margin-top: 0;
+    }
+
+    .ds-markdown-cite {
+      margin: 0 var(--ui-space-0-5);
+
+      + .ds-markdown-cite {
+        margin-left: 0;
+      }
+    }
+  }
+}

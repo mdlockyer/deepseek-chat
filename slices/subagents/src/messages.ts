@@ -1,0 +1,36 @@
+import { defineMessages } from '@deepseek-chat/spine/i18n'
+
+export const subagentsMessages = defineMessages({
+  'zh-CN': {
+    phaseTitle: '子代理协作',
+    liveWorking: '子代理研究中',
+    countOne: '1 个子代理',
+    countMany: '{count} 个子代理',
+    statusRunning: '进行中',
+    statusFinished: '已完成',
+    statusExhausted: '已达上限',
+    statusFailed: '出错',
+    statusStopped: '已停止',
+    boardNotes: '共享留言板',
+    boardFinding: '发现',
+    boardQuestion: '提问',
+    boardDirection: '指令',
+    boardAssumption: '暂定假设：{text}',
+  },
+  'en-US': {
+    phaseTitle: 'Subagents',
+    liveWorking: 'Running subagents',
+    countOne: '1 subagent',
+    countMany: '{count} subagents',
+    statusRunning: 'Running',
+    statusFinished: 'Done',
+    statusExhausted: 'Limit reached',
+    statusFailed: 'Failed',
+    statusStopped: 'Stopped',
+    boardNotes: 'Shared board',
+    boardFinding: 'Finding',
+    boardQuestion: 'Question',
+    boardDirection: 'Direction',
+    boardAssumption: 'Assuming: {text}',
+  },
+})
