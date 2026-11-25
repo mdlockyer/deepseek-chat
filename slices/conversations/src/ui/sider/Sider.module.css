@@ -1,3 +1,9 @@
+@property --sider-fade-end {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+
 @layer slice {
   .sider {
     position: relative;
@@ -153,6 +159,42 @@
     scrollbar-color: var(--ui-scrollbar-thumb) transparent;
     --hover-glide-bg: var(--ui-surface-rail-hover);
     --hover-glide-radius: var(--ui-radius-md);
+    --fade-size: var(--ui-space-6);
+    scroll-padding-block-end: var(--fade-size);
+    mask:
+      linear-gradient(black, black) no-clip subtract,
+      linear-gradient(to bottom, transparent, black) 0 100% / 100% var(--sider-fade-end) no-repeat
+        no-clip;
+  }
+
+  @supports (animation-timeline: scroll(self block)) {
+    .list {
+      animation: hide-fade-end linear both;
+      animation-timeline: scroll(self block);
+      animation-range: calc(100% - var(--fade-size)) 100%;
+    }
+  }
+
+  @supports not (animation-timeline: scroll(self block)) {
+    .list {
+      transition: --sider-fade-end var(--ui-duration-normal) var(--ui-ease-standard);
+    }
+
+    .listMoreEnd {
+      --sider-fade-end: var(--fade-size);
+    }
+  }
+
+  .listEndSentinel {
+    min-inline-size: 1px;
+    min-block-size: 1px;
+    pointer-events: none;
+  }
+
+  @keyframes hide-fade-end {
+    from {
+      --sider-fade-end: var(--fade-size);
+    }
   }
 
   @media not all and (min-width: 768px) {

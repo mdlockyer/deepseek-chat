@@ -74,6 +74,38 @@ export const Sider = ({
     }
   }, [])
 
+  // 无 scroll-driven animations 时用哨兵监听底部是否还有可滚动内容，驱动 --sider-fade-end
+  useEffect(() => {
+    const scroller = hoverGlide.containerRef.current
+    if (
+      !scroller ||
+      typeof CSS === 'undefined' ||
+      CSS.supports('animation-timeline', 'scroll(self block)') ||
+      typeof IntersectionObserver === 'undefined'
+    ) {
+      return
+    }
+    const sentinel = document.createElement('div')
+    sentinel.setAttribute('aria-hidden', 'true')
+    sentinel.className = styles.listEndSentinel
+    scroller.append(sentinel)
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries.at(-1)
+        if (entry) {
+          scroller.classList.toggle(styles.listMoreEnd, !entry.isIntersecting)
+        }
+      },
+      { root: scroller, rootMargin: '1px' }
+    )
+    observer.observe(sentinel)
+    return () => {
+      observer.disconnect()
+      sentinel.remove()
+      scroller.classList.remove(styles.listMoreEnd)
+    }
+  }, [hoverGlide.containerRef])
+
   // 首屏列表逐条落入的 stagger 上限 8 条；移动端抽屉里不 stagger，随抽屉一起落
   let enterIndex = 0
 
