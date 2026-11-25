@@ -342,7 +342,11 @@ describe('buildTurnWorkStrip & getFrontStageNotes', () => {
       )
       assert.match(strip.label, /1 searches/)
       assert.match(strip.label, /1 pages/)
-      assert.match(strip.label, /1 error|1 项出错/)
+      assert.doesNotMatch(
+        strip.label,
+        /error|出错/,
+        'recovered mid-turn tool errors must not escalate into transcript warning copy'
+      )
       assert.doesNotMatch(
         strip.label,
         /5s|5 秒/,
@@ -479,7 +483,7 @@ describe('buildTurnWorkStrip & getFrontStageNotes', () => {
     assert.equal(thinkingTrace.hasRichDetails, false)
   })
 
-  it('retains all failed and running steps in chronological order with exact gap markers in selectInlineTracePreview', () => {
+  it('shows opening steps cleanly for settled runs and retains running steps in chronological order with exact gap markers', () => {
     const makeItems = (count: number, statuses: Record<number, InlineTraceItem['status']>) =>
       Array.from({ length: count }, (_, i) => ({
         key: `s-${i}`,
@@ -496,40 +500,35 @@ describe('buildTurnWorkStrip & getFrontStageNotes', () => {
       true
     )
 
-    // Long 32-step run with a late error at index 26: keeps 5 opening steps + failed step 26 with a gap marker.
-    const longWithLateError = selectInlineTracePreview(makeItems(32, { 26: 'failed' }), 6)
+    // Settled 32-step run with a recovered mid-turn error at index 26: shows opening 6 steps calmly without jumping ahead.
+    const settledLong = selectInlineTracePreview(makeItems(32, { 26: 'failed' }), 6)
     assert.deepEqual(
-      longWithLateError.entries.map((e) => [e.item.key, e.gapBefore]),
+      settledLong.entries.map((e) => [e.item.key, e.gapBefore]),
       [
         ['s-0', false],
         ['s-1', false],
         ['s-2', false],
         ['s-3', false],
         ['s-4', false],
-        ['s-26', true],
+        ['s-5', false],
       ]
     )
-    assert.equal(longWithLateError.hiddenCount, 26)
+    assert.equal(settledLong.hiddenCount, 26)
 
-    // Extreme case: more failed/running items than maxVisible still surfaces every exception.
-    const manyErrors = selectInlineTracePreview(
-      makeItems(12, {
-        1: 'failed',
-        3: 'failed',
-        5: 'failed',
-        7: 'failed',
-        9: 'failed',
-        10: 'failed',
-        11: 'running',
-      }),
-      6
-    )
-    assert.equal(manyErrors.entries.length, 7)
-    assert.equal(manyErrors.hiddenCount, 5)
+    // Live 32-step run with a currently running step at index 31: keeps 5 opening steps + running step 31 with a gap marker.
+    const liveLong = selectInlineTracePreview(makeItems(32, { 31: 'running' }), 6)
     assert.deepEqual(
-      manyErrors.entries.map((e) => e.item.key),
-      ['s-1', 's-3', 's-5', 's-7', 's-9', 's-10', 's-11']
+      liveLong.entries.map((e) => [e.item.key, e.gapBefore]),
+      [
+        ['s-0', false],
+        ['s-1', false],
+        ['s-2', false],
+        ['s-3', false],
+        ['s-4', false],
+        ['s-31', true],
+      ]
     )
+    assert.equal(liveLong.hiddenCount, 26)
 
     // Invariants across varied positions and caps.
     for (const total of [0, 1, 6, 7, 15, 32]) {
@@ -542,8 +541,8 @@ describe('buildTurnWorkStrip & getFrontStageNotes', () => {
         assert.equal(preview.entries.length + preview.hiddenCount, items.length)
         const shownKeys = new Set(preview.entries.map((e) => e.item.key))
         for (const item of items) {
-          if (item.status === 'failed' || item.status === 'running') {
-            assert.ok(shownKeys.has(item.key), `must retain ${item.status} item ${item.key}`)
+          if (item.status === 'running') {
+            assert.ok(shownKeys.has(item.key), `must retain running item ${item.key}`)
           }
         }
         const indices = preview.entries.map((e) => Number(e.item.key.slice(2)))

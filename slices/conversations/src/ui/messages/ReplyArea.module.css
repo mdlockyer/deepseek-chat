@@ -87,10 +87,6 @@
     color: var(--ui-text-muted);
   }
 
-  .errorIcon {
-    color: var(--ui-text-danger);
-  }
-
   .headline {
     min-width: 0;
     overflow: hidden;
@@ -355,28 +351,11 @@
     color: var(--ui-text-primary);
   }
 
-  .traceItemFailed {
-    color: var(--ui-text-danger);
-  }
-
   .traceRow {
     display: flex;
     align-items: baseline;
     gap: var(--ui-space-1-5);
     min-width: 0;
-  }
-
-  .traceFailIcon {
-    display: inline-flex;
-    align-items: center;
-    align-self: center;
-    flex-shrink: 0;
-    color: var(--ui-text-danger);
-
-    > svg {
-      width: 14px;
-      height: 14px;
-    }
   }
 
   .traceLabel {
@@ -391,7 +370,7 @@
   }
 
   .traceError {
-    padding-left: var(--ui-space-5);
+    padding-left: var(--ui-space-3);
     font: var(--ui-type-micro);
     color: var(--ui-text-muted);
     overflow-wrap: anywhere;

@@ -315,13 +315,7 @@ export const buildTurnWorkStrip = (
       ? translate('activityStoppedAfter', { work: workPhrase })
       : translate('messageThinkStopped')
   } else if (workPhrase) {
-    label =
-      errorCount > 0
-        ? translate(errorCount === 1 ? 'activityWorkWithErrorsOne' : 'activityWorkWithErrorsMany', {
-            work: workPhrase,
-            count: errorCount,
-          })
-        : workPhrase
+    label = workPhrase
   } else if (hasThinking) {
     label =
       thinkingSeconds !== null
@@ -478,7 +472,7 @@ export const buildInlineTrace = (view: ReplyView): InlineTrace => {
 
 /**
  * Selects a bounded preview of inline trace steps in original chronological order.
- * Every failed or currently running step is always retained so exceptions are never hidden.
+ * Any currently running step is always retained so live progress is never hidden.
  */
 export const selectInlineTracePreview = (
   items: readonly InlineTraceItem[],
@@ -493,8 +487,7 @@ export const selectInlineTracePreview = (
 
   const selected = new Set<number>()
   for (let i = 0; i < items.length; i += 1) {
-    const status = items[i].status
-    if (status === 'failed' || status === 'running') {
+    if (items[i].status === 'running') {
       selected.add(i)
     }
   }

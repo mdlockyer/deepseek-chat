@@ -4,7 +4,6 @@ import {
   IconChevronDownOutline14,
   IconChevronRightOutline14,
   IconPanelRightOutline16,
-  IconWarningOutline16,
 } from '@deepseek-chat/lib-ui'
 import clsx from 'clsx'
 import { memo, useEffect, useState } from 'react'
@@ -217,14 +216,8 @@ export const ReplyArea = memo(function ReplyArea({
             aria-expanded={expanded}
             onClick={toggleExpanded}
           >
-            <span
-              className={clsx(
-                styles.iconSlot,
-                strip.stopped && styles.stoppedIcon,
-                strip.errorCount > 0 && styles.errorIcon
-              )}
-            >
-              {strip.errorCount > 0 ? <IconWarningOutline16 /> : <WhaleLoader width={15} still />}
+            <span className={clsx(styles.iconSlot, strip.stopped && styles.stoppedIcon)}>
+              <WhaleLoader width={15} still />
             </span>
             <span className={styles.settledLabel}>{strip.label}</span>
             <span className={styles.chevron} aria-hidden="true">
@@ -295,16 +288,10 @@ const InlineTraceInlay = ({
               className={clsx(
                 styles.traceItem,
                 gapBefore && styles.traceItemGap,
-                item.status === 'running' && styles.traceItemRunning,
-                item.status === 'failed' && styles.traceItemFailed
+                item.status === 'running' && styles.traceItemRunning
               )}
             >
               <div className={styles.traceRow}>
-                {item.status === 'failed' ? (
-                  <span className={styles.traceFailIcon} aria-hidden="true">
-                    <IconWarningOutline16 />
-                  </span>
-                ) : null}
                 <span className={styles.traceLabel}>{item.label}</span>
                 {item.status === 'running' ? (
                   <span className={styles.traceRunningTag}>{t('activityTrackRunning')}</span>
