@@ -7,6 +7,7 @@ import {
   EmptyState,
   FileGlyph,
   HoverCard,
+  HoverGlide,
   IconBrowseOutline16,
   IconCheckOutline16,
   IconCodeOutline14,
@@ -47,7 +48,6 @@ import {
   createNoticeBus,
   createOverlayCoordinator,
   hoverGlideItem,
-  useHoverGlide,
   type FileGlyphKind,
 } from '@deepseek-chat/lib-ui'
 import { applyDocumentTheme, type ThemeMode } from '@deepseek-chat/spine/design'
@@ -314,7 +314,6 @@ export const Workbench = () => {
   const [contrastRows, setContrastRows] = useState<ContrastRow[]>([])
 
   const popoverAnchorRef = useRef<HTMLSpanElement>(null)
-  const hoverGlide = useHoverGlide<HTMLDivElement>()
 
   useEffect(() => overlays.subscribe(setOverlayOpen), [overlays])
 
@@ -825,8 +824,7 @@ export const Workbench = () => {
 
                 <div className={styles.card}>
                   <h3 className={styles.cardTitle}>HoverGlide, FileGlyph &amp; EmptyState</h3>
-                  <div className={styles.glideList} {...hoverGlide.containerProps}>
-                    <div {...hoverGlide.indicatorProps} />
+                  <HoverGlide className={styles.glideList}>
                     {(['item-1', 'item-2', 'item-3'] as const).map((id, index) => (
                       <button
                         key={id}
@@ -844,7 +842,24 @@ export const Workbench = () => {
                         </Badge>
                       </button>
                     ))}
-                  </div>
+                    <div className={styles.glideActions}>
+                      <Button variant="ghost" size="s" {...hoverGlideItem()}>
+                        Show more
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="s"
+                        {...hoverGlideItem(activeGlide === 'action-open')}
+                        onClick={() =>
+                          setActiveGlide((curr) =>
+                            curr === 'action-open' ? 'item-1' : 'action-open'
+                          )
+                        }
+                      >
+                        Open panel
+                      </Button>
+                    </div>
+                  </HoverGlide>
                   <div className={styles.glyphGrid}>
                     {FILE_GLYPHS.map((item) => (
                       <div key={item.kind} className={styles.glyphItem}>

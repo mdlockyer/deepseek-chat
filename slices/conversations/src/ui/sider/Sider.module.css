@@ -150,8 +150,6 @@
   }
 
   .list {
-    position: relative;
-    isolation: isolate;
     height: 100%;
     margin: 0 calc(var(--ui-space-0-5) * -1);
     padding: 0 var(--ui-space-0-5);
@@ -159,7 +157,6 @@
     overscroll-behavior: contain;
     scrollbar-color: var(--ui-scrollbar-thumb) transparent;
     --hover-glide-bg: var(--ui-surface-rail-hover);
-    --hover-glide-radius: var(--ui-radius-md);
     --fade-size: var(--ui-space-6);
     scroll-padding-block-end: var(--fade-size);
     mask:
@@ -195,12 +192,6 @@
   @keyframes hide-fade-end {
     from {
       --sider-fade-end: var(--fade-size);
-    }
-  }
-
-  @media not all and (min-width: 768px) {
-    .list {
-      --hover-glide-radius: var(--ui-radius-lg);
     }
   }
 
@@ -470,10 +461,6 @@
 
     .listWrap {
       margin-top: var(--ui-space-4);
-    }
-
-    .list {
-      --hover-glide-radius: var(--ui-radius-lg);
     }
 
     .sectionHeader {

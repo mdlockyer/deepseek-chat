@@ -106,10 +106,13 @@ export {
 } from './Layout.js'
 export {
   HOVER_GLIDE_ITEM_ATTR,
+  HOVER_GLIDE_SURFACE_ATTR,
+  HoverGlide,
   HoverGlideIndicator,
   hoverGlideItem,
   useHoverGlide,
   type HoverGlideOptions,
+  type HoverGlideProps,
   type HoverGlideResult,
 } from './HoverGlide.js'
 export {
@@ -119,6 +122,7 @@ export {
   glideRectsEqual,
   leaveGlideTarget,
   measureGlideRect,
+  normalizeGlideRadius,
   syncGlideRect,
   type BoxRect,
   type GlideRect,

@@ -24,6 +24,10 @@
       &:hover:not(:disabled) {
         background-color: var(--ui-interactive-hover);
       }
+
+      [data-hover-glide-surface='active'] &:hover:not(:disabled)[data-hover-glide-item=''] {
+        background-color: transparent;
+      }
     }
 
     &:focus-visible {

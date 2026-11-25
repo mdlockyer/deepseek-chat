@@ -6,6 +6,8 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { setLocale } from '@deepseek-chat/spine/i18n'
 import {
   HOVER_GLIDE_ITEM_ATTR,
+  HOVER_GLIDE_SURFACE_ATTR,
+  HoverGlide,
   HoverGlideIndicator,
   INITIAL_HOVER_GLIDE_STATE,
   ToastViewport,
@@ -16,9 +18,11 @@ import {
   createOverlayCoordinator,
   enterGlideTarget,
   expireGlideCooldown,
+  glideRectsEqual,
   hoverGlideItem,
   leaveGlideTarget,
   measureGlideRect,
+  normalizeGlideRadius,
   syncGlideRect,
   usePresence,
   type GlideRect,
@@ -211,6 +215,35 @@ describe('lib-ui HoverGlide state machine & geometry', () => {
     assert.deepEqual(hoverGlideItem(true), { [HOVER_GLIDE_ITEM_ATTR]: 'muted' })
     const html = renderToStaticMarkup(createElement(HoverGlideIndicator))
     assert.match(html, /aria-hidden="true"/)
+
+    const activeSurfaceHtml = renderToStaticMarkup(
+      createElement(HoverGlide, null, createElement('button', hoverGlideItem(), 'Row'))
+    )
+    assert.match(activeSurfaceHtml, new RegExp(`${HOVER_GLIDE_SURFACE_ATTR}="active"`))
+    assert.match(activeSurfaceHtml, /aria-hidden="true"/)
+    assert.match(activeSurfaceHtml, /Row/)
+
+    const disabledSurfaceHtml = renderToStaticMarkup(
+      createElement(HoverGlide, { disabled: true }, 'Hidden')
+    )
+    assert.match(disabledSurfaceHtml, new RegExp(`${HOVER_GLIDE_SURFACE_ATTR}="disabled"`))
+  })
+
+  it('normalizes and clamps corner radii so rounded rows morph smoothly into capsule pills', () => {
+    assert.equal(normalizeGlideRadius('9999px', 140, 32), '16px')
+    assert.equal(normalizeGlideRadius('12px', 540, 32), '12px')
+    assert.equal(normalizeGlideRadius('12px 12px 12px 12px', 236, 40), '12px')
+    assert.equal(normalizeGlideRadius('12px 12px 0px 0px', 200, 40), '12px 12px 0px 0px')
+    assert.equal(normalizeGlideRadius('50%', 32, 32), '16px')
+    assert.equal(normalizeGlideRadius('0', 200, 32), '0px')
+    assert.equal(normalizeGlideRadius('', 200, 32), null)
+    assert.equal(normalizeGlideRadius('12px', 0, 32), null)
+    assert.equal(normalizeGlideRadius('12px / 8px', 200, 32), null)
+
+    const base: GlideRect = { x: 8, y: 12, width: 200, height: 32 }
+    assert.equal(glideRectsEqual(base, { ...base, radius: null }), true)
+    assert.equal(glideRectsEqual({ ...base, radius: '12px' }, { ...base, radius: '16px' }), false)
+    assert.equal(glideRectsEqual({ ...base, radius: '16px' }, { ...base, radius: '16px' }), true)
   })
 })
 
@@ -479,6 +512,437 @@ describe('lib-ui usePresence (SPEC 10)', () => {
           root.unmount()
         })
         dom.restore()
+      }
+    }
+  })
+})
+
+describe('lib-ui <HoverGlide> interactive DOM behavior', () => {
+  it('morphs clamped radius across mixed shapes, skips disabled targets, observes stationary mute changes, and retargets on ancestor scroll and resize', async () => {
+    const globals = globalThis as Record<string, unknown>
+    const savedKeys = [
+      'window',
+      'document',
+      'HTMLElement',
+      'Element',
+      'Node',
+      'ResizeObserver',
+      'MutationObserver',
+      'IS_REACT_ACT_ENVIRONMENT',
+    ] as const
+    const saved = new Map<string, { hadOwn: boolean; value: unknown }>()
+    for (const key of savedKeys) {
+      saved.set(key, { hadOwn: Object.hasOwn(globals, key), value: globals[key] })
+    }
+
+    const rects = new WeakMap<
+      FakeEl,
+      { left: number; top: number; width: number; height: number }
+    >()
+    const radii = new WeakMap<FakeEl, string>()
+    const windowListeners = new Map<string, Set<(event: unknown) => void>>()
+    const rafQueue: (() => void)[] = []
+    let hitTarget: FakeEl | null = null
+    const observers: {
+      resize: (() => void) | null
+      mutation: ((records: { target: FakeEl }[]) => void) | null
+    } = { resize: null, mutation: null }
+    const pendingTimers = new Map<number, () => void>()
+    let nextTimerId = 1
+
+    const toKebab = (name: string) => name.replace(/[A-Z]/g, (ch) => `-${ch.toLowerCase()}`)
+
+    class FakeEl {
+      nodeType: number
+      nodeName: string
+      tagName: string
+      nodeValue = ''
+      childNodes: FakeEl[] = []
+      parentNode: FakeEl | null = null
+      ownerDocument: unknown
+      style: Record<string, string> = {}
+      namespaceURI = 'http://www.w3.org/1999/xhtml'
+      scrollLeft = 0
+      scrollTop = 0
+      clientLeft = 0
+      clientTop = 0
+      offsetWidth = 100
+      private attrs = new Map<string, string>()
+      private listeners = new Map<string, Set<(event: unknown) => void>>()
+
+      dataset: Record<string, string | undefined>
+
+      constructor(nodeType: number, nodeName: string, ownerDocument: unknown) {
+        this.nodeType = nodeType
+        this.nodeName = nodeName
+        this.tagName = nodeName
+        this.ownerDocument = ownerDocument
+        this.dataset = new Proxy(
+          {},
+          {
+            get: (_target, prop: string) => this.attrs.get(`data-${toKebab(prop)}`),
+            set: (_target, prop: string, value: string) => {
+              this.setAttribute(`data-${toKebab(prop)}`, String(value))
+              return true
+            },
+          }
+        )
+      }
+
+      get isConnected(): boolean {
+        return this.parentNode !== null
+      }
+
+      appendChild(child: FakeEl) {
+        child.parentNode = this
+        this.childNodes.push(child)
+        return child
+      }
+
+      removeChild(child: FakeEl) {
+        this.childNodes = this.childNodes.filter((item) => item !== child)
+        child.parentNode = null
+        return child
+      }
+
+      insertBefore(child: FakeEl, ref: FakeEl | null) {
+        child.parentNode = this
+        const index = ref ? this.childNodes.indexOf(ref) : -1
+        if (index >= 0) {
+          this.childNodes.splice(index, 0, child)
+        } else {
+          this.childNodes.push(child)
+        }
+        return child
+      }
+
+      setAttribute(name: string, value: string) {
+        this.attrs.set(name, String(value))
+        if (
+          observers.mutation &&
+          (name === HOVER_GLIDE_ITEM_ATTR || name === 'disabled' || name === 'aria-disabled')
+        ) {
+          observers.mutation([{ target: this }])
+        }
+      }
+
+      getAttribute(name: string): string | null {
+        return this.attrs.has(name) ? (this.attrs.get(name) ?? '') : null
+      }
+
+      hasAttribute(name: string): boolean {
+        return this.attrs.has(name)
+      }
+
+      removeAttribute(name: string) {
+        this.attrs.delete(name)
+      }
+
+      contains(node: FakeEl | null): boolean {
+        for (let cur: FakeEl | null = node; cur; cur = cur.parentNode) {
+          if (cur === this) {
+            return true
+          }
+        }
+        return false
+      }
+
+      matches(selector: string): boolean {
+        if (selector === `[${HOVER_GLIDE_ITEM_ATTR}]`) {
+          return this.attrs.has(HOVER_GLIDE_ITEM_ATTR)
+        }
+        if (selector === ':disabled') {
+          return this.attrs.has('disabled')
+        }
+        return false
+      }
+
+      closest(selector: string): FakeEl | null {
+        if (this.matches(selector)) {
+          return this
+        }
+        return this.parentNode ? this.parentNode.closest(selector) : null
+      }
+
+      getBoundingClientRect() {
+        return rects.get(this) ?? { left: 0, top: 0, width: 0, height: 0 }
+      }
+
+      addEventListener(type: string, fn: (event: unknown) => void) {
+        let set = this.listeners.get(type)
+        if (!set) {
+          set = new Set()
+          this.listeners.set(type, set)
+        }
+        set.add(fn)
+      }
+
+      removeEventListener(type: string, fn: (event: unknown) => void) {
+        this.listeners.get(type)?.delete(fn)
+      }
+
+      dispatch(type: string, event: Record<string, unknown>) {
+        for (const fn of [...(this.listeners.get(type) ?? [])]) {
+          fn(event)
+        }
+      }
+
+      get firstChild(): FakeEl | null {
+        return this.childNodes[0] ?? null
+      }
+
+      get nextSibling(): FakeEl | null {
+        if (!this.parentNode) {
+          return null
+        }
+        const index = this.parentNode.childNodes.indexOf(this)
+        return this.parentNode.childNodes[index + 1] ?? null
+      }
+
+      set textContent(value: string) {
+        this.childNodes = value ? [doc.createTextNode(String(value))] : []
+      }
+
+      get textContent(): string {
+        return this.nodeType === 3
+          ? this.nodeValue
+          : this.childNodes.map((child) => child.textContent).join('')
+      }
+
+      get className(): string {
+        return this.attrs.get('class') ?? ''
+      }
+
+      set className(value: string) {
+        this.attrs.set('class', value)
+      }
+    }
+
+    const win = {
+      setTimeout(cb: () => void) {
+        const id = nextTimerId++
+        pendingTimers.set(id, cb)
+        return id
+      },
+      clearTimeout(id: number) {
+        pendingTimers.delete(id)
+      },
+      requestAnimationFrame(cb: () => void) {
+        rafQueue.push(cb)
+        return rafQueue.length
+      },
+      cancelAnimationFrame() {},
+      getComputedStyle(el: FakeEl) {
+        return { borderRadius: radii.get(el) ?? '' }
+      },
+      addEventListener(type: string, fn: (event: unknown) => void) {
+        let set = windowListeners.get(type)
+        if (!set) {
+          set = new Set()
+          windowListeners.set(type, set)
+        }
+        set.add(fn)
+      },
+      removeEventListener(type: string, fn: (event: unknown) => void) {
+        windowListeners.get(type)?.delete(fn)
+      },
+      navigator: { userAgent: '' },
+      HTMLIFrameElement: function FakeIFrame() {},
+    }
+
+    const doc = {
+      nodeType: 9,
+      defaultView: win,
+      documentElement: null as FakeEl | null,
+      body: null as FakeEl | null,
+      activeElement: null,
+      createElement(tag: string) {
+        return new FakeEl(1, tag.toUpperCase(), doc)
+      },
+      createTextNode(text: string) {
+        const node = new FakeEl(3, '#text', doc)
+        node.nodeValue = text
+        return node
+      },
+      elementFromPoint: () => hitTarget,
+      addEventListener() {},
+      removeEventListener() {},
+    }
+    doc.documentElement = doc.createElement('html')
+    doc.body = doc.createElement('body')
+
+    globals.window = win
+    globals.document = doc
+    globals.HTMLElement = FakeEl
+    globals.Element = FakeEl
+    globals.Node = FakeEl
+    globals.ResizeObserver = class {
+      constructor(cb: () => void) {
+        observers.resize = cb
+      }
+      observe() {}
+      disconnect() {}
+    }
+    globals.MutationObserver = class {
+      constructor(cb: (records: { target: FakeEl }[]) => void) {
+        observers.mutation = cb
+      }
+      observe() {}
+      disconnect() {}
+    }
+    globals.IS_REACT_ACT_ENVIRONMENT = true
+
+    const scroller = doc.createElement('div')
+    const mount = doc.createElement('div')
+    scroller.appendChild(mount)
+    doc.body.appendChild(scroller)
+
+    let surfaceEl: FakeEl | null = null
+    let rowEl: FakeEl | null = null
+    let pillEl: FakeEl | null = null
+    let disabledEl: FakeEl | null = null
+    let mutedBtnEl: FakeEl | null = null
+
+    const Demo = ({ muted }: { muted: boolean }) =>
+      createElement(
+        HoverGlide,
+        {
+          ref: (node: HTMLDivElement | null) => {
+            surfaceEl = node as unknown as FakeEl | null
+          },
+        },
+        createElement(
+          'button',
+          {
+            ...hoverGlideItem(),
+            ref: (node: HTMLButtonElement | null) => {
+              rowEl = node as unknown as FakeEl | null
+            },
+          },
+          'Trace row'
+        ),
+        createElement(
+          'button',
+          {
+            ...hoverGlideItem(),
+            ref: (node: HTMLButtonElement | null) => {
+              pillEl = node as unknown as FakeEl | null
+            },
+          },
+          'Show more'
+        ),
+        createElement(
+          'button',
+          {
+            ...hoverGlideItem(),
+            disabled: true,
+            ref: (node: HTMLButtonElement | null) => {
+              disabledEl = node as unknown as FakeEl | null
+            },
+          },
+          'Disabled'
+        ),
+        createElement(
+          'button',
+          {
+            ...hoverGlideItem(muted),
+            ref: (node: HTMLButtonElement | null) => {
+              mutedBtnEl = node as unknown as FakeEl | null
+            },
+          },
+          'Open in Activity'
+        )
+      )
+
+    const root = createRoot(mount as unknown as HTMLElement)
+    try {
+      await act(async () => {
+        root.render(createElement(Demo, { muted: true }))
+      })
+      assert.ok(surfaceEl && rowEl && pillEl && disabledEl && mutedBtnEl)
+      const surface = surfaceEl as FakeEl
+      const row = rowEl as FakeEl
+      const pill = pillEl as FakeEl
+      const disabledBtn = disabledEl as FakeEl
+      const mutedBtn = mutedBtnEl as FakeEl
+      const indicator = surface.childNodes[0]
+
+      surface.clientLeft = 1
+      rects.set(surface, { left: 10, top: 100, width: 560, height: 200 })
+      rects.set(row, { left: 19, top: 104, width: 540, height: 32 })
+      radii.set(row, '12px')
+      rects.set(pill, { left: 19, top: 146, width: 140, height: 32 })
+      radii.set(pill, '9999px')
+      rects.set(disabledBtn, { left: 163, top: 146, width: 100, height: 32 })
+      radii.set(disabledBtn, '9999px')
+      rects.set(mutedBtn, { left: 267, top: 146, width: 130, height: 32 })
+      radii.set(mutedBtn, '9999px')
+
+      // React attaches pointer handlers via props; pull the React props from the fiber key to fire synthetic events cleanly.
+      const reactPropsKey = Object.keys(surface).find((key) => key.startsWith('__reactProps$'))
+      assert.ok(reactPropsKey, 'surface has React props')
+      const handlers = (surface as unknown as Record<string, Record<string, (e: unknown) => void>>)[
+        reactPropsKey
+      ]
+
+      // 1. Cold entry onto rounded row -> snaps to 12px radius and x = 19 - 10 - 1 = 8px.
+      handlers.onPointerOver({ pointerType: 'mouse', clientX: 50, clientY: 120, target: row })
+      assert.equal(indicator.dataset.glideVisible, 'true')
+      assert.equal(indicator.style.transform, 'translate3d(8px, 4px, 0)')
+      assert.equal(indicator.style.width, '540px')
+      assert.equal(indicator.style.borderRadius, '12px')
+
+      // 2. Warm glide onto capsule pill button -> clamps 9999px to 16px for smooth morphing.
+      handlers.onPointerOver({ pointerType: 'mouse', clientX: 50, clientY: 160, target: pill })
+      assert.equal(indicator.dataset.glideVisible, 'true')
+      assert.equal(indicator.dataset.glideMoving, 'true')
+      assert.equal(indicator.style.width, '140px')
+      assert.equal(indicator.style.borderRadius, '16px')
+
+      // 3. Disabled target is ignored -> enters cooling (hidden).
+      handlers.onPointerOver({
+        pointerType: 'mouse',
+        clientX: 200,
+        clientY: 160,
+        target: disabledBtn,
+      })
+      assert.equal(indicator.dataset.glideVisible, 'false')
+
+      // 4. Muted target tracks invisibly, then flipping muted -> false reveals immediately via MutationObserver.
+      handlers.onPointerOver({ pointerType: 'mouse', clientX: 300, clientY: 160, target: mutedBtn })
+      assert.equal(indicator.dataset.glideVisible, 'false')
+      await act(async () => {
+        root.render(createElement(Demo, { muted: false }))
+      })
+      assert.equal(indicator.dataset.glideVisible, 'true')
+      assert.equal(indicator.style.borderRadius, '16px')
+
+      // 5. Ancestor scroll re-targets stationary pointer to row via elementFromPoint.
+      hitTarget = row
+      for (const listener of windowListeners.get('scroll') ?? []) {
+        listener({ target: scroller })
+      }
+      while (rafQueue.length > 0) {
+        rafQueue.shift()?.()
+      }
+      assert.equal(indicator.style.width, '540px')
+      assert.equal(indicator.style.borderRadius, '12px')
+
+      // 6. ResizeObserver re-targets stationary pointer to pill via elementFromPoint.
+      hitTarget = pill
+      observers.resize?.()
+      assert.equal(indicator.style.width, '140px')
+      assert.equal(indicator.style.borderRadius, '16px')
+    } finally {
+      await act(async () => {
+        root.unmount()
+      })
+      for (const [key, entry] of saved) {
+        if (entry.hadOwn) {
+          globals[key] = entry.value
+        } else {
+          Reflect.deleteProperty(globals, key)
+        }
       }
     }
   })

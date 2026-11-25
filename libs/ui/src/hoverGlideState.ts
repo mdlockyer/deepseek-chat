@@ -3,6 +3,7 @@ export type GlideRect = {
   y: number
   width: number
   height: number
+  radius?: string | null
 }
 
 export type BoxRect = {
@@ -60,7 +61,56 @@ export const measureGlideRect = (
 })
 
 export const glideRectsEqual = (a: GlideRect, b: GlideRect): boolean =>
-  a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height
+  a.x === b.x &&
+  a.y === b.y &&
+  a.width === b.width &&
+  a.height === b.height &&
+  (a.radius ?? null) === (b.radius ?? null)
+
+const RADIUS_TOKEN_RE = /^(?:0|(\d+(?:\.\d+)?|\.\d+)(px|%))$/
+
+const formatRadiusPx = (value: number): string => `${Math.round(value * 100) / 100}px`
+
+/**
+ * Normalize a target element's computed CSS `border-radius` for smooth gliding transitions.
+ * Clamps each corner to half the smaller box dimension so capsule radii (e.g. `9999px`)
+ * interpolate smoothly to and from standard rounded rectangles instead of snapping.
+ */
+export const normalizeGlideRadius = (
+  rawRadius: string | null | undefined,
+  width: number,
+  height: number
+): string | null => {
+  if (!rawRadius || width <= 0 || height <= 0) {
+    return null
+  }
+  const trimmed = rawRadius.trim()
+  if (!trimmed || trimmed.includes('/')) {
+    return null
+  }
+  const tokens = trimmed.split(/\s+/)
+  if (tokens.length < 1 || tokens.length > 4) {
+    return null
+  }
+  const minDim = Math.min(width, height)
+  const maxRadius = minDim / 2
+  const resolved: string[] = []
+  for (const token of tokens) {
+    const match = RADIUS_TOKEN_RE.exec(token)
+    if (!match) {
+      return null
+    }
+    if (token === '0') {
+      resolved.push('0px')
+      continue
+    }
+    const amount = Number(match[1])
+    const unit = match[2]
+    const px = unit === '%' ? (amount / 100) * minDim : amount
+    resolved.push(formatRadiusPx(Math.min(Math.max(0, px), maxRadius)))
+  }
+  return resolved.every((value) => value === resolved[0]) ? resolved[0] : resolved.join(' ')
+}
 
 /**
  * Move the hover glide indicator onto a target item:

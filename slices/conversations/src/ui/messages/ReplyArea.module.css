@@ -366,16 +366,15 @@
     font: var(--ui-type-caption);
     text-align: left;
     cursor: pointer;
-    transition:
-      background-color var(--ui-duration-fast) var(--ui-ease-standard),
-      color var(--ui-duration-fast) var(--ui-ease-standard);
+    transition: color var(--ui-duration-fast) var(--ui-ease-standard);
 
-    &:hover {
-      background: var(--ui-interactive-hover);
-      color: var(--ui-text-primary);
+    @media (hover: hover) {
+      &:hover {
+        color: var(--ui-text-primary);
 
-      .traceIcon {
-        color: var(--ui-text-secondary);
+        .traceIcon {
+          color: var(--ui-text-secondary);
+        }
       }
     }
 

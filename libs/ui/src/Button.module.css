@@ -84,6 +84,11 @@
       &:hover:not(:disabled):not([aria-disabled='true']) {
         background-color: var(--ui-interactive-hover);
       }
+
+      [data-hover-glide-surface='active']
+        &:hover:not(:disabled):not([aria-disabled='true'])[data-hover-glide-item=''] {
+        background-color: transparent;
+      }
     }
   }
 
@@ -96,6 +101,11 @@
       &:hover:not(:disabled):not([aria-disabled='true']) {
         background-color: var(--ui-interactive-hover);
         color: var(--ui-text-primary);
+      }
+
+      [data-hover-glide-surface='active']
+        &:hover:not(:disabled):not([aria-disabled='true'])[data-hover-glide-item=''] {
+        background-color: transparent;
       }
     }
   }

@@ -1,10 +1,12 @@
 import type { DeliveredFileRef, LiveTrack } from '@deepseek-chat/lib-tools'
 import {
   Button,
+  HoverGlide,
   IconCheckedOutline14,
   IconChevronDownOutline14,
   IconChevronRightOutline14,
   IconPanelRightOutline16,
+  hoverGlideItem,
 } from '@deepseek-chat/lib-ui'
 import clsx from 'clsx'
 import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react'
@@ -311,7 +313,7 @@ const InlineTraceInlay = ({
   const hasIcons = preview.entries.some(({ item }) => item.icon !== undefined && item.icon !== null)
 
   return (
-    <div className={styles.inlineTrace}>
+    <HoverGlide className={styles.inlineTrace}>
       {thinkingOnly && trace.thinkingMarkdown ? (
         <div className={clsx(styles.inlineThinking, 'ds-think-content')}>
           <Markdown
@@ -344,6 +346,7 @@ const InlineTraceInlay = ({
                 <button
                   type="button"
                   className={styles.traceRowButton}
+                  {...hoverGlideItem()}
                   onClick={() => onInspect(item.callId)}
                 >
                   <span className={styles.traceRow}>
@@ -388,6 +391,7 @@ const InlineTraceInlay = ({
               variant="ghost"
               size="s"
               className={styles.traceFooterAction}
+              {...hoverGlideItem()}
               onClick={() => setShowAll(true)}
             >
               {t(
@@ -403,6 +407,7 @@ const InlineTraceInlay = ({
               variant="ghost"
               size="s"
               className={styles.traceFooterAction}
+              {...hoverGlideItem()}
               onClick={collapseSteps}
             >
               {t('activityShowFewerSteps')}
@@ -415,6 +420,7 @@ const InlineTraceInlay = ({
               icon={<IconPanelRightOutline16 />}
               className={clsx(styles.traceFooterAction, isInspecting && styles.inspectButtonActive)}
               aria-pressed={isInspecting}
+              {...hoverGlideItem(isInspecting)}
               onClick={() => onInspect()}
             >
               {isInspecting ? t('activityViewingInPanel') : t('activityOpenInPanel')}
@@ -422,7 +428,7 @@ const InlineTraceInlay = ({
           ) : null}
         </div>
       ) : null}
-    </div>
+    </HoverGlide>
   )
 }
 

@@ -1,9 +1,9 @@
 import {
   Button,
   Dialog,
+  HoverGlide,
   IconButton,
   IconPanelLeftOutline16,
-  useHoverGlide,
   useOverlayLock,
   usePresence,
 } from '@deepseek-chat/lib-ui'
@@ -45,7 +45,7 @@ export const Sider = ({
   }
   const shownDeleting = deleting ?? lastDeletingRef.current
   const [deletePending, setDeletePending] = useState(false)
-  const hoverGlide = useHoverGlide<HTMLDivElement>({ disabled: collapsed })
+  const listRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>
@@ -72,7 +72,7 @@ export const Sider = ({
   }, [])
 
   useEffect(() => {
-    const scroller = hoverGlide.containerRef.current
+    const scroller = listRef.current
     if (
       !scroller ||
       typeof CSS === 'undefined' ||
@@ -100,7 +100,7 @@ export const Sider = ({
       sentinel.remove()
       scroller.classList.remove(styles.listMoreEnd)
     }
-  }, [hoverGlide.containerRef])
+  }, [])
 
   let enterIndex = 0
 
@@ -142,8 +142,7 @@ export const Sider = ({
           {t('newChat')}
         </button>
         <div className={styles.listWrap}>
-          <div className={styles.list} {...hoverGlide.containerProps}>
-            <div {...hoverGlide.indicatorProps} />
+          <HoverGlide ref={listRef} className={styles.list} disabled={collapsed}>
             <ul className={styles.groups}>
               {groups.map((group) => (
                 <li key={group.key} className={styles.section}>
@@ -162,7 +161,7 @@ export const Sider = ({
                 </li>
               ))}
             </ul>
-          </div>
+          </HoverGlide>
         </div>
       </div>
       <Dialog

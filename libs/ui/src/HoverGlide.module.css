@@ -1,4 +1,14 @@
 @layer components {
+  .surface {
+    position: relative;
+    isolation: isolate;
+  }
+
+  .surface :where([data-hover-glide-item]) {
+    position: relative;
+    z-index: var(--ui-z-base);
+  }
+
   .indicator {
     position: absolute;
     top: 0;
@@ -29,6 +39,8 @@
           var(--hover-glide-ease, cubic-bezier(0.2, 0.9, 0.25, 1)),
         height var(--hover-glide-duration, var(--ui-duration-fast))
           var(--hover-glide-ease, cubic-bezier(0.2, 0.9, 0.25, 1)),
+        border-radius var(--hover-glide-duration, var(--ui-duration-fast))
+          var(--hover-glide-ease, cubic-bezier(0.2, 0.9, 0.25, 1)),
         opacity var(--hover-glide-fade-out, 100ms) ease-out;
     }
 
@@ -39,6 +51,8 @@
         width var(--hover-glide-duration, var(--ui-duration-fast))
           var(--hover-glide-ease, cubic-bezier(0.2, 0.9, 0.25, 1)),
         height var(--hover-glide-duration, var(--ui-duration-fast))
+          var(--hover-glide-ease, cubic-bezier(0.2, 0.9, 0.25, 1)),
+        border-radius var(--hover-glide-duration, var(--ui-duration-fast))
           var(--hover-glide-ease, cubic-bezier(0.2, 0.9, 0.25, 1)),
         opacity var(--hover-glide-fade-in, 75ms) ease-out;
     }

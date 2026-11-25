@@ -13,15 +13,15 @@ every slice's UI and pass the full gate with zero slice edits.
 
 ## Public Entrypoint (`@deepseek-chat/lib-ui`)
 
-| Category                | Exports                                                                                                                                                                                                                                                                     |
-| :---------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Runtime & Provider**  | `UiProvider`, `createOverlayCoordinator`, `createNoticeBus`, `useOverlayPort`, `useOverlayLock`, `useUiNotice`, `useIsMobile`, `usePresence`, `copyText`, `computeAnchoredPosition`, `useAnchoredPosition`, `useDismiss`, `useDelayedOpen`, `VIEWPORT_PADDING`              |
-| **Actions**             | `Button`, `LinkButton`, `IconButton`, `Chip`                                                                                                                                                                                                                                |
-| **Inputs & Selection**  | `TextField`, `PasswordField`, `Select`, `Switch`, `SegmentedControl`, `RadioCardGroup`                                                                                                                                                                                      |
-| **Overlays & Floating** | `Dialog`, `Popover`, `Menu`, `Tooltip`, `HoverCard`, `ToastViewport`                                                                                                                                                                                                        |
-| **Navigation & Motion** | `Tabs`, `TabList`, `Tab`, `TabPanel`, `useHoverGlide`, `HoverGlideIndicator`, `hoverGlideItem`, `HOVER_GLIDE_ITEM_ATTR`, `INITIAL_HOVER_GLIDE_STATE`, `enterGlideTarget`, `leaveGlideTarget`, `expireGlideCooldown`, `syncGlideRect`, `measureGlideRect`, `glideRectsEqual` |
-| **Feedback & Layout**   | `Badge`, `Banner`, `EmptyState`, `Spinner`, `SettingGroup`, `SettingRow`, `SettingInlineConfirm`, `PanelHeader`                                                                                                                                                             |
-| **Icons & Glyphs**      | Domain-blind `Icon*` SVG components and `FileGlyph` (`kind: 'document' \| 'pdf' \| 'spreadsheet' \| 'presentation' \| 'image'`)                                                                                                                                             |
+| Category                | Exports                                                                                                                                                                                                                                                                                                                                       |
+| :---------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Runtime & Provider**  | `UiProvider`, `createOverlayCoordinator`, `createNoticeBus`, `useOverlayPort`, `useOverlayLock`, `useUiNotice`, `useIsMobile`, `usePresence`, `copyText`, `computeAnchoredPosition`, `useAnchoredPosition`, `useDismiss`, `useDelayedOpen`, `VIEWPORT_PADDING`                                                                                |
+| **Actions**             | `Button`, `LinkButton`, `IconButton`, `Chip`                                                                                                                                                                                                                                                                                                  |
+| **Inputs & Selection**  | `TextField`, `PasswordField`, `Select`, `Switch`, `SegmentedControl`, `RadioCardGroup`                                                                                                                                                                                                                                                        |
+| **Overlays & Floating** | `Dialog`, `Popover`, `Menu`, `Tooltip`, `HoverCard`, `ToastViewport`                                                                                                                                                                                                                                                                          |
+| **Navigation & Motion** | `Tabs`, `TabList`, `Tab`, `TabPanel`, `HoverGlide`, `useHoverGlide`, `HoverGlideIndicator`, `hoverGlideItem`, `HOVER_GLIDE_ITEM_ATTR`, `HOVER_GLIDE_SURFACE_ATTR`, `INITIAL_HOVER_GLIDE_STATE`, `enterGlideTarget`, `leaveGlideTarget`, `expireGlideCooldown`, `syncGlideRect`, `measureGlideRect`, `normalizeGlideRadius`, `glideRectsEqual` |
+| **Feedback & Layout**   | `Badge`, `Banner`, `EmptyState`, `Spinner`, `SettingGroup`, `SettingRow`, `SettingInlineConfirm`, `PanelHeader`                                                                                                                                                                                                                               |
+| **Icons & Glyphs**      | Domain-blind `Icon*` SVG components and `FileGlyph` (`kind: 'document' \| 'pdf' \| 'spreadsheet' \| 'presentation' \| 'image'`)                                                                                                                                                                                                               |
 
 ## Behavioural & Accessibility Invariants
 
@@ -66,10 +66,16 @@ every slice's UI and pass the full gate with zero slice edits.
    - `createNoticeBus()` holds at most one active notice (new notices replace old ones and cancel
      stale timers), renders `text()` in the current locale at render time, and expires after its
      duration (longer when a link is present).
-8. **Hover glide.** `enterGlideTarget` snaps on cold entry and glides on warm transitions;
-   `leaveGlideTarget` enters `cooling` so crossing small gaps keeps gliding until
-   `expireGlideCooldown` resets cold; muted items track invisibly; `measureGlideRect` round-trips
-   cleanly between viewport and scroll-content coordinates.
+8. **Hover glide.** `<HoverGlide>` and `useHoverGlide` provide a single-surface gliding hover
+   container that isolates its stacking context, elevates `[data-hover-glide-item]` targets above
+   the indicator, and suppresses duplicate native `:hover` backgrounds on unmuted `Button` /
+   `IconButton` items while active. `enterGlideTarget` snaps on cold entry and glides on warm
+   transitions; `leaveGlideTarget` enters `cooling` so crossing small gaps keeps gliding until
+   `expireGlideCooldown` resets cold; muted items track invisibly and update immediately on
+   attribute change; disabled items are ignored; `measureGlideRect` round-trips cleanly between
+   viewport and scroll-content coordinates; `normalizeGlideRadius` clamps per-item corner radii to
+   half the smaller box dimension so mixed shapes (such as rounded rows and capsule pills) morph
+   smoothly; ancestor scroll and layout resizes re-target the stationary pointer.
 9. **Buttons & loading states.** `Button` defaults to `type="button"`, preserves label visibility
    and width under `loading` (`aria-busy="true"`), and never omits accessible text on `IconButton`.
 10. **Presence lifecycle (`usePresence`).** Mounts synchronously (`mounted: true`, `exiting: false`)

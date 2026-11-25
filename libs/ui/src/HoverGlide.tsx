@@ -6,6 +6,7 @@ import {
   useMemo,
   useRef,
   type ComponentPropsWithoutRef,
+  type MutableRefObject,
   type PointerEvent as ReactPointerEvent,
   type RefObject,
 } from 'react'
@@ -15,6 +16,7 @@ import {
   expireGlideCooldown,
   leaveGlideTarget,
   measureGlideRect,
+  normalizeGlideRadius,
   syncGlideRect,
   type GlideRect,
   type HoverGlideEffect,
@@ -23,11 +25,12 @@ import {
 import styles from './HoverGlide.module.css'
 
 export const HOVER_GLIDE_ITEM_ATTR = 'data-hover-glide-item'
+export const HOVER_GLIDE_SURFACE_ATTR = 'data-hover-glide-surface'
 const DEFAULT_ITEM_SELECTOR = `[${HOVER_GLIDE_ITEM_ATTR}]`
 const DEFAULT_COOLDOWN_MS = 120
 
 /**
- * Mark an element inside a `useHoverGlide` container as a glide target.
+ * Mark an element inside a `<HoverGlide>` or `useHoverGlide` surface as a glide target.
  * Pass `muted = true` for items with their own active surface so the glider tracks
  * their position invisibly and emerges smoothly from them when the pointer moves on.
  */
@@ -44,8 +47,10 @@ export type HoverGlideOptions = {
 export type HoverGlideResult<T extends HTMLElement> = {
   containerRef: RefObject<T>
   indicatorRef: RefObject<HTMLDivElement>
+  surfaceClassName: string
   containerProps: {
     ref: RefObject<T>
+    [HOVER_GLIDE_SURFACE_ATTR]: 'active' | 'disabled'
     onPointerOver: (event: ReactPointerEvent<T>) => void
     onPointerMove: (event: ReactPointerEvent<T>) => void
     onPointerLeave: (event: ReactPointerEvent<T>) => void
@@ -60,6 +65,11 @@ export type HoverGlideResult<T extends HTMLElement> = {
 
 const isMutedItem = (element: HTMLElement) =>
   element.getAttribute(HOVER_GLIDE_ITEM_ATTR) === 'muted'
+
+const isDisabledItem = (element: HTMLElement) =>
+  element.getAttribute('aria-disabled') === 'true' ||
+  element.hasAttribute('disabled') ||
+  (typeof element.matches === 'function' && element.matches(':disabled'))
 
 /**
  * Single-surface gliding hover indicator driven imperatively via refs (zero React re-renders
@@ -77,7 +87,7 @@ export const useHoverGlide = <T extends HTMLElement = HTMLElement>({
   const scrollFrameRef = useRef<number | null>(null)
   const pointerInsideRef = useRef(false)
   const lastPointerRef = useRef<{ x: number; y: number } | null>(null)
-  const appliedSizeRef = useRef<{ width: number; height: number } | null>(null)
+  const appliedGeometryRef = useRef<{ width: number; height: number; radius: string } | null>(null)
 
   const clearCooldown = useCallback(() => {
     if (cooldownTimerRef.current !== null) {
@@ -88,14 +98,18 @@ export const useHoverGlide = <T extends HTMLElement = HTMLElement>({
 
   const applyRect = useCallback((indicator: HTMLDivElement, rect: GlideRect) => {
     indicator.style.transform = `translate3d(${rect.x}px, ${rect.y}px, 0)`
-    const prevSize = appliedSizeRef.current
-    if (!prevSize || prevSize.width !== rect.width) {
+    const prev = appliedGeometryRef.current
+    if (!prev || prev.width !== rect.width) {
       indicator.style.width = `${rect.width}px`
     }
-    if (!prevSize || prevSize.height !== rect.height) {
+    if (!prev || prev.height !== rect.height) {
       indicator.style.height = `${rect.height}px`
     }
-    appliedSizeRef.current = { width: rect.width, height: rect.height }
+    const nextRadius = rect.radius ?? ''
+    if (!prev || prev.radius !== nextRadius) {
+      indicator.style.borderRadius = nextRadius
+    }
+    appliedGeometryRef.current = { width: rect.width, height: rect.height, radius: nextRadius }
   }, [])
 
   const resetIndicatorGeometry = useCallback((indicator: HTMLDivElement) => {
@@ -104,7 +118,8 @@ export const useHoverGlide = <T extends HTMLElement = HTMLElement>({
     indicator.style.transform = 'translate3d(0px, 0px, 0)'
     indicator.style.width = '0px'
     indicator.style.height = '0px'
-    appliedSizeRef.current = { width: 0, height: 0 }
+    indicator.style.borderRadius = ''
+    appliedGeometryRef.current = { width: 0, height: 0, radius: '' }
   }, [])
 
   const commitEffect = useCallback(
@@ -155,7 +170,7 @@ export const useHoverGlide = <T extends HTMLElement = HTMLElement>({
         return null
       }
       const item = node.closest<HTMLElement>(itemSelector)
-      if (!item || !container.contains(item) || item === container) {
+      if (!item || !container.contains(item) || item === container || isDisabledItem(item)) {
         return null
       }
       return item
@@ -168,7 +183,7 @@ export const useHoverGlide = <T extends HTMLElement = HTMLElement>({
     if (!container) {
       return null
     }
-    return measureGlideRect(
+    const rect = measureGlideRect(
       item.getBoundingClientRect(),
       container.getBoundingClientRect(),
       container.scrollLeft,
@@ -176,6 +191,12 @@ export const useHoverGlide = <T extends HTMLElement = HTMLElement>({
       container.clientLeft,
       container.clientTop
     )
+    const computedRadius =
+      typeof window !== 'undefined' && typeof window.getComputedStyle === 'function'
+        ? window.getComputedStyle(item).borderRadius
+        : null
+    const radius = normalizeGlideRadius(computedRadius, rect.width, rect.height)
+    return radius !== null ? { ...rect, radius } : rect
   }, [])
 
   const moveToTarget = useCallback(
@@ -225,54 +246,106 @@ export const useHoverGlide = <T extends HTMLElement = HTMLElement>({
       return
     }
 
-    const onScroll = () => {
+    const syncAfterLayoutOrScroll = () => {
+      const pointer = lastPointerRef.current
+      if (
+        pointerInsideRef.current &&
+        pointer &&
+        typeof document !== 'undefined' &&
+        typeof document.elementFromPoint === 'function'
+      ) {
+        moveToTarget(document.elementFromPoint(pointer.x, pointer.y), { snap: true })
+        return
+      }
+      const current = stateRef.current
+      if (current.kind !== 'active') {
+        return
+      }
+      if (
+        !current.target.isConnected ||
+        !container.contains(current.target) ||
+        !current.target.matches(itemSelector) ||
+        isDisabledItem(current.target)
+      ) {
+        const next = leaveGlideTarget(current)
+        stateRef.current = next.state
+        commitEffect(next.effect)
+        return
+      }
+      const rect = measureItem(current.target)
+      if (!rect) {
+        return
+      }
+      const next = syncGlideRect(current, rect)
+      stateRef.current = next.state
+      commitEffect(next.effect)
+    }
+
+    const onScroll = (event: Event) => {
       if (!pointerInsideRef.current || !lastPointerRef.current || scrollFrameRef.current !== null) {
+        return
+      }
+      const target = event.target
+      const affectsContainer =
+        target === container ||
+        target === document ||
+        target === window ||
+        (typeof Node !== 'undefined' && target instanceof Node && target.contains(container))
+      if (!affectsContainer) {
         return
       }
       scrollFrameRef.current = window.requestAnimationFrame(() => {
         scrollFrameRef.current = null
-        const pointer = lastPointerRef.current
-        if (!pointerInsideRef.current || !pointer) {
-          return
-        }
-        const hit = document.elementFromPoint(pointer.x, pointer.y)
-        moveToTarget(hit, { snap: true })
+        syncAfterLayoutOrScroll()
       })
     }
 
-    const observer =
+    const onWindowBlur = () => {
+      if (!pointerInsideRef.current) {
+        return
+      }
+      pointerInsideRef.current = false
+      const next = leaveGlideTarget(stateRef.current)
+      stateRef.current = next.state
+      commitEffect(next.effect)
+    }
+
+    const resizeObserver =
       typeof ResizeObserver !== 'undefined'
         ? new ResizeObserver(() => {
+            syncAfterLayoutOrScroll()
+          })
+        : null
+
+    const mutationObserver =
+      typeof MutationObserver !== 'undefined'
+        ? new MutationObserver((records) => {
             const current = stateRef.current
             if (current.kind !== 'active') {
               return
             }
-            if (
-              !current.target.isConnected ||
-              !container.contains(current.target) ||
-              !current.target.matches(itemSelector)
-            ) {
-              const next = leaveGlideTarget(current)
-              stateRef.current = next.state
-              commitEffect(next.effect)
-              return
+            if (records.some((record) => record.target === current.target)) {
+              moveToTarget(current.target, { snap: true })
             }
-            const rect = measureItem(current.target)
-            if (!rect) {
-              return
-            }
-            const next = syncGlideRect(current, rect)
-            stateRef.current = next.state
-            commitEffect(next.effect)
           })
         : null
 
     container.addEventListener('scroll', onScroll, { passive: true })
-    observer?.observe(container)
+    window.addEventListener('scroll', onScroll, { passive: true, capture: true })
+    window.addEventListener('blur', onWindowBlur)
+    resizeObserver?.observe(container)
+    mutationObserver?.observe(container, {
+      subtree: true,
+      attributes: true,
+      attributeFilter: [HOVER_GLIDE_ITEM_ATTR, 'disabled', 'aria-disabled'],
+    })
 
     return () => {
       container.removeEventListener('scroll', onScroll)
-      observer?.disconnect()
+      window.removeEventListener('scroll', onScroll, true)
+      window.removeEventListener('blur', onWindowBlur)
+      resizeObserver?.disconnect()
+      mutationObserver?.disconnect()
       if (scrollFrameRef.current !== null) {
         window.cancelAnimationFrame(scrollFrameRef.current)
         scrollFrameRef.current = null
@@ -327,11 +400,12 @@ export const useHoverGlide = <T extends HTMLElement = HTMLElement>({
   const containerProps = useMemo(
     () => ({
       ref: containerRef,
+      [HOVER_GLIDE_SURFACE_ATTR]: (disabled ? 'disabled' : 'active') as 'active' | 'disabled',
       onPointerOver,
       onPointerMove,
       onPointerLeave,
     }),
-    [onPointerLeave, onPointerMove, onPointerOver]
+    [disabled, onPointerLeave, onPointerMove, onPointerOver]
   )
 
   const indicatorProps = useMemo(
@@ -343,8 +417,98 @@ export const useHoverGlide = <T extends HTMLElement = HTMLElement>({
     []
   )
 
-  return { containerRef, indicatorRef, containerProps, indicatorProps, reset }
+  return {
+    containerRef,
+    indicatorRef,
+    surfaceClassName: styles.surface,
+    containerProps,
+    indicatorProps,
+    reset,
+  }
 }
+
+export type HoverGlideProps = ComponentPropsWithoutRef<'div'> &
+  HoverGlideOptions & {
+    /** Optional extra className for the gliding background indicator element. */
+    indicatorClassName?: string
+  }
+
+/**
+ * Declarative single-surface gliding hover container.
+ * Wraps any list, button row, or mixed control group so items marked with `hoverGlideItem()`
+ * share one smoothly gliding background that adapts to each item's size and corner radius.
+ */
+export const HoverGlide = forwardRef<HTMLDivElement, HoverGlideProps>(function HoverGlide(
+  {
+    itemSelector,
+    cooldownMs,
+    disabled,
+    indicatorClassName,
+    className,
+    onPointerOver,
+    onPointerMove,
+    onPointerLeave,
+    children,
+    ...rest
+  },
+  forwardedRef
+) {
+  const glide = useHoverGlide<HTMLDivElement>({ itemSelector, cooldownMs, disabled })
+
+  const setRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      ;(glide.containerRef as MutableRefObject<HTMLDivElement | null>).current = node
+      if (typeof forwardedRef === 'function') {
+        forwardedRef(node)
+      } else if (forwardedRef) {
+        forwardedRef.current = node
+      }
+    },
+    [forwardedRef, glide.containerRef]
+  )
+
+  const handlePointerOver = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      glide.containerProps.onPointerOver(event)
+      onPointerOver?.(event)
+    },
+    [glide.containerProps, onPointerOver]
+  )
+
+  const handlePointerMove = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      glide.containerProps.onPointerMove(event)
+      onPointerMove?.(event)
+    },
+    [glide.containerProps, onPointerMove]
+  )
+
+  const handlePointerLeave = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      glide.containerProps.onPointerLeave(event)
+      onPointerLeave?.(event)
+    },
+    [glide.containerProps, onPointerLeave]
+  )
+
+  return (
+    <div
+      {...rest}
+      ref={setRef}
+      className={clsx(glide.surfaceClassName, className)}
+      data-hover-glide-surface={glide.containerProps[HOVER_GLIDE_SURFACE_ATTR]}
+      onPointerOver={handlePointerOver}
+      onPointerMove={handlePointerMove}
+      onPointerLeave={handlePointerLeave}
+    >
+      <div
+        {...glide.indicatorProps}
+        className={clsx(glide.indicatorProps.className, indicatorClassName)}
+      />
+      {children}
+    </div>
+  )
+})
 
 /** Optional wrapper when passing custom classes or inline styles onto the gliding surface. */
 export const HoverGlideIndicator = forwardRef<HTMLDivElement, ComponentPropsWithoutRef<'div'>>(

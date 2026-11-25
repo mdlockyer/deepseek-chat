@@ -184,8 +184,6 @@
   }
 
   .glideList {
-    position: relative;
-    isolation: isolate;
     display: flex;
     flex-direction: column;
     gap: var(--ui-space-0-5);
@@ -193,12 +191,9 @@
     border-radius: var(--ui-radius-md);
     background-color: var(--ui-surface-rail);
     --hover-glide-bg: var(--ui-surface-rail-hover);
-    --hover-glide-radius: var(--ui-radius-sm);
   }
 
   .glideItem {
-    position: relative;
-    z-index: var(--ui-z-base);
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -221,6 +216,13 @@
   .glideItemActive {
     background-color: var(--ui-surface-rail-active);
     color: var(--ui-accent-invert);
+  }
+
+  .glideActions {
+    display: flex;
+    align-items: center;
+    gap: var(--ui-space-1);
+    padding-top: var(--ui-space-1);
   }
 
   .glyphGrid {
