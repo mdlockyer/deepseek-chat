@@ -82,10 +82,7 @@ export const serializeBrowserForArchive = (
 
 const BrowserActivityView = ({ entries, streaming, openLink }: ActivityStepRenderProps) => {
   const t = browserMessages.useTranslate()
-  const hasError = entries.some(
-    ({ result }) => result && result.status !== 'ok' && result.status !== 'running'
-  )
-  const [open, setOpen] = useState(hasError)
+  const [open, setOpen] = useState(true)
   const isRunning =
     streaming && entries.some(({ result }) => !result || result.status === 'running')
   const totalMs = entries.reduce((acc, { result }) => acc + (result?.durationMs ?? 0), 0)

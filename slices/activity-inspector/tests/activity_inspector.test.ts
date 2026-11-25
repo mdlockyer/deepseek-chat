@@ -73,7 +73,7 @@ const fakePanel = () => {
 }
 
 describe('slice-activity-inspector: panel lifecycle & EventLog reactivity', () => {
-  it('toggles on TurnInspectionRequested, preserves lastTarget on displacement, restores, and cleans up on facts', () => {
+  it('supports header toggle (follow_latest), pinned TurnInspectionRequested, displacement isolation, and cleanup on facts', () => {
     const log = new EventLog()
     const panel = fakePanel()
     const slice = createActivityInspectorSlice({
@@ -84,7 +84,21 @@ describe('slice-activity-inspector: panel lifecycle & EventLog reactivity', () =
       openInApp: null,
     })
 
-    // Open
+    // First-class header toggle opens in follow_latest mode and closes on second click.
+    slice.togglePanel('s1')
+    assert.equal(panel.slot.isOpen('s1'), true)
+    assert.deepEqual(slice.getSelection(), {
+      kind: 'follow_latest',
+      sessionId: 's1',
+      tab: 'activity',
+    })
+    assert.equal(slice.getTarget(), null, 'follow_latest has no pinned target')
+
+    slice.togglePanel('s1')
+    assert.equal(panel.slot.isOpen('s1'), false)
+    assert.equal(slice.getSelection(), null)
+
+    // Explicit TurnInspectionRequested pins a specific turn and tab.
     log.publish<TurnInspectionRequested>({
       type: 'TurnInspectionRequested',
       sessionId: 's1',
@@ -94,17 +108,15 @@ describe('slice-activity-inspector: panel lifecycle & EventLog reactivity', () =
     assert.deepEqual(slice.getTarget(), { sessionId: 's1', messageId: 'm1', tab: 'activity' })
     assert.equal(panel.slot.isOpen('s1'), true)
 
-    // Displace with another right panel -> lastTarget preserved
+    // Displace with another right panel -> getTarget reports null while hidden,
+    // and toggling Activity back on resumes the session's pinned selection.
     panel.displace('s1')
     assert.equal(slice.getTarget(), null)
-    assert.deepEqual(slice.getLastTarget(), { sessionId: 's1', messageId: 'm1', tab: 'activity' })
-
-    // Restore one-click
-    slice.restoreLastActivity()
+    slice.togglePanel('s1')
     assert.deepEqual(slice.getTarget(), { sessionId: 's1', messageId: 'm1', tab: 'activity' })
     assert.equal(panel.slot.isOpen('s1'), true)
 
-    // Same request again toggles closed
+    // Same pinned request again toggles closed.
     log.publish<TurnInspectionRequested>({
       type: 'TurnInspectionRequested',
       sessionId: 's1',
@@ -114,7 +126,7 @@ describe('slice-activity-inspector: panel lifecycle & EventLog reactivity', () =
     assert.equal(slice.getTarget(), null)
     assert.equal(panel.slot.isOpen('s1'), false)
 
-    // Re-open, then SessionDeleted clears it
+    // Re-open, then SessionDeleted clears it.
     log.publish<TurnInspectionRequested>({
       type: 'TurnInspectionRequested',
       sessionId: 's1',
@@ -123,9 +135,9 @@ describe('slice-activity-inspector: panel lifecycle & EventLog reactivity', () =
     })
     log.publish<SessionDeleted>({ type: 'SessionDeleted', sessionId: 's1' })
     assert.equal(slice.getTarget(), null)
-    assert.equal(slice.getLastTarget(), null)
+    assert.equal(slice.getSelection(), null)
 
-    // Re-open on s2, switch active session -> closes target
+    // Re-open on s2, switch active session -> clears s2 selection.
     panel.setActive('s2')
     log.publish<TurnInspectionRequested>({
       type: 'TurnInspectionRequested',
@@ -139,9 +151,9 @@ describe('slice-activity-inspector: panel lifecycle & EventLog reactivity', () =
     })
     assert.equal(slice.getTarget(), null)
 
-    // History replacement clears everything
+    // History replacement clears everything.
     log.publish<SessionHistoryReplaced>({ type: 'SessionHistoryReplaced' })
-    assert.equal(slice.getLastTarget(), null)
+    assert.equal(slice.getSelection(), null)
 
     slice.dispose()
   })
@@ -291,6 +303,85 @@ describe('slice-activity-inspector: ActivityPanel rendering', () => {
     const html = renderToStaticMarkup(createElement(slice.ActivityPanel))
     assert.match(html, /Thought for 3s/)
     assert.match(html, /<strong><span>reasoning<\/span><\/strong>/)
+    slice.dispose()
+  })
+
+  it('follows the latest turn with activity when opened via HeaderToggle and renders a turn switcher for multi-turn sessions', () => {
+    const log = new EventLog()
+    const panel = fakePanel()
+    const turns = [
+      {
+        messageId: 'm1',
+        turnNumber: 1,
+        promptExcerpt: 'First question',
+        streaming: false,
+        hasActivity: true,
+      },
+      {
+        messageId: 'm2',
+        turnNumber: 2,
+        promptExcerpt: 'Second question',
+        streaming: false,
+        hasActivity: true,
+      },
+    ] as const
+    const turnMap: Record<string, TurnSnapshot> = {
+      m1: {
+        sessionId: 's1',
+        messageId: 'm1',
+        status: 'done',
+        streaming: false,
+        blocks: [{ type: 'thinking', thinking: 'Alpha thought', startedAt: 0, endedAt: 2000 }],
+      },
+      m2: {
+        sessionId: 's1',
+        messageId: 'm2',
+        status: 'done',
+        streaming: false,
+        blocks: [{ type: 'thinking', thinking: 'Beta thought', startedAt: 0, endedAt: 5000 }],
+      },
+    }
+    const slice = createActivityInspectorSlice({
+      log,
+      panel: panel.slot,
+      turnSource: {
+        getTurn: (_sid, mid) => turnMap[mid] ?? null,
+        listTurns: () => turns,
+        subscribe: () => () => undefined,
+      },
+      getPresenter: () => null,
+      openInApp: null,
+    })
+
+    slice.togglePanel('s1')
+    const latestHtml = renderToStaticMarkup(createElement(slice.ActivityPanel))
+    assert.match(latestHtml, /Beta thought/, 'follow_latest displays the newest active turn')
+    assert.match(latestHtml, /Turn 2 · Second question/, 'shows turn switcher for multi-turn chat')
+
+    slice.selectTurn('s1', 'm1')
+    const pinnedHtml = renderToStaticMarkup(createElement(slice.ActivityPanel))
+    assert.match(pinnedHtml, /Alpha thought/, 'selectTurn switches to the chosen earlier turn')
+    slice.dispose()
+  })
+
+  it('renders a helpful empty state when opened on a brand-new chat with no activity', () => {
+    const log = new EventLog()
+    const panel = fakePanel()
+    const slice = createActivityInspectorSlice({
+      log,
+      panel: panel.slot,
+      turnSource: {
+        getTurn: () => null,
+        listTurns: () => [],
+        subscribe: () => () => undefined,
+      },
+      getPresenter: () => null,
+      openInApp: null,
+    })
+
+    slice.togglePanel('s1')
+    const html = renderToStaticMarkup(createElement(slice.ActivityPanel))
+    assert.match(html, /Tool steps, code runs, screenshots, reasoning, and sources/)
     slice.dispose()
   })
 })

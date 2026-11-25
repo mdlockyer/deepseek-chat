@@ -1,5 +1,6 @@
 import type {
   ActiveSessionChanged,
+  ReplyLifecycleChanged,
   SessionDeleted,
   SessionHistoryReplaced,
 } from '@deepseek-chat/spine/facts/session'
@@ -9,11 +10,13 @@ import { create } from 'zustand'
 
 export type RightPanelKind = 'preview' | 'browser' | 'activity'
 
+export type PanelRevealPolicy = 'auto' | 'user_overridden'
+
 export type SidePanelState = {
   activeSessionId: string | null
   activePanels: Record<string, RightPanelKind | null>
-  /** Last panel displaced on the same session, powering one-click return chips. */
-  previousPanels: Record<string, RightPanelKind | null>
+  /** Per-session reveal policy: resets to `'auto'` when a new reply starts. */
+  revealPolicies: Record<string, PanelRevealPolicy>
   panelAnimating: boolean
   panelResizing: boolean
   overlayLocks: number
@@ -55,15 +58,11 @@ export const getActiveRightPanel = (
   return Object.hasOwn(state.activePanels, sessionId) ? state.activePanels[sessionId] : null
 }
 
-export const getPreviousRightPanel = (
-  sessionId: string | null | undefined,
-  state: Pick<SidePanelState, 'previousPanels'>
-): RightPanelKind | null => {
-  if (!sessionId) {
-    return null
-  }
-  return Object.hasOwn(state.previousPanels, sessionId) ? state.previousPanels[sessionId] : null
-}
+const getRevealPolicy = (
+  sessionId: string,
+  state: Pick<SidePanelState, 'revealPolicies'>
+): PanelRevealPolicy =>
+  Object.hasOwn(state.revealPolicies, sessionId) ? state.revealPolicies[sessionId] : 'auto'
 
 /**
  * Factory-scoped coordinator for the shared right-hand side panel.
@@ -76,7 +75,7 @@ export const createRightPanelController = (store: KeyValueStore, log: EventLog) 
   const useStore = create<SidePanelState>(() => ({
     activeSessionId: null,
     activePanels: {},
-    previousPanels: {},
+    revealPolicies: {},
     panelAnimating: false,
     panelResizing: false,
     overlayLocks: 0,
@@ -121,9 +120,6 @@ export const createRightPanelController = (store: KeyValueStore, log: EventLog) 
   const getActivePanel = (sessionId: string | null | undefined) =>
     getActiveRightPanel(sessionId, get())
 
-  const getPreviousPanel = (sessionId: string | null | undefined) =>
-    getPreviousRightPanel(sessionId, get())
-
   const setActiveSession = (sessionId: string | null) => {
     const state = get()
     if (state.activeSessionId === sessionId) {
@@ -140,15 +136,32 @@ export const createRightPanelController = (store: KeyValueStore, log: EventLog) 
   const openPanel = (sessionId: string, kind: RightPanelKind) => {
     const state = get()
     const prev = getActiveRightPanel(sessionId, state)
-    if (prev === kind) {
+    const prevPolicy = getRevealPolicy(sessionId, state)
+    if (prev === kind && prevPolicy === 'user_overridden') {
       return
     }
     const isViewing = state.activeSessionId === sessionId
     set({
       activePanels: { ...state.activePanels, [sessionId]: kind },
-      previousPanels:
-        prev !== null ? { ...state.previousPanels, [sessionId]: prev } : state.previousPanels,
+      revealPolicies: { ...state.revealPolicies, [sessionId]: 'user_overridden' },
       ...(isViewing && prev === null ? { panelAnimating: true } : {}),
+    })
+  }
+
+  /**
+   * Politely reveals `kind` for background/agent work without displacing an already-open panel
+   * or re-opening a panel the user explicitly dismissed during the current turn.
+   */
+  const revealPanel = (sessionId: string, kind: RightPanelKind) => {
+    const state = get()
+    const prev = getActiveRightPanel(sessionId, state)
+    if (prev !== null || getRevealPolicy(sessionId, state) === 'user_overridden') {
+      return
+    }
+    const isViewing = state.activeSessionId === sessionId
+    set({
+      activePanels: { ...state.activePanels, [sessionId]: kind },
+      ...(isViewing ? { panelAnimating: true } : {}),
     })
   }
 
@@ -161,7 +174,7 @@ export const createRightPanelController = (store: KeyValueStore, log: EventLog) 
     const isViewing = state.activeSessionId === sessionId
     set({
       activePanels: { ...state.activePanels, [sessionId]: null },
-      previousPanels: { ...state.previousPanels, [sessionId]: null },
+      revealPolicies: { ...state.revealPolicies, [sessionId]: 'user_overridden' },
       ...(isViewing ? { panelAnimating: false } : {}),
     })
   }
@@ -202,8 +215,8 @@ export const createRightPanelController = (store: KeyValueStore, log: EventLog) 
       activePanels: Object.fromEntries(
         Object.entries(state.activePanels).filter(([key]) => key !== sessionId)
       ),
-      previousPanels: Object.fromEntries(
-        Object.entries(state.previousPanels).filter(([key]) => key !== sessionId)
+      revealPolicies: Object.fromEntries(
+        Object.entries(state.revealPolicies).filter(([key]) => key !== sessionId)
       ),
       ...(state.activeSessionId === sessionId
         ? { activeSessionId: null, panelAnimating: false }
@@ -215,7 +228,7 @@ export const createRightPanelController = (store: KeyValueStore, log: EventLog) 
     set({
       activeSessionId: null,
       activePanels: {},
-      previousPanels: {},
+      revealPolicies: {},
       panelAnimating: false,
       panelResizing: false,
     })
@@ -234,6 +247,7 @@ export const createRightPanelController = (store: KeyValueStore, log: EventLog) 
     isResizing: () => get().panelResizing,
     isOpen: (sessionId) => getActivePanel(sessionId) === kind,
     open: (sessionId) => openPanel(sessionId, kind),
+    reveal: (sessionId) => revealPanel(sessionId, kind),
     close: (sessionId) => closePanel(sessionId, kind),
     setAnimating,
     getLayout: () => toLayout(get()),
@@ -249,6 +263,17 @@ export const createRightPanelController = (store: KeyValueStore, log: EventLog) 
       },
       { replaySticky: true }
     ),
+    log.subscribe<ReplyLifecycleChanged>('ReplyLifecycleChanged', ({ fact }) => {
+      if (fact.phase !== 'started') {
+        return
+      }
+      const state = get()
+      if (getRevealPolicy(fact.sessionId, state) !== 'auto') {
+        set({
+          revealPolicies: { ...state.revealPolicies, [fact.sessionId]: 'auto' },
+        })
+      }
+    }),
     log.subscribe<SessionDeleted>('SessionDeleted', ({ fact }) => {
       disposeSession(fact.sessionId)
     }),
@@ -260,9 +285,9 @@ export const createRightPanelController = (store: KeyValueStore, log: EventLog) 
   return {
     useStore,
     getActivePanel,
-    getPreviousPanel,
     setActiveSession,
     openPanel,
+    revealPanel,
     closePanel,
     closeActivePanelKind,
     setAnimating,

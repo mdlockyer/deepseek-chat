@@ -316,4 +316,128 @@
   .askEntryVal {
     color: var(--ui-text-primary);
   }
+
+  .inlineTrace {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ui-space-2);
+    margin-left: 7px;
+    padding: var(--ui-space-1) 0 var(--ui-space-1) var(--ui-space-3);
+    border-left: 1px solid var(--ui-border-default);
+    animation: detail-in var(--ui-duration-normal) ease-out both;
+  }
+
+  .inlineThinking {
+    max-height: 280px;
+    overflow-y: auto;
+    padding-right: var(--ui-space-2);
+    color: var(--ui-text-secondary);
+    scrollbar-color: var(--ui-scrollbar-thumb) transparent;
+  }
+
+  .traceList {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ui-space-1);
+    max-height: 280px;
+    margin: 0;
+    padding: 0 var(--ui-space-2) 0 0;
+    list-style: none;
+    overflow-y: auto;
+    scrollbar-color: var(--ui-scrollbar-thumb) transparent;
+  }
+
+  .traceItem {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ui-space-0-5);
+    font: var(--ui-type-caption);
+    color: var(--ui-text-secondary);
+  }
+
+  .traceItemRunning {
+    color: var(--ui-text-primary);
+  }
+
+  .traceItemFailed {
+    color: var(--ui-text-danger);
+  }
+
+  .traceRow {
+    display: flex;
+    align-items: baseline;
+    gap: var(--ui-space-1-5);
+    min-width: 0;
+  }
+
+  .traceIndex {
+    flex-shrink: 0;
+    color: var(--ui-text-muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .traceLabel {
+    flex: 1;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .traceMeta {
+    flex-shrink: 0;
+    color: var(--ui-text-muted);
+    font: var(--ui-type-micro);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .traceError {
+    padding-left: var(--ui-space-4);
+    font: var(--ui-type-micro);
+    color: var(--ui-text-danger);
+    overflow-wrap: anywhere;
+  }
+
+  .traceFooter {
+    display: flex;
+    align-items: center;
+    padding-top: var(--ui-space-0-5);
+  }
+
+  .inspectButton {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--ui-space-1-5);
+    min-height: 26px;
+    padding: var(--ui-space-0-5) var(--ui-space-2);
+    margin-left: calc(var(--ui-space-2) * -1);
+    border: none;
+    border-radius: var(--ui-radius-xs);
+    background: transparent;
+    color: var(--ui-text-muted);
+    font: var(--ui-type-caption-strong);
+    cursor: pointer;
+    transition:
+      background-color var(--ui-duration-fast) var(--ui-ease-standard),
+      color var(--ui-duration-fast) var(--ui-ease-standard);
+
+    > svg {
+      width: 14px;
+      height: 14px;
+      flex-shrink: 0;
+    }
+
+    &:hover {
+      background: var(--ui-interactive-hover);
+      color: var(--ui-text-primary);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--ui-focus-ring);
+      outline-offset: 1px;
+    }
+  }
+
+  .inspectButtonActive {
+    background: var(--ui-accent-soft);
+    color: var(--ui-text-accent);
+  }
 }

@@ -7,57 +7,74 @@ import type {
 import type { PanelSlot } from '@deepseek-chat/spine/ports'
 import type { EventLog } from '@deepseek-chat/spine/runtime'
 import { create } from 'zustand'
-import type { ActivityTab, ActivityTarget } from './types.js'
+import type { ActivitySelection, ActivityTab, ActivityTarget } from './types.js'
 
 type ActivityPanelStoreState = {
-  target: ActivityTarget | null
-  lastTarget: ActivityTarget | null
+  selection: ActivitySelection | null
+  panelOpen: boolean
 }
 
 export const createActivityPanelState = (panel: PanelSlot, log: EventLog) => {
-  const useStore = create<ActivityPanelStoreState>(() => ({
-    target: null,
-    lastTarget: null,
-  }))
-
   const activeSessionId = () => panel.getLayout().activeSessionId
 
-  const toggle = (sessionId: string, messageId: string, tab: ActivityTab) => {
-    const { target } = useStore.getState()
+  const useStore = create<ActivityPanelStoreState>(() => ({
+    selection: null,
+    panelOpen: panel.isOpen(activeSessionId()),
+  }))
+
+  const openForSession = (sessionId: string, tab?: ActivityTab) => {
+    const prev = useStore.getState().selection
+    const next: ActivitySelection =
+      prev && prev.sessionId === sessionId
+        ? tab
+          ? { ...prev, tab }
+          : prev
+        : { kind: 'follow_latest', sessionId, tab: tab ?? 'activity' }
+    panel.open(sessionId)
+    useStore.setState({ selection: next, panelOpen: panel.isOpen(sessionId) })
+  }
+
+  const togglePanel = (sessionId: string) => {
+    if (panel.isOpen(sessionId)) {
+      panel.close(sessionId)
+      useStore.setState({ selection: null, panelOpen: false })
+      return
+    }
+    openForSession(sessionId)
+  }
+
+  const toggleTurn = (sessionId: string, messageId: string, tab: ActivityTab) => {
+    const { selection } = useStore.getState()
     if (
-      target &&
-      target.sessionId === sessionId &&
-      target.messageId === messageId &&
-      target.tab === tab &&
+      selection?.kind === 'pinned' &&
+      selection.sessionId === sessionId &&
+      selection.messageId === messageId &&
+      selection.tab === tab &&
       panel.isOpen(sessionId)
     ) {
       panel.close(sessionId)
-      useStore.setState({ target: null, lastTarget: null })
+      useStore.setState({ selection: null, panelOpen: false })
       return
     }
-    const next: ActivityTarget = { sessionId, messageId, tab }
+    const next: ActivitySelection = { kind: 'pinned', sessionId, messageId, tab }
     panel.open(sessionId)
-    useStore.setState({ target: next, lastTarget: next })
+    useStore.setState({ selection: next, panelOpen: panel.isOpen(sessionId) })
+  }
+
+  const selectTurn = (sessionId: string, messageId: string) => {
+    const prevTab = useStore.getState().selection?.tab ?? 'activity'
+    useStore.setState({
+      selection: { kind: 'pinned', sessionId, messageId, tab: prevTab },
+    })
   }
 
   const setTab = (tab: ActivityTab) => {
     useStore.setState((curr) => {
-      if (!curr.target || curr.target.tab === tab) {
+      if (!curr.selection || curr.selection.tab === tab) {
         return curr
       }
-      const next: ActivityTarget = { ...curr.target, tab }
-      return { target: next, lastTarget: next }
+      return { selection: { ...curr.selection, tab } }
     })
-  }
-
-  const restoreLast = () => {
-    const { lastTarget } = useStore.getState()
-    const sessionId = activeSessionId()
-    if (!lastTarget || !sessionId || lastTarget.sessionId !== sessionId) {
-      return
-    }
-    panel.open(sessionId)
-    useStore.setState({ target: lastTarget })
   }
 
   const close = () => {
@@ -65,56 +82,79 @@ export const createActivityPanelState = (panel: PanelSlot, log: EventLog) => {
     if (sessionId) {
       panel.close(sessionId)
     }
-    useStore.setState({ target: null, lastTarget: null })
+    useStore.setState({ selection: null, panelOpen: false })
   }
 
-  let wasOpen = panel.isOpen(activeSessionId())
-  let lastSession = activeSessionId()
   const unsubPanel = panel.subscribe(() => {
     const sessionId = activeSessionId()
     const open = panel.isOpen(sessionId)
-    if (sessionId && sessionId === lastSession && wasOpen && !open) {
-      useStore.setState((curr) => (curr.target ? { target: null, lastTarget: curr.target } : curr))
-    }
-    wasOpen = open
-    lastSession = sessionId
+    useStore.setState((curr) => {
+      if (open && sessionId && curr.selection?.sessionId !== sessionId) {
+        return {
+          selection: { kind: 'follow_latest', sessionId, tab: 'activity' },
+          panelOpen: true,
+        }
+      }
+      if (curr.panelOpen !== open) {
+        return { panelOpen: open }
+      }
+      return curr
+    })
   })
 
   const unsubFacts = [
     log.subscribe<ActiveSessionChanged>('ActiveSessionChanged', ({ fact }) => {
+      const open = panel.isOpen(fact.sessionId)
       useStore.setState((curr) => {
-        if (!curr.target && !curr.lastTarget) {
-          return curr
-        }
-        if (curr.target?.sessionId === fact.sessionId) {
-          return curr
+        if (fact.sessionId && open) {
+          return {
+            selection:
+              curr.selection?.sessionId === fact.sessionId
+                ? curr.selection
+                : { kind: 'follow_latest', sessionId: fact.sessionId, tab: 'activity' },
+            panelOpen: true,
+          }
         }
         return {
-          target: null,
-          lastTarget: curr.lastTarget?.sessionId === fact.sessionId ? curr.lastTarget : null,
+          selection: curr.selection?.sessionId === fact.sessionId ? curr.selection : null,
+          panelOpen: open,
         }
       })
     }),
     log.subscribe<SessionDeleted>('SessionDeleted', ({ fact }) => {
       useStore.setState((curr) => ({
-        target: curr.target?.sessionId === fact.sessionId ? null : curr.target,
-        lastTarget: curr.lastTarget?.sessionId === fact.sessionId ? null : curr.lastTarget,
+        selection: curr.selection?.sessionId === fact.sessionId ? null : curr.selection,
+        panelOpen: panel.isOpen(activeSessionId()),
       }))
     }),
     log.subscribe<SessionHistoryReplaced>('SessionHistoryReplaced', () => {
-      useStore.setState({ target: null, lastTarget: null })
+      useStore.setState({ selection: null, panelOpen: false })
     }),
     log.subscribe<TurnInspectionRequested>('TurnInspectionRequested', ({ fact }) => {
-      toggle(fact.sessionId, fact.messageId, fact.tab)
+      toggleTurn(fact.sessionId, fact.messageId, fact.tab)
     }),
   ]
 
+  const getActiveTarget = (): ActivityTarget | null => {
+    const { selection, panelOpen } = useStore.getState()
+    if (!panelOpen || selection?.kind !== 'pinned') {
+      return null
+    }
+    return {
+      sessionId: selection.sessionId,
+      messageId: selection.messageId,
+      tab: selection.tab,
+    }
+  }
+
   return {
     useStore,
-    toggle,
+    togglePanel,
+    toggleTurn,
+    selectTurn,
     setTab,
-    restoreLast,
     close,
+    getActiveTarget,
     dispose: () => {
       unsubPanel()
       for (const unsub of unsubFacts) {

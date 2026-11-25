@@ -34,6 +34,11 @@ export type PanelSlot = StageHost & {
   /** Whether this slot is the panel shown for the session. */
   isOpen(sessionId: string | null): boolean
   open(sessionId: string): void
+  /**
+   * Politely reveal this slot for background/agent activity without displacing a panel
+   * the user explicitly opened or re-opening a panel the user dismissed during the current turn.
+   */
+  reveal?(sessionId: string): void
   close(sessionId: string): void
   setAnimating(animating: boolean): void
   getLayout(): PanelLayout

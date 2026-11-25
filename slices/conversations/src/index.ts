@@ -16,6 +16,7 @@ export {
   DEFAULT_CONVERSATIONS_PARAMS,
   type ConversationsDeps,
   type ConversationsParams,
+  type SessionTurnSummary,
   type TurnSnapshot,
 } from './runtime.js'
 export {
@@ -112,6 +113,7 @@ export const createConversationsSlice = (deps: ConversationsDeps) => {
 
     /** Narrow read-only turn snapshot source consumed by `slices/activity-inspector`. */
     getTurnSnapshot: runtime.getTurnSnapshot,
+    listSessionTurns: runtime.listSessionTurns,
     subscribeToTurns: runtime.subscribeToTurns,
 
     // Storage ports consumed by `slices/history-backup` via app composition.
@@ -173,8 +175,11 @@ export {
   type ToolStep,
 } from './view.js'
 export {
+  buildInlineTrace,
   buildTurnWorkStrip,
   getFrontStageNotes,
   type FrontStageNoteEntry,
+  type InlineTrace,
+  type InlineTraceItem,
   type TurnWorkStripState,
 } from './workStrip.js'

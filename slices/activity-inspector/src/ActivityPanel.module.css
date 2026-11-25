@@ -70,6 +70,14 @@
     box-shadow: var(--ui-shadow-sm);
   }
 
+  .turnBar {
+    display: flex;
+    align-items: center;
+    padding: var(--ui-space-2) var(--ui-space-4);
+    border-bottom: 1px solid var(--ui-border-subtle);
+    flex-shrink: 0;
+  }
+
   .content {
     --search-view-card-meta-font: var(--ui-type-caption);
     --search-view-card-meta-padding-top: 2px;

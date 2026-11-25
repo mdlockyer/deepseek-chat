@@ -92,6 +92,14 @@ export type TurnSnapshot = {
   readonly capabilityState?: Readonly<Record<string, unknown>>
 }
 
+export type SessionTurnSummary = {
+  readonly messageId: string
+  readonly turnNumber: number
+  readonly promptExcerpt: string
+  readonly streaming: boolean
+  readonly hasActivity: boolean
+}
+
 type ChatState = {
   ready: boolean
   initError: boolean
@@ -107,6 +115,23 @@ type ChatState = {
 const THINKING_TOGGLE_KEY = 'chat-demo:thinking'
 const SESSION_CACHE_LIMIT = 5
 const NO_MESSAGES: readonly Message[] = []
+const NO_TURNS: readonly SessionTurnSummary[] = []
+
+const excerptOfPrompt = (text: string): string => {
+  const clean = text.replace(/\s+/g, ' ').trim()
+  return clean.length > 56 ? `${clean.slice(0, 55)}…` : clean
+}
+
+const hasTurnActivity = (message: AssistantMessage): boolean =>
+  message.blocks.some(
+    (block) =>
+      block.type === 'thinking' ||
+      block.type === 'tool_use' ||
+      block.type === 'tool_result' ||
+      block.type === 'server_tool_use' ||
+      block.type === 'web_search_tool_result' ||
+      block.type === 'web_fetch_tool_result'
+  )
 
 const sortSessions = (sessions: SessionSummary[]) =>
   [...sessions].sort((a, b) => b.updatedAt - a.updatedAt)
@@ -1059,6 +1084,45 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
   })
 
   const turnSnapshotCache = new WeakMap<AssistantMessage, TurnSnapshot>()
+  const sessionTurnsCache = new WeakMap<
+    Session,
+    { readonly isStreaming: boolean; readonly list: readonly SessionTurnSummary[] }
+  >()
+
+  const listSessionTurns = (sessionId: string): readonly SessionTurnSummary[] => {
+    const state = get()
+    const session = Object.hasOwn(state.sessionCache, sessionId)
+      ? state.sessionCache[sessionId]
+      : undefined
+    if (!session) {
+      return NO_TURNS
+    }
+    const isStreaming = Object.hasOwn(state.streaming, sessionId)
+    const cached = sessionTurnsCache.get(session)
+    if (cached && cached.isStreaming === isStreaming) {
+      return cached.list
+    }
+    const visible = getVisibleMessages(session)
+    const turns: SessionTurnSummary[] = []
+    let lastUserPrompt = ''
+    let turnNumber = 0
+    for (const msg of visible) {
+      if (msg.role === 'user') {
+        lastUserPrompt = excerptOfPrompt(msg.content)
+        continue
+      }
+      turnNumber += 1
+      turns.push({
+        messageId: msg.id,
+        turnNumber,
+        promptExcerpt: lastUserPrompt,
+        streaming: isStreaming && msg.status === 'streaming',
+        hasActivity: hasTurnActivity(msg),
+      })
+    }
+    sessionTurnsCache.set(session, { isStreaming, list: turns })
+    return turns
+  }
 
   const getTurnSnapshot = (sessionId: string, messageId: string): TurnSnapshot | null => {
     const state = get()
@@ -1159,6 +1223,7 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
     useChatMessages,
     useHistoryState,
     getTurnSnapshot,
+    listSessionTurns,
     subscribeToTurns,
     requestTurnInspection,
     dispose,

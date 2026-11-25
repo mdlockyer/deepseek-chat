@@ -1,0 +1,6 @@
+@layer slice {
+  .active {
+    color: var(--ui-text-accent);
+    background: var(--ui-accent-soft);
+  }
+}

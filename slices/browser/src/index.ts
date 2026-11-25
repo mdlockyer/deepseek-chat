@@ -116,15 +116,25 @@ export const createBrowserSlice = (deps: BrowserSliceDeps) => {
   const HeaderToggle: ComponentType<{ readonly sessionId: string }> = ({ sessionId }) => {
     const t = browserMessages.useTranslate()
     const open = deps.panel.useLayout(() => deps.panel.isOpen(sessionId))
+    const controllingHere = state.useBrowserStore(
+      (s) => s.controlling && s.controllingSessionId === sessionId
+    )
     if (!desktop) {
       return null
     }
+    const backgroundActive = !open && controllingHere
     return createElement(IconButton, {
       size: 'm',
       tone: 'primary',
-      className: open ? headerToggleStyles.active : undefined,
+      className: open
+        ? headerToggleStyles.active
+        : backgroundActive
+          ? headerToggleStyles.backgroundActive
+          : undefined,
       icon: createElement(IconGlobeLanguageOutline16),
-      tooltip: t(open ? 'closeBrowser' : 'openBrowser'),
+      tooltip: t(
+        open ? 'closeBrowser' : backgroundActive ? 'browserRunningBackground' : 'openBrowser'
+      ),
       tooltipPlacement: 'bottom',
       'aria-pressed': open,
       onClick: () => void state.toggleBrowserPanel(sessionId),

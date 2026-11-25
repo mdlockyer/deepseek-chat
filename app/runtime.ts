@@ -63,7 +63,7 @@ import {
   type SecretSlot,
 } from '@deepseek-chat/spine/ports'
 import { EventLog } from '@deepseek-chat/spine/runtime'
-import type { ComponentType } from 'react'
+import { createElement, type ComponentType } from 'react'
 import { create } from 'zustand'
 import { createSiderLayoutController, type SiderLayoutController } from './layout.js'
 import { createRightPanelController, type RightPanelController } from './rightPanel/state.js'
@@ -321,12 +321,15 @@ export const createAppRuntime = (config: AppRuntimeConfig = {}) => {
   ]
   toolRegistry = createToolRegistry(capabilities, COMPOSITION_PROMPT_NOTES)
 
+  let activityInspector: ActivityInspectorSlice | null = null
+  const ActivityHeaderToggle: ComponentType<{ readonly sessionId: string }> = ({ sessionId }) =>
+    activityInspector ? createElement(activityInspector.HeaderToggle, { sessionId }) : null
+
   const headerActions: ComponentType<{ readonly sessionId: string }>[] = [
     ...(workspaceFiles ? [workspaceFiles.HeaderToggle] : []),
     ...(browser ? [browser.HeaderToggle] : []),
+    ...(enabled.activityInspector ? [ActivityHeaderToggle] : []),
   ]
-
-  let activityInspector: ActivityInspectorSlice | null = null
 
   const conversations: ConversationsSlice = createConversationsSlice({
     log,
@@ -396,6 +399,7 @@ export const createAppRuntime = (config: AppRuntimeConfig = {}) => {
         panel: rightPanel.createSlot('activity'),
         turnSource: {
           getTurn: conversations.getTurnSnapshot,
+          listTurns: conversations.listSessionTurns,
           subscribe: conversations.subscribeToTurns,
         },
         getPresenter: toolRegistry.presenterFor,

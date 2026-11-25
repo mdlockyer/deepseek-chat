@@ -17,6 +17,27 @@ export type ActivityTarget = {
   readonly tab: ActivityTab
 }
 
+export type ActivitySelection =
+  | {
+      readonly kind: 'follow_latest'
+      readonly sessionId: string
+      readonly tab: ActivityTab
+    }
+  | {
+      readonly kind: 'pinned'
+      readonly sessionId: string
+      readonly messageId: string
+      readonly tab: ActivityTab
+    }
+
+export type SessionTurnSummary = {
+  readonly messageId: string
+  readonly turnNumber: number
+  readonly promptExcerpt: string
+  readonly streaming: boolean
+  readonly hasActivity: boolean
+}
+
 export type TurnThinkingBlock = {
   readonly type: 'thinking'
   readonly thinking: string
@@ -58,6 +79,7 @@ export type TurnSnapshot = {
 /** Narrow read-only live view into a conversation turn (avoids putting 60Hz deltas on EventLog). */
 export type TurnSnapshotSource = {
   getTurn(sessionId: string, messageId: string): TurnSnapshot | null
+  listTurns?(sessionId: string): readonly SessionTurnSummary[]
   subscribe(listener: () => void): () => void
 }
 

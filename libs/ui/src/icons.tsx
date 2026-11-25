@@ -1010,6 +1010,31 @@ export const IconPanelRightOutline16 = () => (
   </svg>
 )
 
+export const IconActivityOutline16 = () => (
+  <svg
+    aria-hidden="true"
+    focusable="false"
+    width={16}
+    height={16}
+    viewBox="0 0 16 16"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <path
+      d="M5.5 4H13.5M5.5 8H13.5M5.5 12H10.8"
+      stroke="currentColor"
+      strokeWidth="1.35"
+      strokeLinecap="round"
+    />
+    <path
+      d="M2.5 4H3.1M2.5 8H3.1M2.5 12H3.1"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+    />
+  </svg>
+)
+
 export const IconChevronLeftOutline14 = () => (
   <svg
     aria-hidden="true"

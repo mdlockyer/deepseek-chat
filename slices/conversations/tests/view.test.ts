@@ -6,6 +6,7 @@ import {
   type ToolCapability,
 } from '@deepseek-chat/lib-tools'
 import {
+  buildInlineTrace,
   buildReplyView,
   buildTurnWorkStrip,
   getAreaTitle,
@@ -389,5 +390,58 @@ describe('buildTurnWorkStrip & getFrontStageNotes', () => {
     const notes = getFrontStageNotes(view)
     assert.equal(notes.length, 1)
     assert.equal(notes[0]?.note.items[0]?.value, 'Editorial')
+  })
+
+  it('builds a domain-blind Tier-1 inline trace with plain summaries, inline errors, hidden-step filtering, and thinking-only prose', () => {
+    const toolReply = replyWith([
+      { type: 'tool_use', id: 't1', name: 'lookup', input: { summary: 'Checking Wikipedia docs' } },
+      {
+        type: 'tool_result',
+        tool_use_id: 't1',
+        capability: 'search-cap',
+        content: 'ok',
+        status: 'ok',
+        durationMs: 1200,
+      },
+      { type: 'tool_use', id: 'w1', name: 'wait_workers', input: { summary: 'Waiting' } },
+      {
+        type: 'tool_result',
+        tool_use_id: 'w1',
+        capability: 'parallel-cap',
+        content: 'done',
+        status: 'ok',
+      },
+      { type: 'tool_use', id: 't2', name: 'fetch_page', input: { summary: 'Reading target page' } },
+      {
+        type: 'tool_result',
+        tool_use_id: 't2',
+        capability: 'search-cap',
+        content: 'Connection timed out\nstack trace line 2',
+        status: 'error',
+      },
+      { type: 'text', text: 'Done.' },
+    ])
+
+    const trace = buildInlineTrace(buildReplyView(toolReply, false, testRegistry))
+    assert.equal(trace.items.length, 2, 'hiddenInTimeline step is omitted')
+    assert.equal(trace.items[0]?.label, 'Checking Wikipedia docs')
+    assert.equal(trace.items[0]?.status, 'done')
+    assert.equal(trace.items[0]?.durationMs, 1200)
+    assert.equal(trace.items[1]?.label, 'Reading target page')
+    assert.equal(trace.items[1]?.status, 'failed')
+    assert.equal(trace.items[1]?.errorText, 'Connection timed out')
+    assert.equal(trace.hasRichDetails, true)
+
+    const thinkingOnlyReply = replyWith(
+      [
+        { type: 'thinking', thinking: 'Weighing the tradeoffs carefully.' },
+        { type: 'text', text: 'Short answer.' },
+      ],
+      true
+    )
+    const thinkingTrace = buildInlineTrace(buildReplyView(thinkingOnlyReply, false, testRegistry))
+    assert.deepEqual(thinkingTrace.items, [])
+    assert.equal(thinkingTrace.thinkingMarkdown, 'Weighing the tradeoffs carefully.')
+    assert.equal(thinkingTrace.hasRichDetails, false)
   })
 })

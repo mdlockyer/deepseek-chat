@@ -1,7 +1,9 @@
 import type { DeliveredFileRef, LiveTrack } from '@deepseek-chat/lib-tools'
 import {
   IconCheckedOutline14,
+  IconChevronDownOutline14,
   IconChevronRightOutline14,
+  IconPanelRightOutline16,
   IconWarningOutline16,
 } from '@deepseek-chat/lib-ui'
 import clsx from 'clsx'
@@ -12,12 +14,16 @@ import { useTranslate } from '../../messages.js'
 import type { AssistantMessage } from '../../types.js'
 import type { ReplyView } from '../../view.js'
 import {
+  buildInlineTrace,
   buildTurnWorkStrip,
   getFrontStageNotes,
   type FrontStageNoteEntry,
+  type InlineTrace,
 } from '../../workStrip.js'
 import { FileCard } from '../files/FileCard.js'
+import { ChatMarkdown as Markdown } from './ChatMarkdown.js'
 import styles from './ReplyArea.module.css'
+import './thinking.markdown.css'
 import { WhaleLoader } from './WhaleLoader.js'
 
 const useNoInspection = () => null
@@ -36,11 +42,13 @@ const useTicker = (active: boolean, interval: number) => {
 }
 
 /**
- * Front Stage Turn Work Strip:
- * - While working: bounded 2-line live ticker (<= 4 compact lines for parallel tracks),
- *   so completed tool calls never accumulate as a wall pushing the user's question off-screen.
- * - Once answered or finished: collapses automatically to a single quiet summary button that
- *   publishes `TurnInspectionRequested` on the Spine EventLog.
+ * Front Stage Turn Work Strip (Tier 0 -> Tier 1 -> Tier 2 progressive disclosure):
+ * - Tier 0: bounded live ticker while working, folding to a quiet summary row once settled.
+ * - Tier 1: clicking the row / chevron expands a compact inline step trace (or thinking prose
+ *   on thinking-only turns) in place without displacing the right-hand workspace panel.
+ * - Tier 2: an explicit "Open in Activity" control inside the expanded trace publishes
+ *   `TurnInspectionRequested` to inspect heavy artifacts (code, screenshots, sources, reasoning)
+ *   side by side in the Activity panel.
  */
 export const ReplyArea = memo(function ReplyArea({
   sessionId,
@@ -66,6 +74,7 @@ export const ReplyArea = memo(function ReplyArea({
     target.sessionId === sessionId &&
     target.messageId === message.id &&
     target.tab === 'activity'
+  const [expanded, setExpanded] = useState(false)
 
   const tick = useTicker(streaming, 1000)
   const strip = buildTurnWorkStrip(
@@ -82,7 +91,9 @@ export const ReplyArea = memo(function ReplyArea({
     return null
   }
 
+  const toggleExpanded = () => setExpanded((value) => !value)
   const inspectActivity = () => requestTurnInspection(sessionId, message.id, 'activity')
+  const trace = expanded ? buildInlineTrace(view) : null
 
   const trackStatusLabel = (track: LiveTrack): string | null => {
     if (track.status === 'running') {
@@ -113,10 +124,10 @@ export const ReplyArea = memo(function ReplyArea({
         <div className={styles.liveWrap}>
           <button
             type="button"
-            className={clsx(styles.stripButton, isInspecting && styles.stripButtonActive)}
-            aria-pressed={isInspecting}
-            aria-label={t('activityInspectLabel')}
-            onClick={inspectActivity}
+            className={clsx(styles.stripButton, expanded && styles.stripButtonActive)}
+            aria-expanded={expanded}
+            aria-label={t('activityToggleTraceLabel')}
+            onClick={toggleExpanded}
           >
             <span className={clsx(styles.iconSlot, strip.waitingForUser && styles.waitingIcon)}>
               <WhaleLoader width={strip.waitingForUser ? 15 : 16} still={strip.waitingForUser} />
@@ -124,11 +135,20 @@ export const ReplyArea = memo(function ReplyArea({
             <span className={styles.headline}>{strip.headline}</span>
             {strip.tally ? <span className={styles.tally}>· {strip.tally}</span> : null}
             <span className={styles.chevron} aria-hidden="true">
-              <IconChevronRightOutline14 />
+              {expanded ? <IconChevronDownOutline14 /> : <IconChevronRightOutline14 />}
             </span>
           </button>
 
-          {strip.liveTracks.length > 0 ? (
+          {expanded && trace ? (
+            <InlineTraceInlay
+              messageId={message.id}
+              trace={trace}
+              streaming={streaming}
+              thinkingOnly={trace.items.length === 0 && trace.thinkingMarkdown !== null}
+              isInspecting={isInspecting}
+              onInspect={inspectActivity}
+            />
+          ) : strip.liveTracks.length > 0 ? (
             <div className={styles.liveTracks} role="status" aria-live="polite">
               {strip.liveTracks.map((track) => {
                 const isRunning = track.status === 'running'
@@ -145,7 +165,7 @@ export const ReplyArea = memo(function ReplyArea({
                       isSettled && styles.liveTrackSettled,
                       isFailed && styles.liveTrackFailed
                     )}
-                    onClick={inspectActivity}
+                    onClick={toggleExpanded}
                   >
                     <span className={styles.liveTrackMain}>
                       <span className={styles.liveTrackLabel}>{track.label}</span>
@@ -178,43 +198,135 @@ export const ReplyArea = memo(function ReplyArea({
             </div>
           ) : strip.detail ? (
             <div className={styles.liveDetailRail} role="status" aria-live="polite">
-              <button type="button" className={styles.liveDetail} onClick={inspectActivity}>
+              <button type="button" className={styles.liveDetail} onClick={toggleExpanded}>
                 {strip.detail}
               </button>
             </div>
           ) : null}
         </div>
       ) : strip.mode === 'settled' ? (
-        <button
-          type="button"
-          className={clsx(
-            styles.stripButton,
-            styles.settledButton,
-            isInspecting && styles.stripButtonActive
-          )}
-          aria-pressed={isInspecting}
-          onClick={inspectActivity}
-        >
-          <span
+        <div className={styles.liveWrap}>
+          <button
+            type="button"
             className={clsx(
-              styles.iconSlot,
-              strip.stopped && styles.stoppedIcon,
-              strip.errorCount > 0 && styles.errorIcon
+              styles.stripButton,
+              styles.settledButton,
+              expanded && styles.stripButtonActive
             )}
+            aria-expanded={expanded}
+            onClick={toggleExpanded}
           >
-            {strip.errorCount > 0 ? <IconWarningOutline16 /> : <WhaleLoader width={15} still />}
-          </span>
-          <span className={styles.settledLabel}>{strip.label}</span>
-          <span className={styles.chevron} aria-hidden="true">
-            <IconChevronRightOutline14 />
-          </span>
-        </button>
+            <span
+              className={clsx(
+                styles.iconSlot,
+                strip.stopped && styles.stoppedIcon,
+                strip.errorCount > 0 && styles.errorIcon
+              )}
+            >
+              {strip.errorCount > 0 ? <IconWarningOutline16 /> : <WhaleLoader width={15} still />}
+            </span>
+            <span className={styles.settledLabel}>{strip.label}</span>
+            <span className={styles.chevron} aria-hidden="true">
+              {expanded ? <IconChevronDownOutline14 /> : <IconChevronRightOutline14 />}
+            </span>
+          </button>
+
+          {expanded && trace ? (
+            <InlineTraceInlay
+              messageId={message.id}
+              trace={trace}
+              streaming={false}
+              thinkingOnly={strip.thinkingOnly}
+              isInspecting={isInspecting}
+              onInspect={inspectActivity}
+            />
+          ) : null}
+        </div>
       ) : null}
 
       {notes.length > 0 ? <FrontStageNotes notes={notes} /> : null}
     </div>
   )
 })
+
+const InlineTraceInlay = ({
+  messageId,
+  trace,
+  streaming,
+  thinkingOnly,
+  isInspecting,
+  onInspect,
+}: {
+  messageId: string
+  trace: InlineTrace
+  streaming: boolean
+  thinkingOnly: boolean
+  isInspecting: boolean
+  onInspect: () => void
+}) => {
+  const t = useTranslate()
+  return (
+    <div className={styles.inlineTrace}>
+      {thinkingOnly && trace.thinkingMarkdown ? (
+        <div className={clsx(styles.inlineThinking, 'ds-think-content')}>
+          <Markdown
+            content={trace.thinkingMarkdown}
+            loading={streaming}
+            cacheKey={`${messageId}-inline-think`}
+            disableLink={false}
+          />
+        </div>
+      ) : trace.items.length > 0 ? (
+        <ol className={styles.traceList}>
+          {trace.items.map((item, index) => (
+            <li
+              key={item.key}
+              className={clsx(
+                styles.traceItem,
+                item.status === 'running' && styles.traceItemRunning,
+                item.status === 'failed' && styles.traceItemFailed
+              )}
+            >
+              <div className={styles.traceRow}>
+                <span className={styles.traceIndex}>{index + 1}.</span>
+                <span className={styles.traceLabel}>{item.label}</span>
+                {item.status === 'running' ? (
+                  <span className={styles.traceMeta}>{t('activityTrackRunning')}</span>
+                ) : item.durationMs !== undefined && item.durationMs >= 500 ? (
+                  <span className={styles.traceMeta}>{(item.durationMs / 1000).toFixed(1)}s</span>
+                ) : null}
+              </div>
+              {item.errorText ? <div className={styles.traceError}>{item.errorText}</div> : null}
+            </li>
+          ))}
+        </ol>
+      ) : trace.thinkingMarkdown ? (
+        <div className={clsx(styles.inlineThinking, 'ds-think-content')}>
+          <Markdown
+            content={trace.thinkingMarkdown}
+            loading={streaming}
+            cacheKey={`${messageId}-inline-think`}
+            disableLink={false}
+          />
+        </div>
+      ) : null}
+
+      {trace.hasRichDetails ? (
+        <div className={styles.traceFooter}>
+          <button
+            type="button"
+            className={clsx(styles.inspectButton, isInspecting && styles.inspectButtonActive)}
+            aria-pressed={isInspecting}
+            onClick={onInspect}
+          >
+            <IconPanelRightOutline16 />
+            <span>{isInspecting ? t('activityViewingInPanel') : t('activityOpenInPanel')}</span>
+          </button>
+        </div>
+      ) : null}
+    </div>
+  )
+}
 
 const FrontStageNotes = ({ notes }: { notes: readonly FrontStageNoteEntry[] }) => {
   const t = useTranslate()

@@ -38,6 +38,20 @@ export type FrontStageNoteEntry = {
   readonly note: FrontStageNote
 }
 
+export type InlineTraceItem = {
+  readonly key: string
+  readonly label: string
+  readonly status: 'running' | 'done' | 'failed'
+  readonly errorText?: string
+  readonly durationMs?: number
+}
+
+export type InlineTrace = {
+  readonly items: readonly InlineTraceItem[]
+  readonly thinkingMarkdown: string | null
+  readonly hasRichDetails: boolean
+}
+
 const MAX_LIVE_TRACKS = 3
 
 type TallyEntry = {
@@ -356,3 +370,114 @@ export const getFrontStageNotes = (view: ReplyView): FrontStageNoteEntry[] =>
     }
     return [{ key: step.key, note }]
   })
+
+const firstErrorLine = (content: string | undefined): string | undefined => {
+  if (!content) {
+    return undefined
+  }
+  const line = content
+    .split('\n')
+    .map((part) => part.trim())
+    .find(Boolean)
+  if (!line) {
+    return undefined
+  }
+  return line.length > 160 ? `${line.slice(0, 159)}…` : line
+}
+
+const mapServerStatus = (status: 'wip' | 'done' | 'failed'): 'running' | 'done' | 'failed' =>
+  status === 'wip' ? 'running' : status
+
+/**
+ * Pure Tier-1 inline trace projection for the expandable transcript inlay.
+ * Domain-blind: derives plain-prose rows strictly from `ReplyView.steps`.
+ */
+export const buildInlineTrace = (view: ReplyView): InlineTrace => {
+  const items: InlineTraceItem[] = []
+  const thinkingParts: string[] = []
+
+  for (const step of view.steps) {
+    if (step.type === 'thinking') {
+      const joined = step.blocks
+        .map((block) => block.thinking.trim())
+        .filter(Boolean)
+        .join('\n\n')
+      if (joined) {
+        thinkingParts.push(joined)
+      }
+      continue
+    }
+    if (step.type === 'search') {
+      const status = mapServerStatus(step.status)
+      step.queries.forEach((query, index) => {
+        const trimmed = query.trim()
+        if (trimmed) {
+          items.push({ key: `${step.key}-q-${index}`, label: trimmed, status })
+        }
+      })
+      continue
+    }
+    if (step.type === 'open') {
+      for (const page of step.pages) {
+        const label = page.title || page.url
+        if (label) {
+          items.push({ key: page.id, label, status: mapServerStatus(page.status) })
+        }
+      }
+      continue
+    }
+    if (step.type === 'read_link') {
+      for (const link of step.links) {
+        const label = link.title || link.url
+        if (label) {
+          items.push({ key: link.id, label, status: mapServerStatus(link.status) })
+        }
+      }
+      continue
+    }
+    if (step.type === 'find') {
+      for (const pattern of step.patterns) {
+        if (pattern.pattern) {
+          items.push({
+            key: pattern.id,
+            label: pattern.pattern,
+            status: mapServerStatus(pattern.status),
+          })
+        }
+      }
+      continue
+    }
+    if (step.type === 'tool') {
+      if (step.summary?.hiddenInTimeline || step.result?.frontStageNote) {
+        continue
+      }
+      const running = showsRunning(step)
+      const failed = step.summary
+        ? Boolean(step.summary.failed)
+        : Boolean(step.result && step.result.status !== 'ok' && step.result.status !== 'running')
+      const status: InlineTraceItem['status'] = running ? 'running' : failed ? 'failed' : 'done'
+      const label =
+        step.rawSummary ?? step.summary?.detail ?? step.summary?.liveVerb ?? step.call.name
+      const errorText = status === 'failed' ? firstErrorLine(step.result?.content) : undefined
+      items.push({
+        key: step.key,
+        label,
+        status,
+        ...(errorText ? { errorText } : {}),
+        ...(step.result?.durationMs !== undefined ? { durationMs: step.result.durationMs } : {}),
+      })
+    }
+  }
+
+  const thinkingMarkdown = thinkingParts.length > 0 ? thinkingParts.join('\n\n') : null
+  const hasRichDetails =
+    items.length > 0 ||
+    view.sources.length > 0 ||
+    (thinkingMarkdown !== null && thinkingMarkdown.length > 600)
+
+  return {
+    items,
+    thinkingMarkdown,
+    hasRichDetails,
+  }
+}

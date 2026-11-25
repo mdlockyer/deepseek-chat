@@ -6,6 +6,7 @@ import {
   IconCloseOutline16,
   IconSearchOutline16,
   IconThinkOutline16,
+  Select,
 } from '@deepseek-chat/lib-ui'
 import clsx from 'clsx'
 import {
@@ -26,11 +27,14 @@ import './thinking.markdown.css'
 import { buildActivityTimeline } from './timeline.js'
 import type {
   ActivityInspectorDeps,
+  ActivitySelection,
   ActivitySource,
-  ActivityTarget,
+  SessionTurnSummary,
   TurnSnapshot,
 } from './types.js'
 import styles from './ActivityPanel.module.css'
+
+const EMPTY_TURNS: readonly SessionTurnSummary[] = []
 
 const useTicker = (active: boolean, interval: number) => {
   const [tick, setTick] = useState(0)
@@ -157,20 +161,46 @@ export const createActivityPanel = (state: ActivityPanelState, deps: ActivityIns
 
   const ActivityPanel = ({ topActions }: { topActions?: ReactNode } = {}) => {
     const t = activityInspectorMessages.useTranslate()
-    const target = state.useStore((s) => s.target)
-    const lastTargetRef = useRef<ActivityTarget | null>(target)
-    if (target) {
-      lastTargetRef.current = target
+    const selection = state.useStore((s) => s.selection)
+    const layoutSessionId = deps.panel.useLayout((layout) => layout.activeSessionId)
+    const lastSelectionRef = useRef<ActivitySelection | null>(selection)
+    if (selection) {
+      lastSelectionRef.current = selection
     }
-    const activeTarget = target ?? lastTargetRef.current
+    const activeSelection = selection ?? lastSelectionRef.current
+    const sessionId = activeSelection?.sessionId ?? layoutSessionId
+
+    const getTurns = useCallback((): readonly SessionTurnSummary[] => {
+      if (!sessionId || !deps.turnSource.listTurns) {
+        return EMPTY_TURNS
+      }
+      return deps.turnSource.listTurns(sessionId)
+    }, [sessionId])
+
+    const allTurns = useSyncExternalStore(deps.turnSource.subscribe, getTurns, getTurns)
+    const activityTurns = useMemo(
+      () => allTurns.filter((item) => item.hasActivity || item.streaming),
+      [allTurns]
+    )
+
+    const resolvedMessageId = useMemo(() => {
+      if (activeSelection?.kind === 'pinned') {
+        return activeSelection.messageId
+      }
+      const streamingTurn = [...activityTurns].reverse().find((item) => item.streaming)
+      if (streamingTurn) {
+        return streamingTurn.messageId
+      }
+      return activityTurns.at(-1)?.messageId ?? null
+    }, [activeSelection, activityTurns])
 
     const cachedTurnRef = useRef<TurnSnapshot | null>(null)
     const getSnapshot = useCallback((): TurnSnapshot | null => {
-      if (!activeTarget) {
+      if (!sessionId || !resolvedMessageId) {
         cachedTurnRef.current = null
         return null
       }
-      const next = deps.turnSource.getTurn(activeTarget.sessionId, activeTarget.messageId)
+      const next = deps.turnSource.getTurn(sessionId, resolvedMessageId)
       const prev = cachedTurnRef.current
       if (prev === next) {
         return prev
@@ -189,7 +219,7 @@ export const createActivityPanel = (state: ActivityPanelState, deps: ActivityIns
       }
       cachedTurnRef.current = next
       return next
-    }, [activeTarget])
+    }, [sessionId, resolvedMessageId])
 
     const turn = useSyncExternalStore(deps.turnSource.subscribe, getSnapshot, getSnapshot)
     const live = Boolean(turn && turn.streaming && turn.status === 'streaming')
@@ -209,7 +239,17 @@ export const createActivityPanel = (state: ActivityPanelState, deps: ActivityIns
     }, [])
 
     const hasSources = (timeline?.sources.all.length ?? 0) > 0
-    const effectiveTab = hasSources ? (activeTarget?.tab ?? 'activity') : 'activity'
+    const effectiveTab = hasSources ? (activeSelection?.tab ?? 'activity') : 'activity'
+    const turnOptions = useMemo(
+      () =>
+        activityTurns.map((item) => ({
+          value: item.messageId,
+          label: item.promptExcerpt
+            ? t('turnOptionWithPrompt', { number: item.turnNumber, prompt: item.promptExcerpt })
+            : t('turnOptionLabel', { number: item.turnNumber }),
+        })),
+      [activityTurns, t]
+    )
 
     return (
       <>
@@ -254,9 +294,22 @@ export const createActivityPanel = (state: ActivityPanelState, deps: ActivityIns
           </div>
         </div>
 
+        {sessionId && turnOptions.length >= 2 && resolvedMessageId ? (
+          <div className={styles.turnBar}>
+            <Select
+              aria-label={t('turnSelectorLabel')}
+              value={resolvedMessageId}
+              options={turnOptions}
+              onChange={(nextMessageId) => state.selectTurn(sessionId, nextMessageId)}
+            />
+          </div>
+        ) : null}
+
         <div className={styles.content}>
           {!turn || !timeline ? (
-            <div className={styles.empty}>{t('empty')}</div>
+            <div className={styles.empty}>
+              {activityTurns.length === 0 ? t('emptySession') : t('empty')}
+            </div>
           ) : effectiveTab === 'sources' ? (
             <SourcesView
               cited={timeline.sources.cited}

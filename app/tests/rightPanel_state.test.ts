@@ -5,9 +5,10 @@ import { EventLog } from '@deepseek-chat/spine/runtime'
 import { clampSidePanelResizeWidth, createRightPanelController } from '../rightPanel/state.js'
 
 const makeController = (activeSessionId: string | null = 's1') => {
-  const controller = createRightPanelController(memoryStore(), new EventLog())
+  const log = new EventLog()
+  const controller = createRightPanelController(memoryStore(), log)
   controller.setActiveSession(activeSessionId)
-  return controller
+  return { controller, log }
 }
 
 describe('right panel resize clamping', () => {
@@ -22,7 +23,7 @@ describe('right panel resize clamping', () => {
 
 describe('right-rail coordination (factory-scoped)', () => {
   it('prevents closeActivePanelKind("activity") from closing an open preview or browser panel', () => {
-    const panel = makeController('s1')
+    const { controller: panel } = makeController('s1')
     panel.openPanel('s1', 'preview')
     assert.equal(panel.getActivePanel('s1'), 'preview')
 
@@ -31,34 +32,59 @@ describe('right-rail coordination (factory-scoped)', () => {
 
     panel.openPanel('s1', 'activity')
     assert.equal(panel.getActivePanel('s1'), 'activity')
-    assert.equal(panel.getPreviousPanel('s1'), 'preview')
 
     panel.closeActivePanelKind('activity')
     assert.equal(panel.getActivePanel('s1'), null)
-    assert.equal(panel.getPreviousPanel('s1'), null)
     panel.dispose()
   })
 
-  it('tracks the displaced previous panel per session for one-click return chips', () => {
-    const panel = makeController('s1')
-    panel.openPanel('s1', 'browser')
-    assert.equal(panel.getPreviousPanel('s1'), null)
+  it('politely reveals when idle, never hijacks an open panel or user dismissal, and resets on a new reply', () => {
+    const { controller: panel, log } = makeController('s1')
+    const browserSlot = panel.createSlot('browser')
+    const activitySlot = panel.createSlot('activity')
 
-    panel.openPanel('s1', 'activity')
+    // Idle session: polite reveal opens browser automatically.
+    browserSlot.reveal?.('s1')
+    assert.equal(panel.getActivePanel('s1'), 'browser')
+
+    // User switches to Activity -> subsequent browser reveals must NOT hijack it.
+    activitySlot.open('s1')
     assert.equal(panel.getActivePanel('s1'), 'activity')
-    assert.equal(panel.getPreviousPanel('s1'), 'browser')
+    browserSlot.reveal?.('s1')
+    assert.equal(panel.getActivePanel('s1'), 'activity')
 
-    panel.openPanel('s1', 'preview')
-    assert.equal(panel.getActivePanel('s1'), 'preview')
-    assert.equal(panel.getPreviousPanel('s1'), 'activity')
+    // User closes the panel -> polite reveal stays quiet for the rest of this turn.
+    activitySlot.close('s1')
+    assert.equal(panel.getActivePanel('s1'), null)
+    browserSlot.reveal?.('s1')
+    assert.equal(panel.getActivePanel('s1'), null)
 
-    panel.closePanel('s1', 'preview')
-    assert.equal(panel.getPreviousPanel('s1'), null)
+    // New reply starts -> policy resets so polite reveal works once again when idle.
+    log.publish({
+      type: 'ReplyLifecycleChanged',
+      sessionId: 's1',
+      messageId: 'm2',
+      phase: 'started',
+    })
+    browserSlot.reveal?.('s1')
+    assert.equal(panel.getActivePanel('s1'), 'browser')
+
+    // If user keeps Activity open across turns, new reply still does not displace Activity.
+    activitySlot.open('s1')
+    log.publish({
+      type: 'ReplyLifecycleChanged',
+      sessionId: 's1',
+      messageId: 'm3',
+      phase: 'started',
+    })
+    browserSlot.reveal?.('s1')
+    assert.equal(panel.getActivePanel('s1'), 'activity')
+
     panel.dispose()
   })
 
   it('fires shared overlay lock listeners only on 0->1 and 1->0 transitions', () => {
-    const panel = makeController('s1')
+    const { controller: panel } = makeController('s1')
     const events: boolean[] = []
     const unsub = panel.registerOverlayLockListener((locked) => events.push(locked))
 

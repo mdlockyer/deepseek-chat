@@ -780,6 +780,45 @@ export const createBrowserState = (deps: BrowserStateDeps) => {
     return true
   }
 
+  const revealBrowserPanel = async (sessionId?: string): Promise<boolean> => {
+    const state = get()
+    const targetSessionId = sessionId ?? state.activeSessionId
+    if (!targetSessionId) {
+      return false
+    }
+    const isViewing = state.activeSessionId === targetSessionId
+    const wasOpen = getSessionBrowser(state, targetSessionId).panelOpen
+    if (panel.reveal) {
+      panel.reveal(targetSessionId)
+    } else {
+      panel.open(targetSessionId)
+    }
+    const isNowOpen = panel.isOpen(targetSessionId)
+    if (isNowOpen) {
+      if (isViewing) {
+        onBrowserOpenCallback?.()
+      }
+      if (!wasOpen) {
+        set((current) => ({
+          sessions: {
+            ...current.sessions,
+            [targetSessionId]: {
+              ...getSessionBrowser(current, targetSessionId),
+              panelOpen: true,
+            },
+          },
+        }))
+      }
+    }
+    if (getSessionBrowser(get(), targetSessionId).tabs.length === 0) {
+      await createBrowserTab('about:blank', { sessionId: targetSessionId, activate: true })
+    }
+    if (isNowOpen && wasOpen && isViewing) {
+      await syncNativeVisibility()
+    }
+    return isNowOpen
+  }
+
   const closeBrowserPanel = async (sessionId?: string): Promise<void> => {
     const state = get()
     const targetSessionId = sessionId ?? state.activeSessionId
@@ -1343,6 +1382,7 @@ export const createBrowserState = (deps: BrowserStateDeps) => {
     closeBrowserTab,
     switchBrowserTab,
     openBrowserPanel,
+    revealBrowserPanel,
     closeBrowserPanel,
     toggleBrowserPanel,
     hideBrowserPanelForOtherView,

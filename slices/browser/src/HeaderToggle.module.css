@@ -3,4 +3,9 @@
     color: var(--ui-text-accent);
     background: var(--ui-accent-soft);
   }
+
+  .backgroundActive {
+    color: var(--ui-text-accent);
+    box-shadow: inset 0 0 0 1.5px var(--ui-border-accent);
+  }
 }
