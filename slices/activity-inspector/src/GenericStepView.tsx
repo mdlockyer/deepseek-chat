@@ -1,5 +1,5 @@
 import type { ActivityStepDetailProps } from '@deepseek-chat/lib-tools'
-import { Banner, IconWarningOutline16 } from '@deepseek-chat/lib-ui'
+import { Banner } from '@deepseek-chat/lib-ui'
 import { activityInspectorMessages } from './messages.js'
 import styles from './ActivityPanel.module.css'
 
@@ -25,7 +25,7 @@ export const GenericStepDetail = ({ entry, openVisual }: ActivityStepDetailProps
       ) : null}
       {result?.content ? (
         failed ? (
-          <Banner tone="error" compact role="note" icon={<IconWarningOutline16 />}>
+          <Banner tone="error" compact role="note">
             <pre className={styles.errorBoxPre}>{result.content}</pre>
           </Banner>
         ) : (

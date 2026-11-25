@@ -560,12 +560,17 @@ describe('slice-activity-inspector: redesigned ActivityPanel rendering', () => {
     assert.match(collapsedHtml, /First human step/)
     assert.match(collapsedHtml, /Second human step/)
     assert.doesNotMatch(collapsedHtml, /RAW_FALLBACK_/, 'human input.summary beats fallback detail')
-    assert.match(collapsedHtml, /Failed/, 'failed steps expose non-color-only Failed badge')
     assert.match(
       collapsedHtml,
-      /PRIVATE_IP_BLOCKED/,
-      'Evidence Shelf surfaces failed error preview'
+      /Failed: PRIVATE_IP_BLOCKED/,
+      'failed step row shows inline failure reason beneath title without a pill badge'
     )
+    assert.doesNotMatch(
+      collapsedHtml,
+      /badgeDanger/,
+      'failed step row does not render a pill status badge'
+    )
+    assert.match(collapsedHtml, /Step failed/, 'Evidence Shelf uses quiet typographic error kicker')
     assert.match(
       collapsedHtml,
       /aria-label="Inspect failed step: First human step"/,

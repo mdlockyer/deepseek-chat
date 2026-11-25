@@ -3,7 +3,6 @@ import {
   IconButton,
   IconGlobeLanguageOutline16,
   IconRefreshOutline16,
-  IconWarningOutline16,
 } from '@deepseek-chat/lib-ui'
 import clsx from 'clsx'
 import { memo, useEffect, useState } from 'react'
@@ -145,7 +144,6 @@ export const AssistantMessage = memo(function AssistantMessage({
         />
       ) : notice ? (
         <div className={styles.notice}>
-          <IconWarningOutline16 />
           <span>
             {notice.text}
             {notice.action === 'apiKey' ? (

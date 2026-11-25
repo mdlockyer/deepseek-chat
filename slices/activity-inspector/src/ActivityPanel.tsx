@@ -1,7 +1,6 @@
 import { Markdown } from '@deepseek-chat/lib-markdown'
 import type { ToolStepVisualArtifact } from '@deepseek-chat/lib-tools'
 import {
-  Badge,
   Button,
   EmptyState,
   HoverGlide,
@@ -14,7 +13,6 @@ import {
   IconPhotoOutline14,
   IconSearchOutline16,
   IconThinkOutline16,
-  IconWarningOutline16,
   IconButton,
   Tab,
   TabList,
@@ -332,13 +330,25 @@ const ActivityStepRow = ({
 
   const rowContent = (
     <>
-      <span className={styles.rowIcon} aria-hidden="true">
+      <span
+        className={clsx(styles.rowIcon, item.status === 'error' && styles.rowIconError)}
+        aria-hidden="true"
+      >
         {icon}
       </span>
-      <span className={clsx(styles.rowLabel, item.status === 'running' && styles.rowLabelActive)}>
-        {item.label}
+      <span className={styles.rowMain}>
+        <span className={clsx(styles.rowLabel, item.status === 'running' && styles.rowLabelActive)}>
+          {item.label}
+        </span>
+        {item.status === 'error' ? (
+          <span className={styles.rowErrorLine}>
+            {item.errorPreview
+              ? t('stepFailedWithReason', { reason: item.errorPreview })
+              : t('stepStatusFailed')}
+          </span>
+        ) : null}
       </span>
-      {visualTitle && item.status === 'ok' ? (
+      {visualTitle && item.status !== 'running' ? (
         <span className={styles.srOnly}> ({visualTitle})</span>
       ) : null}
       <span className={styles.rowTrailing}>
@@ -348,10 +358,6 @@ const ActivityStepRow = ({
             startedAt={item.entry.result?.startedAt}
             verb={runningVerb}
           />
-        ) : item.status === 'error' ? (
-          <Badge tone="danger" icon={<IconWarningOutline16 />}>
-            {t('stepStatusFailed')}
-          </Badge>
         ) : (
           <>
             {visualCount > 0 ? (

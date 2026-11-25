@@ -3,7 +3,6 @@ import {
   Button,
   IconBrowseOutline16,
   IconOpenExternalOutline14,
-  IconWarningOutline16,
 } from '@deepseek-chat/lib-ui'
 import type {
   ActivityStepDetailProps,
@@ -123,7 +122,7 @@ const FileStepDetail = ({ entry, sessionId, openFile }: ActivityStepDetailProps)
         <div className={styles.path}>{action.path}</div>
       ) : null}
       {failed && result?.content?.trim() ? (
-        <Banner tone="error" compact role="note" icon={<IconWarningOutline16 />}>
+        <Banner tone="error" compact role="note">
           <div className={styles.errorText}>{result.content.trim()}</div>
         </Banner>
       ) : null}

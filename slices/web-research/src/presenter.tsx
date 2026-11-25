@@ -10,7 +10,6 @@ import {
   IconGlobeLanguageOutline14,
   IconOpenExternalOutline14,
   IconSearchOutline16,
-  IconWarningOutline16,
 } from '@deepseek-chat/lib-ui'
 import { webResearchMessages } from './messages.js'
 import styles from './WebResearchActivity.module.css'
@@ -110,7 +109,7 @@ const WebResearchStepDetail = ({ entry, openLink }: ActivityStepDetailProps) => 
     return (
       <div className={styles.detail}>
         {failed ? (
-          <Banner tone="error" compact role="note" icon={<IconWarningOutline16 />}>
+          <Banner tone="error" compact role="note">
             <div className={styles.errorText}>
               {result?.content?.trim() || t('activityWebScrapeFailed')}
             </div>
@@ -143,7 +142,7 @@ const WebResearchStepDetail = ({ entry, openLink }: ActivityStepDetailProps) => 
     <div className={styles.detail}>
       {query ? <div className={styles.queryItem}>“{query}”</div> : null}
       {failed && result?.content?.trim() ? (
-        <Banner tone="error" compact role="note" icon={<IconWarningOutline16 />}>
+        <Banner tone="error" compact role="note">
           <div className={styles.errorText}>{result.content.trim()}</div>
         </Banner>
       ) : null}

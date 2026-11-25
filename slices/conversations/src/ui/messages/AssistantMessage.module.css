@@ -23,15 +23,9 @@
   .notice {
     display: flex;
     align-items: flex-start;
-    gap: var(--ui-space-1-5);
     margin-top: var(--ui-space-2);
     font: var(--ui-type-label);
     color: var(--ui-text-danger);
-
-    > svg {
-      flex-shrink: 0;
-      margin-top: var(--ui-space-1);
-    }
 
     > span {
       min-width: 0;

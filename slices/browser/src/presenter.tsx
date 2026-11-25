@@ -14,7 +14,6 @@ import {
   IconGlobeLanguageOutline14,
   IconOpenExternalOutline14,
   IconViewportOutline14,
-  IconWarningOutline16,
 } from '@deepseek-chat/lib-ui'
 import styles from './BrowserActivity.module.css'
 import { browserMessages } from './messages.js'
@@ -215,7 +214,7 @@ const BrowserStepDetail = ({
       ) : null}
 
       {failed && rawOutput ? (
-        <Banner tone="error" compact role="note" icon={<IconWarningOutline16 />}>
+        <Banner tone="error" compact role="note">
           <div className={styles.errorText}>{rawOutput}</div>
         </Banner>
       ) : null}

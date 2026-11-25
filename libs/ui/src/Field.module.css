@@ -88,17 +88,10 @@
   .errorRow {
     display: flex;
     align-items: center;
-    gap: var(--ui-space-1-5);
     font: var(--ui-type-micro);
     font-weight: 400;
     line-height: 18px;
     color: var(--ui-text-danger);
-
-    svg {
-      flex-shrink: 0;
-      width: 14px;
-      height: 14px;
-    }
   }
 
   @media not all and (min-width: 768px) {

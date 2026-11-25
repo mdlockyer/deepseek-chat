@@ -250,18 +250,9 @@
     background: var(--ui-danger-soft);
   }
 
-  .errorGroupHeader {
-    display: flex;
-    align-items: center;
-    gap: var(--ui-space-2);
-    min-width: 0;
-  }
-
-  .errorCalloutIcon {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
+  .errorCalloutKicker {
+    display: block;
+    font: var(--ui-type-micro);
     color: var(--ui-text-danger);
   }
 
@@ -551,7 +542,7 @@
 
     @media (hover: hover) {
       &:hover:not(:disabled) {
-        .rowIcon,
+        .rowIcon:not(.rowIconError),
         .rowChevron {
           color: var(--ui-text-secondary);
         }
@@ -568,7 +559,7 @@
     background: var(--ui-accent-soft);
     color: var(--ui-text-primary);
 
-    .rowIcon {
+    .rowIcon:not(.rowIconError) {
       color: var(--ui-text-accent);
     }
   }
@@ -589,6 +580,10 @@
     }
   }
 
+  .rowIconError {
+    color: var(--ui-text-danger);
+  }
+
   .rowHeading {
     flex: 1;
     min-width: 0;
@@ -597,15 +592,31 @@
     overflow-wrap: anywhere;
   }
 
-  .rowLabel {
+  .rowMain {
+    display: flex;
+    flex-direction: column;
     flex: 1;
     min-width: 0;
+    gap: var(--ui-space-0-5);
+  }
+
+  .rowLabel {
+    display: block;
     color: var(--ui-text-primary);
     overflow-wrap: anywhere;
   }
 
   .rowLabelActive {
     font-weight: 500;
+  }
+
+  .rowErrorLine {
+    display: block;
+    font: var(--ui-type-caption);
+    color: var(--ui-text-danger);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .rowTrailing {

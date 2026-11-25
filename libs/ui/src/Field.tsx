@@ -1,7 +1,7 @@
 import clsx from 'clsx'
 import { forwardRef, useId, useState, type InputHTMLAttributes, type ReactNode } from 'react'
 import { IconButton } from './IconButton.js'
-import { IconEyeOffOutline16, IconEyeOutline16, IconWarningOutline16 } from './icons.js'
+import { IconEyeOffOutline16, IconEyeOutline16 } from './icons.js'
 import { uiMessages } from './messages.js'
 import styles from './Field.module.css'
 
@@ -78,7 +78,6 @@ export const TextField = forwardRef<HTMLInputElement, TextFieldProps>(function T
       </div>
       {error ? (
         <div id={errorId} role="alert" className={styles.errorRow}>
-          <IconWarningOutline16 />
           <span>{error}</span>
         </div>
       ) : null}

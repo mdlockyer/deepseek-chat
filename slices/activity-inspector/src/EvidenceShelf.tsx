@@ -1,4 +1,4 @@
-import { IconChevronRightOutline14, IconWarningOutline16 } from '@deepseek-chat/lib-ui'
+import { IconChevronRightOutline14 } from '@deepseek-chat/lib-ui'
 import { activityInspectorMessages } from './messages.js'
 import type { ActivityFailedStep, ActivityVisualItem } from './timeline.js'
 import styles from './ActivityPanel.module.css'
@@ -37,10 +37,8 @@ export const EvidenceShelf = ({
           aria-label={t('inspectErrorStep', { label: failedSteps[0].label })}
           onClick={() => onInspectStep(failedSteps[0].callId)}
         >
-          <span className={styles.errorCalloutIcon} aria-hidden="true">
-            <IconWarningOutline16 />
-          </span>
           <span className={styles.errorCalloutBody}>
+            <span className={styles.errorCalloutKicker}>{t('evidenceErrorsOne')}</span>
             <span className={styles.errorSummaryTitle}>{failedSteps[0].label}</span>
             {failedSteps[0].preview ? (
               <span className={styles.errorSummaryPreview}>{failedSteps[0].preview}</span>
@@ -56,14 +54,9 @@ export const EvidenceShelf = ({
           role="group"
           aria-label={t('evidenceErrorsMany', { count: failedSteps.length })}
         >
-          <div className={styles.errorGroupHeader}>
-            <span className={styles.errorCalloutIcon} aria-hidden="true">
-              <IconWarningOutline16 />
-            </span>
-            <span className={styles.errorSummaryTitle}>
-              {t('evidenceErrorsMany', { count: failedSteps.length })}
-            </span>
-          </div>
+          <span className={styles.errorCalloutKicker}>
+            {t('evidenceErrorsMany', { count: failedSteps.length })}
+          </span>
           <div className={styles.errorSummaryList}>
             {failedSteps.map((step) => (
               <button

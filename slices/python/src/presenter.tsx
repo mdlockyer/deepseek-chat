@@ -1,4 +1,4 @@
-import { Banner, IconCodeOutline14, IconWarningOutline16 } from '@deepseek-chat/lib-ui'
+import { Banner, IconCodeOutline14 } from '@deepseek-chat/lib-ui'
 import type {
   ActivityStepDetailProps,
   ArchiveFragment,
@@ -70,7 +70,7 @@ const PythonStepDetail = ({ entry, openVisual, renderMarkdown }: ActivityStepDet
         : null}
       {result?.content?.trim() ? (
         failed ? (
-          <Banner tone="error" compact role="note" icon={<IconWarningOutline16 />}>
+          <Banner tone="error" compact role="note">
             <pre className={styles.errorOutput}>{result.content}</pre>
           </Banner>
         ) : (
