@@ -1,12 +1,13 @@
+import {
+  IconPaperclipOutline16,
+  IconPlusOutline14,
+  Popover,
+  Switch,
+  Tooltip,
+} from '@deepseek-chat/lib-ui'
 import clsx from 'clsx'
-import { useCallback, useEffect, useState, type ReactNode } from 'react'
-import { createPortal } from 'react-dom'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { useTranslate } from '../../messages.js'
-import { acquireOverlay } from '@deepseek-chat/spine/design'
-import { usePresence } from '@deepseek-chat/spine/design'
-import { useAnchoredPosition, useDismiss } from '@deepseek-chat/spine/design'
-import { IconPaperclipOutline16, IconPlusOutline14 } from '@deepseek-chat/spine/design'
-import { Tooltip } from '@deepseek-chat/spine/design'
 import styles from './ComposerMenu.module.css'
 
 export type ComposerToolSwitch = {
@@ -41,40 +42,12 @@ export const ComposerMenu = ({
 }) => {
   const t = useTranslate()
   const [open, setOpen] = useState(false)
-  const { mounted, exiting } = usePresence(open, 140)
-  const { anchorRef, floatingRef, position } = useAnchoredPosition<
-    HTMLButtonElement,
-    HTMLDivElement
-  >(mounted, { side: 'top', align: 'start', offset: 8, measureKey: tools.length })
+  const anchorRef = useRef<HTMLButtonElement>(null)
+  const listRef = useRef<HTMLDivElement>(null)
+  const focusLastOnOpenRef = useRef(false)
 
-  const close = useCallback(
-    (restoreFocus = false) => {
-      setOpen(false)
-      if (restoreFocus) {
-        requestAnimationFrame(() => anchorRef.current?.focus({ preventScroll: true }))
-      }
-    },
-    [anchorRef]
-  )
-
-  useDismiss(open, [anchorRef, floatingRef], () => close(false))
-  useEffect(() => (mounted ? acquireOverlay() : undefined), [mounted])
-
-  // 打开时按键盘交互习惯聚焦浮层容器（或首项），支持上下键遍历选项
-  useEffect(() => {
-    if (open) {
-      floatingRef.current?.focus({ preventScroll: true })
-    }
-  }, [open, floatingRef])
-
-  const activeLabels = tools.filter((item) => item.checked).map((item) => item.label)
-  const tooltipText =
-    activeLabels.length > 0
-      ? t('composerMenuActiveTooltip', { tools: activeLabels.join(', ') })
-      : t('composerMenuTooltip')
-
-  const focusRow = (direction: 1 | -1 | 'first' | 'last') => {
-    const container = floatingRef.current
+  const focusRow = useCallback((direction: 1 | -1 | 'first' | 'last') => {
+    const container = listRef.current
     if (!container) {
       return
     }
@@ -100,7 +73,22 @@ export const ComposerMenu = ({
           : rows.length - 1
         : (activeIndex + direction + rows.length) % rows.length
     rows[nextIndex]?.focus({ preventScroll: true })
-  }
+  }, [])
+
+  useEffect(() => {
+    if (!open || !focusLastOnOpenRef.current) {
+      return
+    }
+    focusLastOnOpenRef.current = false
+    const frame = requestAnimationFrame(() => focusRow('last'))
+    return () => cancelAnimationFrame(frame)
+  }, [open, focusRow])
+
+  const activeLabels = tools.filter((item) => item.checked).map((item) => item.label)
+  const tooltipText =
+    activeLabels.length > 0
+      ? t('composerMenuActiveTooltip', { tools: activeLabels.join(', ') })
+      : t('composerMenuTooltip')
 
   return (
     <>
@@ -115,16 +103,10 @@ export const ComposerMenu = ({
           disabled={disabled}
           onClick={() => setOpen((value) => !value)}
           onKeyDown={(event) => {
-            if (event.key === 'Escape' && open) {
-              event.preventDefault()
-              event.stopPropagation()
-              close(true)
-              return
-            }
             if (event.key === 'ArrowUp' && !open) {
               event.preventDefault()
+              focusLastOnOpenRef.current = true
               setOpen(true)
-              requestAnimationFrame(() => focusRow('last'))
             }
           }}
         >
@@ -134,86 +116,71 @@ export const ComposerMenu = ({
           {activeLabels.length > 0 ? <span className={styles.activeDot} aria-hidden /> : null}
         </button>
       </Tooltip>
-      {mounted
-        ? createPortal(
-            <div
-              ref={floatingRef}
-              tabIndex={-1}
-              role="dialog"
-              aria-label={t('composerMenuTooltip')}
-              className={clsx(styles.menu, exiting && styles.exiting)}
-              style={position ?? { top: 0, left: 0, visibility: 'hidden' }}
-              onKeyDown={(event) => {
-                if (event.key === 'Escape') {
-                  event.preventDefault()
-                  event.stopPropagation()
-                  close(true)
-                  return
-                }
-                if (isUploadShortcut(event.nativeEvent)) {
-                  event.preventDefault()
-                  close(false)
-                  onUploadFiles()
-                  return
-                }
-                if (event.key === 'ArrowDown') {
-                  event.preventDefault()
-                  focusRow(1)
-                } else if (event.key === 'ArrowUp') {
-                  event.preventDefault()
-                  focusRow(-1)
-                } else if (event.key === 'Home') {
-                  event.preventDefault()
-                  focusRow('first')
-                } else if (event.key === 'End') {
-                  event.preventDefault()
-                  focusRow('last')
-                }
-              }}
-            >
-              <button
-                type="button"
-                data-composer-row=""
-                className={styles.row}
-                disabled={disabled}
-                onClick={() => {
-                  close(false)
-                  onUploadFiles()
-                }}
-              >
-                <span className={styles.rowIcon}>
-                  <IconPaperclipOutline16 />
-                </span>
-                <span className={styles.rowLabel}>{t('uploadFile')}</span>
-                <kbd className={styles.shortcut}>{isMacPlatform ? '⌘U' : 'Ctrl+U'}</kbd>
-              </button>
-              <div className={styles.divider} role="separator" />
-              {tools.map((tool) => (
-                <button
-                  key={tool.key}
-                  type="button"
-                  role="switch"
-                  aria-checked={tool.checked}
-                  data-composer-row=""
-                  className={styles.row}
-                  onClick={tool.onToggle}
-                >
-                  <span className={clsx(styles.rowIcon, tool.checked && styles.rowIconActive)}>
-                    {tool.icon}
-                  </span>
-                  <span className={styles.rowLabel}>{tool.label}</span>
-                  <span
-                    className={clsx(styles.switchTrack, tool.checked && styles.switchTrackOn)}
-                    aria-hidden
-                  >
-                    <span className={styles.switchThumb} />
-                  </span>
-                </button>
-              ))}
-            </div>,
-            document.body
-          )
-        : null}
+      <Popover
+        open={open}
+        onOpenChange={setOpen}
+        anchorRef={anchorRef}
+        side="top"
+        align="start"
+        offset={8}
+        measureKey={tools.length}
+        autoFocusSurface
+        role="dialog"
+        ariaLabel={t('composerMenuTooltip')}
+        className={styles.menu}
+        onKeyDown={(event) => {
+          if (isUploadShortcut(event.nativeEvent)) {
+            event.preventDefault()
+            setOpen(false)
+            onUploadFiles()
+            return
+          }
+          if (event.key === 'ArrowDown') {
+            event.preventDefault()
+            focusRow(1)
+          } else if (event.key === 'ArrowUp') {
+            event.preventDefault()
+            focusRow(-1)
+          } else if (event.key === 'Home') {
+            event.preventDefault()
+            focusRow('first')
+          } else if (event.key === 'End') {
+            event.preventDefault()
+            focusRow('last')
+          }
+        }}
+      >
+        <div ref={listRef}>
+          <button
+            type="button"
+            data-composer-row=""
+            className={styles.row}
+            disabled={disabled}
+            onClick={() => {
+              setOpen(false)
+              onUploadFiles()
+            }}
+          >
+            <span className={styles.rowIcon}>
+              <IconPaperclipOutline16 />
+            </span>
+            <span className={styles.rowLabel}>{t('uploadFile')}</span>
+            <kbd className={styles.shortcut}>{isMacPlatform ? '⌘U' : 'Ctrl+U'}</kbd>
+          </button>
+          <div className={styles.divider} role="separator" />
+          {tools.map((tool) => (
+            <Switch
+              key={tool.key}
+              block
+              data-composer-row=""
+              icon={tool.icon}
+              label={tool.label}
+              checked={tool.checked}
+              onChange={tool.onToggle}
+            />
+          ))}
+        </div>
+      </Popover>
     </>
   )
 }

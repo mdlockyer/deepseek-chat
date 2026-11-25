@@ -1,8 +1,8 @@
+import { useIsMobile } from '@deepseek-chat/lib-ui'
 import clsx from 'clsx'
-import { useIsMobile } from '@deepseek-chat/spine/design'
 import { useTranslate } from '../../messages.js'
+import { DeepSeekMark } from '../brand/DeepSeekMark.js'
 import { ChatInput } from '../chatInput/ChatInput.js'
-import { DeepSeekMark } from '@deepseek-chat/spine/design'
 import { MobileHeader } from './MobileHeader.js'
 import styles from './Welcome.module.css'
 

@@ -1,113 +1,115 @@
-.container {
-  position: absolute;
-  inset: 0;
-  display: flex;
-}
-
-/* 新对话：品牌放在会话标题的位置，左对齐与标题一致，垂直中心与交通灯同一线 */
-.detailBrand {
-  position: absolute;
-  top: 0;
-  right: 0;
-  left: 0;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  box-sizing: border-box;
-  height: 52px;
-  padding: 0 14px 0 30px;
-  /* 侧边栏开合时品牌与面板同步滑动，而不是跳位 */
-  transition: padding-left var(--ds-transition-duration-panel) var(--ds-ease-panel);
-}
-
-/* 侧边栏收起时让开交通灯与左上角按钮组（96–174px）：192px，与 SessionView 标题同位置。
-   用内边距而不是外边距，整行保持满宽，仍可拖动窗口 */
-.withCollapsedSider {
-  padding-left: 192px;
-}
-
-.brandMark {
-  display: flex;
-  flex-shrink: 0;
-  align-items: center;
-  color: var(--dsw-alias-brand-primary);
-}
-
-.brandName {
-  font-size: 15px;
-  line-height: 20px;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-  color: var(--dsw-alias-label-primary);
-}
-
-.welcome {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  box-sizing: border-box;
-  width: 100%;
-  max-width: var(--message-list-max-width);
-  margin: auto;
-  padding: 0 var(--message-list-padding-horizontal) 64px;
-  animation: welcome-in var(--ds-transition-duration) var(--ds-ease-panel) both;
-}
-
-@keyframes welcome-in {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-}
-
-.greeting {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 21px;
-  font-size: 24px;
-  line-height: 32px;
-  font-weight: 600;
-  text-align: center;
-  color: var(--dsw-alias-label-primary);
-}
-
-@media (max-width: 439px) {
-  .greeting {
-    font-size: 20px;
-    line-height: 28px;
-    font-weight: 500;
-  }
-}
-
-@media not all and (min-width: 768px) {
+@layer slice {
   .container {
-    flex-direction: column;
+    position: absolute;
+    inset: 0;
+    display: flex;
+  }
+
+  /* 新对话：品牌放在会话标题的位置，左对齐与标题一致，垂直中心与交通灯同一线 */
+  .detailBrand {
+    position: absolute;
+    top: 0;
+    right: 0;
+    left: 0;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    box-sizing: border-box;
+    height: var(--ui-panel-header-height);
+    padding: 0 14px 0 30px;
+    /* 侧边栏开合时品牌与面板同步滑动，而不是跳位 */
+    transition: padding-left var(--ui-duration-panel) var(--ui-ease-panel);
+  }
+
+  /* 侧边栏收起时让开交通灯与左上角按钮组（96–174px）：192px，与 SessionView 标题同位置。
+     用内边距而不是外边距，整行保持满宽，仍可拖动窗口 */
+  .withCollapsedSider {
+    padding-left: 192px;
+  }
+
+  .brandMark {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    color: var(--ui-accent-fill);
+  }
+
+  .brandName {
+    font-size: 15px;
+    line-height: 20px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    color: var(--ui-text-primary);
   }
 
   .welcome {
-    flex: 1;
-    min-height: 0;
-    justify-content: flex-end;
-    max-width: none;
-    margin: 0;
-    padding: 0 16px env(safe-area-inset-bottom);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    width: 100%;
+    max-width: var(--message-list-max-width);
+    margin: auto;
+    padding: 0 var(--message-list-padding-horizontal) 64px;
+    animation: welcome-in var(--ui-duration-normal) var(--ui-ease-panel) both;
+  }
+
+  @keyframes welcome-in {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
   }
 
   .greeting {
-    flex-shrink: 0;
-    margin: auto 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 21px;
+    font-size: var(--ui-font-size-2xl);
+    line-height: 32px;
+    font-weight: 600;
+    text-align: center;
+    color: var(--ui-text-primary);
   }
 
-  .caveat {
-    flex-shrink: 0;
-    width: 100%;
-    padding: 6px 0;
-    font-size: 11px;
-    line-height: 16px;
-    text-align: center;
-    color: var(--dsw-alias-label-tertiary);
-    user-select: none;
+  @media (max-width: 439px) {
+    .greeting {
+      font-size: var(--ui-font-size-xl);
+      line-height: 28px;
+      font-weight: 500;
+    }
+  }
+
+  @media not all and (min-width: 768px) {
+    .container {
+      flex-direction: column;
+    }
+
+    .welcome {
+      flex: 1;
+      min-height: 0;
+      justify-content: flex-end;
+      max-width: none;
+      margin: 0;
+      padding: 0 var(--ui-space-4) env(safe-area-inset-bottom);
+    }
+
+    .greeting {
+      flex-shrink: 0;
+      margin: auto 0;
+    }
+
+    .caveat {
+      flex-shrink: 0;
+      width: 100%;
+      padding: var(--ui-space-1-5) 0;
+      font-size: 11px;
+      line-height: 16px;
+      text-align: center;
+      color: var(--ui-text-muted);
+      user-select: none;
+    }
   }
 }

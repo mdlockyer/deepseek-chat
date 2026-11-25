@@ -1,4 +1,3 @@
-import { onOverlayChange } from '@deepseek-chat/spine/design'
 import { createRoot } from 'react-dom/client'
 import { App } from './App.js'
 import { AppErrorBoundary } from './AppErrorBoundary.js'
@@ -17,22 +16,6 @@ import './global.css'
 ensureKatex()
 setupTheme()
 // 原生浏览器视图画在页面之上，任何 HTML 浮层（菜单、弹窗）打开时都要让位
-let releaseBrowserOverlay: (() => void) | null = null
-onOverlayChange((open) => {
-  if (open) {
-    if (!releaseBrowserOverlay) {
-      const releaseBrowser = browser.acquireOverlayLock()
-      const releasePanel = acquireSidePanelOverlayLock()
-      releaseBrowserOverlay = () => {
-        releaseBrowser()
-        releasePanel()
-      }
-    }
-  } else {
-    releaseBrowserOverlay?.()
-    releaseBrowserOverlay = null
-  }
-})
 let releaseUiOverlay: (() => void) | null = null
 overlays.subscribe((open) => {
   if (open) {

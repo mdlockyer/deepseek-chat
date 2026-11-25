@@ -1,8 +1,7 @@
 import { useTranslate } from '../../messages.js'
 import { useRef } from 'react'
 import { type MessageVersions } from '../../branches.js'
-import { IconChevronRightOutline14 } from '@deepseek-chat/spine/design'
-import { IconButton } from '@deepseek-chat/spine/design'
+import { IconButton, IconChevronRightOutline14 } from '@deepseek-chat/lib-ui'
 import styles from './BranchSwitcher.module.css'
 
 export type { MessageVersions } from '../../branches.js'

@@ -1,166 +1,132 @@
-.dialog {
-  --modal-header-gap: 7px;
-  width: 760px;
-  /* 高度随分组内容变化：三个分组的内容长度差别很大，固定高度会留下大片空白 */
-  height: auto;
-  max-height: calc(100vh - 32px);
-  padding: 19px 24px 22px;
-}
-
-.dialogMain {
-  display: flex;
-  flex: 1;
-  min-height: 0;
-  color: var(--dsw-alias-label-primary);
-}
-
-.navigation {
-  display: flex;
-  flex-direction: column;
-  flex-shrink: 0;
-  gap: 4px;
-  width: 172px;
-  margin: 6px 12px 0 -12px;
-  padding-top: 4px;
-}
-
-.navItem {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  box-sizing: border-box;
-  width: calc(100% - 8px);
-  min-height: 40px;
-  margin: 0 4px;
-  padding: 9px 10px 9px 8px;
-  border: none;
-  border-radius: 12px;
-  background-color: transparent;
-  color: var(--dsw-alias-label-primary);
-  font: inherit;
-  font-size: 14px;
-  line-height: 22px;
-  text-align: left;
-  cursor: pointer;
-  user-select: none;
-  outline: none;
-  transition: background-color var(--ds-transition-duration) var(--ds-ease-in-out);
-
-  svg {
-    flex-shrink: 0;
-  }
-
-  &:hover {
-    background-color: var(--dsw-alias-interactive-bg-hover);
-  }
-
-  /* 选中项与悬停项必须可区分：选中用品牌色文字与浅品牌底 */
-  &.navItemActive {
-    background-color: var(--dsw-alias-button-ghost-active-fill);
-    color: var(--dsw-alias-label-primary);
-    font-weight: 500;
-
-    svg {
-      color: var(--dsw-alias-brand-primary);
-    }
-  }
-
-  &:focus-visible {
-    box-shadow: 0 0 0 2px var(--dsw-alias-button-primary-fill);
-  }
-}
-
-.content {
-  display: flex;
-  flex: 1 1 auto;
-  flex-direction: column;
-  min-width: 0;
-  min-height: 0;
-  margin-right: -24px;
-  padding: 0 24px;
-  overflow-y: auto;
-}
-
-.uploadButton {
-  padding: 0 13px;
-}
-
-@media not all and (min-width: 768px) {
+@layer slice {
   .dialog {
-    align-self: flex-end;
-    width: 100%;
-    max-width: none;
-    height: calc(100% - 64px);
-    max-height: 800px;
-    border-radius: 24px 24px 0 0;
+    width: 760px;
+    /* 高度随分组内容变化：三个分组的内容长度差别很大，固定高度会留下大片空白 */
+    height: auto;
+    max-height: calc(100dvh - var(--ui-space-8));
+    padding: 19px var(--ui-space-6) 22px;
   }
 
   .dialogMain {
-    flex-direction: column;
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    color: var(--ui-text-primary);
+  }
+
+  .tabs {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
   }
 
   .navigation {
-    flex-direction: row;
-    width: auto;
-    margin: 6px -4px;
-    padding: 4px 0;
-    overflow-x: auto;
+    flex-shrink: 0;
+    gap: var(--ui-space-1);
+    width: 172px;
+    margin: var(--ui-space-1-5) var(--ui-space-3) 0 calc(var(--ui-space-3) * -1);
+    padding-top: var(--ui-space-1);
   }
 
   .navItem {
-    flex: 1 0 auto;
-    justify-content: center;
-    width: auto;
-    min-width: 108px;
-    margin: 0;
-    white-space: nowrap;
-
-    &:first-child {
-      margin-left: 4px;
-    }
-
-    &:last-child {
-      margin-right: 4px;
-    }
+    width: calc(100% - var(--ui-space-2));
+    min-height: var(--ui-control-lg);
+    margin: 0 var(--ui-space-1);
+    padding: 9px var(--ui-space-2-5) 9px var(--ui-space-2);
+    border-radius: var(--ui-radius-md);
   }
 
   .content {
-    padding-top: 24px;
-    padding-left: 0;
-    padding-bottom: env(safe-area-inset-bottom);
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    margin-right: calc(var(--ui-space-6) * -1);
+    padding: 0 var(--ui-space-6);
+    overflow-y: auto;
   }
-}
 
-.importConfirm {
-  padding-top: 26px;
-  padding-bottom: 24px;
-}
+  .uploadButton {
+    padding: 0 13px;
+  }
 
-.importConfirmText {
-  color: var(--dsw-alias-label-primary);
-}
+  @media not all and (min-width: 768px) {
+    .dialog {
+      width: 100%;
+      max-width: none;
+      height: calc(100% - 64px);
+      max-height: 800px;
+      border-radius: var(--ui-radius-xl) var(--ui-radius-xl) 0 0;
+    }
 
-.deleteConfirm {
-  max-height: calc(100dvh - 32px);
-  overflow-y: auto;
-}
+    .tabs {
+      flex-direction: column;
+    }
 
-.deleteActions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 8px;
-  width: 100%;
-}
+    .navigation {
+      width: auto;
+      margin: var(--ui-space-1-5) calc(var(--ui-space-1) * -1);
+      padding: var(--ui-space-1) 0;
+      overflow-x: auto;
+    }
 
-@media not all and (min-width: 768px) {
-  .deleteActions > button {
-    min-height: 44px;
-    height: auto;
-    padding-top: 10px;
-    padding-bottom: 10px;
-    white-space: normal;
-    overflow-wrap: anywhere;
-    max-width: 100%;
+    .navItem {
+      flex: 1 0 auto;
+      justify-content: center;
+      width: auto;
+      min-width: 108px;
+      margin: 0;
+      white-space: nowrap;
+
+      &:first-child {
+        margin-left: var(--ui-space-1);
+      }
+
+      &:last-child {
+        margin-right: var(--ui-space-1);
+      }
+    }
+
+    .content {
+      padding-top: var(--ui-space-6);
+      padding-left: 0;
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+  }
+
+  .importConfirm {
+    padding-top: 26px;
+    padding-bottom: var(--ui-space-6);
+  }
+
+  .importConfirmText {
+    color: var(--ui-text-primary);
+  }
+
+  .deleteConfirm {
+    max-height: calc(100dvh - var(--ui-space-8));
+    overflow-y: auto;
+  }
+
+  .deleteActions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: var(--ui-space-2);
+    width: 100%;
+  }
+
+  @media not all and (min-width: 768px) {
+    .deleteActions > button {
+      min-height: var(--ui-control-xl);
+      height: auto;
+      padding-top: var(--ui-space-2-5);
+      padding-bottom: var(--ui-space-2-5);
+      white-space: normal;
+      overflow-wrap: anywhere;
+      max-width: 100%;
+    }
   }
 }

@@ -8,6 +8,7 @@ import {
   account,
   browser,
   httpFetch,
+  notices,
   preferences,
   setActivePanelSession,
   spine,
@@ -29,6 +30,7 @@ export const conversations = createConversationsSlice({
   getLocationLabel: (locale) => preferences.getLocationLabel(locale),
   onActiveSessionChange: setActivePanelSession,
   browserAvailable: isDesktopApp,
+  notify: notices,
   // 开发诊断：流式请求时序交给开发服务器落盘（生产构建不包含）
   ...(__DEV__
     ? {

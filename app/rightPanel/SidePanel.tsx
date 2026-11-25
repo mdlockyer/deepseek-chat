@@ -9,7 +9,8 @@ import {
   setSidePanelWidth,
   useSidePanelStore,
 } from './state.js'
-import { PANEL_DURATION_MS, usePresence } from '@deepseek-chat/spine/design'
+import { usePresence } from '@deepseek-chat/lib-ui'
+import { PANEL_DURATION_MS } from '@deepseek-chat/spine/design'
 import styles from './RightPanel.module.css'
 
 /** 共享右侧面板壳层：开合动画、左侧拖拽调宽、窄屏自动收起侧边栏、移动端全屏抽屉 */

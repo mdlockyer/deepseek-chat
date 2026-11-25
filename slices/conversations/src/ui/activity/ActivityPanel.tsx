@@ -3,17 +3,16 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   IconBrowseOutline16,
   IconBrowserOutline14,
+  IconButton,
   IconCheckedOutline14,
   IconChevronDownOutline14,
   IconChevronRightOutline14,
   IconCloseFill14,
   IconCloseOutline16,
-  IconButton,
   IconRightUpOutline14,
   IconSearchOutline16,
   IconThinkOutline16,
-  panelStyles,
-} from '@deepseek-chat/spine/design'
+} from '@deepseek-chat/lib-ui'
 import {
   buildActivityTimeline,
   type ActivityPhase,
@@ -175,7 +174,7 @@ const ActivityPanelBody = ({
             {t('activityPanelTitle')}
           </div>
         )}
-        <div className={panelStyles.topActions}>
+        <div className={styles.topActions}>
           {topActions}
           <IconButton
             size="xs"

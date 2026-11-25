@@ -42,16 +42,16 @@ export type HoverGlideOptions = {
 }
 
 export type HoverGlideResult<T extends HTMLElement> = {
-  containerRef: RefObject<T | null>
-  indicatorRef: RefObject<HTMLDivElement | null>
+  containerRef: RefObject<T>
+  indicatorRef: RefObject<HTMLDivElement>
   containerProps: {
-    ref: RefObject<T | null>
+    ref: RefObject<T>
     onPointerOver: (event: ReactPointerEvent<T>) => void
     onPointerMove: (event: ReactPointerEvent<T>) => void
     onPointerLeave: (event: ReactPointerEvent<T>) => void
   }
   indicatorProps: {
-    ref: RefObject<HTMLDivElement | null>
+    ref: RefObject<HTMLDivElement>
     'aria-hidden': true
     className: string
   }

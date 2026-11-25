@@ -1,33 +1,47 @@
-.item {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  align-items: center;
-  box-sizing: border-box;
-  height: 40px;
-  padding-right: 6px;
-  border-radius: 12px;
-  font-size: 14px;
-  line-height: 22px;
-  color: var(--dsw-alias-label-primary);
-  list-style: none;
-  transition:
-    background-color var(--ds-transition-duration) var(--ds-ease-in-out),
-    color var(--ds-transition-duration) var(--ds-ease-in-out);
-  animation: item-in var(--ds-transition-duration) var(--ds-ease-panel) both;
+@layer slice {
+  .item {
+    position: relative;
+    z-index: var(--ui-z-base);
+    display: flex;
+    align-items: center;
+    box-sizing: border-box;
+    height: var(--ui-control-lg);
+    padding-right: var(--ui-space-1-5);
+    border-radius: var(--ui-radius-md);
+    font: var(--ui-type-label);
+    color: var(--ui-text-primary);
+    list-style: none;
+    transition:
+      background-color var(--ui-duration-normal) var(--ui-ease-standard),
+      color var(--ui-duration-normal) var(--ui-ease-standard);
+    animation: item-in var(--ui-duration-normal) var(--ui-ease-panel) both;
 
-  &.active {
-    background-color: var(--dsw-specific-sidebar-nav-item-active-accent);
-    color: var(--dsw-alias-brand-primary-invert);
-  }
-
-  @media (hover: hover) {
-    &:hover,
     &.active {
+      background-color: var(--ui-surface-rail-active);
+      color: var(--ui-accent-invert);
+    }
+
+    @media (hover: hover) {
+      &:hover,
+      &.active {
+        .action {
+          opacity: 1;
+          visibility: visible;
+          transition: opacity var(--ui-duration-normal) var(--ui-ease-standard);
+        }
+
+        .time {
+          opacity: 0;
+        }
+      }
+    }
+
+    /* 键盘进入这一行时也显示菜单按钮 */
+    &:focus-within {
       .action {
         opacity: 1;
         visibility: visible;
-        transition: opacity var(--ds-transition-duration) var(--ds-ease-in-out);
+        transition: opacity var(--ui-duration-normal) var(--ui-ease-standard);
       }
 
       .time {
@@ -36,138 +50,126 @@
     }
   }
 
-  /* 键盘进入这一行时也显示菜单按钮 */
-  &:focus-within {
-    .action {
-      opacity: 1;
-      visibility: visible;
-      transition: opacity var(--ds-transition-duration) var(--ds-ease-in-out);
-    }
-
-    .time {
-      opacity: 0;
-    }
-  }
-}
-
-/* 整行的点击目标：真正的按钮，可聚焦、可键盘激活 */
-.row {
-  display: flex;
-  align-items: center;
-  flex: 1;
-  min-width: 0;
-  height: 100%;
-  padding: 9px 4px 9px 10px;
-  border: 0;
-  border-radius: 12px;
-  background: none;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-  outline: none;
-
-  &:focus-visible {
-    box-shadow: inset 0 0 0 2px var(--dsw-alias-button-primary-fill);
-  }
-}
-
-.title {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  line-height: 18px;
-}
-
-.untitled {
-  color: var(--dsw-alias-label-secondary);
-
-  .active & {
-    color: inherit;
-  }
-}
-
-.time {
-  position: absolute;
-  right: 12px;
-  pointer-events: none;
-  font-size: 12px;
-  line-height: 16px;
-  font-variant-numeric: tabular-nums;
-  color: var(--dsw-alias-label-tertiary);
-  transition: opacity var(--ds-transition-duration) var(--ds-ease-in-out);
-}
-
-/* 常驻占位、淡入淡出：悬停时标题宽度不跳 */
-.action {
-  display: flex;
-  flex-shrink: 0;
-  margin-left: 4px;
-  opacity: 0;
-  visibility: hidden;
-  transition:
-    opacity var(--ds-transition-duration) var(--ds-ease-in-out),
-    visibility 0s linear var(--ds-transition-duration);
-}
-
-.renameInput {
-  box-sizing: border-box;
-  width: 100%;
-  height: 40px;
-  padding: 0 10px;
-  border-radius: 12px;
-  border: 1px solid var(--dsw-alias-brand-primary);
-  background-color: var(--dsw-specific-input-major);
-  color: var(--dsw-alias-label-primary);
-  font: inherit;
-  font-size: 14px;
-  outline: none;
-}
-
-@media (hover: none) {
-  .action {
-    opacity: 1;
-    visibility: visible;
-  }
-
-  .time {
-    display: none;
-  }
-}
-
-@keyframes item-in {
-  from {
-    opacity: 0;
-    transform: translateY(-4px);
-  }
-
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
-@media not all and (min-width: 768px) {
-  .item {
-    height: 44px;
-    border-radius: 16px;
-    font-size: 16px;
-  }
-
+  /* 整行的点击目标：真正的按钮，可聚焦、可键盘激活 */
   .row {
-    padding: 11px 4px 11px 12px;
+    display: flex;
+    align-items: center;
+    flex: 1;
+    min-width: 0;
+    height: 100%;
+    padding: 9px var(--ui-space-1) 9px var(--ui-space-2-5);
+    border: 0;
+    border-radius: var(--ui-radius-md);
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    outline: none;
+
+    &:focus-visible {
+      outline: 2px solid var(--ui-focus-ring);
+      outline-offset: -2px;
+    }
   }
 
   .title {
-    line-height: 22px;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    line-height: 18px;
+  }
+
+  .untitled {
+    color: var(--ui-text-secondary);
+
+    .active & {
+      color: inherit;
+    }
+  }
+
+  .time {
+    position: absolute;
+    right: var(--ui-space-3);
+    pointer-events: none;
+    font-size: var(--ui-font-size-xs);
+    line-height: 16px;
+    font-variant-numeric: tabular-nums;
+    color: var(--ui-text-muted);
+    transition: opacity var(--ui-duration-normal) var(--ui-ease-standard);
+  }
+
+  /* 常驻占位、淡入淡出：悬停时标题宽度不跳 */
+  .action {
+    display: flex;
+    flex-shrink: 0;
+    margin-left: var(--ui-space-1);
+    opacity: 0;
+    visibility: hidden;
+    transition:
+      opacity var(--ui-duration-normal) var(--ui-ease-standard),
+      visibility 0s linear var(--ui-duration-normal);
   }
 
   .renameInput {
-    height: 44px;
-    padding: 0 12px;
-    border-radius: 16px;
-    font-size: 16px;
+    box-sizing: border-box;
+    width: 100%;
+    height: var(--ui-control-lg);
+    padding: 0 var(--ui-space-2-5);
+    border-radius: var(--ui-radius-md);
+    border: 1px solid var(--ui-accent-fill);
+    background-color: var(--ui-surface-input);
+    color: var(--ui-text-primary);
+    font: inherit;
+    font-size: var(--ui-font-size-md);
+    outline: none;
+  }
+
+  @media (hover: none) {
+    .action {
+      opacity: 1;
+      visibility: visible;
+    }
+
+    .time {
+      display: none;
+    }
+  }
+
+  @keyframes item-in {
+    from {
+      opacity: 0;
+      transform: translateY(-4px);
+    }
+
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  @media not all and (min-width: 768px) {
+    .item {
+      height: var(--ui-control-xl);
+      border-radius: var(--ui-radius-lg);
+      font-size: var(--ui-font-size-lg);
+    }
+
+    .row {
+      padding: 11px var(--ui-space-1) 11px var(--ui-space-3);
+    }
+
+    .title {
+      line-height: 22px;
+    }
+
+    .renameInput {
+      height: var(--ui-control-xl);
+      padding: 0 var(--ui-space-3);
+      border-radius: var(--ui-radius-lg);
+      font-size: var(--ui-font-size-lg);
+    }
   }
 }

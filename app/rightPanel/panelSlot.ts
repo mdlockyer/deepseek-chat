@@ -1,4 +1,4 @@
-import type { PanelLayout, PanelSlot } from '@deepseek-chat/spine/design'
+import type { PanelLayout, PanelSlot } from '@deepseek-chat/spine/ports'
 import { stageHost } from './stageHost.js'
 import {
   closeRightPanel,

@@ -1,11 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTranslate } from '../../messages.js'
-import {
-  IconButton,
-  IconCheckOutline16,
-  IconCopyOutline16,
-  copyText,
-} from '@deepseek-chat/spine/design'
+import { IconButton, IconCheckOutline16, IconCopyOutline16, copyText } from '@deepseek-chat/lib-ui'
 import { showNotice } from '../../notice.js'
 
 /** 复制成功后图标换成对勾 1 秒，期间再次点击不重复复制 */

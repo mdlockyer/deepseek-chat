@@ -3,8 +3,11 @@ import { useEffect, useId, useRef, type ReactNode } from 'react'
 import { IconButton } from './IconButton.js'
 import { IconCloseOutline16 } from './icons.js'
 import { uiMessages } from './messages.js'
+import { usePresence } from './runtime.js'
 import { useOverlayLock } from './UiProvider.js'
 import styles from './Dialog.module.css'
+
+const EXIT_DURATION_MS = 200
 
 export type DialogSize = 'sm' | 'md' | 'lg'
 
@@ -88,7 +91,8 @@ export const Dialog = ({
   const dismissibleRef = useRef(dismissible)
   dismissibleRef.current = dismissible
 
-  useOverlayLock(open)
+  const { mounted } = usePresence(open, EXIT_DURATION_MS)
+  useOverlayLock(mounted)
 
   useEffect(() => {
     const dialog = dialogRef.current
@@ -197,7 +201,7 @@ export const Dialog = ({
       aria-labelledby={titleId}
       className={clsx(styles.dialog, sheetOnMobile && styles.sheetOnMobile)}
     >
-      {open ? (
+      {mounted ? (
         <div ref={panelRef} className={clsx(styles.panel, styles[size], className)}>
           <div className={styles.header}>
             <h1 id={titleId} className={styles.title}>

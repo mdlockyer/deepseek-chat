@@ -1,207 +1,206 @@
-.message {
-  position: relative;
-  animation: message-in var(--ds-transition-duration) var(--ds-ease-panel) both;
+@layer slice {
+  .message {
+    position: relative;
+    animation: message-in var(--ui-duration-normal) var(--ui-ease-panel) both;
 
-  &:hover .actions,
-  &:focus-within .actions {
+    &:hover .actions,
+    &:focus-within .actions {
+      opacity: 1;
+    }
+
+    :global(.ds-assistant-message-main-content) {
+      padding-bottom: var(--ui-space-1-5);
+    }
+  }
+
+  @keyframes message-in {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+  }
+
+  .notice {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--ui-space-1-5);
+    margin-top: var(--ui-space-2);
+    font: var(--ui-type-label);
+    color: var(--ui-text-danger);
+
+    > svg {
+      flex-shrink: 0;
+      margin-top: var(--ui-space-1);
+    }
+
+    > span {
+      min-width: 0;
+      overflow-wrap: anywhere;
+      white-space: pre-wrap;
+    }
+  }
+
+  .noticeAction {
+    padding: 0;
+    border: none;
+    background: none;
+    font: inherit;
+    color: var(--ui-text-accent);
+    text-decoration: none;
+    cursor: pointer;
+
+    &:hover {
+      text-decoration: underline;
+    }
+  }
+
+  .bottom {
+    position: relative;
+    left: -6px;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--ui-space-2-5);
+    padding-top: var(--ui-space-3);
+    padding-bottom: var(--ui-space-2-5);
+  }
+
+  .actions {
+    display: flex;
+    align-items: center;
+    gap: var(--ui-space-2-5);
+    opacity: 0;
+    transition: opacity var(--ui-duration-normal) var(--ui-ease-standard);
+  }
+
+  .alwaysShow {
     opacity: 1;
   }
 
-  :global(.ds-assistant-message-main-content) {
-    padding-bottom: 6px;
-  }
-}
-
-@keyframes message-in {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-}
-
-.notice {
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
-  margin-top: 8px;
-  font-size: 14px;
-  line-height: 22px;
-  color: var(--dsw-alias-state-error-primary);
-
-  > svg {
-    flex-shrink: 0;
-    margin-top: 4px;
+  .continueButton {
+    margin-left: auto;
   }
 
-  > span {
-    min-width: 0;
-    overflow-wrap: anywhere;
-    white-space: pre-wrap;
-  }
-}
-
-.noticeAction {
-  padding: 0;
-  border: none;
-  background: none;
-  font: inherit;
-  color: var(--dsw-alias-brand-text);
-  text-decoration: none;
-  cursor: pointer;
-
-  &:hover {
-    text-decoration: underline;
-  }
-}
-
-.bottom {
-  position: relative;
-  left: -6px;
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 10px;
-  padding-top: 12px;
-  padding-bottom: 10px;
-}
-
-.actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  opacity: 0;
-  transition: opacity var(--ds-transition-duration) var(--ds-ease-in-out);
-}
-
-.alwaysShow {
-  opacity: 1;
-}
-
-.continueButton {
-  margin-left: auto;
-}
-
-.summary {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  width: fit-content;
-  min-height: 32px;
-  margin-top: 14px;
-  padding: 4px 12px 4px 10px;
-  border-radius: 100px;
-  border: 1px solid var(--dsw-alias-border-l2);
-  background-color: var(--dsw-alias-bg-base);
-  color: var(--dsw-alias-label-primary);
-  font: var(--dsw-font-xs-13);
-  font-weight: 500;
-  font-variant-numeric: tabular-nums;
-  cursor: pointer;
-  user-select: none;
-  transition:
-    background-color var(--ds-transition-duration) var(--ds-ease-in-out),
-    border-color var(--ds-transition-duration) var(--ds-ease-in-out);
-
-  &:hover {
-    background-color: var(--dsw-alias-interactive-bg-hover);
-  }
-
-  &:focus-visible {
-    outline: 2px solid var(--dsw-alias-brand-primary);
-    outline-offset: 2px;
-  }
-}
-
-.summaryActive {
-  background-color: var(--dsw-alias-interactive-bg-active);
-  border-color: var(--dsw-alias-border-l3);
-}
-
-.sourcesIcon {
-  display: inline-flex;
-  align-items: center;
-  color: var(--dsw-alias-label-secondary);
-
-  > svg {
-    width: 14px;
-    height: 14px;
-  }
-}
-
-.sourcesLabel {
-  line-height: 20px;
-}
-
-@media (pointer: coarse) {
   .summary {
-    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--ui-space-1-5);
+    width: fit-content;
+    min-height: var(--ui-control-sm);
+    margin-top: 14px;
+    padding: var(--ui-space-1) var(--ui-space-3) var(--ui-space-1) var(--ui-space-2-5);
+    border-radius: var(--ui-radius-pill);
+    border: 1px solid var(--ui-border-default);
+    background-color: var(--ui-surface-canvas);
+    color: var(--ui-text-primary);
+    font: var(--ui-type-caption-strong);
+    font-variant-numeric: tabular-nums;
+    cursor: pointer;
+    user-select: none;
+    transition:
+      background-color var(--ui-duration-normal) var(--ui-ease-standard),
+      border-color var(--ui-duration-normal) var(--ui-ease-standard);
+
+    &:hover {
+      background-color: var(--ui-interactive-hover);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--ui-focus-ring);
+      outline-offset: 2px;
+    }
   }
-}
 
-/* 生成中长时间没有新内容（如服务端整块输出工具调用）：与步骤行一致的扫光文字 */
-/* 与原等待点同高，换上鲸鱼后回复区不跳动 */
-.waiting {
-  display: flex;
-  align-items: center;
-  height: 34px;
-}
-
-.working {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  height: 34px;
-  font-size: 14px;
-  line-height: 22px;
-}
-
-/* 微光把文字设为透明，只加在文字上，鲸鱼保持可见 */
-.workingText {
-  color: transparent;
-  background: linear-gradient(
-      90deg,
-      var(--dsw-alias-label-secondary) 0%,
-      var(--dsw-alias-label-secondary) 40%,
-      var(--dsw-alias-label-caption) 50%,
-      var(--dsw-alias-label-secondary) 60%,
-      var(--dsw-alias-label-secondary) 100%
-    )
-    0 0 / 300% 100%;
-  background-clip: text;
-  animation: working-shimmer 2s ease-out infinite;
-  width: fit-content;
-}
-
-@keyframes working-shimmer {
-  from {
-    background-position: 100% 0;
+  .summaryActive {
+    background-color: var(--ui-interactive-active);
+    border-color: var(--ui-border-strong);
   }
-  to {
-    background-position: 0 0;
+
+  .sourcesIcon {
+    display: inline-flex;
+    align-items: center;
+    color: var(--ui-text-secondary);
+
+    > svg {
+      width: 14px;
+      height: 14px;
+    }
   }
-}
 
-/* 本条回复产出的文件与图表，紧随正文，不收进活动面板 */
-.images {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin: 10px 0;
-}
+  .sourcesLabel {
+    line-height: 20px;
+  }
 
-.outputImage {
-  display: block;
-  max-width: 100%;
-  max-height: 420px;
-  width: auto;
-  height: auto;
-  border-radius: 10px;
-  border: 1px solid var(--dsw-alias-border-l2);
-}
+  @media (pointer: coarse) {
+    .summary {
+      min-height: var(--ui-control-xl);
+    }
+  }
 
-.files {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin: 8px 0;
+  /* 生成中长时间没有新内容（如服务端整块输出工具调用）：与步骤行一致的扫光文字 */
+  /* 与原等待点同高，换上鲸鱼后回复区不跳动 */
+  .waiting {
+    display: flex;
+    align-items: center;
+    height: 34px;
+  }
+
+  .working {
+    display: flex;
+    align-items: center;
+    gap: var(--ui-space-1-5);
+    height: 34px;
+    font: var(--ui-type-label);
+  }
+
+  /* 微光把文字设为透明，只加在文字上，鲸鱼保持可见 */
+  .workingText {
+    color: transparent;
+    background: linear-gradient(
+        90deg,
+        var(--ui-text-secondary) 0%,
+        var(--ui-text-secondary) 40%,
+        var(--ui-text-disabled) 50%,
+        var(--ui-text-secondary) 60%,
+        var(--ui-text-secondary) 100%
+      )
+      0 0 / 300% 100%;
+    background-clip: text;
+    animation: working-shimmer 2s ease-out infinite;
+    width: fit-content;
+  }
+
+  @keyframes working-shimmer {
+    from {
+      background-position: 100% 0;
+    }
+    to {
+      background-position: 0 0;
+    }
+  }
+
+  /* 本条回复产出的文件与图表，紧随正文，不收进活动面板 */
+  .images {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ui-space-2-5);
+    margin: var(--ui-space-2-5) 0;
+  }
+
+  .outputImage {
+    display: block;
+    max-width: 100%;
+    max-height: 420px;
+    width: auto;
+    height: auto;
+    border-radius: var(--ui-radius-sm);
+    border: 1px solid var(--ui-border-default);
+  }
+
+  .files {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--ui-space-2);
+    margin: var(--ui-space-2) 0;
+  }
 }

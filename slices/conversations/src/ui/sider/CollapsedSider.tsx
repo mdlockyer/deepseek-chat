@@ -1,11 +1,11 @@
+import { IconButton, IconPanelLeftOutline16 } from '@deepseek-chat/lib-ui'
+import { PANEL_DURATION_MS } from '@deepseek-chat/spine/design'
 import clsx from 'clsx'
 import { useLayoutEffect, useRef } from 'react'
-import { IconPanelLeftOutline16, NewChatIcon } from '@deepseek-chat/spine/design'
-import { useTranslate } from '../../messages.js'
 import { deps } from '../../env.js'
+import { useTranslate } from '../../messages.js'
 import { newChat } from '../../store.js'
-import { IconButton } from '@deepseek-chat/spine/design'
-import { PANEL_DURATION_MS } from '@deepseek-chat/spine/design'
+import { NewChatIcon } from './NewChatIcon.js'
 import styles from './Sider.module.css'
 
 const TOGGLE_SELECTOR = '[data-sider-toggle]'
@@ -63,7 +63,7 @@ export const CollapsedSider = ({ exiting = false }: { exiting?: boolean }) => {
           : currentTransform
       group.style.width = isFreshMount ? `${SINGLE_BUTTON_WIDTH}px` : currentWidth
       void group.offsetWidth
-      group.style.transition = `transform ${PANEL_DURATION_MS}ms var(--ds-ease-panel), width ${PANEL_DURATION_MS}ms var(--ds-ease-panel)`
+      group.style.transition = `transform ${PANEL_DURATION_MS}ms var(--ui-ease-panel), width ${PANEL_DURATION_MS}ms var(--ui-ease-panel)`
       group.style.transform = 'translateX(0)'
       group.style.width = `${COLLAPSED_PILL_WIDTH}px`
     } else {
@@ -71,7 +71,7 @@ export const CollapsedSider = ({ exiting = false }: { exiting?: boolean }) => {
       group.style.transform = currentTransform === 'none' ? 'translateX(0)' : currentTransform
       group.style.width = currentWidth
       void group.offsetWidth
-      group.style.transition = `transform ${PANEL_DURATION_MS}ms var(--ds-ease-panel), width 180ms var(--ds-ease-panel)`
+      group.style.transition = `transform ${PANEL_DURATION_MS}ms var(--ui-ease-panel), width 180ms var(--ui-ease-panel)`
       group.style.transform = `translateX(${dx}px)`
       group.style.width = `${SINGLE_BUTTON_WIDTH}px`
     }

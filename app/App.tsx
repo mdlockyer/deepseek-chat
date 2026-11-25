@@ -1,6 +1,6 @@
 import { MarkdownTheme } from '@deepseek-chat/lib-markdown'
-import { ToastViewport, UiProvider } from '@deepseek-chat/lib-ui'
-import { Toast, usePresence, PANEL_DURATION_MS } from '@deepseek-chat/spine/design'
+import { ToastViewport, UiProvider, usePresence } from '@deepseek-chat/lib-ui'
+import { PANEL_DURATION_MS } from '@deepseek-chat/spine/design'
 import { useLocale } from '@deepseek-chat/spine/i18n'
 import { useEffect } from 'react'
 import clsx from 'clsx'
@@ -100,7 +100,6 @@ export const App = () => {
           <RightPanel />
         </div>
         <SettingsDialog />
-        <Toast />
         <ToastViewport />
       </MarkdownTheme>
     </UiProvider>

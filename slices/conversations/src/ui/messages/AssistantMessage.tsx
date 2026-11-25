@@ -6,7 +6,7 @@ import {
   IconGlobeLanguageOutline16,
   IconRefreshOutline16,
   IconWarningOutline16,
-} from '@deepseek-chat/spine/design'
+} from '@deepseek-chat/lib-ui'
 import { describeReply } from '../../describe.js'
 import { deps } from '../../env.js'
 import { useTranslate } from '../../messages.js'

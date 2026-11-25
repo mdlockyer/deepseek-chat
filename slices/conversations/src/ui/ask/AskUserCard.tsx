@@ -1,4 +1,4 @@
-import { Button, IconCheckedOutline14 } from '@deepseek-chat/spine/design'
+import { Button, IconCheckedOutline14 } from '@deepseek-chat/lib-ui'
 import clsx from 'clsx'
 import { useEffect, useState } from 'react'
 import { useAskUserStore, type AskUserQuestion, type PendingAskUser } from '../../askUser.js'

@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react'
 import clsx from 'clsx'
-import { IconLinkOutline14 } from '@deepseek-chat/spine/design'
+import { IconLinkOutline14 } from '@deepseek-chat/lib-ui'
 import { FallbackImage } from './FallbackImage.js'
 import styles from './SiteLogo.module.css'
 

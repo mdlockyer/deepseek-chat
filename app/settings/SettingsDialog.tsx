@@ -1,38 +1,38 @@
-import clsx from 'clsx'
-import { useRef, useState, type ReactNode } from 'react'
 import {
   Button,
+  Dialog,
   IconDataOutline16,
   IconDownloadOutline16,
   IconKeyOutline16,
   IconSettingsOutline16,
   IconUploadOutline14,
-  Modal,
-  settingStyles,
-  showToast,
-  usePresence,
-} from '@deepseek-chat/spine/design'
-import { account, browser, preferences, python, voice, webResearch } from '../composition.js'
+  SettingRow,
+  Tab,
+  TabList,
+  TabPanel,
+  Tabs,
+  useIsMobile,
+} from '@deepseek-chat/lib-ui'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
+import {
+  account,
+  browser,
+  notices,
+  preferences,
+  python,
+  voice,
+  webResearch,
+} from '../composition.js'
 import { conversations } from '../conversations.js'
-import { isDesktopApp } from '../platform/desktop.js'
 import {
   translate,
   useTranslate,
   type TranslationKey,
   type TranslationMessage,
 } from '../i18n/index.js'
+import { isDesktopApp } from '../platform/desktop.js'
 import { closeSettings, useSettingsDialog, type SettingsSection } from './settingsDialogState.js'
 import styles from './Settings.module.css'
-
-/**
- * 设置弹窗：分「通用设置」（主题、语言、朗读音色、位置）、「API 密钥」与「数据管理」（导入、导出、删除）。
- * 桌面端为居中弹窗、左侧导航；移动端为底部弹层、导航横排在内容上方
- */
-export const SettingsDialog = () => {
-  const open = useSettingsDialog((state) => state.open)
-  const { mounted, exiting } = usePresence(open, 160)
-  return mounted ? <SettingsContent exiting={exiting} /> : null
-}
 
 const sections: { value: SettingsSection; label: TranslationKey; icon: ReactNode }[] = [
   {
@@ -48,115 +48,134 @@ const sections: { value: SettingsSection; label: TranslationKey; icon: ReactNode
   { value: 'data', label: 'settingDialogAsideDataOptionLabel', icon: <IconDataOutline16 /> },
 ]
 
-const SettingsContent = ({ exiting = false }: { exiting?: boolean }) => {
+/**
+ * 设置弹窗：分「通用设置」（主题、语言、朗读音色、位置）、「API 密钥」与「数据管理」（导入、导出、删除）。
+ * 桌面端为居中弹窗、左侧导航；移动端为底部弹层、导航横排在内容上方
+ */
+export const SettingsDialog = () => {
   const t = useTranslate()
-  // 打开时按调用方指定的分组选中，之后在弹窗内切换
-  const [section, setSection] = useState(() => useSettingsDialog.getState().section)
-  // 切换分组不丢失正在输入的密钥与导入状态
-  const accountEditor = account.useKeyEditor()
-  const firecrawlEditor = webResearch.useKeyEditor()
+  const open = useSettingsDialog((state) => state.open)
+  const initialSection = useSettingsDialog((state) => state.section)
   const historyImport = useHistoryImport()
   const historyDelete = useHistoryDelete()
-  const replacingHistory = conversations.useHistoryState().replacing
-  const historyBusy = historyImport.busy || historyDelete.busy || replacingHistory
-  const importConfirm = usePresence(historyImport.file !== null, 160)
-  const deleteConfirm = usePresence(historyDelete.opened, 160)
+
   return (
     <>
-      <Modal
+      <Dialog
+        open={open}
         title={t('settings')}
         closable
+        dismissible={!historyDelete.busy}
+        sheetOnMobile
+        size="lg"
         className={styles.dialog}
         mainClassName={styles.dialogMain}
-        exiting={exiting}
         onClose={() => {
           if (!historyDelete.busy) {
             closeSettings()
           }
         }}
       >
-        <div role="tablist" className={styles.navigation}>
-          {sections.map((item) => (
-            <button
-              key={item.value}
-              type="button"
-              role="tab"
-              aria-selected={section === item.value}
-              className={clsx(styles.navItem, section === item.value && styles.navItemActive)}
-              onClick={() => setSection(item.value)}
-            >
-              {item.icon}
-              {t(item.label)}
-            </button>
-          ))}
-        </div>
-        <div role="tabpanel" className={styles.content}>
-          {section === 'general' ? (
-            <>
-              <preferences.ThemeSetting />
-              <preferences.LocaleSetting />
-              <voice.VoiceSetting />
-              <preferences.LocationSetting />
-              {isDesktopApp ? (
-                <>
-                  <browser.LocalhostSetting />
-                  <python.RuntimeSetting />
-                </>
-              ) : null}
-            </>
-          ) : section === 'apiKey' ? (
-            <>
-              <account.KeySettings editor={accountEditor} />
-              <webResearch.KeySettings editor={firecrawlEditor} />
-            </>
-          ) : (
-            <>
-              <ImportHistory historyImport={historyImport} disabled={historyBusy} />
-              <ExportHistory disabled={historyBusy} />
-              <SettingCell
-                label={t('deleteAllSessions')}
-                status={null}
-                action={
-                  <Button
-                    variant="dangerOutlined"
-                    size="m"
-                    className={settingStyles.cellButton}
-                    disabled={historyBusy}
-                    onClick={historyDelete.open}
-                  >
-                    {t('delete')}
-                  </Button>
-                }
-              />
-            </>
-          )}
-        </div>
-      </Modal>
-      {importConfirm.mounted ? (
-        <ImportConfirm historyImport={historyImport} exiting={importConfirm.exiting} />
-      ) : null}
-      {deleteConfirm.mounted ? (
-        <DeleteAllConfirm historyDelete={historyDelete} exiting={deleteConfirm.exiting} />
-      ) : null}
+        <SettingsContent
+          initialSection={initialSection}
+          historyImport={historyImport}
+          historyDelete={historyDelete}
+        />
+      </Dialog>
+      <ImportConfirm historyImport={historyImport} />
+      <DeleteAllConfirm historyDelete={historyDelete} />
     </>
+  )
+}
+
+const SettingsContent = ({
+  initialSection,
+  historyImport,
+  historyDelete,
+}: {
+  initialSection: SettingsSection
+  historyImport: ReturnType<typeof useHistoryImport>
+  historyDelete: ReturnType<typeof useHistoryDelete>
+}) => {
+  const t = useTranslate()
+  const isMobile = useIsMobile()
+  const [section, setSection] = useState<SettingsSection>(initialSection)
+
+  useEffect(() => {
+    setSection(initialSection)
+  }, [initialSection])
+
+  // 切换分组不丢失正在输入的密钥与导入状态
+  const accountEditor = account.useKeyEditor()
+  const firecrawlEditor = webResearch.useKeyEditor()
+  const replacingHistory = conversations.useHistoryState().replacing
+  const historyBusy = historyImport.busy || historyDelete.busy || replacingHistory
+
+  return (
+    <Tabs
+      value={section}
+      onChange={setSection}
+      orientation={isMobile ? 'horizontal' : 'vertical'}
+      className={styles.tabs}
+    >
+      <TabList ariaLabel={t('settings')} className={styles.navigation}>
+        {sections.map((item) => (
+          <Tab key={item.value} value={item.value} icon={item.icon} className={styles.navItem}>
+            {t(item.label)}
+          </Tab>
+        ))}
+      </TabList>
+      <TabPanel value="general" className={styles.content}>
+        <preferences.ThemeSetting />
+        <preferences.LocaleSetting />
+        <voice.VoiceSetting />
+        <preferences.LocationSetting />
+        {isDesktopApp ? (
+          <>
+            <browser.LocalhostSetting />
+            <python.RuntimeSetting />
+          </>
+        ) : null}
+      </TabPanel>
+      <TabPanel value="apiKey" className={styles.content}>
+        <account.KeySettings editor={accountEditor} />
+        <webResearch.KeySettings editor={firecrawlEditor} />
+      </TabPanel>
+      <TabPanel value="data" className={styles.content}>
+        <ImportHistory historyImport={historyImport} disabled={historyBusy} />
+        <ExportHistory disabled={historyBusy} />
+        <SettingRow
+          label={t('deleteAllSessions')}
+          action={
+            <Button
+              variant="dangerOutlined"
+              size="m"
+              disabled={historyBusy}
+              onClick={historyDelete.open}
+            >
+              {t('delete')}
+            </Button>
+          }
+        />
+      </TabPanel>
+    </Tabs>
   )
 }
 
 /** 删除确认保留在设置之上；失败可重试，成功只关闭确认弹窗。 */
 const DeleteAllConfirm = ({
   historyDelete,
-  exiting = false,
 }: {
   historyDelete: ReturnType<typeof useHistoryDelete>
-  exiting?: boolean
 }) => {
   const t = useTranslate()
   return (
-    <Modal
+    <Dialog
+      open={historyDelete.opened}
       title={t('deleteAllSessionsModalTitle')}
+      dismissible={!historyDelete.busy}
       className={styles.deleteConfirm}
       onClose={historyDelete.cancel}
-      exiting={exiting}
       footer={
         <div className={styles.deleteActions} aria-busy={historyDelete.busy}>
           <Button
@@ -169,6 +188,7 @@ const DeleteAllConfirm = ({
           </Button>
           <Button
             variant="danger"
+            loading={historyDelete.busy}
             disabled={historyDelete.busy}
             onClick={() => void historyDelete.confirm()}
           >
@@ -178,7 +198,7 @@ const DeleteAllConfirm = ({
       }
     >
       {t('deleteAllSessionsModalDescription')}
-    </Modal>
+    </Dialog>
   )
 }
 
@@ -196,9 +216,9 @@ const useHistoryDelete = () => {
     try {
       await conversations.clearHistory()
       setOpened(false)
-      showToast({ text: () => translate('historyDeleted') })
+      notices.show({ text: () => translate('historyDeleted') })
     } catch {
-      showToast({ text: () => translate('historyDeleteFailed'), tone: 'error' })
+      notices.show({ text: () => translate('historyDeleteFailed'), tone: 'error' })
     } finally {
       deleting.current = false
       setBusy(false)
@@ -221,18 +241,16 @@ const useHistoryDelete = () => {
 /** 覆盖导入的二次确认，叠在设置弹窗上 */
 const ImportConfirm = ({
   historyImport,
-  exiting = false,
 }: {
   historyImport: ReturnType<typeof useHistoryImport>
-  exiting?: boolean
 }) => {
   const t = useTranslate()
   return (
-    <Modal
+    <Dialog
+      open={historyImport.file !== null}
       title={t('historyImportConfirmTitle')}
       className={styles.importConfirm}
       onClose={historyImport.cancel}
-      exiting={exiting}
       footer={
         <>
           <Button variant="outlined" size="m" autoFocus onClick={historyImport.cancel}>
@@ -245,7 +263,7 @@ const ImportConfirm = ({
       }
     >
       <div className={styles.importConfirmText}>{t('historyImportConfirmDescription')}</div>
-    </Modal>
+    </Dialog>
   )
 }
 
@@ -262,37 +280,6 @@ const errorStatus = (key: TranslationKey, error: unknown): Status => {
       : { params: { message: error instanceof Error ? error.message : String(error) } }),
     error: true,
   }
-}
-
-const SettingCell = ({
-  label,
-  description,
-  status,
-  action,
-  className,
-}: {
-  label: string
-  description?: string
-  status: Status
-  action: ReactNode
-  className?: string
-}) => {
-  const t = useTranslate()
-  return (
-    <div className={clsx(settingStyles.cell, settingStyles.row, className)}>
-      <div className={settingStyles.text}>
-        <div className={settingStyles.label}>{label}</div>
-        {status || description ? (
-          <div className={clsx(settingStyles.description, status?.error && settingStyles.error)}>
-            {status
-              ? t(status.key, status.reason ? { message: status.reason() } : status.params)
-              : description}
-          </div>
-        ) : null}
-      </div>
-      {action}
-    </div>
-  )
 }
 
 /** 选文件后先提示覆盖；确认后才检查文件并执行导入，任何错误都提示导入失败。 */
@@ -334,18 +321,26 @@ const ImportHistory = ({
 }) => {
   const t = useTranslate()
   const inputRef = useRef<HTMLInputElement>(null)
+  const status = historyImport.status
 
   return (
-    <SettingCell
+    <SettingRow
       label={t('historyImport')}
       description={t('historyImportDescription')}
-      status={historyImport.status}
+      status={
+        status
+          ? {
+              text: t(status.key, status.reason ? { message: status.reason() } : status.params),
+              error: status.error,
+            }
+          : null
+      }
       action={
         <>
           <Button
             variant="outlined"
             size="m"
-            className={clsx(settingStyles.cellButton, styles.uploadButton)}
+            className={styles.uploadButton}
             disabled={disabled}
             onClick={() => inputRef.current?.click()}
           >
@@ -397,15 +392,21 @@ const ExportHistory = ({ disabled }: { disabled: boolean }) => {
   }
 
   return (
-    <SettingCell
+    <SettingRow
       label={t('exportAllLabel')}
       description={t('historyExportDescription')}
-      status={status}
+      status={
+        status
+          ? {
+              text: t(status.key, status.reason ? { message: status.reason() } : status.params),
+              error: status.error,
+            }
+          : null
+      }
       action={
         <Button
           variant="outlined"
           size="m"
-          className={settingStyles.cellButton}
           disabled={disabled || busy || empty}
           onClick={() => void onExport()}
         >

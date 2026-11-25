@@ -1,12 +1,9 @@
 import { useTranslate } from '../../messages.js'
 import clsx from 'clsx'
 import { memo, useLayoutEffect, useRef, useState } from 'react'
-import { useIsMobile } from '@deepseek-chat/spine/design'
-import { IconEditOutline16 } from '@deepseek-chat/spine/design'
+import { Button, IconButton, IconEditOutline16, useIsMobile } from '@deepseek-chat/lib-ui'
 import { editMessage, retryUpload } from '../../store.js'
 import { type UserMessage as UserMessageType } from '../../types.js'
-import { Button } from '@deepseek-chat/spine/design'
-import { IconButton } from '@deepseek-chat/spine/design'
 import { deps, ensureApiKey } from '../../env.js'
 import {
   BranchSwitcher,

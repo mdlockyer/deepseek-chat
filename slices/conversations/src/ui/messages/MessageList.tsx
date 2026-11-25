@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { useIsMobile } from '@deepseek-chat/spine/design'
+import { useIsMobile } from '@deepseek-chat/lib-ui'
 import { buildMessageVersions, getVisibleMessages, type MessageVersions } from '../../branches.js'
 import { selectMessageVersion } from '../../store.js'
 import { type Session } from '../../types.js'

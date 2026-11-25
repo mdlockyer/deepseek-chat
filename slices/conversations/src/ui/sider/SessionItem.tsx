@@ -9,7 +9,7 @@ import {
   IconTrashOutline16,
   Menu,
   hoverGlideItem,
-} from '@deepseek-chat/spine/design'
+} from '@deepseek-chat/lib-ui'
 import { renameSession, selectSession } from '../../store.js'
 import { type SessionSummary } from '../../types.js'
 import { formatClock, sessionTitle } from '../../format.js'
@@ -102,8 +102,8 @@ export const SessionItem = memo(function SessionItem({
             },
           ]}
         >
-          {({ toggle }) => (
-            <IconButton icon={<IconEllipsisOutline16 />} aria-label={t('more')} onClick={toggle} />
+          {({ triggerProps }) => (
+            <IconButton icon={<IconEllipsisOutline16 />} aria-label={t('more')} {...triggerProps} />
           )}
         </Menu>
       </div>

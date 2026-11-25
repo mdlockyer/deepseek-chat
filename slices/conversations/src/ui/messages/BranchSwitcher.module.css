@@ -1,20 +1,22 @@
-.switcher {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  height: 28px;
-}
+@layer slice {
+  .switcher {
+    display: flex;
+    align-items: center;
+    gap: var(--ui-space-0-5);
+    height: var(--ui-control-xs);
+  }
 
-.previous svg {
-  transform: rotate(180deg);
-}
+  .previous svg {
+    transform: rotate(180deg);
+  }
 
-.count {
-  color: var(--dsw-alias-label-tertiary);
-  font-size: 15px;
-  line-height: 18px;
-  font-weight: 500;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-  user-select: none;
+  .count {
+    color: var(--ui-text-muted);
+    font-size: 15px;
+    line-height: 18px;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    user-select: none;
+  }
 }

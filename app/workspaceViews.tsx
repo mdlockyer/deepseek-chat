@@ -1,6 +1,6 @@
 import { Markdown, MermaidDiagram, useHighlightedHtml } from '@deepseek-chat/lib-markdown'
+import { FileGlyph, fileGlyphKindFromExt } from '@deepseek-chat/lib-ui'
 import type { WorkspaceViews } from '@deepseek-chat/slice-workspace-files'
-import { FileIcon } from '@deepseek-chat/spine/design'
 
 /** 超长文本不高亮 */
 const MAX_HIGHLIGHT_CHARS = 300_000
@@ -14,5 +14,7 @@ export const workspaceViews: WorkspaceViews = {
     return <MermaidDiagram code={code} loading={false} />
   },
   useHighlight: (text, language) => useHighlightedHtml(text, language, MAX_HIGHLIGHT_CHARS),
-  FileIcon,
+  FileIcon: function WorkspaceFileIcon({ ext }) {
+    return <FileGlyph kind={fileGlyphKindFromExt(ext)} />
+  },
 }

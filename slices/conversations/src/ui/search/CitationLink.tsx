@@ -1,7 +1,7 @@
 import type { MouseEvent } from 'react'
 import { deps } from '../../env.js'
 import { type Source } from '../../view.js'
-import { HoverCard, type HoverCardTrigger } from './HoverCard.js'
+import { HoverCard, type HoverCardTrigger } from '@deepseek-chat/lib-ui'
 import { SourceCard } from './SourceCard.js'
 
 /**

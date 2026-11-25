@@ -1,10 +1,10 @@
 import { useCallback, useRef } from 'react'
 import {
+  Chip,
   IconBrowseOutline16,
   IconGlobeLanguageOutline16,
   IconSearchOutline16,
-  panelStyles,
-} from '@deepseek-chat/spine/design'
+} from '@deepseek-chat/lib-ui'
 import { browser } from '../composition.js'
 import { conversations } from '../conversations.js'
 import { useTranslate } from '../i18n/index.js'
@@ -64,45 +64,39 @@ export const RightPanel = () => {
         return null
       }
       return (
-        <button
-          type="button"
-          className={panelStyles.modeChip}
+        <Chip
+          icon={<IconSearchOutline16 />}
           title={t('rightPanelBackToActivity')}
           aria-label={t('rightPanelBackToActivity')}
           onClick={conversations.restoreLastActivityPanel}
         >
-          <IconSearchOutline16 />
-          <span>{t('rightPanelBackToActivity')}</span>
-        </button>
+          {t('rightPanelBackToActivity')}
+        </Chip>
       )
     }
     if (shownKind === 'activity') {
       if (previousKind === 'preview' && fileRecords.length > 0) {
         return (
-          <button
-            type="button"
-            className={panelStyles.modeChip}
+          <Chip
+            icon={<IconBrowseOutline16 />}
             title={t('rightPanelBackToFiles')}
             aria-label={t('rightPanelBackToFiles')}
             onClick={() => openRightPanel(activeSessionId, 'preview')}
           >
-            <IconBrowseOutline16 />
-            <span>{t('rightPanelBackToFiles')}</span>
-          </button>
+            {t('rightPanelBackToFiles')}
+          </Chip>
         )
       }
       if (previousKind === 'browser' && isDesktopApp) {
         return (
-          <button
-            type="button"
-            className={panelStyles.modeChip}
+          <Chip
+            icon={<IconGlobeLanguageOutline16 />}
             title={t('rightPanelBackToBrowser')}
             aria-label={t('rightPanelBackToBrowser')}
             onClick={() => openRightPanel(activeSessionId, 'browser')}
           >
-            <IconGlobeLanguageOutline16 />
-            <span>{t('rightPanelBackToBrowser')}</span>
-          </button>
+            {t('rightPanelBackToBrowser')}
+          </Chip>
         )
       }
     }

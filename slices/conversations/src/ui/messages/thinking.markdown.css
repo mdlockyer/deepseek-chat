@@ -1,96 +1,107 @@
-.ds-think-content .ds-markdown {
-  font: var(--dsw-font-markdown-small);
-  color: var(--dsw-alias-label-secondary);
+@layer slice {
+  .ds-think-content .ds-markdown {
+    font: var(--ui-type-small);
+    color: var(--ui-text-secondary);
 
-  h1,
-  h2,
-  h3,
-  h4,
-  h5,
-  h6,
-  .ds-markdown-paragraph {
-    margin: 12px 0;
-  }
-  h1,
-  h2,
-  h3,
-  h4,
-  h5,
-  h6 {
-    font: var(--dsw-font-markdown-small-strong);
-  }
+    h1,
+    h2,
+    h3,
+    h4,
+    h5,
+    h6,
+    .ds-markdown-paragraph {
+      margin: var(--ui-space-3) 0;
+    }
 
-  code {
-    font: var(--dsw-font-markdown-code-block);
-  }
+    h1,
+    h2,
+    h3,
+    h4,
+    h5,
+    h6 {
+      font: var(--ui-type-small-strong);
+    }
 
-  hr {
-    margin: 28px 0;
-  }
+    code {
+      font: var(--ui-type-code-block);
+    }
 
-  blockquote {
-    margin: 12px 0 0;
-  }
+    hr {
+      margin: 28px 0;
+    }
 
-  ul,
-  ol {
-    margin: 12px 0;
-  }
+    blockquote {
+      margin: var(--ui-space-3) 0 0;
+    }
 
-  th {
-    font: var(--dsw-font-markdown-small-strong);
-  }
-  td {
-    font: var(--dsw-font-markdown-small);
-  }
+    ul,
+    ol {
+      margin: var(--ui-space-3) 0;
+    }
 
-  h3 + ul,
-  h4 + ul,
-  h5 + ul,
-  h6 + ul,
-  h3 + ol,
-  h4 + ol,
-  h5 + ol,
-  h6 + ol {
-    margin-top: 4px;
-  }
-  h3:has(+ ul),
-  h4:has(+ ul),
-  h5:has(+ ul),
-  h6:has(+ ul),
-  h3:has(+ ol),
-  h4:has(+ ol),
-  h5:has(+ ol),
-  h6:has(+ ol) {
-    margin-bottom: 4px;
-  }
-  .ds-markdown-paragraph + ul,
-  .ds-markdown-paragraph + ol {
-    margin-top: 4px;
-  }
-  .ds-markdown-paragraph:has(+ ol),
-  .ds-markdown-paragraph:has(+ ol) {
-    margin-bottom: 4px;
-  }
+    th {
+      font: var(--ui-type-small-strong);
+    }
 
-  li > ul,
-  li > ol {
-    margin-top: 2px;
-  }
-  li > .ds-markdown-paragraph {
-    margin: 2px 0;
-  }
-  li:not(:first-child) {
-    margin-top: 2px;
-  }
-  li > *:first-child {
-    margin-top: 0;
-  }
+    td {
+      font: var(--ui-type-small);
+    }
 
-  .ds-markdown-cite {
-    margin: 0 2px;
-    + .ds-markdown-cite {
-      margin-left: 0;
+    h3 + ul,
+    h4 + ul,
+    h5 + ul,
+    h6 + ul,
+    h3 + ol,
+    h4 + ol,
+    h5 + ol,
+    h6 + ol {
+      margin-top: var(--ui-space-1);
+    }
+
+    h3:has(+ ul),
+    h4:has(+ ul),
+    h5:has(+ ul),
+    h6:has(+ ul),
+    h3:has(+ ol),
+    h4:has(+ ol),
+    h5:has(+ ol),
+    h6:has(+ ol) {
+      margin-bottom: var(--ui-space-1);
+    }
+
+    .ds-markdown-paragraph + ul,
+    .ds-markdown-paragraph + ol {
+      margin-top: var(--ui-space-1);
+    }
+
+    .ds-markdown-paragraph:has(+ ul),
+    .ds-markdown-paragraph:has(+ ol) {
+      margin-bottom: var(--ui-space-1);
+    }
+
+    li > ul,
+    li > ol {
+      margin-top: var(--ui-space-0-5);
+    }
+
+    li > .ds-markdown-paragraph {
+      margin: var(--ui-space-0-5) 0;
+    }
+
+    li:not(:first-child) {
+      margin-top: var(--ui-space-0-5);
+    }
+
+    li > *:first-child {
+      margin-top: 0;
+    }
+
+    .ds-markdown-cite {
+      margin: 0 var(--ui-space-0-5);
+
+      + .ds-markdown-cite {
+        margin-left: 0;
+      }
     }
   }
 }

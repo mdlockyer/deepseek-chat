@@ -1,89 +1,91 @@
-.view {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-}
+@layer slice {
+  .view {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+  }
 
-.header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  flex-shrink: 0;
-  /* 52px 让标题中心落在 26px，与新对话时的品牌行、交通灯同一水平线 */
-  height: 52px;
-  padding: 0 14px 0 18px;
-  box-sizing: border-box;
-  background: var(--dsw-alias-bg-base);
-}
-
-.headerActions {
-  display: flex;
-  align-items: center;
-  flex-shrink: 0;
-  gap: 4px;
-  margin-left: auto;
-}
-
-.browserButtonActive {
-  color: var(--dsw-alias-brand-text);
-  background: var(--dsw-alias-button-ghost-active-fill);
-}
-
-.title {
-  max-width: 480px;
-  padding: 0 12px;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  font: var(--dsw-font-s-strong-14);
-  color: var(--dsw-alias-label-primary);
-  /* 侧边栏开合时标题与面板同步滑动，而不是跳位 */
-  transition: margin-left var(--ds-transition-duration-panel) var(--ds-ease-panel);
-}
-
-/* 收起后让开左上角按钮组（96–174px）：18 + 162 + 12 = 192px 起 */
-.withCollapsedSider {
-  margin-left: 162px;
-}
-
-.inputContainer {
-  position: sticky;
-  bottom: 0;
-  z-index: 10;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  box-sizing: border-box;
-  width: calc(var(--message-list-max-width) - var(--message-list-padding-horizontal) * 2);
-  max-width: calc(100% - 32px);
-  margin: auto auto 0;
-  padding-top: 14px;
-  background: linear-gradient(
-    to bottom,
-    transparent 0%,
-    var(--dsw-alias-bg-base) 38%,
-    var(--dsw-alias-bg-base) 100%
-  );
-}
-
-.caveat {
-  width: 100%;
-  padding: 6px 0;
-  font-size: 11px;
-  line-height: 16px;
-  text-align: center;
-  color: var(--dsw-alias-label-tertiary);
-  user-select: none;
-}
-
-@media not all and (min-width: 768px) {
-  .inputContainer {
-    position: relative;
-    bottom: auto;
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--ui-space-2);
     flex-shrink: 0;
-    margin: 0 auto;
-    padding-bottom: env(safe-area-inset-bottom);
+    /* 52px 让标题中心落在 26px，与新对话时的品牌行、交通灯同一水平线 */
+    height: var(--ui-panel-header-height);
+    padding: 0 14px 0 18px;
+    box-sizing: border-box;
+    background: var(--ui-surface-canvas);
+  }
+
+  .headerActions {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    gap: var(--ui-space-1);
+    margin-left: auto;
+  }
+
+  .browserButtonActive {
+    color: var(--ui-text-accent);
+    background: var(--ui-accent-soft);
+  }
+
+  .title {
+    max-width: 480px;
+    padding: 0 var(--ui-space-3);
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    font: var(--ui-type-label-strong);
+    color: var(--ui-text-primary);
+    /* 侧边栏开合时标题与面板同步滑动，而不是跳位 */
+    transition: margin-left var(--ui-duration-panel) var(--ui-ease-panel);
+  }
+
+  /* 收起后让开左上角按钮组（96–174px）：18 + 162 + 12 = 192px 起 */
+  .withCollapsedSider {
+    margin-left: 162px;
+  }
+
+  .inputContainer {
+    position: sticky;
+    bottom: 0;
+    z-index: var(--ui-z-sticky);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    box-sizing: border-box;
+    width: calc(var(--message-list-max-width) - var(--message-list-padding-horizontal) * 2);
+    max-width: calc(100% - var(--ui-space-8));
+    margin: auto auto 0;
+    padding-top: 14px;
+    background: linear-gradient(
+      to bottom,
+      transparent 0%,
+      var(--ui-surface-canvas) 38%,
+      var(--ui-surface-canvas) 100%
+    );
+  }
+
+  .caveat {
+    width: 100%;
+    padding: var(--ui-space-1-5) 0;
+    font-size: 11px;
+    line-height: 16px;
+    text-align: center;
+    color: var(--ui-text-muted);
+    user-select: none;
+  }
+
+  @media not all and (min-width: 768px) {
+    .inputContainer {
+      position: relative;
+      bottom: auto;
+      flex-shrink: 0;
+      margin: 0 auto;
+      padding-bottom: env(safe-area-inset-bottom);
+    }
   }
 }

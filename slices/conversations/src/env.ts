@@ -1,5 +1,5 @@
 import type { EventLog } from '@deepseek-chat/spine/runtime'
-import type { HttpFetch, KeyValueStore } from '@deepseek-chat/spine/ports'
+import type { HttpFetch, KeyValueStore, NoticePort } from '@deepseek-chat/spine/ports'
 import type { Locale } from '@deepseek-chat/spine/i18n'
 import type { StreamTrace } from './streamTrace.js'
 import type { ToolGateway } from './tools.js'
@@ -79,6 +79,8 @@ export type ConversationsDeps = {
   readonly autoTitle?: boolean
   /** Optional overrides for tunable runtime parameters. */
   readonly params?: Partial<ConversationsParams>
+  /** Optional port for user-visible toast notices (defaults to no-op in headless tests). */
+  readonly notify?: NoticePort
   /** Ports for the chat's views. */
   readonly ui: ConversationsViewDeps
 }

@@ -1,12 +1,15 @@
+import {
+  IconBrowseOutline16,
+  IconButton,
+  IconGlobeLanguageOutline16,
+  useIsMobile,
+} from '@deepseek-chat/lib-ui'
 import clsx from 'clsx'
-import { useIsMobile } from '@deepseek-chat/spine/design'
-import { useTranslate } from '../../messages.js'
 import { deps } from '../../env.js'
-import type { ChatPanels } from '../../views.js'
-import { type Session } from '../../types.js'
 import { sessionTitle } from '../../format.js'
-import { IconButton } from '@deepseek-chat/spine/design'
-import { IconBrowseOutline16, IconGlobeLanguageOutline16 } from '@deepseek-chat/spine/design'
+import { useTranslate } from '../../messages.js'
+import { type Session } from '../../types.js'
+import type { ChatPanels } from '../../views.js'
 import { useAskUserStore } from '../../askUser.js'
 import { AskUserCard } from '../ask/AskUserCard.js'
 import { ChatInput } from '../chatInput/ChatInput.js'

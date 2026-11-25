@@ -1,4 +1,4 @@
-import { Button, useIsMobile } from '@deepseek-chat/spine/design'
+import { Button, useIsMobile } from '@deepseek-chat/lib-ui'
 import { useEffect } from 'react'
 import { onUploadNotice } from '../../attachments.js'
 import { deps } from '../../env.js'

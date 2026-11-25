@@ -5,7 +5,7 @@ import {
   IconChevronRightOutline14,
   IconCloseFill14,
   IconWarningOutline16,
-} from '@deepseek-chat/spine/design'
+} from '@deepseek-chat/lib-ui'
 import { buildTurnWorkStrip, getFrontStageAsks } from '../../activityView.js'
 import { formatSize, getExtension } from '../../attachments.js'
 import { loadFile } from '../../db.js'

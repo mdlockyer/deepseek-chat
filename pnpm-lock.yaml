@@ -240,6 +240,9 @@ importers:
       '@deepseek-chat/lib-agent':
         specifier: workspace:*
         version: link:../../libs/agent
+      '@deepseek-chat/lib-ui':
+        specifier: workspace:*
+        version: link:../../libs/ui
       '@deepseek-chat/spine':
         specifier: workspace:*
         version: link:../../spine

@@ -91,6 +91,9 @@
     --ui-surface-scrim: rgba(15, 17, 21, 0.36);
     --ui-surface-scrim-soft: rgba(15, 17, 21, 0.24);
     --ui-surface-scrim-strong: rgba(15, 17, 21, 0.48);
+    --ui-surface-scrim-deep: rgba(15, 17, 21, 0.65);
+    --ui-surface-glass: rgba(255, 255, 255, 0.72);
+    --ui-surface-button-elevated: var(--_p-neutral-00);
     --ui-surface-tooltip: var(--_p-neutral-850);
     --ui-surface-toast: var(--_p-neutral-800);
     --ui-surface-paper: var(--_p-neutral-00);
@@ -113,6 +116,7 @@
     --ui-text-on-accent: var(--_p-neutral-00);
     --ui-text-on-danger: var(--_p-neutral-00);
     --ui-text-on-inverse: var(--_p-neutral-00);
+    --ui-text-on-scrim: var(--_p-neutral-00);
     --ui-text-on-toast: var(--_p-neutral-50);
     --ui-text-on-toast-link: var(--_p-blue-300);
     --ui-text-accent: var(--_p-blue-550);
@@ -130,6 +134,7 @@
     --ui-border-focus-neutral: var(--_p-neutral-600);
     --ui-border-accent: var(--_p-blue-300);
     --ui-border-danger: var(--_p-red-600);
+    --ui-border-on-scrim: rgba(255, 255, 255, 0.4);
 
     /* Brand & Accent */
     --ui-accent-fill: var(--_p-blue-500);
@@ -186,6 +191,13 @@
     --ui-shadow-toast: 0 0 4px 2px rgba(15, 17, 21, 0.04), 0 4px 16px 0 rgba(15, 17, 21, 0.12);
     --ui-shadow-tooltip: 0 4px 14px rgba(15, 17, 21, 0.16);
     --ui-shadow-stage: 0 0 0 1px var(--ui-border-strong), 0 4px 16px rgba(15, 17, 21, 0.1);
+    --ui-shadow-floating:
+      0 -2px 2px rgba(72, 104, 178, 0.04), 0 2px 2px rgba(106, 111, 117, 0.09),
+      0 1px 2px rgba(72, 104, 178, 0.08);
+    --ui-shadow-floating-hover:
+      0 4px 4px 0 rgba(72, 104, 178, 0.04), 0 -3px 4px 0 rgba(72, 104, 178, 0.04),
+      0 6px 6px 0 rgba(106, 111, 117, 0.1);
+    --ui-shadow-drop-subtle: 0 0 0.5px rgba(15, 17, 21, 0.2);
 
     /* ==========================================================================
      * Typography (Semantic / Functional styles on a 4px leading rhythm)
@@ -269,6 +281,7 @@
     --ui-z-panel: 20;
     --ui-z-panel-handle: 30;
     --ui-z-chrome: 40;
+    --ui-z-chrome-floating: 42;
     --ui-z-drawer-backdrop: 700;
     --ui-z-drawer: 800;
     --ui-z-popover: 900;
@@ -319,6 +332,9 @@
     --ui-surface-scrim: rgba(0, 0, 0, 0.6);
     --ui-surface-scrim-soft: rgba(0, 0, 0, 0.42);
     --ui-surface-scrim-strong: rgba(0, 0, 0, 0.64);
+    --ui-surface-scrim-deep: rgba(0, 0, 0, 0.72);
+    --ui-surface-glass: rgba(21, 21, 23, 0.72);
+    --ui-surface-button-elevated: var(--_p-neutral-750);
     --ui-surface-tooltip: var(--_p-neutral-750);
     --ui-surface-toast: var(--_p-neutral-750);
     --ui-surface-paper: var(--_p-neutral-00);
@@ -402,6 +418,10 @@
     --ui-shadow-toast: inset 0 0 0 1px var(--ui-border-inverse), 0 6px 20px rgba(0, 0, 0, 0.36);
     --ui-shadow-tooltip: 0 6px 16px rgba(0, 0, 0, 0.28), 0 3px 6px -4px rgba(0, 0, 0, 0.36);
     --ui-shadow-stage: 0 0 0 1px var(--ui-border-strong), 0 4px 16px rgba(0, 0, 0, 0.36);
+    --ui-shadow-floating: inset 0 1px 1px rgba(255, 255, 255, 0.1), 0 2px 4px rgba(0, 0, 0, 0.24);
+    --ui-shadow-floating-hover:
+      inset 0 1px 1px rgba(255, 255, 255, 0.14), 0 4px 8px rgba(0, 0, 0, 0.3);
+    --ui-shadow-drop-subtle: 0 0 0.5px rgba(0, 0, 0, 0.4);
   }
 }
 

@@ -1,6 +1,6 @@
 import { Component, type ReactNode } from 'react'
 import clsx from 'clsx'
-import { Button } from '@deepseek-chat/spine/design'
+import { Button } from '@deepseek-chat/lib-ui'
 import { translate } from './i18n/index.js'
 import styles from './App.module.css'
 

@@ -1,75 +1,77 @@
-.frame {
-  --titlebar-inset: 0px;
-  position: absolute;
-  inset: 0;
-  display: flex;
-  overflow: hidden;
-  background-color: var(--dsw-alias-bg-base);
-}
-
-/* 桌面版把标题栏做成透明的覆盖层：内容从窗口顶部开始，交通灯浮在侧边栏上方。
-   --titlebar-inset：交通灯占的高度，用于折叠后的按钮组与窄屏顶栏 */
-.frame.desktop {
-  --titlebar-inset: 36px;
-}
-
-.main {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-width: 0;
-}
-
-.content {
-  position: relative;
-  flex: 1;
-  min-height: 0;
-}
-
-.errorBoundary {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  height: 100%;
-  padding: 24px;
-  color: var(--dsw-alias-label-secondary);
-  background-color: var(--dsw-alias-bg-base);
-  font-size: 14px;
-  text-align: center;
-}
-
-.errorBoundaryFull {
-  position: fixed;
-  inset: 0;
-}
-
-.errorTitle {
-  margin: 0;
-  color: var(--dsw-alias-label-primary);
-  font-size: 16px;
-  font-weight: 600;
-}
-
-.errorDescription {
-  margin: 0;
-  max-width: 420px;
-}
-
-.errorActions {
-  display: flex;
-  gap: 8px;
-  margin-top: 4px;
-}
-
-@media not all and (min-width: 768px) {
+@layer slice {
   .frame {
+    --titlebar-inset: 0px;
+    position: absolute;
+    inset: 0;
+    display: flex;
+    overflow: hidden;
+    background-color: var(--ui-surface-canvas);
+  }
+
+  /* 桌面版把标题栏做成透明的覆盖层：内容从窗口顶部开始，交通灯浮在侧边栏上方。
+     --titlebar-inset：交通灯占的高度，用于折叠后的按钮组与窄屏顶栏 */
+  .frame.desktop {
+    --titlebar-inset: 36px;
+  }
+
+  .main {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .content {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+  }
+
+  .errorBoundary {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--ui-space-3);
+    height: 100%;
+    padding: var(--ui-space-6);
+    color: var(--ui-text-secondary);
+    background-color: var(--ui-surface-canvas);
+    font-size: var(--ui-font-size-md);
+    text-align: center;
+  }
+
+  .errorBoundaryFull {
     position: fixed;
-    top: var(--app-viewport-top, 0px);
-    bottom: auto;
-    height: var(--app-viewport-height, 100dvh);
+    inset: 0;
+  }
+
+  .errorTitle {
+    margin: 0;
+    color: var(--ui-text-primary);
+    font-size: var(--ui-font-size-lg);
+    font-weight: 600;
+  }
+
+  .errorDescription {
+    margin: 0;
+    max-width: 420px;
+  }
+
+  .errorActions {
+    display: flex;
+    gap: var(--ui-space-2);
+    margin-top: var(--ui-space-1);
+  }
+
+  @media not all and (min-width: 768px) {
+    .frame {
+      position: fixed;
+      top: var(--app-viewport-top, 0px);
+      bottom: auto;
+      height: var(--app-viewport-height, 100dvh);
+    }
   }
 }

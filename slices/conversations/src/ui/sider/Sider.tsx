@@ -1,23 +1,24 @@
-import { useTranslate as useConversationsTranslate } from '../../messages.js'
-import clsx from 'clsx'
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { useTranslate } from '../../messages.js'
-import { acquireOverlay } from '@deepseek-chat/spine/design'
 import {
+  Button,
+  Dialog,
+  IconButton,
   IconPanelLeftOutline16,
   IconSettingsOutline16,
-  NewChatIcon,
-} from '@deepseek-chat/spine/design'
+  useHoverGlide,
+  useOverlayLock,
+  usePresence,
+} from '@deepseek-chat/lib-ui'
+import { PANEL_DURATION_MS } from '@deepseek-chat/spine/design'
+import clsx from 'clsx'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { deps } from '../../env.js'
+import { useTranslate, useTranslate as useConversationsTranslate } from '../../messages.js'
+import { showNotice } from '../../notice.js'
 import { groupSessions } from '../../sessionGroups.js'
 import { newChat, removeSession, useChatStore } from '../../store.js'
 import { type SessionSummary } from '../../types.js'
-import { Button } from '@deepseek-chat/spine/design'
-import { IconButton } from '@deepseek-chat/spine/design'
-import { Modal } from '@deepseek-chat/spine/design'
-import { showNotice } from '../../notice.js'
 import { closeMobileSider, useMobileSider } from './mobileSiderState.js'
-import { PANEL_DURATION_MS, useHoverGlide, usePresence } from '@deepseek-chat/spine/design'
+import { NewChatIcon } from './NewChatIcon.js'
 import { SessionItem } from './SessionItem.js'
 import styles from './Sider.module.css'
 
@@ -45,7 +46,6 @@ export const Sider = ({
   if (deleting) {
     lastDeletingRef.current = deleting
   }
-  const deleteModal = usePresence(deleting !== null, 160)
   const shownDeleting = deleting ?? lastDeletingRef.current
   const [deletePending, setDeletePending] = useState(false)
   const hoverGlide = useHoverGlide<HTMLDivElement>({ disabled: collapsed })
@@ -149,44 +149,47 @@ export const Sider = ({
           </button>
         </div>
       </div>
-      {deleteModal.mounted && shownDeleting ? (
-        <Modal
-          title={t('deleteSessionModalContentTitle')}
-          exiting={deleteModal.exiting}
-          onClose={() => {
-            if (!deletePending) {
-              setDeleting(null)
-            }
-          }}
-          footer={
-            <>
-              <Button variant="outlined" disabled={deletePending} onClick={() => setDeleting(null)}>
-                {t('cancel')}
-              </Button>
-              <Button
-                variant="danger"
-                disabled={deletePending}
-                onClick={async () => {
-                  setDeletePending(true)
-                  try {
-                    if (await removeSession(shownDeleting.id)) {
-                      setDeleting(null)
-                    } else {
-                      showNotice({ key: 'sessionDeleteFailed', type: 'error' })
-                    }
-                  } finally {
-                    setDeletePending(false)
-                  }
-                }}
-              >
-                {t('delete')}
-              </Button>
-            </>
+      <Dialog
+        open={deleting !== null}
+        title={t('deleteSessionModalContentTitle')}
+        dismissible={!deletePending}
+        onClose={() => {
+          if (!deletePending) {
+            setDeleting(null)
           }
-        >
-          {t('deleteSessionWithFilesDescription')}
-        </Modal>
-      ) : null}
+        }}
+        footer={
+          <>
+            <Button variant="outlined" disabled={deletePending} onClick={() => setDeleting(null)}>
+              {t('cancel')}
+            </Button>
+            <Button
+              variant="danger"
+              loading={deletePending}
+              disabled={deletePending}
+              onClick={async () => {
+                if (!shownDeleting) {
+                  return
+                }
+                setDeletePending(true)
+                try {
+                  if (await removeSession(shownDeleting.id)) {
+                    setDeleting(null)
+                  } else {
+                    showNotice({ key: 'sessionDeleteFailed', type: 'error' })
+                  }
+                } finally {
+                  setDeletePending(false)
+                }
+              }}
+            >
+              {t('delete')}
+            </Button>
+          </>
+        }
+      >
+        {t('deleteSessionWithFilesDescription')}
+      </Dialog>
     </div>
   )
 }
@@ -195,7 +198,7 @@ export const Sider = ({
 export const MobileSider = () => {
   const open = useMobileSider((state) => state.open)
   const { mounted, exiting } = usePresence(open, PANEL_DURATION_MS)
-  useEffect(() => (mounted ? acquireOverlay() : undefined), [mounted])
+  useOverlayLock(mounted)
   if (!mounted) {
     return null
   }

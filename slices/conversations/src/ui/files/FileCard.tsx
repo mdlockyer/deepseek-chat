@@ -3,11 +3,13 @@ import type { ReactNode } from 'react'
 import { useTranslate } from '../../messages.js'
 import { formatSize, getExtension } from '../../attachments.js'
 import {
+  FileGlyph,
   IconCloseFill14,
   IconDownloadOutline16,
   IconRefreshOutline16,
-} from '@deepseek-chat/spine/design'
-import { FileIcon } from '@deepseek-chat/spine/design'
+  Spinner,
+  fileGlyphKindFromExt,
+} from '@deepseek-chat/lib-ui'
 import styles from './FileCard.module.css'
 
 /**
@@ -43,10 +45,10 @@ export const FileCard = ({
 }) => {
   const t = useTranslate()
   const ext = getExtension(name)
-  let icon: ReactNode = <FileIcon ext={ext} />
+  let icon: ReactNode = <FileGlyph kind={fileGlyphKindFromExt(ext)} />
   let description = subtitle ?? ([ext, formatSize(size)].filter(Boolean).join(' ') || '')
   if (status === 'uploading') {
-    icon = <span className={styles.spinner} />
+    icon = <Spinner size="sm" />
     description = t('uploadFileStatusUploading')
   } else if (status === 'error') {
     // 不可重试（过大、格式不支持）时保留文件图标并显示原因

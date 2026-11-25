@@ -8,7 +8,8 @@ import {
   IconSendOutline16,
   IconStopFill16,
   IconThinkOutline16,
-} from '@deepseek-chat/spine/design'
+  useIsMobile,
+} from '@deepseek-chat/lib-ui'
 import {
   setBrowser,
   setPython,
@@ -16,7 +17,6 @@ import {
   setThinking,
   useComposerOptions,
 } from '../../composerOptions.js'
-import { useIsMobile } from '@deepseek-chat/spine/design'
 import { sendMessage, stopReply, useChatStore } from '../../store.js'
 import {
   addDraftFiles,

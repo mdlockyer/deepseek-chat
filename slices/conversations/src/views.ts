@@ -1,4 +1,4 @@
-import type { PanelSlot } from '@deepseek-chat/spine/design'
+import type { PanelSlot } from '@deepseek-chat/spine/ports'
 import type { ComponentType } from 'react'
 import type { PresentedFileRef, Session } from './types.js'
 

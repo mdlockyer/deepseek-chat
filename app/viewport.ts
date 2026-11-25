@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef } from 'react'
 
-export { useIsMobile } from '@deepseek-chat/spine/design'
+export { useIsMobile } from '@deepseek-chat/lib-ui'
 
 const preventPageScroll = (event: TouchEvent) => {
   if (event.touches.length !== 1) {
