@@ -114,8 +114,13 @@ const fakeHost = () => {
     onNavigationBlocked: () => () => {},
     onDownloadBlocked: () => () => {},
   }
+  const emitState = (payload: BrowserTabStatePayload) => {
+    for (const handler of stateHandlers) {
+      handler(payload)
+    }
+  }
   const named = (name: string) => calls.filter((call) => call.name === name)
-  return { host, calls, scripts, lastActive, named }
+  return { host, calls, scripts, lastActive, named, emitState }
 }
 
 /** The app's right panel, reduced to the rules a slot sees (one kind per chat, open animation). */
@@ -1088,5 +1093,695 @@ describe('browser: bounds sync, stable refs, and SoM screenshot badges', () => {
       ;(globalThis as Record<string, unknown>).document = prevDocument
       ;(globalThis as Record<string, unknown>).Image = prevImage
     }
+  })
+})
+
+describe('browser: navigation settling, async form submit, stale-ref recovery, and snapshot framing', () => {
+  const createInteractiveDom = (initialUrl: string, initialTitle: string) => {
+    class SimEvent {
+      type: string
+      bubbles: boolean
+      cancelable: boolean
+      defaultPrevented = false
+      key?: string
+      target: unknown = null
+      constructor(type: string, init: Record<string, unknown> = {}) {
+        this.type = type
+        this.bubbles = Boolean(init.bubbles)
+        this.cancelable = Boolean(init.cancelable)
+        if (typeof init.key === 'string') {
+          this.key = init.key
+        }
+      }
+      preventDefault() {
+        if (this.cancelable) {
+          this.defaultPrevented = true
+        }
+      }
+    }
+
+    type Listener = { fn: (ev: SimEvent) => void; once: boolean }
+
+    class SimElement {
+      tagName: string
+      attrs = new Map<string, string>()
+      children: SimElement[] = []
+      parentElement: SimElement | null = null
+      isConnected = true
+      innerText: string
+      rect = { left: 10, top: 20, right: 130, bottom: 52, width: 120, height: 32 }
+      listeners = new Map<string, Listener[]>()
+      onClickAction: ((ev: SimEvent) => void) | null = null
+
+      constructor(tag: string, label: string, top = 20) {
+        this.tagName = tag.toUpperCase()
+        this.innerText = label
+        this.rect = { left: 10, top, right: 130, bottom: top + 32, width: 120, height: 32 }
+      }
+      get textContent(): string {
+        return this.innerText || this.children.map((c) => c.textContent).join(' ')
+      }
+      append(child: SimElement) {
+        child.parentElement = this
+        child.isConnected = this.isConnected
+        this.children.push(child)
+        return child
+      }
+      getAttribute(name: string) {
+        return this.attrs.get(name) ?? null
+      }
+      setAttribute(name: string, value: string) {
+        this.attrs.set(name, value)
+      }
+      hasAttribute(name: string) {
+        return this.attrs.has(name)
+      }
+      getBoundingClientRect() {
+        return this.rect
+      }
+      scrollIntoView() {}
+      focus() {
+        simDocument.activeElement = this
+      }
+      addEventListener(type: string, fn: (ev: SimEvent) => void, opts?: { once?: boolean }) {
+        const list = this.listeners.get(type) ?? []
+        list.push({ fn, once: Boolean(opts?.once) })
+        this.listeners.set(type, list)
+      }
+      removeEventListener(type: string, fn: (ev: SimEvent) => void) {
+        const list = this.listeners.get(type)
+        if (!list) {
+          return
+        }
+        this.listeners.set(
+          type,
+          list.filter((entry) => entry.fn !== fn)
+        )
+      }
+      dispatchEvent(ev: SimEvent): boolean {
+        ev.target = this
+        for (const cur of ancestorsOf(this)) {
+          const list = [...(cur.listeners.get(ev.type) ?? [])]
+          for (const entry of list) {
+            if (entry.once) {
+              cur.removeEventListener(ev.type, entry.fn)
+            }
+            entry.fn(ev)
+          }
+          if (!ev.bubbles) {
+            break
+          }
+        }
+        if (ev.bubbles) {
+          const docList = [...(docListeners.get(ev.type) ?? [])]
+          for (const entry of docList) {
+            if (entry.once) {
+              simDocument.removeEventListener(ev.type, entry.fn)
+            }
+            entry.fn(ev)
+          }
+        }
+        return !ev.defaultPrevented
+      }
+      click() {
+        const ev = new SimEvent('click', { bubbles: true, cancelable: true })
+        const notPrevented = this.dispatchEvent(ev)
+        if (notPrevented) {
+          for (const cur of ancestorsOf(this)) {
+            if (cur.onClickAction) {
+              cur.onClickAction(ev)
+              break
+            }
+          }
+        }
+      }
+      closest(selector: string): SimElement | null {
+        for (const cur of ancestorsOf(this)) {
+          if (
+            (selector === 'a[href]' && cur.tagName === 'A' && cur.hasAttribute('href')) ||
+            (selector === 'form' && cur.tagName === 'FORM') ||
+            (selector === 'button, input[type="submit"], input[type="image"]' &&
+              (cur.tagName === 'BUTTON' ||
+                (cur.tagName === 'INPUT' &&
+                  (cur.getAttribute('type') === 'submit' || cur.getAttribute('type') === 'image'))))
+          ) {
+            return cur
+          }
+        }
+        return null
+      }
+    }
+
+    const ancestorsOf = (start: SimElement): SimElement[] => {
+      const chain: SimElement[] = []
+      let cur: SimElement | null = start
+      while (cur) {
+        chain.push(cur)
+        cur = cur.parentElement
+      }
+      return chain
+    }
+
+    class SimHTMLElement extends SimElement {}
+    class SimSVGElement extends SimElement {}
+    class SimForm extends SimHTMLElement {
+      onSubmitAction: (() => void) | null = null
+      constructor() {
+        super('form', '', 20)
+      }
+      requestSubmit() {
+        const ev = new SimEvent('submit', { bubbles: true, cancelable: true })
+        if (this.dispatchEvent(ev)) {
+          this.onSubmitAction?.()
+        }
+      }
+      submit() {
+        this.onSubmitAction?.()
+      }
+    }
+    class SimInput extends SimHTMLElement {
+      type = 'text'
+      private _value = ''
+      disabled = false
+      labels: SimElement[] = []
+      form: SimForm | null = null
+      constructor(label: string, top = 20) {
+        super('input', '', top)
+        this.setAttribute('aria-label', label)
+      }
+      get value() {
+        return this._value
+      }
+      set value(v: string) {
+        this._value = v
+      }
+    }
+    class SimTextarea extends SimHTMLElement {
+      value = ''
+      disabled = false
+      labels: SimElement[] = []
+    }
+    class SimSelect extends SimHTMLElement {
+      value = ''
+      disabled = false
+      options: SimElement[] = []
+      labels: SimElement[] = []
+    }
+    class SimAnchor extends SimHTMLElement {
+      href: string
+      target = ''
+      constructor(label: string, href: string, top = 20) {
+        super('a', label, top)
+        this.href = href
+        this.setAttribute('href', href)
+      }
+    }
+
+    const docListeners = new Map<string, Listener[]>()
+    const body = new SimHTMLElement('body', '', 0)
+    const simLocation = { href: initialUrl }
+    const simWindow: Record<PropertyKey, unknown> = {
+      innerWidth: 800,
+      innerHeight: 600,
+      scrollX: 0,
+      scrollY: 0,
+      scrollBy: (_opts: { top?: number; left?: number }) => {
+        simWindow.scrollY = Number(simWindow.scrollY) + (_opts?.top ?? 0)
+      },
+      scrollTo: (_opts: { top?: number }) => {
+        simWindow.scrollY = _opts?.top ?? 0
+      },
+    }
+    const simDocument = {
+      body,
+      documentElement: {
+        clientWidth: 800,
+        clientHeight: 600,
+        scrollWidth: 800,
+        scrollHeight: 2400,
+        appendChild: () => {},
+      },
+      title: initialTitle,
+      readyState: 'complete',
+      activeElement: body as SimElement,
+      getElementById: () => null,
+      querySelector: () => null,
+      querySelectorAll: () => [],
+      createElement: () => new SimHTMLElement('div', '', 0),
+      addEventListener: (type: string, fn: (ev: SimEvent) => void, opts?: { once?: boolean }) => {
+        const list = docListeners.get(type) ?? []
+        list.push({ fn, once: Boolean(opts?.once) })
+        docListeners.set(type, list)
+      },
+      removeEventListener: (type: string, fn: (ev: SimEvent) => void) => {
+        const list = docListeners.get(type)
+        if (!list) {
+          return
+        }
+        docListeners.set(
+          type,
+          list.filter((entry) => entry.fn !== fn)
+        )
+      },
+    }
+
+    const runScript = (script: string): string => {
+      const fn = new Function(
+        'window',
+        'document',
+        'location',
+        'getComputedStyle',
+        'Element',
+        'HTMLElement',
+        'SVGElement',
+        'HTMLInputElement',
+        'HTMLTextAreaElement',
+        'HTMLSelectElement',
+        'HTMLAnchorElement',
+        'PointerEvent',
+        'MouseEvent',
+        'KeyboardEvent',
+        'InputEvent',
+        'Event',
+        script
+      )
+      return fn(
+        simWindow,
+        simDocument,
+        simLocation,
+        () => ({ display: 'block', visibility: 'visible', opacity: '1' }),
+        SimElement,
+        SimHTMLElement,
+        SimSVGElement,
+        SimInput,
+        SimTextarea,
+        SimSelect,
+        SimAnchor,
+        SimEvent,
+        SimEvent,
+        SimEvent,
+        SimEvent,
+        SimEvent
+      ) as string
+    }
+
+    return {
+      SimEvent,
+      SimElement,
+      SimHTMLElement,
+      SimForm,
+      SimInput,
+      SimAnchor,
+      body,
+      simWindow,
+      simDocument,
+      simLocation,
+      runScript,
+    }
+  }
+
+  it('waits for delayed cross-origin link navigation on browser_click without browser_wait, while non-navigating clicks settle promptly', async () => {
+    const dom = createInteractiveDom('https://example.com/', 'Example Domain')
+    dom.body.innerText = 'Example Domain\nThis domain is for use in illustrative examples.'
+
+    const env = await withVisiblePage()
+    const tabId = env.browser.getSession('s1').tabs[0]?.id ?? ''
+    assert.ok(tabId)
+    env.host.host.evalJs = async (_tabId, script, isolated) =>
+      isolated ? dom.runScript(script) : JSON.stringify({ ok: true, value: null })
+
+    // Cross-origin link whose native load starts AFTER 320 ms (past the old 250 ms blind sleep).
+    const link = new dom.SimAnchor('', 'https://www.iana.org/domains/example', 40)
+    const span = new dom.SimHTMLElement('span', 'Learn more', 40)
+    link.append(span)
+    link.onClickAction = () => {
+      setTimeout(() => {
+        env.host.emitState({
+          tabId,
+          url: 'https://example.com/',
+          title: null,
+          isLoading: true,
+          canGoBack: true,
+          canGoForward: false,
+        })
+        setTimeout(() => {
+          dom.simLocation.href = 'https://www.iana.org/help/example-domains'
+          dom.simDocument.title = 'Example Domains'
+          dom.body.innerText = 'IANA Example Domains\nManaged by IANA.'
+          dom.body.children = []
+          env.host.emitState({
+            tabId,
+            url: 'https://www.iana.org/help/example-domains',
+            title: 'Example Domains',
+            isLoading: false,
+            canGoBack: true,
+            canGoForward: false,
+          })
+        }, 60)
+      }, 320)
+    }
+
+    const spaLink = new dom.SimAnchor('SPA Link', 'https://example.com/spa', 90)
+    spaLink.addEventListener('click', (ev) => ev.preventDefault())
+
+    dom.body.append(link)
+    dom.body.append(spaLink)
+
+    const observed = await env.browser.run(
+      'browser_observe',
+      {},
+      { signal: signal(), sessionId: 's1' }
+    )
+    assert.equal(observed.status, 'ok')
+    const spaRef = /\[(e\d+)\] link "SPA Link"/.exec(observed.text)?.[1]
+    const learnRef = /\[(e\d+)\] link "Learn more"/.exec(observed.text)?.[1]
+    assert.ok(spaRef && learnRef)
+
+    // Non-navigating (preventDefault) click should settle quickly without waiting for a full nav start window.
+    const spaClick = await env.browser.run(
+      'browser_click',
+      { ref: spaRef },
+      { signal: signal(), sessionId: 's1' }
+    )
+    assert.equal(spaClick.status, 'ok')
+    assert.equal(spaClick.meta.url, 'https://example.com/')
+    assert.ok(spaClick.durationMs < 1000, `non-navigating click took ${spaClick.durationMs}ms`)
+
+    // Cross-origin link click must wait for the delayed load and return the destination page directly.
+    const navClick = await env.browser.run(
+      'browser_click',
+      { ref: learnRef },
+      { signal: signal(), sessionId: 's1' }
+    )
+    assert.equal(navClick.status, 'ok')
+    assert.equal(navClick.meta.url, 'https://www.iana.org/help/example-domains')
+    assert.match(navClick.text, /IANA Example Domains/)
+    env.browser.dispose()
+  })
+
+  it('yields after input on browser_type(submit: true) so async-hydrated inputs receive Enter without a premature change event', async () => {
+    const dom = createInteractiveDom('https://en.wikipedia.org/wiki/Main_Page', 'Wikipedia')
+    dom.body.innerText = 'Welcome to Wikipedia'
+
+    const env = await withVisiblePage()
+    const tabId = env.browser.getSession('s1').tabs[0]?.id ?? ''
+    assert.ok(tabId)
+    env.host.host.evalJs = async (_tabId, script, isolated) =>
+      isolated ? dom.runScript(script) : JSON.stringify({ ok: true, value: null })
+
+    const ssrForm = new dom.SimForm()
+    const ssrInput = new dom.SimInput('Search Wikipedia', 20)
+    ssrInput.form = ssrForm
+    ssrForm.append(ssrInput)
+    dom.body.append(ssrForm)
+
+    let prematureChangeFired = false
+    let ssrEnterCount = 0
+    let hydratedEnterValue: string | null = null
+
+    ssrInput.addEventListener('change', () => {
+      prematureChangeFired = true
+    })
+    ssrInput.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter') {
+        ssrEnterCount += 1
+        // Unhydrated search widget prevents default and only opens suggestions instead of submitting.
+        ev.preventDefault()
+      }
+    })
+    ssrInput.addEventListener('input', () => {
+      const typed = ssrInput.value
+      // Simulate Vue/Codex TypeaheadSearch mounting asynchronously after input.
+      setTimeout(() => {
+        ssrInput.isConnected = false
+        ssrForm.isConnected = false
+        const hydratedForm = new dom.SimForm()
+        const hydratedInput = new dom.SimInput('Search Wikipedia', 20)
+        hydratedInput.value = typed
+        hydratedInput.form = hydratedForm
+        hydratedForm.append(hydratedInput)
+        dom.body.children = [hydratedForm]
+        dom.simDocument.activeElement = hydratedInput
+
+        hydratedInput.addEventListener('keydown', (ev) => {
+          if (ev.key === 'Enter') {
+            hydratedEnterValue = hydratedInput.value
+            ev.preventDefault()
+            env.host.emitState({
+              tabId,
+              url: 'https://en.wikipedia.org/wiki/Main_Page',
+              title: null,
+              isLoading: true,
+              canGoBack: true,
+              canGoForward: false,
+            })
+            setTimeout(() => {
+              dom.simLocation.href = 'https://en.wikipedia.org/wiki/Humpback_whale'
+              dom.simDocument.title = 'Humpback whale - Wikipedia'
+              dom.body.innerText =
+                'Humpback whale\nThe humpback whale is a species of baleen whale.'
+              dom.body.children = []
+              env.host.emitState({
+                tabId,
+                url: 'https://en.wikipedia.org/wiki/Humpback_whale',
+                title: 'Humpback whale - Wikipedia',
+                isLoading: false,
+                canGoBack: true,
+                canGoForward: false,
+              })
+            }, 40)
+          }
+        })
+      }, 40)
+    })
+
+    const observed = await env.browser.run(
+      'browser_observe',
+      {},
+      { signal: signal(), sessionId: 's1' }
+    )
+    const searchRef = /\[(e\d+)\] input:text "Search Wikipedia"/.exec(observed.text)?.[1]
+    assert.ok(searchRef)
+
+    const typed = await env.browser.run(
+      'browser_type',
+      { ref: searchRef, text: 'Humpback whale', submit: true },
+      { signal: signal(), sessionId: 's1' }
+    )
+
+    assert.equal(prematureChangeFired, false, 'must not emit premature change before Enter')
+    assert.equal(ssrEnterCount, 0, 'must not dispatch synchronous Enter before hydration settles')
+    assert.equal(hydratedEnterValue, 'Humpback whale')
+    assert.equal(typed.status, 'ok')
+    assert.equal(typed.meta.url, 'https://en.wikipedia.org/wiki/Humpback_whale')
+    assert.match(typed.text, /species of baleen whale/)
+    env.browser.dispose()
+  })
+
+  it('returns safe stale-ref errors with refreshed interactive refs and matching replacement hints inside untrusted_webpage_content', async () => {
+    const dom = createInteractiveDom('https://en.wikipedia.org/wiki/Main_Page', 'Wikipedia')
+    dom.body.innerText = 'Search header'
+
+    const env = await withVisiblePage()
+    env.host.host.evalJs = async (_tabId, script, isolated) =>
+      isolated ? dom.runScript(script) : JSON.stringify({ ok: true, value: null })
+
+    const oldBtn = new dom.SimHTMLElement('button', 'Search', 30)
+    const otherBtn = new dom.SimHTMLElement('button', 'Donate', 80)
+    dom.body.append(oldBtn)
+    dom.body.append(otherBtn)
+
+    const observed = await env.browser.run(
+      'browser_observe',
+      {},
+      { signal: signal(), sessionId: 's1' }
+    )
+    const oldSearchRef = /\[(e\d+)\] button "Search"/.exec(observed.text)?.[1]
+    assert.ok(oldSearchRef)
+
+    // Framework replaces the Search button DOM node before the next click.
+    oldBtn.isConnected = false
+    let replacementClicks = 0
+    const newBtn = new dom.SimHTMLElement('button', 'Search', 30)
+    newBtn.onClickAction = () => {
+      replacementClicks += 1
+    }
+    dom.body.children = [newBtn, otherBtn]
+
+    const stale = await env.browser.run(
+      'browser_click',
+      { ref: oldSearchRef },
+      { signal: signal(), sessionId: 's1' }
+    )
+    assert.equal(stale.status, 'error')
+    assert.match(stale.text, /stale/i)
+    assert.equal(replacementClicks, 0, 'must never silently click the replacement node')
+    assert.match(
+      stale.text,
+      /<untrusted_webpage_content[^>]*>[\s\S]*button "Search"[\s\S]*<\/untrusted_webpage_content>/
+    )
+
+    const replacementRef = /\[(e\d+)\] button "Search"/.exec(stale.text)?.[1]
+    assert.ok(replacementRef && replacementRef !== oldSearchRef, 'surfaces fresh replacement ref')
+
+    const retry = await env.browser.run(
+      'browser_click',
+      { ref: replacementRef },
+      { signal: signal(), sessionId: 's1' }
+    )
+    assert.equal(retry.status, 'ok')
+    assert.equal(replacementClicks, 1)
+    env.browser.dispose()
+  })
+
+  it('omits page text on scroll/viewport, deduplicates unchanged text on same-URL actions, reports inline diffs, and always returns full text on observe', async () => {
+    const dom = createInteractiveDom('https://example.com/form', 'Account Form')
+    const baseLines = [
+      'Account Registration',
+      'Line one of stable instructions about your account.',
+      'Line two of stable instructions about privacy.',
+      'Line three of stable instructions about security.',
+      'Line four of stable instructions about terms.',
+    ]
+    dom.body.innerText = baseLines.join('\n')
+
+    const env = await withVisiblePage()
+    env.host.host.evalJs = async (_tabId, script, isolated) =>
+      isolated ? dom.runScript(script) : JSON.stringify({ ok: true, value: null })
+
+    const noopBtn = new dom.SimHTMLElement('button', 'Check', 30)
+    const submitBtn = new dom.SimHTMLElement('button', 'Submit', 80)
+    submitBtn.onClickAction = () => {
+      dom.body.innerText = `${baseLines.join('\n')}\nPassword must be at least 8 characters.`
+    }
+    dom.body.append(noopBtn)
+    dom.body.append(submitBtn)
+
+    // 1. Explicit observe returns full page text.
+    const obs1 = await env.browser.run('browser_observe', {}, { signal: signal(), sessionId: 's1' })
+    assert.equal(obs1.status, 'ok')
+    assert.match(obs1.text, /Line one of stable instructions/)
+    const checkRef = /\[(e\d+)\] button "Check"/.exec(obs1.text)?.[1]
+    const submitRef = /\[(e\d+)\] button "Submit"/.exec(obs1.text)?.[1]
+    assert.ok(checkRef && submitRef)
+
+    // 2. Scroll omits page text by default, includes it when text: true.
+    const scrolled = await env.browser.run(
+      'browser_scroll',
+      { direction: 'down', amount: 400 },
+      { signal: signal(), sessionId: 's1' }
+    )
+    assert.equal(scrolled.status, 'ok')
+    assert.doesNotMatch(scrolled.text, /Line one of stable instructions/)
+    assert.match(scrolled.text, /button "Submit"/)
+
+    const scrolledWithText = await env.browser.run(
+      'browser_scroll',
+      { direction: 'up', amount: 200, text: true },
+      { signal: signal(), sessionId: 's1' }
+    )
+    assert.equal(scrolledWithText.status, 'ok')
+    assert.match(scrolledWithText.text, /Line one of stable instructions/)
+
+    // 3. Viewport change omits page text.
+    const resized = await env.browser.run(
+      'browser_set_viewport',
+      { preset: 'mobile' },
+      { signal: signal(), sessionId: 's1' }
+    )
+    assert.equal(resized.status, 'ok')
+    assert.doesNotMatch(resized.text, /Line one of stable instructions/)
+
+    // 4. Same-URL click with unchanged text does not re-dump the page body.
+    const unchangedClick = await env.browser.run(
+      'browser_click',
+      { ref: checkRef },
+      { signal: signal(), sessionId: 's1' }
+    )
+    assert.equal(unchangedClick.status, 'ok')
+    assert.doesNotMatch(unchangedClick.text, /Line one of stable instructions/)
+    assert.match(unchangedClick.text, /unchanged/i)
+
+    // 5. Same-URL click that adds a validation error surfaces the new line without repeating unchanged lines.
+    const errorClick = await env.browser.run(
+      'browser_click',
+      { ref: submitRef },
+      { signal: signal(), sessionId: 's1' }
+    )
+    assert.equal(errorClick.status, 'ok')
+    assert.match(errorClick.text, /Password must be at least 8 characters\./)
+    assert.doesNotMatch(errorClick.text, /Line one of stable instructions/)
+
+    // 6. Explicit browser_observe always returns the full page text again.
+    const obs2 = await env.browser.run('browser_observe', {}, { signal: signal(), sessionId: 's1' })
+    assert.equal(obs2.status, 'ok')
+    assert.match(obs2.text, /Line one of stable instructions/)
+    assert.match(obs2.text, /Password must be at least 8 characters\./)
+
+    // 7. browser_navigate({ text: false }) omits page text.
+    const navNoText = await env.browser.run(
+      'browser_navigate',
+      { url: 'https://example.com/other', text: false },
+      { signal: signal(), sessionId: 's1' }
+    )
+    assert.equal(navNoText.status, 'ok')
+    assert.doesNotMatch(navNoText.text, /Line one of stable instructions/)
+    env.browser.dispose()
+  })
+
+  it('always preserves the closing </untrusted_webpage_content> tag under truncation across oversized snapshots and browser_eval outputs', async () => {
+    const env = await withVisiblePage()
+
+    // Oversized snapshot: 140 verbose elements + 20,000 chars of page text.
+    const verboseElements = Array.from({ length: 140 }, (_, i) => ({
+      ref: `e${i + 1}`,
+      role: 'link',
+      label: `Very long Wikipedia article link label number ${i + 1} `.repeat(3).trim(),
+      href: `/wiki/Humpback_whale_reference_section_${i + 1}_${'x'.repeat(80)}`,
+      inView: i < 20,
+      rect: { x: 0, y: i * 24, w: 200, h: 20 },
+    }))
+    env.host.host.evalJs = async (_tabId, script, isolated) => {
+      if (isolated) {
+        return JSON.stringify({
+          ...SNAPSHOT,
+          totalInteractiveCount: verboseElements.length,
+          elements: verboseElements,
+          pageText: 'Humpback whale biology paragraph. '.repeat(600),
+        })
+      }
+      return new AsyncFunction(script)()
+    }
+
+    const hugeObserve = await env.browser.run(
+      'browser_observe',
+      {},
+      { signal: signal(), sessionId: 's1' }
+    )
+    assert.equal(hugeObserve.status, 'ok')
+    assert.match(hugeObserve.text, /<untrusted_webpage_content url="https:\/\/example\.com\/">/)
+    assert.ok(
+      hugeObserve.text.trimEnd().endsWith('</untrusted_webpage_content>'),
+      'observe output must keep closing </untrusted_webpage_content> tag when truncated'
+    )
+    assert.match(hugeObserve.text, /Truncated/i)
+
+    // Oversized browser_eval outputs across multiple lengths.
+    for (const size of [25_000, 40_000, 80_000]) {
+      const hugeEval = await env.browser.run(
+        'browser_eval',
+        { script: `return "w".repeat(${size})` },
+        { signal: signal(), sessionId: 's1' }
+      )
+      assert.equal(hugeEval.status, 'ok')
+      assert.match(hugeEval.text, /^<untrusted_webpage_content url="[^"]*">\n/)
+      assert.ok(
+        hugeEval.text.trimEnd().endsWith('</untrusted_webpage_content>'),
+        `eval output (${size} chars) must keep closing </untrusted_webpage_content> tag`
+      )
+      assert.match(hugeEval.text, /Truncated/i)
+    }
+
+    env.browser.dispose()
   })
 })

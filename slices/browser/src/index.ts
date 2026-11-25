@@ -228,6 +228,7 @@ export const createBrowserSlice = (deps: BrowserSliceDeps) => {
     }),
     LocalhostSetting: createLocalhostSetting(allowLocalhost),
     dispose: () => {
+      tools.dispose()
       toggleListeners.clear()
       for (const unsubscribe of unsubscribers) {
         unsubscribe()

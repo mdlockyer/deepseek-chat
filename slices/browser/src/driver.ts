@@ -4,10 +4,19 @@
  * so WKWebView (macOS), WebView2 (Windows), and WebKitGTK (Linux) handle results uniformly.
  */
 
+const CATCH_DRIVER_ERROR = `
+  return JSON.stringify({
+    ok: false,
+    error: err instanceof Error ? err.message : String(err),
+    ...(err && typeof err === 'object' && err.__staleRef ? { staleRef: err.__staleRef } : {}),
+  });
+`
+
 const SHARED_HELPERS = `
 const __DS_KEY = Symbol.for('__ds_browser_driver__');
-const __dsStore = window[__DS_KEY] || (window[__DS_KEY] = { refs: new Map(), elToRef: new WeakMap(), seq: 0 });
+const __dsStore = window[__DS_KEY] || (window[__DS_KEY] = { refs: new Map(), elToRef: new WeakMap(), meta: new Map(), seq: 0 });
 if (!__dsStore.elToRef) __dsStore.elToRef = new WeakMap();
+if (!__dsStore.meta) __dsStore.meta = new Map();
 
 const __isVisible = (el) => {
   if (!el || !(el instanceof Element)) return false;
@@ -41,7 +50,11 @@ const __resolveTarget = (ref, x, y) => {
     const weak = __dsStore.refs.get(key);
     const el = weak ? weak.deref() : null;
     if (!el || !el.isConnected) {
-      throw new Error('Element ref ' + key + ' is stale or no longer in the document. Call browser_observe to refresh refs.');
+      const prev = __dsStore.meta.get(key) || null;
+      const desc = prev ? ' (' + prev.role + (prev.label ? ' ' + JSON.stringify(prev.label) : '') + ')' : '';
+      const err = new Error('Element ref ' + key + desc + ' is stale or no longer in the document.');
+      err.__staleRef = { ref: key, role: prev ? prev.role : null, label: prev ? prev.label : null };
+      throw err;
     }
     return el;
   }
@@ -221,6 +234,11 @@ try {
         h: Math.round(rect.height),
       },
     };
+    __dsStore.meta.set(ref, { role, label: entry.label });
+    if (__dsStore.meta.size > 1000) {
+      const oldest = __dsStore.meta.keys().next().value;
+      if (oldest !== undefined) __dsStore.meta.delete(oldest);
+    }
     if (el instanceof HTMLInputElement) {
       if (el.type === 'password') {
         entry.value = el.value ? '[REDACTED]' : '';
@@ -317,6 +335,35 @@ try {
 
   const btn = p.button === 'right' ? 2 : p.button === 'middle' ? 1 : 0;
   const init = { bubbles: true, cancelable: true, view: window, clientX: cx, clientY: cy, button: btn };
+  const anchor = typeof el.closest === 'function'
+    ? el.closest('a[href]')
+    : (el instanceof HTMLAnchorElement ? el : null);
+  const anchorHref = anchor ? (anchor.href || anchor.getAttribute('href') || '') : '';
+  const anchorTarget = anchor ? (anchor.target || anchor.getAttribute('target') || '').toLowerCase() : '';
+  const isSameTabDocLink = (() => {
+    if (!anchorHref || anchorTarget === '_blank') return false;
+    try {
+      const cur = new URL(location.href);
+      const next = new URL(anchorHref, location.href);
+      if (next.protocol !== 'http:' && next.protocol !== 'https:') return false;
+      return (cur.origin + cur.pathname + cur.search) !== (next.origin + next.pathname + next.search);
+    } catch {
+      return false;
+    }
+  })();
+  const submitControl = typeof el.closest === 'function'
+    ? el.closest('button, input[type="submit"], input[type="image"]')
+    : null;
+  const controlType = submitControl ? (submitControl.getAttribute('type') || '').toLowerCase() : '';
+  const controlForm = submitControl
+    ? ('form' in submitControl && submitControl.form
+        ? submitControl.form
+        : (typeof submitControl.closest === 'function' ? submitControl.closest('form') : null))
+    : null;
+  const isFormSubmitControl = Boolean(
+    submitControl && controlForm && controlType !== 'button' && controlType !== 'reset'
+  );
+
   el.dispatchEvent(new PointerEvent('pointerover', init));
   el.dispatchEvent(new MouseEvent('mouseover', init));
   el.dispatchEvent(new PointerEvent('pointerdown', init));
@@ -325,25 +372,48 @@ try {
   el.dispatchEvent(new PointerEvent('pointerup', init));
   el.dispatchEvent(new MouseEvent('mouseup', init));
 
-  if (btn === 2) {
-    el.dispatchEvent(new MouseEvent('contextmenu', init));
-  } else if (p.doubleClick) {
-    if (typeof el.click === 'function') el.click();
-    el.dispatchEvent(new MouseEvent('dblclick', init));
-  } else if (typeof el.click === 'function') {
-    el.click();
-  } else {
-    el.dispatchEvent(new MouseEvent('click', init));
+  let clickDefaultPrevented = false;
+  let formSubmitTriggered = false;
+  const onDocClick = (ev) => { clickDefaultPrevented = Boolean(ev && ev.defaultPrevented); };
+  const onDocSubmit = (ev) => { if (ev && !ev.defaultPrevented) formSubmitTriggered = true; };
+  const hasDocListen = typeof document.addEventListener === 'function';
+  if (hasDocListen) {
+    document.addEventListener('click', onDocClick, { once: true });
+    document.addEventListener('submit', onDocSubmit, { once: true });
   }
+  try {
+    if (btn === 2) {
+      el.dispatchEvent(new MouseEvent('contextmenu', init));
+    } else if (p.doubleClick) {
+      if (typeof el.click === 'function') el.click();
+      el.dispatchEvent(new MouseEvent('dblclick', init));
+    } else if (typeof el.click === 'function') {
+      el.click();
+    } else {
+      el.dispatchEvent(new MouseEvent('click', init));
+    }
+  } finally {
+    if (hasDocListen) {
+      document.removeEventListener('click', onDocClick);
+      document.removeEventListener('submit', onDocSubmit);
+    }
+  }
+
+  const expectsNavigation = btn === 0 && !p.doubleClick && (
+    (isSameTabDocLink && !clickDefaultPrevented) ||
+    formSubmitTriggered ||
+    (isFormSubmitControl && !clickDefaultPrevented)
+  );
 
   return JSON.stringify({
     ok: true,
     tag: el.tagName.toLowerCase(),
     text: (el.innerText || el.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 80),
-    href: el instanceof HTMLAnchorElement ? el.href : undefined,
+    href: anchorHref || undefined,
+    expectsNavigation,
   });
 } catch (err) {
-  return JSON.stringify({ ok: false, error: err instanceof Error ? err.message : String(err) });
+${CATCH_DRIVER_ERROR}
 }
 `
 }
@@ -354,7 +424,7 @@ export const buildTypeScript = (params: {
   y?: number
   text: string
   clear?: boolean
-  submit?: boolean
+  emitChange?: boolean
 }): string => {
   const args = JSON.stringify(params)
   return `
@@ -386,7 +456,9 @@ try {
       el.value = nextVal;
     }
     el.dispatchEvent(new InputEvent('input', { bubbles: true, cancelable: true, inputType: 'insertText', data: p.text }));
-    el.dispatchEvent(new Event('change', { bubbles: true }));
+    if (p.emitChange !== false) {
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+    }
   } else if (el.isContentEditable) {
     if (shouldClear) {
       const sel = window.getSelection();
@@ -404,28 +476,13 @@ try {
     throw new Error('Target element <' + el.tagName.toLowerCase() + '> is not editable.');
   }
 
-  if (p.submit) {
-    const enterInit = { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true };
-    const kd = el.dispatchEvent(new KeyboardEvent('keydown', enterInit));
-    el.dispatchEvent(new KeyboardEvent('keypress', enterInit));
-    el.dispatchEvent(new KeyboardEvent('keyup', enterInit));
-    if (kd && el.form) {
-      if (typeof el.form.requestSubmit === 'function') {
-        el.form.requestSubmit();
-      } else {
-        el.form.submit();
-      }
-    }
-  }
-
   return JSON.stringify({
     ok: true,
     tag: el.tagName.toLowerCase(),
     length: p.text.length,
-    submitted: Boolean(p.submit),
   });
 } catch (err) {
-  return JSON.stringify({ ok: false, error: err instanceof Error ? err.message : String(err) });
+${CATCH_DRIVER_ERROR}
 }
 `
 }
@@ -433,13 +490,24 @@ try {
 export const buildPressKeyScript = (params: {
   key: string
   modifiers?: ('meta' | 'ctrl' | 'alt' | 'shift')[]
+  fallbackRef?: string
 }): string => {
   const args = JSON.stringify(params)
   return `
 try {
+  ${SHARED_HELPERS}
   const p = ${args};
   const mods = new Set(p.modifiers || []);
-  const target = document.activeElement || document.body || document.documentElement;
+  const active = document.activeElement;
+  let target = (active && active !== document.body && active !== document.documentElement) ? active : null;
+  if (!target && typeof p.fallbackRef === 'string' && p.fallbackRef.trim()) {
+    const weak = __dsStore.refs.get(p.fallbackRef.trim().replace(/^@/, ''));
+    const candidate = weak ? weak.deref() : null;
+    if (candidate && candidate.isConnected) target = candidate;
+  }
+  if (!target) {
+    target = document.body || document.documentElement;
+  }
   const key = p.key;
   const keyCodeMap = { Enter: 13, Tab: 9, Escape: 27, Backspace: 8, ArrowUp: 38, ArrowDown: 40, ArrowLeft: 37, ArrowRight: 39, ' ': 32, PageDown: 34, PageUp: 33, Home: 36, End: 35 };
   const codeMap = { ' ': 'Space', Enter: 'Enter', Tab: 'Tab', Escape: 'Escape', Backspace: 'Backspace' };
@@ -456,29 +524,51 @@ try {
     bubbles: true,
     cancelable: true,
   };
-  const notPrevented = target.dispatchEvent(new KeyboardEvent('keydown', evInit));
-  target.dispatchEvent(new KeyboardEvent('keypress', evInit));
-  target.dispatchEvent(new KeyboardEvent('keyup', evInit));
 
-  if (notPrevented) {
-    if (key === 'Enter' && target instanceof HTMLInputElement && target.form) {
-      if (typeof target.form.requestSubmit === 'function') target.form.requestSubmit();
-    } else if (key === 'PageDown') {
-      window.scrollBy({ top: Math.round(window.innerHeight * 0.85), behavior: 'instant' });
-    } else if (key === 'PageUp') {
-      window.scrollBy({ top: -Math.round(window.innerHeight * 0.85), behavior: 'instant' });
-    } else if (key === 'ArrowDown' && (target === document.body || target === document.documentElement)) {
-      window.scrollBy({ top: 120, behavior: 'instant' });
-    } else if (key === 'ArrowUp' && (target === document.body || target === document.documentElement)) {
-      window.scrollBy({ top: -120, behavior: 'instant' });
-    } else if (key === ' ' && (target === document.body || target === document.documentElement)) {
-      window.scrollBy({ top: Math.round(window.innerHeight * 0.8), behavior: 'instant' });
+  let formSubmitTriggered = false;
+  let directFormSubmit = false;
+  let fallbackFormSubmit = false;
+  const onDocSubmit = (ev) => { if (ev && !ev.defaultPrevented) formSubmitTriggered = true; };
+  const hasDocListen = typeof document.addEventListener === 'function';
+  if (hasDocListen) {
+    document.addEventListener('submit', onDocSubmit, { once: true });
+  }
+  try {
+    const notPrevented = target.dispatchEvent(new KeyboardEvent('keydown', evInit));
+    target.dispatchEvent(new KeyboardEvent('keypress', evInit));
+    target.dispatchEvent(new KeyboardEvent('keyup', evInit));
+
+    if (notPrevented) {
+      if (key === 'Enter' && target instanceof HTMLInputElement && target.form) {
+        fallbackFormSubmit = true;
+        if (typeof target.form.requestSubmit === 'function') {
+          target.form.requestSubmit();
+        } else {
+          directFormSubmit = true;
+          target.form.submit();
+        }
+      } else if (key === 'PageDown') {
+        window.scrollBy({ top: Math.round(window.innerHeight * 0.85), behavior: 'instant' });
+      } else if (key === 'PageUp') {
+        window.scrollBy({ top: -Math.round(window.innerHeight * 0.85), behavior: 'instant' });
+      } else if (key === 'ArrowDown' && (target === document.body || target === document.documentElement)) {
+        window.scrollBy({ top: 120, behavior: 'instant' });
+      } else if (key === 'ArrowUp' && (target === document.body || target === document.documentElement)) {
+        window.scrollBy({ top: -120, behavior: 'instant' });
+      } else if (key === ' ' && (target === document.body || target === document.documentElement)) {
+        window.scrollBy({ top: Math.round(window.innerHeight * 0.8), behavior: 'instant' });
+      }
+    }
+  } finally {
+    if (hasDocListen) {
+      document.removeEventListener('submit', onDocSubmit);
     }
   }
 
-  return JSON.stringify({ ok: true, key });
+  const expectsNavigation = formSubmitTriggered || directFormSubmit || (!hasDocListen && fallbackFormSubmit);
+  return JSON.stringify({ ok: true, key, expectsNavigation });
 } catch (err) {
-  return JSON.stringify({ ok: false, error: err instanceof Error ? err.message : String(err) });
+${CATCH_DRIVER_ERROR}
 }
 `
 }
@@ -524,7 +614,7 @@ try {
     scrollHeight: Math.round(document.documentElement.scrollHeight),
   });
 } catch (err) {
-  return JSON.stringify({ ok: false, error: err instanceof Error ? err.message : String(err) });
+${CATCH_DRIVER_ERROR}
 }
 `
 }
@@ -559,7 +649,7 @@ try {
   el.dispatchEvent(new Event('change', { bubbles: true }));
   return JSON.stringify({ ok: true, value: el.value, matched });
 } catch (err) {
-  return JSON.stringify({ ok: false, error: err instanceof Error ? err.message : String(err) });
+${CATCH_DRIVER_ERROR}
 }
 `
 }

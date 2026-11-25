@@ -175,8 +175,26 @@ export const createBrowserState = (deps: BrowserStateDeps) => {
   const nativeCreated = new Set<string>()
   const pendingCreates = new Map<string, Promise<void>>()
   const loadWaiters = new Map<string, Set<() => void>>()
+  const navCompletedSeq = new Map<string, number>()
+  const navListeners = new Map<string, Set<() => void>>()
   let eventsBound = false
   let onBrowserOpenCallback: (() => void) | null = null
+
+  const notifyNavListeners = (tabId: string) => {
+    const listeners = navListeners.get(tabId)
+    if (!listeners) {
+      return
+    }
+    for (const listener of [...listeners]) {
+      listener()
+    }
+  }
+
+  const clearTabNavTracking = (tabId: string) => {
+    notifyNavListeners(tabId)
+    navListeners.delete(tabId)
+    navCompletedSeq.delete(tabId)
+  }
 
   const updateSessionBrowser = (
     sessionId: string,
@@ -356,8 +374,12 @@ export const createBrowserState = (deps: BrowserStateDeps) => {
         }
       })
       if (payload.isLoading === false) {
+        navCompletedSeq.set(payload.tabId, (navCompletedSeq.get(payload.tabId) ?? 0) + 1)
         resolveLoadWaiters(payload.tabId)
         void syncNativeVisibility()
+      }
+      if (payload.isLoading !== null || Boolean(payload.url)) {
+        notifyNavListeners(payload.tabId)
       }
     })
 
@@ -495,6 +517,7 @@ export const createBrowserState = (deps: BrowserStateDeps) => {
     }))
     for (const tabId of tabIds) {
       resolveLoadWaiters(tabId)
+      clearTabNavTracking(tabId)
       pendingCreates.delete(tabId)
       if (nativeCreated.delete(tabId) && desktop) {
         resetNativeSyncCache(tabId)
@@ -520,6 +543,7 @@ export const createBrowserState = (deps: BrowserStateDeps) => {
     })
     for (const tabId of allTabIds) {
       resolveLoadWaiters(tabId)
+      clearTabNavTracking(tabId)
       pendingCreates.delete(tabId)
       if (nativeCreated.delete(tabId) && desktop) {
         await native.closeTab(tabId).catch(() => {})
@@ -691,6 +715,7 @@ export const createBrowserState = (deps: BrowserStateDeps) => {
     })
 
     resolveLoadWaiters(tabId)
+    clearTabNavTracking(tabId)
     pendingCreates.delete(tabId)
     if (nativeCreated.delete(tabId) && desktop) {
       resetNativeSyncCache(tabId)
@@ -1085,6 +1110,9 @@ export const createBrowserState = (deps: BrowserStateDeps) => {
               : t
           ),
         }))
+        if (info.url) {
+          notifyNavListeners(tabId)
+        }
       }
     }
   }
@@ -1100,6 +1128,137 @@ export const createBrowserState = (deps: BrowserStateDeps) => {
     if (nativeCreated.has(tabId)) {
       await native.openDevtools(tabId)
     }
+  }
+
+  const beginNavigationWatch = (tabId: string) => {
+    const owner = findTabOwner(get(), tabId)
+    return {
+      tabId,
+      startUrl: owner?.tab.url ?? '',
+      startCompletedSeq: navCompletedSeq.get(tabId) ?? 0,
+    }
+  }
+
+  const waitForNavigation = (
+    watch: {
+      readonly tabId: string
+      readonly startUrl: string
+      readonly startCompletedSeq: number
+    },
+    options: {
+      readonly expectsNavigation: boolean
+      readonly settleMs: number
+      readonly startWindowMs?: number
+      readonly loadTimeoutMs?: number
+      readonly signal: AbortSignal
+    }
+  ): Promise<{ readonly navigated: boolean }> => {
+    const {
+      expectsNavigation,
+      settleMs,
+      startWindowMs = 2_000,
+      loadTimeoutMs = 10_000,
+      signal,
+    } = options
+    if (signal.aborted) {
+      return Promise.reject(signal.reason ?? new DOMException('Aborted', 'AbortError'))
+    }
+    type NavWaitPhase =
+      | { readonly kind: 'watching' }
+      | { readonly kind: 'loading' }
+      | { readonly kind: 'settled' }
+
+    return new Promise((resolve, reject) => {
+      let phase: NavWaitPhase = { kind: 'watching' }
+      let startTimer: ReturnType<typeof setTimeout> | null = null
+      let loadTimer: ReturnType<typeof setTimeout> | null = null
+
+      const cleanup = () => {
+        if (startTimer !== null) {
+          clearTimeout(startTimer)
+          startTimer = null
+        }
+        if (loadTimer !== null) {
+          clearTimeout(loadTimer)
+          loadTimer = null
+        }
+        signal.removeEventListener('abort', onAbort)
+        navListeners.get(watch.tabId)?.delete(checkState)
+      }
+
+      const finish = (navigated: boolean) => {
+        if (phase.kind === 'settled') {
+          return
+        }
+        phase = { kind: 'settled' }
+        cleanup()
+        resolve({ navigated })
+      }
+
+      const enterLoading = () => {
+        if (phase.kind !== 'watching') {
+          return
+        }
+        if (startTimer !== null) {
+          clearTimeout(startTimer)
+          startTimer = null
+        }
+        phase = { kind: 'loading' }
+        loadTimer = setTimeout(() => {
+          finish(true)
+        }, loadTimeoutMs)
+      }
+
+      const checkState = () => {
+        if (phase.kind === 'settled') {
+          return
+        }
+        const tab = findTabOwner(get(), watch.tabId)?.tab
+        if (!tab) {
+          finish(false)
+          return
+        }
+        if (phase.kind === 'watching') {
+          if (tab.isLoading) {
+            enterLoading()
+            return
+          }
+          const completed = (navCompletedSeq.get(watch.tabId) ?? 0) > watch.startCompletedSeq
+          if (completed || (watch.startUrl !== '' && tab.url !== watch.startUrl)) {
+            finish(true)
+          }
+        } else if (!tab.isLoading) {
+          finish(true)
+        }
+      }
+
+      const onAbort = () => {
+        if (phase.kind === 'settled') {
+          return
+        }
+        phase = { kind: 'settled' }
+        cleanup()
+        reject(signal.reason ?? new DOMException('Aborted', 'AbortError'))
+      }
+
+      let listeners = navListeners.get(watch.tabId)
+      if (!listeners) {
+        listeners = new Set()
+        navListeners.set(watch.tabId, listeners)
+      }
+      listeners.add(checkState)
+      signal.addEventListener('abort', onAbort, { once: true })
+
+      checkState()
+      if (phase.kind === 'watching') {
+        startTimer = setTimeout(
+          () => {
+            finish(false)
+          },
+          expectsNavigation ? startWindowMs : settleMs
+        )
+      }
+    })
   }
 
   const waitForTabLoad = (
@@ -1196,6 +1355,8 @@ export const createBrowserState = (deps: BrowserStateDeps) => {
     runBrowserHistory,
     clearBrowserTabData,
     openBrowserTabDevtools,
+    beginNavigationWatch,
+    waitForNavigation,
     waitForTabLoad,
     setBrowserControlling,
     getActiveBrowserTab,

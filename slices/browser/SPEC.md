@@ -57,15 +57,39 @@ panel, from `spine/design`), `KeyValueStore`.
 9. **URLs.** Only `http:`/`https:` are web pages. Address-bar input: explicit `http(s)://` kept;
    `localhost`/`127.0.0.1`/`[::1]` (with port/path) get `http://`; `name.tld` gets `https://`;
    anything else becomes a Google search; blank is `about:blank`.
-10. **Tool runs** execute one at a time in call order. A call aborted before it starts resolves
-    `aborted` without touching the browser; a failure resolves `error` with the message; while a
-    call runs the chat is marked as controlled by the model, and the mark is cleared afterwards.
-11. **Untrusted content.** Page text and `browser_eval` results reach the model wrapped in
-    `<untrusted_webpage_content …>`. Snapshots never include password field values.
+10. **Tool runs & action settling.** Calls execute one at a time in call order. A call aborted
+    before it starts resolves `aborted` without touching the browser; a failure resolves `error`
+    with the message; while a call runs the chat is marked as controlled by the model, and the mark
+    is cleared afterwards. Actions that initiate a document navigation (`browser_navigate`,
+    navigating `browser_click`, `browser_type` with `submit: true`, and form-submitting
+    `browser_press_key`) wait for the navigation to start and finish loading before snapshotting.
+    `browser_type` with `submit: true` yields after input before dispatching `Enter` to the live
+    active element (without a premature `change` event). Detached element refs fail with
+    `status: 'error'` (never silently retargeting another node) and include refreshed interactive
+    refs (and matching replacement hints) wrapped in `<untrusted_webpage_content …>`.
+11. **Untrusted content & snapshot verbosity.** Page text, refreshed stale-ref listings, and
+    `browser_eval` results reach the model wrapped in
+    `<untrusted_webpage_content …>…</untrusted_webpage_content>`; truncation always occurs inside
+    the wrapper so the closing tag is never dropped. Snapshots never include password field values.
+    Layout/chrome actions (`browser_scroll`, `browser_set_viewport`, `browser_tabs` switch) omit
+    page text unless requested; same-URL content-mutating actions (`browser_click`, `browser_type`,
+    `browser_press_key`, `browser_select`) deduplicate unchanged page text and report only changed
+    lines (or full text when the page mostly changed); `browser_observe` and navigations return
+    full page text unless `text: false`.
 12. **Viewports** are per tab; the tab's zoom is the fit of its viewport into the stage.
 13. **Localhost access.** Stored under `chat-demo:browser-allow-localhost` (default off) and sent to
     the host when events are bound and whenever it changes.
 14. **New-chat screen links.** `openUrl` with no chat opens the URL externally.
+
+## Tunable parameters
+
+- Navigation settle delays: post-load SPA settle (~180 ms), post-type submit yield (~150 ms),
+  non-navigating action settle (~180–250 ms), expected-navigation start window (~2,000 ms), and
+  load timeout (~10,000–15,000 ms).
+- Snapshot budgets: interactive element cap (140), extracted page text cap (12,000 chars), and
+  outer tool output cap (24,000 chars, truncated inside `<untrusted_webpage_content>`).
+- Delta reporting threshold: same-URL diff emits changed lines when at most half the page changed
+  and the delta fits within a compact cap; larger rewrites emit full page text.
 
 ## Facts
 
