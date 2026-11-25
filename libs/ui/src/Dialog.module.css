@@ -16,10 +16,10 @@
 
     &::backdrop {
       background-color: transparent;
-      backdrop-filter: blur(2px);
+      backdrop-filter: blur(0px);
       overflow: hidden;
       overscroll-behavior: contain;
-      transition-property: background-color, display, overlay;
+      transition-property: background-color, backdrop-filter, display, overlay;
       transition-duration: var(--ui-duration-normal);
       transition-timing-function: var(--ui-ease-standard);
       transition-behavior: allow-discrete;
@@ -39,9 +39,11 @@
 
     &::backdrop {
       background-color: var(--ui-surface-scrim);
+      backdrop-filter: blur(2px);
 
       @starting-style {
         background-color: transparent;
+        backdrop-filter: blur(0px);
       }
     }
   }

@@ -44,6 +44,7 @@
   }
 
   .body {
+    box-sizing: border-box;
     max-width: 1120px;
     margin: 0 auto;
     padding: var(--ui-space-6);
