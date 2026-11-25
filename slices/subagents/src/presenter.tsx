@@ -52,34 +52,63 @@ export const serializeSubagentForArchive = (
   return []
 }
 
-const SubagentCard = ({ agent }: { agent: AgentRun }) => {
+const SubagentRow = ({ agent }: { agent: AgentRun }) => {
   const t = subagentsMessages.useTranslate()
   const [open, setOpen] = useState(false)
-  const statusKey =
-    agent.state.status === 'running'
-      ? 'statusRunning'
-      : agent.state.status === 'finished'
-        ? 'statusFinished'
-        : agent.state.status === 'exhausted'
-          ? 'statusExhausted'
-          : agent.state.status === 'failed'
-            ? 'statusFailed'
-            : 'statusStopped'
+  const isRunning = agent.state.status === 'running'
+  const isFailed = agent.state.status === 'failed'
+  const statusKey = isRunning
+    ? 'statusRunning'
+    : agent.state.status === 'finished'
+      ? 'statusFinished'
+      : agent.state.status === 'exhausted'
+        ? 'statusExhausted'
+        : isFailed
+          ? 'statusFailed'
+          : 'statusStopped'
   const toolCalls = agent.blocks.filter((b) => b.type === 'tool_use')
+  const expandable = toolCalls.length > 0 || isFailed
+
+  const titleLine = (
+    <span className={styles.rowTop}>
+      <span className={styles.chevron} aria-hidden="true">
+        {expandable ? open ? <IconChevronDownOutline14 /> : <IconChevronRightOutline14 /> : null}
+      </span>
+      <span className={clsx(styles.label, !isRunning && !isFailed && styles.labelSettled)}>
+        {agent.label || agent.profile}
+      </span>
+      <span
+        className={clsx(
+          styles.status,
+          isRunning && styles.statusRunning,
+          isFailed && styles.statusError
+        )}
+      >
+        {t(statusKey)}
+      </span>
+    </span>
+  )
+
   return (
-    <div className={styles.card}>
-      <button type="button" className={styles.cardHeader} onClick={() => setOpen((v) => !v)}>
-        {open ? <IconChevronDownOutline14 /> : <IconChevronRightOutline14 />}
-        <span className={styles.label}>{agent.label || agent.profile}</span>
-        {agent.summary ? <span className={styles.summary}>{agent.summary}</span> : null}
-        <span
-          className={clsx(styles.status, agent.state.status === 'failed' && styles.statusError)}
+    <div className={styles.row}>
+      {expandable ? (
+        <button
+          type="button"
+          className={styles.rowTrigger}
+          aria-expanded={open}
+          onClick={() => setOpen((v) => !v)}
         >
-          {t(statusKey)}
-        </span>
-      </button>
-      {open ? (
-        <div className={styles.cardBody}>
+          {titleLine}
+          {agent.summary ? <span className={styles.summary}>{agent.summary}</span> : null}
+        </button>
+      ) : (
+        <div className={styles.rowStatic}>
+          {titleLine}
+          {agent.summary ? <span className={styles.summary}>{agent.summary}</span> : null}
+        </div>
+      )}
+      {expandable && open ? (
+        <div className={styles.steps}>
           {toolCalls.map((call) => {
             const summary =
               call.input && typeof (call.input as { summary?: unknown }).summary === 'string'
@@ -115,37 +144,42 @@ const SubagentsActivityView = ({ entries, capabilityState }: ActivityStepRenderP
 
   return (
     <div className={styles.root}>
-      <div className={styles.header}>{t('phaseTitle')}</div>
+      <div className={styles.header}>
+        <span>{t('phaseTitle')}</span>
+        {agents.length > 0 ? <span className={styles.meta}>· {agents.length}</span> : null}
+      </div>
       {agents.length > 0 ? (
         <div className={styles.list}>
           {agents.map((agent) => (
-            <SubagentCard key={agent.runId} agent={agent} />
+            <SubagentRow key={agent.runId} agent={agent} />
           ))}
         </div>
       ) : null}
       {notes.length > 0 ? (
         <div className={styles.board}>
           <div className={styles.boardHeading}>{t('boardNotes')}</div>
-          {notes.map((post) => (
-            <div key={post.id} className={styles.note}>
-              <span className={styles.noteKind}>
-                {t(
-                  post.kind === 'finding'
-                    ? 'boardFinding'
+          <div className={styles.noteList}>
+            {notes.map((post) => (
+              <div key={post.id} className={styles.note}>
+                <span className={styles.noteKind}>
+                  {t(
+                    post.kind === 'finding'
+                      ? 'boardFinding'
+                      : post.kind === 'question'
+                        ? 'boardQuestion'
+                        : 'boardDirection'
+                  )}
+                </span>
+                <span className={styles.noteBody}>
+                  {post.kind === 'finding'
+                    ? post.text
                     : post.kind === 'question'
-                      ? 'boardQuestion'
-                      : 'boardDirection'
-                )}
-              </span>
-              <span>
-                {post.kind === 'finding'
-                  ? post.text
-                  : post.kind === 'question'
-                    ? `${post.question} (${t('boardAssumption', { text: post.assumption })})`
-                    : post.text}
-              </span>
-            </div>
-          ))}
+                      ? `${post.question} (${t('boardAssumption', { text: post.assumption })})`
+                      : post.text}
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
       ) : null}
     </div>

@@ -1,8 +1,7 @@
-import type { DeliveredFileRef } from '@deepseek-chat/lib-tools'
+import type { DeliveredFileRef, LiveTrack } from '@deepseek-chat/lib-tools'
 import {
   IconCheckedOutline14,
   IconChevronRightOutline14,
-  IconCloseFill14,
   IconWarningOutline16,
 } from '@deepseek-chat/lib-ui'
 import clsx from 'clsx'
@@ -83,6 +82,24 @@ export const ReplyArea = memo(function ReplyArea({
     return null
   }
 
+  const inspectActivity = () => requestTurnInspection(sessionId, message.id, 'activity')
+
+  const trackStatusLabel = (track: LiveTrack): string | null => {
+    if (track.status === 'running') {
+      return track.detail ? null : t('activityTrackRunning')
+    }
+    if (track.status === 'finished') {
+      return t('activityTrackFinished')
+    }
+    if (track.status === 'exhausted') {
+      return t('activityTrackExhausted')
+    }
+    if (track.status === 'failed') {
+      return t('activityTrackFailed')
+    }
+    return t('activityTrackStopped')
+  }
+
   return (
     <div className={styles.area}>
       {strip.mode === 'waiting' ? (
@@ -90,7 +107,7 @@ export const ReplyArea = memo(function ReplyArea({
           <span className={styles.iconSlot}>
             <WhaleLoader width={16} />
           </span>
-          <span className={clsx(styles.headline, styles.shimmer)}>{strip.label}</span>
+          <span className={styles.headline}>{strip.label}</span>
         </div>
       ) : strip.mode === 'live' ? (
         <div className={styles.liveWrap}>
@@ -99,18 +116,12 @@ export const ReplyArea = memo(function ReplyArea({
             className={clsx(styles.stripButton, isInspecting && styles.stripButtonActive)}
             aria-pressed={isInspecting}
             aria-label={t('activityInspectLabel')}
-            onClick={() => requestTurnInspection(sessionId, message.id, 'activity')}
+            onClick={inspectActivity}
           >
-            <span className={styles.iconSlot}>
-              {strip.waitingForUser ? (
-                <span className={styles.waitingDot} aria-hidden="true">
-                  <span className={styles.dotInner} />
-                </span>
-              ) : (
-                <WhaleLoader width={16} />
-              )}
+            <span className={clsx(styles.iconSlot, strip.waitingForUser && styles.waitingIcon)}>
+              <WhaleLoader width={strip.waitingForUser ? 15 : 16} still={strip.waitingForUser} />
             </span>
-            <span className={clsx(styles.headline, styles.shimmer)}>{strip.headline}</span>
+            <span className={styles.headline}>{strip.headline}</span>
             {strip.tally ? <span className={styles.tally}>· {strip.tally}</span> : null}
             <span className={styles.chevron} aria-hidden="true">
               <IconChevronRightOutline14 />
@@ -118,33 +129,58 @@ export const ReplyArea = memo(function ReplyArea({
           </button>
 
           {strip.liveTracks.length > 0 ? (
-            <div className={styles.liveAgents} role="status" aria-live="polite">
-              {strip.liveTracks.map((track) => (
-                <div key={track.id} className={styles.liveAgentRow}>
-                  <span className={styles.liveAgentStatus} aria-hidden="true">
-                    {track.status === 'running' ? (
-                      <span className={styles.liveAgentDot} />
-                    ) : track.status === 'failed' || track.status === 'stopped' ? (
-                      <IconCloseFill14 />
-                    ) : (
-                      <IconCheckedOutline14 />
+            <div className={styles.liveTracks} role="status" aria-live="polite">
+              {strip.liveTracks.map((track) => {
+                const isRunning = track.status === 'running'
+                const isFailed = track.status === 'failed'
+                const isSettled = !isRunning && !isFailed
+                const showDetail = (isRunning || isFailed) && Boolean(track.detail)
+                const statusText = trackStatusLabel(track)
+                return (
+                  <button
+                    key={track.id}
+                    type="button"
+                    className={clsx(
+                      styles.liveTrackRow,
+                      isSettled && styles.liveTrackSettled,
+                      isFailed && styles.liveTrackFailed
                     )}
-                  </span>
-                  <span className={styles.liveAgentLabel}>{track.label}</span>
-                  {track.detail ? (
-                    <span className={styles.liveAgentDetail}>— {track.detail}</span>
-                  ) : null}
-                </div>
-              ))}
+                    onClick={inspectActivity}
+                  >
+                    <span className={styles.liveTrackMain}>
+                      <span className={styles.liveTrackLabel}>{track.label}</span>
+                      {showDetail ? (
+                        <span className={styles.liveTrackDetail}>{track.detail}</span>
+                      ) : null}
+                    </span>
+                    {statusText ? (
+                      <span
+                        className={clsx(
+                          styles.liveTrackStatus,
+                          isFailed && styles.liveTrackStatusError
+                        )}
+                      >
+                        {statusText}
+                      </span>
+                    ) : null}
+                  </button>
+                )
+              })}
               {strip.overflowTracks > 0 ? (
-                <div className={styles.liveAgentOverflow}>
+                <button
+                  type="button"
+                  className={styles.liveTrackOverflow}
+                  onClick={inspectActivity}
+                >
                   {t('activityMoreTracks', { count: strip.overflowTracks })}
-                </div>
+                </button>
               ) : null}
             </div>
           ) : strip.detail ? (
-            <div className={styles.liveDetail} role="status" aria-live="polite">
-              {strip.detail}
+            <div className={styles.liveDetailRail} role="status" aria-live="polite">
+              <button type="button" className={styles.liveDetail} onClick={inspectActivity}>
+                {strip.detail}
+              </button>
             </div>
           ) : null}
         </div>
@@ -157,7 +193,7 @@ export const ReplyArea = memo(function ReplyArea({
             isInspecting && styles.stripButtonActive
           )}
           aria-pressed={isInspecting}
-          onClick={() => requestTurnInspection(sessionId, message.id, 'activity')}
+          onClick={inspectActivity}
         >
           <span
             className={clsx(

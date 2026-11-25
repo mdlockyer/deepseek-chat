@@ -78,6 +78,11 @@
     }
   }
 
+  .waitingIcon {
+    --whale-color: var(--ui-text-secondary);
+    color: var(--ui-text-secondary);
+  }
+
   .stoppedIcon {
     --whale-color: var(--ui-text-muted);
     color: var(--ui-text-muted);
@@ -118,48 +123,41 @@
     color: var(--ui-text-muted);
   }
 
-  .shimmer {
-    color: transparent;
-    background: linear-gradient(
-        90deg,
-        var(--ui-text-secondary) 0%,
-        var(--ui-text-secondary) 40%,
-        var(--ui-text-disabled) 50%,
-        var(--ui-text-secondary) 60%,
-        var(--ui-text-secondary) 100%
-      )
-      0 0 / 300% 100%;
-    background-clip: text;
-    animation: shimmer 2s ease-out infinite;
-  }
-
-  @keyframes shimmer {
-    from {
-      background-position: 100% 0;
-    }
-    to {
-      background-position: 0 0;
-    }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .shimmer {
-      color: var(--ui-text-secondary);
-      background: none;
-      background-clip: border-box;
-      animation: none;
-    }
+  .liveDetailRail {
+    margin-left: 7px;
+    padding-left: var(--ui-space-1-5);
+    border-left: 1px solid var(--ui-border-default);
+    animation: detail-in var(--ui-duration-normal) ease-out both;
   }
 
   .liveDetail {
-    padding-left: 22px;
+    display: block;
     max-width: 100%;
+    min-height: 24px;
+    padding: var(--ui-space-0-5) var(--ui-space-2);
+    border: none;
+    border-radius: var(--ui-radius-xs);
+    background: transparent;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     font: var(--ui-type-caption);
     color: var(--ui-text-muted);
-    animation: detail-in var(--ui-duration-normal) ease-out both;
+    text-align: left;
+    cursor: pointer;
+    transition:
+      background-color var(--ui-duration-fast) var(--ui-ease-standard),
+      color var(--ui-duration-fast) var(--ui-ease-standard);
+
+    &:hover {
+      background: var(--ui-interactive-hover);
+      color: var(--ui-text-secondary);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--ui-focus-ring);
+      outline-offset: 1px;
+    }
   }
 
   @keyframes detail-in {
@@ -168,49 +166,73 @@
     }
   }
 
-  .liveAgents {
+  .liveTracks {
     display: flex;
     flex-direction: column;
-    gap: var(--ui-space-1);
-    padding-left: 22px;
+    gap: var(--ui-space-0-5);
+    max-width: 520px;
+    margin-left: 7px;
+    padding-left: var(--ui-space-1-5);
+    border-left: 1px solid var(--ui-border-default);
   }
 
-  .liveAgentRow {
+  .liveTrackRow {
     display: flex;
-    align-items: center;
-    gap: var(--ui-space-1-5);
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--ui-space-3);
+    width: 100%;
     min-width: 0;
+    min-height: 24px;
+    padding: var(--ui-space-0-5) var(--ui-space-2);
+    border: none;
+    border-radius: var(--ui-radius-xs);
+    background: transparent;
     font: var(--ui-type-caption);
+    text-align: left;
+    cursor: pointer;
+    transition:
+      background-color var(--ui-duration-fast) var(--ui-ease-standard),
+      color var(--ui-duration-fast) var(--ui-ease-standard);
+
+    &:hover {
+      background: var(--ui-interactive-hover);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--ui-focus-ring);
+      outline-offset: 1px;
+    }
   }
 
-  .liveAgentStatus {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 14px;
-    height: 14px;
+  .liveTrackMain {
+    display: flex;
+    align-items: baseline;
+    gap: var(--ui-space-2);
+    min-width: 0;
+    flex: 1;
+  }
+
+  .liveTrackLabel {
     flex-shrink: 0;
-    color: var(--ui-text-muted);
-  }
-
-  .liveAgentDot {
-    width: 6px;
-    height: 6px;
-    border-radius: var(--ui-radius-pill);
-    background: var(--ui-accent-fill);
-  }
-
-  .liveAgentLabel {
-    flex-shrink: 0;
-    max-width: 48%;
+    max-width: 52%;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-weight: 500;
+    font: var(--ui-type-caption-strong);
+    color: var(--ui-text-primary);
+  }
+
+  .liveTrackSettled .liveTrackLabel {
+    font: var(--ui-type-caption);
+    color: var(--ui-text-muted);
+  }
+
+  .liveTrackFailed .liveTrackLabel {
     color: var(--ui-text-secondary);
   }
 
-  .liveAgentDetail {
+  .liveTrackDetail {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -218,37 +240,49 @@
     color: var(--ui-text-muted);
   }
 
-  .liveAgentOverflow {
-    padding-left: var(--ui-space-5);
-    font: var(--ui-type-caption);
+  .liveTrackStatus {
+    flex-shrink: 0;
+    font: var(--ui-type-micro);
+    font-variant-numeric: tabular-nums;
     color: var(--ui-text-muted);
   }
 
-  .waitingDot {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 14px;
-    height: 14px;
+  .liveTrackStatusError {
+    color: var(--ui-text-danger);
   }
 
-  .dotInner {
-    width: 6px;
-    height: 6px;
-    border-radius: var(--ui-radius-pill);
-    background: var(--ui-accent-fill);
-    animation: pulse 1.5s linear infinite;
-  }
+  .liveTrackOverflow {
+    width: fit-content;
+    min-height: 24px;
+    padding: var(--ui-space-0-5) var(--ui-space-2);
+    border: none;
+    border-radius: var(--ui-radius-xs);
+    background: transparent;
+    font: var(--ui-type-micro);
+    font-variant-numeric: tabular-nums;
+    color: var(--ui-text-muted);
+    text-align: left;
+    cursor: pointer;
+    transition:
+      background-color var(--ui-duration-fast) var(--ui-ease-standard),
+      color var(--ui-duration-fast) var(--ui-ease-standard);
 
-  @keyframes pulse {
-    0%,
-    100% {
-      transform: scale(1);
-      opacity: 1;
+    &:hover {
+      background: var(--ui-interactive-hover);
+      color: var(--ui-text-secondary);
     }
-    50% {
-      transform: scale(1.25);
-      opacity: 0.55;
+
+    &:focus-visible {
+      outline: 2px solid var(--ui-focus-ring);
+      outline-offset: 1px;
+    }
+  }
+
+  @media (pointer: coarse) {
+    .liveDetail,
+    .liveTrackRow,
+    .liveTrackOverflow {
+      min-height: var(--ui-control-xl);
     }
   }
 

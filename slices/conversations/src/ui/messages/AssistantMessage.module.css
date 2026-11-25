@@ -153,30 +153,9 @@
     font: var(--ui-type-label);
   }
 
-  /* 微光把文字设为透明，只加在文字上，鲸鱼保持可见 */
   .workingText {
-    color: transparent;
-    background: linear-gradient(
-        90deg,
-        var(--ui-text-secondary) 0%,
-        var(--ui-text-secondary) 40%,
-        var(--ui-text-disabled) 50%,
-        var(--ui-text-secondary) 60%,
-        var(--ui-text-secondary) 100%
-      )
-      0 0 / 300% 100%;
-    background-clip: text;
-    animation: working-shimmer 2s ease-out infinite;
+    color: var(--ui-text-secondary);
     width: fit-content;
-  }
-
-  @keyframes working-shimmer {
-    from {
-      background-position: 100% 0;
-    }
-    to {
-      background-position: 0 0;
-    }
   }
 
   /* 本条回复产出的文件与图表，紧随正文，不收进活动面板 */

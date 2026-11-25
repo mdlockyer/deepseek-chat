@@ -7,80 +7,134 @@
 
   .header {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
+    align-items: baseline;
+    gap: var(--ui-space-1-5);
     font: var(--ui-type-label-strong);
     color: var(--ui-text-primary);
+  }
+
+  .meta {
+    font: var(--ui-type-micro);
+    font-variant-numeric: tabular-nums;
+    color: var(--ui-text-muted);
   }
 
   .list {
     display: flex;
     flex-direction: column;
-    gap: var(--ui-space-2);
   }
 
-  .card {
-    border: 1px solid var(--ui-border-subtle);
-    border-radius: var(--ui-radius-md);
-    background: var(--ui-surface-sunken);
-    overflow: hidden;
-  }
-
-  .cardHeader {
+  .row {
     display: flex;
-    align-items: center;
-    gap: var(--ui-space-2);
-    width: 100%;
-    padding: var(--ui-space-2) var(--ui-space-2-5);
+    flex-direction: column;
+  }
+
+  .row + .row {
+    border-top: 1px solid var(--ui-border-subtle);
+  }
+
+  .rowTrigger,
+  .rowStatic {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ui-space-0-5);
+    width: calc(100% + var(--ui-space-3));
+    padding: var(--ui-space-2) var(--ui-space-1-5);
+    margin: 0 calc(var(--ui-space-1-5) * -1);
+    box-sizing: border-box;
     border: none;
+    border-radius: var(--ui-radius-xs);
     background: transparent;
     color: var(--ui-text-primary);
     font: inherit;
     text-align: left;
+  }
+
+  .rowTrigger {
     cursor: pointer;
+    transition: background-color var(--ui-duration-fast) var(--ui-ease-standard);
 
     &:hover {
       background: var(--ui-interactive-hover);
     }
+
+    &:focus-visible {
+      outline: 2px solid var(--ui-focus-ring);
+      outline-offset: 1px;
+    }
+  }
+
+  @media (pointer: coarse) {
+    .rowTrigger {
+      min-height: var(--ui-control-xl);
+    }
+  }
+
+  .rowTop {
+    display: flex;
+    align-items: center;
+    gap: var(--ui-space-1-5);
+    min-width: 0;
+  }
+
+  .chevron {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+    color: var(--ui-text-muted);
   }
 
   .label {
-    font: var(--ui-type-caption-strong);
-    color: var(--ui-text-primary);
-  }
-
-  .summary {
     flex: 1;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font: var(--ui-type-caption);
+    font: var(--ui-type-caption-strong);
+    color: var(--ui-text-primary);
+  }
+
+  .labelSettled {
     color: var(--ui-text-secondary);
   }
 
-  .status {
-    font: var(--ui-type-micro);
+  .summary {
+    padding-left: var(--ui-space-5);
+    font: var(--ui-type-caption);
     color: var(--ui-text-muted);
+    word-break: break-word;
+  }
+
+  .status {
     flex-shrink: 0;
+    font: var(--ui-type-micro);
+    font-variant-numeric: tabular-nums;
+    color: var(--ui-text-muted);
+  }
+
+  .statusRunning {
+    color: var(--ui-text-primary);
   }
 
   .statusError {
     color: var(--ui-text-danger);
   }
 
-  .cardBody {
+  .steps {
     display: flex;
     flex-direction: column;
     gap: var(--ui-space-1-5);
-    padding: 0 var(--ui-space-2-5) var(--ui-space-2-5);
-    border-top: 1px solid var(--ui-border-subtle);
+    margin: var(--ui-space-0-5) 0 var(--ui-space-2-5) 6px;
+    padding-left: var(--ui-space-3);
+    border-left: 1px solid var(--ui-border-default);
     font: var(--ui-type-caption);
     color: var(--ui-text-secondary);
   }
 
   .stepRow {
-    padding-top: var(--ui-space-1);
     word-break: break-word;
   }
 
@@ -88,27 +142,38 @@
     display: flex;
     flex-direction: column;
     gap: var(--ui-space-1-5);
-    padding-top: var(--ui-space-1);
+    padding-top: var(--ui-space-2);
+    border-top: 1px solid var(--ui-border-subtle);
   }
 
   .boardHeading {
-    font: var(--ui-type-caption-strong);
+    font: var(--ui-type-micro);
     color: var(--ui-text-muted);
+  }
+
+  .noteList {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ui-space-2);
+    margin-left: 6px;
+    padding-left: var(--ui-space-3);
+    border-left: 1px solid var(--ui-border-subtle);
   }
 
   .note {
     display: flex;
     flex-direction: column;
     gap: var(--ui-space-0-5);
-    padding: var(--ui-space-1-5) var(--ui-space-2);
-    border-radius: var(--ui-radius-sm);
-    background: var(--ui-surface-sunken);
     font: var(--ui-type-caption);
-    color: var(--ui-text-secondary);
   }
 
   .noteKind {
-    font-weight: 500;
-    color: var(--ui-text-primary);
+    font: var(--ui-type-micro);
+    color: var(--ui-text-secondary);
+  }
+
+  .noteBody {
+    color: var(--ui-text-secondary);
+    word-break: break-word;
   }
 }

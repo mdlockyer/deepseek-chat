@@ -192,7 +192,7 @@ export type ToolStepSummary = {
   readonly tally?: ToolStepTally
   /** Optional compact parallel live tracks (e.g. concurrent child agents). */
   readonly liveTracks?: readonly LiveTrack[]
-  /** True when the step is paused waiting for user input (renders pulsing dot instead of loader). */
+  /** True when the step is paused waiting for user input (renders paused mark instead of active loader). */
   readonly waitingForUser?: boolean
   /** True for plumbing steps that should be folded out of the Activity timeline. */
   readonly hiddenInTimeline?: boolean
