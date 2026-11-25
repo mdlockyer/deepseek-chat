@@ -336,18 +336,12 @@ const ActivityStepRow = ({
       >
         {icon}
       </span>
-      <span className={styles.rowMain}>
-        <span className={clsx(styles.rowLabel, item.status === 'running' && styles.rowLabelActive)}>
-          {item.label}
-        </span>
-        {item.status === 'error' ? (
-          <span className={styles.rowErrorLine}>
-            {item.errorPreview
-              ? t('stepFailedWithReason', { reason: item.errorPreview })
-              : t('stepStatusFailed')}
-          </span>
-        ) : null}
+      <span className={clsx(styles.rowLabel, item.status === 'running' && styles.rowLabelActive)}>
+        {item.label}
       </span>
+      {item.status === 'error' ? (
+        <span className={styles.srOnly}> ({t('stepStatusFailed')})</span>
+      ) : null}
       {visualTitle && item.status !== 'running' ? (
         <span className={styles.srOnly}> ({visualTitle})</span>
       ) : null}
@@ -780,12 +774,7 @@ export const createActivityPanel = (state: ActivityPanelState, deps: ActivityIns
 
       return (
         <div className={styles.bodyStack}>
-          <EvidenceShelf
-            failedSteps={timeline.failedSteps}
-            visuals={timeline.visuals}
-            onInspectStep={inspectStep}
-            onOpenVisual={openVisualAt}
-          />
+          <EvidenceShelf visuals={timeline.visuals} onOpenVisual={openVisualAt} />
 
           <HoverGlide className={styles.stream}>
             {hasReasoning ? (

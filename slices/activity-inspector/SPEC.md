@@ -9,12 +9,13 @@ either `follow_latest` mode (tracking the latest or currently streaming turn) or
 `Latest` return button when pinned behind a newer turn).
 
 Rather than duplicating the left chat pane's step list under stacked filter bars, the drawer keeps
-**one single 52px header** (with underline `Activity` | `Sources` tabs when sources exist), pins an
-**Evidence Shelf** at the top of the scrollable body (jumpable error summary callout + clickable
-horizontal thumbnail filmstrip opening a full-size native `Dialog` lightbox), groups multi-round
-**Reasoning** inside a single top disclosure with per-round causal step links, folds inter-tool
-model narration prose inside each step's expanded detail, and renders one unified scannable
-step-row grammar across all capabilities.
+**one single 52px header** (with underline `Activity` | `Sources` tabs when sources exist), pins a
+**Visuals strip** at the top of the scrollable body whenever screenshots or figures were captured
+(opening a full-size native `Dialog` lightbox), groups multi-round **Reasoning** inside a single top
+disclosure with per-round causal step links, folds inter-tool model narration prose inside each
+step's expanded detail, and renders one unified scannable step-row grammar across all capabilities
+(marking failed tool calls quietly via a danger-tinted step icon so users can expand the row for
+details without loud top-level error banners).
 
 ## Public entrypoint
 
@@ -62,9 +63,10 @@ Pure exports: `buildActivityTimeline`, `extractTurnSources`, `SiteLogo`, `Source
    collapsed timeline). Multi-round `thinking` blocks live inside a single top Reasoning disclosure
    (expanded on thinking-only turns, collapsed on tool turns) with causal links to the step each
    round led into.
-5. **Evidence Shelf & Visual Lightbox (zero mode switching).** When a turn has failed steps, a
-   compact error callout at the top of the body previews the failure and jumps directly to and
-   expands the failed step (which stays genuinely collapsible). When a turn captures visual
+5. **Visuals strip, Lightbox, & quiet failed steps (zero mode switching).** Mid-turn tool errors are
+   routine in agentic turns and stay quiet in the collapsed timeline: a failed step tints its tool
+   icon (`--ui-text-danger`) with screen-reader `(Failed)` status and reveals the full error detail
+   when expanded, without promoting an error banner above the timeline. When a turn captures visual
    artifacts, a clickable horizontal thumbnail filmstrip renders above the timeline; clicking any
    filmstrip thumbnail or expanded-step visual opens a native `Dialog` lightbox with keyboard
    prev/next navigation, descriptive external link, and `"Show step"`.

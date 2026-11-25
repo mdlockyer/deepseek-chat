@@ -562,24 +562,23 @@ describe('slice-activity-inspector: redesigned ActivityPanel rendering', () => {
     assert.doesNotMatch(collapsedHtml, /RAW_FALLBACK_/, 'human input.summary beats fallback detail')
     assert.match(
       collapsedHtml,
-      /Failed: PRIVATE_IP_BLOCKED/,
-      'failed step row shows inline failure reason beneath title without a pill badge'
+      /rowIconError/,
+      'failed step row marks its icon in danger color quietly'
     )
-    assert.doesNotMatch(
-      collapsedHtml,
-      /badgeDanger/,
-      'failed step row does not render a pill status badge'
-    )
-    assert.match(collapsedHtml, /Step failed/, 'Evidence Shelf uses quiet typographic error kicker')
     assert.match(
       collapsedHtml,
-      /aria-label="Inspect failed step: First human step"/,
-      'Evidence Shelf renders the failed step as a direct clickable jump row'
+      /\(Failed\)/,
+      'failed step row preserves screen-reader Failed status'
     )
     assert.doesNotMatch(
       collapsedHtml,
-      />Inspect</,
-      'Evidence Shelf omits separate floating Inspect button in favor of whole-row click'
+      /PRIVATE_IP_BLOCKED/,
+      'mid-turn error details stay collapsed until the user expands the step (no top error banner or inline error row)'
+    )
+    assert.doesNotMatch(
+      collapsedHtml,
+      /badgeDanger|Step failed/,
+      'omits both pill status badges and top-level error banners'
     )
     assert.match(
       collapsedHtml,
