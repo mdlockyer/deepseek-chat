@@ -6,6 +6,7 @@ import type {
   ToolStepPresenter,
 } from '@deepseek-chat/lib-tools'
 import {
+  Banner,
   IconGlobeLanguageOutline14,
   IconOpenExternalOutline14,
   IconSearchOutline16,
@@ -109,14 +110,11 @@ const WebResearchStepDetail = ({ entry, openLink }: ActivityStepDetailProps) => 
     return (
       <div className={styles.detail}>
         {failed ? (
-          <div className={styles.errorBox} role="note">
-            <span className={styles.errorIcon} aria-hidden="true">
-              <IconWarningOutline16 />
-            </span>
+          <Banner tone="error" compact role="note" icon={<IconWarningOutline16 />}>
             <div className={styles.errorText}>
               {result?.content?.trim() || t('activityWebScrapeFailed')}
             </div>
-          </div>
+          </Banner>
         ) : null}
         {page.url ? (
           <div className={styles.pageItem}>
@@ -145,12 +143,9 @@ const WebResearchStepDetail = ({ entry, openLink }: ActivityStepDetailProps) => 
     <div className={styles.detail}>
       {query ? <div className={styles.queryItem}>“{query}”</div> : null}
       {failed && result?.content?.trim() ? (
-        <div className={styles.errorBox} role="note">
-          <span className={styles.errorIcon} aria-hidden="true">
-            <IconWarningOutline16 />
-          </span>
+        <Banner tone="error" compact role="note" icon={<IconWarningOutline16 />}>
           <div className={styles.errorText}>{result.content.trim()}</div>
-        </div>
+        </Banner>
       ) : null}
       {sources.length > 0 ? (
         <div className={styles.pageList}>

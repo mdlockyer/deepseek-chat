@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
+import { createElement } from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
 import type {
   SessionDeleted,
   SessionFilesChanged,
@@ -588,6 +590,31 @@ describe('python slice: managed runtime and tool', () => {
       { tool_use_id: 'c1', content: res.content, status: 'ok' }
     )
     assert.equal(archive?.length, 2)
+
+    const Detail = python.capability.presenter?.renderStepDetail
+    assert.ok(Detail)
+    const detailHtml = renderToStaticMarkup(
+      createElement(Detail, {
+        entry: {
+          call: { id: 'c3', name: 'python', input: { code: 'plot()', summary: 'Plotting trend' } },
+          result: {
+            tool_use_id: 'c3',
+            content: 'ValueError: bad data',
+            status: 'error',
+            images: ['data:image/png;base64,AA=='],
+          },
+        },
+        sessionId: 's1',
+        streaming: false,
+        now: 0,
+        openLink: () => undefined,
+        openVisual: () => undefined,
+        renderMarkdown: ({ content }) => createElement('pre', null, content),
+      })
+    )
+    assert.match(detailHtml, /role="note"/)
+    assert.match(detailHtml, /ValueError: bad data/)
+    assert.match(detailHtml, /<button[^>]*type="button"[^>]*><img/)
     python.dispose()
   })
 })

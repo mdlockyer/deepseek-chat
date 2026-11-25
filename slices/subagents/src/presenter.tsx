@@ -1,4 +1,4 @@
-import { IconThinkOutline14, IconWarningOutline16 } from '@deepseek-chat/lib-ui'
+import { Banner, IconThinkOutline14, IconWarningOutline16 } from '@deepseek-chat/lib-ui'
 import type {
   ActivityStepDetailProps,
   ArchiveFragment,
@@ -107,14 +107,11 @@ const SubagentStepDetail = ({ entry, capabilityState }: ActivityStepDetailProps)
       ) : null}
 
       {agent.state.status === 'failed' ? (
-        <div className={styles.errorBox} role="note">
-          <span className={styles.errorIcon} aria-hidden="true">
-            <IconWarningOutline16 />
-          </span>
+        <Banner tone="error" compact role="note" icon={<IconWarningOutline16 />}>
           <div className={styles.errorText}>
             {agent.state.error.message || agent.state.error.kind}
           </div>
-        </div>
+        </Banner>
       ) : null}
 
       {notes.length > 0 ? (

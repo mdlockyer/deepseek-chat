@@ -1,4 +1,4 @@
-import { IconCodeOutline14, IconWarningOutline16 } from '@deepseek-chat/lib-ui'
+import { Banner, IconCodeOutline14, IconWarningOutline16 } from '@deepseek-chat/lib-ui'
 import type {
   ActivityStepDetailProps,
   ArchiveFragment,
@@ -53,7 +53,7 @@ export const serializePythonForArchive = (
   return fragments
 }
 
-const PythonStepDetail = ({ entry, renderMarkdown }: ActivityStepDetailProps) => {
+const PythonStepDetail = ({ entry, openVisual, renderMarkdown }: ActivityStepDetailProps) => {
   const t = pythonMessages.useTranslate()
   const { call, result } = entry
   const code = codeOf(call)
@@ -70,12 +70,9 @@ const PythonStepDetail = ({ entry, renderMarkdown }: ActivityStepDetailProps) =>
         : null}
       {result?.content?.trim() ? (
         failed ? (
-          <div className={styles.errorBox} role="note">
-            <span className={styles.errorIcon} aria-hidden="true">
-              <IconWarningOutline16 />
-            </span>
+          <Banner tone="error" compact role="note" icon={<IconWarningOutline16 />}>
             <pre className={styles.errorOutput}>{result.content}</pre>
-          </div>
+          </Banner>
         ) : (
           <div className={styles.outputBlock}>
             <div className={styles.sectionLabel}>{t('pythonOutputHeading')}</div>
@@ -83,9 +80,21 @@ const PythonStepDetail = ({ entry, renderMarkdown }: ActivityStepDetailProps) =>
           </div>
         )
       ) : null}
-      {visuals.map((visual, idx) => (
-        <img key={idx} src={visual.src} alt={visual.alt} className={styles.figure} />
-      ))}
+      {visuals.map((visual, idx) =>
+        openVisual ? (
+          <button
+            key={idx}
+            type="button"
+            className={styles.figureButton}
+            aria-label={visual.alt}
+            onClick={() => openVisual(visual)}
+          >
+            <img src={visual.src} alt={visual.alt} className={styles.figure} />
+          </button>
+        ) : (
+          <img key={idx} src={visual.src} alt={visual.alt} className={styles.figure} />
+        )
+      )}
     </div>
   )
 }

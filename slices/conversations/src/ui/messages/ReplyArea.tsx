@@ -129,7 +129,11 @@ export const ReplyArea = memo(function ReplyArea({
         <div className={styles.liveWrap}>
           <button
             type="button"
-            className={clsx(styles.stripButton, expanded && styles.stripButtonActive)}
+            className={clsx(
+              styles.stripButton,
+              expanded && styles.stripButtonActive,
+              isInspecting && styles.stripButtonInspecting
+            )}
             aria-expanded={expanded}
             aria-label={t('activityToggleTraceLabel')}
             onClick={toggleExpanded}
@@ -215,7 +219,8 @@ export const ReplyArea = memo(function ReplyArea({
             className={clsx(
               styles.stripButton,
               styles.settledButton,
-              expanded && styles.stripButtonActive
+              expanded && styles.stripButtonActive,
+              isInspecting && styles.stripButtonInspecting
             )}
             aria-expanded={expanded}
             onClick={toggleExpanded}

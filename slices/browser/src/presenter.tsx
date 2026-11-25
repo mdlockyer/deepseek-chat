@@ -7,6 +7,7 @@ import type {
   ToolStepVisualArtifact,
 } from '@deepseek-chat/lib-tools'
 import {
+  Banner,
   IconBrowserOutline14,
   IconCodeOutline14,
   IconEyeOutline16,
@@ -159,7 +160,12 @@ export const serializeBrowserForArchive = (
   return [{ type: 'MARKDOWN', content: fence('text', body), separate: true }]
 }
 
-const BrowserStepDetail = ({ entry, openLink, renderMarkdown }: ActivityStepDetailProps) => {
+const BrowserStepDetail = ({
+  entry,
+  openLink,
+  openVisual,
+  renderMarkdown,
+}: ActivityStepDetailProps) => {
   const t = browserMessages.useTranslate()
   const { call, result } = entry
   const meta = readMeta(call, result)
@@ -209,17 +215,26 @@ const BrowserStepDetail = ({ entry, openLink, renderMarkdown }: ActivityStepDeta
       ) : null}
 
       {failed && rawOutput ? (
-        <div className={styles.errorBox} role="note">
-          <span className={styles.errorIcon} aria-hidden="true">
-            <IconWarningOutline16 />
-          </span>
+        <Banner tone="error" compact role="note" icon={<IconWarningOutline16 />}>
           <div className={styles.errorText}>{rawOutput}</div>
-        </div>
+        </Banner>
       ) : null}
 
-      {visuals.map((visual, imgIndex) => (
-        <img key={imgIndex} src={visual.src} alt={visual.alt} className={styles.screenshot} />
-      ))}
+      {visuals.map((visual, imgIndex) =>
+        openVisual ? (
+          <button
+            key={imgIndex}
+            type="button"
+            className={styles.screenshotButton}
+            aria-label={visual.alt}
+            onClick={() => openVisual(visual)}
+          >
+            <img src={visual.src} alt={visual.alt} className={styles.screenshot} />
+          </button>
+        ) : (
+          <img key={imgIndex} src={visual.src} alt={visual.alt} className={styles.screenshot} />
+        )
+      )}
 
       {showOutput ? (
         <div className={styles.block}>
@@ -237,21 +252,15 @@ export const browserPresenter: ToolStepPresenter = {
     const humanSummary = callSummaryOf(call)
     const running = !result || result.status === 'running'
     const actionUrl = meta.url && isHttpUrl(meta.url) ? meta.url : null
-    const host = actionUrl ? getSiteName(actionUrl) : null
     const visuals = buildVisuals(call, result, meta)
     const script = evalScriptOf(call)
     const hasOutput = Boolean(result?.content?.trim())
-    const showHostMeta =
-      call.name === BROWSER_NAVIGATE_TOOL_NAME &&
-      host &&
-      !(humanSummary && humanSummary.toLowerCase().includes(host.toLowerCase()))
 
     return {
       lane: 'browser',
       icon: browserToolIcon(call.name),
       liveVerb: browserMessages.translate('browserStepRunning'),
       detail: humanSummary ?? meta.summary,
-      ...(showHostMeta ? { meta: host } : {}),
       ...(visuals ? { visuals } : {}),
       hasDetail: Boolean(actionUrl || visuals?.length || hasOutput || script),
       stillRunning: running && streaming,

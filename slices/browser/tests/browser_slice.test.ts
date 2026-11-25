@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
+import { createElement } from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
 import type { PanelLayout, PanelSlot } from '@deepseek-chat/spine/ports'
 import type { BrowserControlTakenOver } from '@deepseek-chat/spine/facts/browser'
 import type {
@@ -753,6 +755,67 @@ describe('browser: ToolCapability, toggle, presenter, and archive serialization'
       summary?.visuals?.[0]?.alt && summary.visuals[0].alt.length > 0,
       'screenshot visual artifacts carry descriptive alt text'
     )
+
+    // Navigating to a host whose literal domain is absent from the summary does not emit erratic row meta.
+    const duckSummary = env.browser.capability.presenter?.summarize(
+      {
+        id: 'b2',
+        name: 'browser_navigate',
+        input: {
+          summary: 'Opening DuckDuckGo to test form typing',
+          url: 'https://duckduckgo.com/',
+        },
+      },
+      {
+        tool_use_id: 'b2',
+        content: 'Loaded',
+        status: 'ok',
+        payload: {
+          tool: 'browser_navigate',
+          summary: 'Loaded https://duckduckgo.com/',
+          url: 'https://duckduckgo.com/',
+          title: 'DuckDuckGo',
+        },
+      },
+      { streaming: false }
+    )
+    assert.equal(duckSummary?.meta, undefined)
+
+    // Step detail wraps screenshots in a clickable button when openVisual is supplied and renders errors via Banner.
+    const Detail = env.browser.capability.presenter?.renderStepDetail
+    assert.ok(Detail)
+    const html = renderToStaticMarkup(
+      createElement(Detail, {
+        entry: {
+          call: {
+            id: 'b3',
+            name: 'browser_navigate',
+            input: { summary: 'Opening blocked address', url: 'https://example.com/' },
+          },
+          result: {
+            tool_use_id: 'b3',
+            content: 'Navigation blocked by policy',
+            status: 'error',
+            payload: {
+              tool: 'browser_navigate',
+              summary: 'Blocked',
+              url: 'https://example.com/',
+              title: 'Example',
+            },
+            previewImages: ['data:image/jpeg;base64,AA=='],
+          },
+        },
+        sessionId: 's1',
+        streaming: false,
+        now: 0,
+        openLink: () => undefined,
+        openVisual: () => undefined,
+        renderMarkdown: ({ content }) => createElement('pre', null, content),
+      })
+    )
+    assert.match(html, /role="note"/)
+    assert.match(html, /Navigation blocked by policy/)
+    assert.match(html, /<button[^>]*type="button"[^>]*><img/)
     env.browser.dispose()
   })
 })

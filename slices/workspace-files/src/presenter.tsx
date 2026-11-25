@@ -1,4 +1,5 @@
 import {
+  Banner,
   Button,
   IconBrowseOutline16,
   IconOpenExternalOutline14,
@@ -122,12 +123,9 @@ const FileStepDetail = ({ entry, sessionId, openFile }: ActivityStepDetailProps)
         <div className={styles.path}>{action.path}</div>
       ) : null}
       {failed && result?.content?.trim() ? (
-        <div className={styles.errorBox} role="note">
-          <span className={styles.errorIcon} aria-hidden="true">
-            <IconWarningOutline16 />
-          </span>
+        <Banner tone="error" compact role="note" icon={<IconWarningOutline16 />}>
           <div className={styles.errorText}>{result.content.trim()}</div>
-        </div>
+        </Banner>
       ) : null}
       {fileRef && sessionId && openFile ? (
         <div className={styles.actions}>

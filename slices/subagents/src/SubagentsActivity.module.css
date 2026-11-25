@@ -25,27 +25,8 @@
     word-break: break-word;
   }
 
-  .errorBox {
-    display: flex;
-    align-items: flex-start;
-    gap: var(--ui-space-1-5);
-    padding: var(--ui-space-2);
-    border-radius: var(--ui-radius-sm);
-    background: var(--ui-danger-soft);
-    color: var(--ui-text-danger);
-  }
-
-  .errorIcon {
-    display: inline-flex;
-    align-items: center;
-    flex-shrink: 0;
-    height: 16px;
-  }
-
   .errorText {
-    flex: 1;
-    min-width: 0;
-    font: var(--ui-type-micro);
+    font: var(--ui-type-caption);
     white-space: pre-wrap;
     word-break: break-word;
   }

@@ -11,6 +11,8 @@
     gap: var(--ui-space-1);
     max-width: 100%;
     width: fit-content;
+    min-height: var(--ui-control-xs);
+    padding: var(--ui-space-0-5) 0;
     border-radius: var(--ui-radius-xs);
     font: var(--ui-type-caption);
     color: var(--ui-text-accent);
@@ -57,36 +59,39 @@
     color: var(--ui-text-muted);
   }
 
-  .errorBox {
-    display: flex;
-    align-items: flex-start;
-    gap: var(--ui-space-1-5);
-    padding: var(--ui-space-2);
-    border-radius: var(--ui-radius-sm);
-    background: var(--ui-danger-soft);
-    color: var(--ui-text-danger);
-  }
-
-  .errorIcon {
-    display: inline-flex;
-    align-items: center;
-    flex-shrink: 0;
-    height: 16px;
-  }
-
   .errorText {
-    flex: 1;
-    min-width: 0;
-    font: var(--ui-type-micro);
+    font: var(--ui-type-caption);
     white-space: pre-wrap;
     overflow-wrap: anywhere;
+  }
+
+  .screenshotButton {
+    display: block;
+    width: 100%;
+    padding: 0;
+    border: none;
+    border-radius: var(--ui-radius-sm);
+    background: transparent;
+    cursor: pointer;
+
+    @media (hover: hover) {
+      &:hover .screenshot {
+        border-color: var(--ui-border-strong);
+      }
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--ui-focus-ring);
+      outline-offset: 2px;
+    }
   }
 
   .screenshot {
     display: block;
     width: 100%;
     border-radius: var(--ui-radius-sm);
-    border: 1px solid var(--ui-border-subtle);
+    border: 1px solid var(--ui-border-default);
+    transition: border-color var(--ui-duration-fast) var(--ui-ease-standard);
   }
 
   .output {
@@ -97,9 +102,14 @@
     border-radius: var(--ui-radius-sm);
     background: var(--ui-surface-sunken);
     font: var(--ui-type-code-block);
-    font-size: var(--ui-font-size-xs);
     color: var(--ui-text-secondary);
     white-space: pre-wrap;
     word-break: break-word;
+  }
+
+  @media (pointer: coarse) {
+    .link {
+      min-height: var(--ui-control-xl);
+    }
   }
 }
