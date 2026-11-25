@@ -11,24 +11,24 @@ visible and where. On the web build there is no host and the browser is unavaila
 
 `createBrowserSlice({ log, host, panel, store, openExternal, notify?, newId? })` returns:
 
-| Member                                                                            | Meaning                                                                                                                  |
-| :-------------------------------------------------------------------------------- | :----------------------------------------------------------------------------------------------------------------------- |
-| `available`                                                                       | `true` when a desktop host was given.                                                                                    |
-| `capability`                                                                      | Open `ToolCapability` (`id: 'browser'`, owns `chat-demo:browser` toggle on desktop, `presenter`, `serializeForArchive`). |
-| `declareTools({ enabled })`, `instructions`, `handles(name)`, `toolNames`         | Tool declaration for a turn (invariant 2). `toolNames` are persisted in chat history; never rename.                      |
-| `HeaderToggle`                                                                    | Session header toggle button (renders only on desktop).                                                                  |
-| `run(name, input, { signal, sessionId? })`                                        | Run one tool call. Always resolves to `{ status, text, images, meta, durationMs }`.                                      |
-| `setActiveSession(id \| null)`                                                    | The chat on screen (`null`: the new-chat screen); also updated reactively by `ActiveSessionChanged`.                     |
-| `start()`                                                                         | Bind host events; returns the unbinding function.                                                                        |
-| `getSession(id)`                                                                  | `{ panelOpen, tabs, activeTabId }` for a chat.                                                                           |
-| `openPanel(id?)`, `closePanel(id?)`, `togglePanel(id?)`                           | The browser panel of a chat (default: the active one).                                                                   |
-| `openUrl(url, { sessionId?, newTab?, initiator? })`                               | Show a URL in the panel.                                                                                                 |
-| `takeOver(sessionId)`                                                             | Publishes `BrowserControlTakenOver` so any controlling agent stops.                                                      |
-| `tabs.create/close/switch/navigate/setViewport`, `setStageSize`, `setPanelBounds` | Tab and layout operations (also used by the slice's own view).                                                           |
-| `refreshSnapshot()`                                                               | Refresh the still image shown while the webview is hidden.                                                               |
-| `BrowserPanel({ topActions? })`, `LocalhostSetting`                               | Views.                                                                                                                   |
-| `isHttpUrl`, `normalizeOmniboxInput`, `BROWSER_TOOL_NAMES`                        | Pure helpers, exported by the package.                                                                                   |
-| `dispose()`                                                                       | Unsubscribes all Spine `EventLog` listeners.                                                                             |
+| Member                                                                             | Meaning                                                                                                                  |
+| :--------------------------------------------------------------------------------- | :----------------------------------------------------------------------------------------------------------------------- |
+| `available`                                                                        | `true` when a desktop host was given.                                                                                    |
+| `capability`                                                                       | Open `ToolCapability` (`id: 'browser'`, owns `chat-demo:browser` toggle on desktop, `presenter`, `serializeForArchive`). |
+| `declareTools({ enabled })`, `instructions`, `handles(name)`, `toolNames`          | Tool declaration for a turn (invariant 2). `toolNames` are persisted in chat history; never rename.                      |
+| `HeaderToggle`                                                                     | Session header toggle button (renders only on desktop).                                                                  |
+| `run(name, input, { signal, sessionId? })`                                         | Run one tool call. Always resolves to `{ status, text, images, meta, durationMs }`.                                      |
+| `setActiveSession(id \| null)`                                                     | The chat on screen (`null`: the new-chat screen); also updated reactively by `ActiveSessionChanged`.                     |
+| `start()`                                                                          | Bind host events; returns the unbinding function.                                                                        |
+| `getSession(id)`                                                                   | `{ panelOpen, tabs, activeTabId }` for a chat.                                                                           |
+| `openPanel(id?)`, `closePanel(id?)`, `togglePanel(id?)`                            | The browser panel of a chat (default: the active one).                                                                   |
+| `openUrl(url, { sessionId?, newTab?, initiator? })`                                | Show a URL in the panel.                                                                                                 |
+| `takeOver(sessionId)`                                                              | Publishes `BrowserControlTakenOver` so any controlling agent stops.                                                      |
+| `tabs.create/close/switch/navigate/setViewport`, `setStageSize`, `setPanelBounds`  | Tab and layout operations (also used by the slice's own view).                                                           |
+| `refreshSnapshot()`                                                                | Refresh the still image shown while the webview is hidden.                                                               |
+| `BrowserPanel({ topActions? })`, `LocalhostSetting`                                | Views.                                                                                                                   |
+| `isHttpUrl`, `normalizeOmniboxInput`, `computeSomBadgeBoxes`, `BROWSER_TOOL_NAMES` | Pure helpers, exported by the package.                                                                                   |
+| `dispose()`                                                                        | Unsubscribes all Spine `EventLog` listeners.                                                                             |
 
 Ports: `BrowserHost` (desktop IPC, `null` on web), `PanelSlot` (this slice's slot in the app's right
 panel, from `spine/design`), `KeyValueStore`.

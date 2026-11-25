@@ -53,6 +53,14 @@ export const StageFrame = ({
   const onViewportCommitRef = useRef(onViewportCommit)
   onViewportCommitRef.current = onViewportCommit
   const dragCleanupRef = useRef<(() => void) | null>(null)
+  const releaseFramesRef = useRef<number[]>([])
+
+  const cancelReleaseFrames = () => {
+    for (const id of releaseFramesRef.current) {
+      cancelAnimationFrame(id)
+    }
+    releaseFramesRef.current = []
+  }
 
   const stageSize = host.useStageSize()
   const [dragViewport, setDragViewport] = useState<{ width: number; height: number } | null>(null)
@@ -66,7 +74,13 @@ export const StageFrame = ({
     }
   }, [canDragResize])
 
-  useEffect(() => () => dragCleanupRef.current?.(), [])
+  useEffect(
+    () => () => {
+      cancelReleaseFrames()
+      dragCleanupRef.current?.()
+    },
+    []
+  )
 
   const displayViewport: ViewportSpec | null = useMemo(() => {
     if (!dragViewport) {
@@ -102,7 +116,6 @@ export const StageFrame = ({
     if (!stageEl) {
       return
     }
-    let frame = 0
     const measure = () => {
       const rect = stageEl.getBoundingClientRect()
       if (rect.width > 1 && rect.height > 1) {
@@ -111,18 +124,13 @@ export const StageFrame = ({
         onStageSizeChangeRef.current?.(size)
       }
     }
-    const schedule = () => {
-      cancelAnimationFrame(frame)
-      frame = requestAnimationFrame(measure)
-    }
     measure()
-    const observer = new ResizeObserver(schedule)
+    const observer = new ResizeObserver(measure)
     observer.observe(stageEl)
-    window.addEventListener('resize', schedule)
+    window.addEventListener('resize', measure)
     return () => {
-      cancelAnimationFrame(frame)
       observer.disconnect()
-      window.removeEventListener('resize', schedule)
+      window.removeEventListener('resize', measure)
     }
   }, [host, hasCustomViewport, canDragResize])
 
@@ -136,6 +144,7 @@ export const StageFrame = ({
     }
     event.preventDefault()
     event.stopPropagation()
+    cancelReleaseFrames()
     dragCleanupRef.current?.()
     onViewportResizeHoverStart?.()
     host.setResizing(true)
@@ -226,11 +235,17 @@ export const StageFrame = ({
       setDragViewport(null)
       setDragEdge(null)
       const releaseResize = () => {
-        requestAnimationFrame(() => {
-          if (dragCleanupRef.current === null && host.isResizing()) {
-            host.setResizing(false)
-          }
+        cancelReleaseFrames()
+        const f1 = requestAnimationFrame(() => {
+          const f2 = requestAnimationFrame(() => {
+            releaseFramesRef.current = []
+            if (dragCleanupRef.current === null && host.isResizing()) {
+              host.setResizing(false)
+            }
+          })
+          releaseFramesRef.current = [f2]
         })
+        releaseFramesRef.current = [f1]
       }
       if (commitResult instanceof Promise) {
         void commitResult.finally(releaseResize)

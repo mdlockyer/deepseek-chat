@@ -1,4 +1,4 @@
-import { StageFrame, ViewportMenu, type StageFit } from '@deepseek-chat/lib-stage'
+import { fitViewportToStage, StageFrame, ViewportMenu } from '@deepseek-chat/lib-stage'
 import {
   Banner,
   EmptyState,
@@ -19,7 +19,15 @@ import {
 } from '@deepseek-chat/lib-ui'
 import type { PanelSlot } from '@deepseek-chat/spine/ports'
 import clsx from 'clsx'
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react'
 import chrome from './BrowserChrome.module.css'
 import { browserMessages } from './messages.js'
 import { EMPTY_SESSION_BROWSER_STATE, isHttpUrl, type BrowserState } from './state.js'
@@ -81,17 +89,31 @@ export const createBrowserPanel = (state: BrowserState, deps: BrowserPanelDeps) 
     const controllingAction = useBrowserStore((state) => state.controllingAction)
     const controllingSessionId = useBrowserStore((state) => state.controllingSessionId)
     const storedWidth = deps.panel.useLayout((layout) => layout.width)
+    const stageSize = deps.panel.useStageSize()
 
     const viewportRef = useRef<HTMLDivElement>(null)
     const omniboxRef = useRef<HTMLInputElement>(null)
     const [addressDraft, setAddressDraft] = useState('')
     const [editingAddress, setEditingAddress] = useState(false)
-    const [stageFit, setStageFit] = useState<StageFit | null>(null)
 
     const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? tabs[0] ?? null
     const activeUrl = activeTab && isHttpUrl(activeTab.url) ? activeTab.url : ''
     const activeViewport = activeTab?.viewport ?? null
     const hasCustomViewport = activeViewport !== null
+    const stageWidth = stageSize?.width ?? null
+    const stageHeight = stageSize?.height ?? null
+    const currentFit = useMemo(() => {
+      if (stageWidth === null || stageHeight === null) {
+        return null
+      }
+      return fitViewportToStage(activeViewport, stageWidth, stageHeight)
+    }, [activeViewport, stageWidth, stageHeight])
+    const resolvedZoom = currentFit?.zoom ?? activeTab?.zoom ?? 1
+
+    const panelAnimatingRef = useRef(panelAnimating)
+    panelAnimatingRef.current = panelAnimating
+    const resolvedZoomRef = useRef(resolvedZoom)
+    resolvedZoomRef.current = resolvedZoom
 
     // 切换会话时取消未提交的地址栏编辑状态
     useEffect(() => {
@@ -128,10 +150,9 @@ export const createBrowserPanel = (state: BrowserState, deps: BrowserPanelDeps) 
       setBrowserStageSize(size)
     }, [])
 
-    // 跟踪 DOM 视口区域并把逻辑坐标与缩放比例同步到 Rust 子 Webview
-    useLayoutEffect(() => {
+    const measureAndSyncBounds = useCallback((force = false) => {
       const el = viewportRef.current
-      if (!el || panelResizing) {
+      if (!el || panelAnimatingRef.current) {
         return
       }
       const rect = el.getBoundingClientRect()
@@ -145,18 +166,51 @@ export const createBrowserPanel = (state: BrowserState, deps: BrowserPanelDeps) 
             width: Math.max(1, Math.floor(rect.right) - left),
             height: Math.max(1, Math.floor(rect.bottom) - top),
           },
-          stageFit?.zoom ?? activeTab?.zoom ?? 1
+          resolvedZoomRef.current,
+          { force }
         )
       }
+    }, [])
+
+    // 持续监听视口框、舞台容器和窗口尺寸变化，实时同步逻辑坐标与缩放比例
+    useLayoutEffect(() => {
+      const el = viewportRef.current
+      if (!el) {
+        return
+      }
+      const onResize = () => measureAndSyncBounds(false)
+      const onWindowResize = () => measureAndSyncBounds(true)
+      const observer = new ResizeObserver(onResize)
+      observer.observe(el)
+      const stageCanvas = el.parentElement?.parentElement?.parentElement
+      if (stageCanvas && stageCanvas !== el) {
+        observer.observe(stageCanvas)
+      }
+      window.addEventListener('resize', onWindowResize)
+      return () => {
+        observer.disconnect()
+        window.removeEventListener('resize', onWindowResize)
+      }
+    }, [measureAndSyncBounds])
+
+    // 跟踪 DOM 视口区域并把逻辑坐标与缩放比例同步到 Rust 子 Webview
+    useLayoutEffect(() => {
+      measureAndSyncBounds(false)
     }, [
+      measureAndSyncBounds,
       activeSessionId,
       storedWidth,
+      panelAnimating,
       panelResizing,
+      overlayLocked,
       activeTab?.id,
-      activeTab?.zoom,
-      stageFit?.boxWidth,
-      stageFit?.boxHeight,
-      stageFit?.zoom,
+      activeViewport?.width,
+      activeViewport?.height,
+      stageWidth,
+      stageHeight,
+      currentFit?.boxWidth,
+      currentFit?.boxHeight,
+      resolvedZoom,
     ])
 
     if (!deps.desktop) {
@@ -326,7 +380,7 @@ export const createBrowserPanel = (state: BrowserState, deps: BrowserPanelDeps) 
             <ViewportMenu
               host={deps.panel}
               viewport={activeViewport}
-              zoom={stageFit?.zoom ?? activeTab?.zoom ?? 1}
+              zoom={resolvedZoom}
               disabled={!activeTab}
               onSelect={(next) => {
                 if (activeTab) {
@@ -379,7 +433,6 @@ export const createBrowserPanel = (state: BrowserState, deps: BrowserPanelDeps) 
           host={deps.panel}
           viewport={activeViewport}
           onStageSizeChange={handleStageSizeChange}
-          onFitChange={setStageFit}
           onViewportResizeHoverStart={() => void refreshActiveTabSnapshot()}
           onViewportCommit={(next) =>
             activeTab

@@ -941,6 +941,7 @@ pub async fn browser_set_active_tab(
     tab_id: Option<String>,
     bounds: Option<BrowserBounds>,
     visible: bool,
+    zoom: Option<f64>,
 ) -> Result<(), String> {
     ensure_main_webview(&webview)?;
     let effective_bounds = {
@@ -953,6 +954,9 @@ pub async fn browser_set_active_tab(
         }
         *b
     };
+    if let (Some(id), Some(next_zoom)) = (tab_id.as_deref(), zoom) {
+        let _ = state.set_tab_zoom(id, sanitize_zoom(next_zoom));
+    }
     state.visible.store(visible, Ordering::Relaxed);
 
     let all_labels: Vec<(String, String, f64)> = {
@@ -973,16 +977,20 @@ pub async fn browser_set_active_tab(
         *active = tab_id.clone();
     }
 
-    for (id, label, zoom) in all_labels {
+    for (id, label, tab_zoom) in all_labels {
         let Some(wv) = app.get_webview(&label) else {
             continue;
         };
-        if visible && tab_id.as_deref() == Some(id.as_str()) {
+        if tab_id.as_deref() == Some(id.as_str()) {
             if let Some(b) = effective_bounds {
                 let _ = wv.set_bounds(b.to_rect());
             }
-            let _ = wv.set_zoom(zoom);
-            let _ = wv.show();
+            let _ = wv.set_zoom(tab_zoom);
+            if visible {
+                let _ = wv.show();
+            } else {
+                let _ = wv.hide();
+            }
         } else {
             let _ = wv.hide();
         }
@@ -1017,11 +1025,11 @@ pub async fn browser_set_bounds(
             let _ = state.set_tab_zoom(&id, sanitize_zoom(next_zoom));
         }
         if let Ok(wv) = get_tab_webview(&app, &state, &id) {
+            wv.set_bounds(sanitized.to_rect())
+                .map_err(|e| e.to_string())?;
             if let Some(next_zoom) = zoom {
                 let _ = wv.set_zoom(sanitize_zoom(next_zoom));
             }
-            wv.set_bounds(sanitized.to_rect())
-                .map_err(|e| e.to_string())?;
         }
     }
     Ok(())

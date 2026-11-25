@@ -32,8 +32,10 @@ import {
 } from './tools.js'
 
 export type * from './host.js'
+export type { SomBadgeBox, SomBadgeElement, SomBadgeLayout } from './somOverlay.js'
 export type { BrowserTab, SessionBrowserState } from './state.js'
 export type { BrowserActionMeta, BrowserToolDefinition, BrowserToolRunResult } from './tools.js'
+export { computeSomBadgeBoxes } from './somOverlay.js'
 export { isHttpUrl, normalizeOmniboxInput } from './state.js'
 /** Tool names persisted in chat history; never rename. */
 export { BROWSER_TOOL_NAMES } from './tools.js'

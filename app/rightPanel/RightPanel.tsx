@@ -4,7 +4,7 @@ import {
   IconGlobeLanguageOutline16,
   IconSearchOutline16,
 } from '@deepseek-chat/lib-ui'
-import { useCallback, useRef } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { useTranslate } from '../i18n/index.js'
 import { useAppRuntime } from '../RuntimeContext.js'
 import { SidePanel } from './SidePanel.js'
@@ -53,7 +53,16 @@ export const RightPanel = () => {
     ? (effectiveKind ?? lastKindRef.current)
     : null
 
+  const panelWidth = rightPanel.useStore((state) => state.width)
+  const panelResizing = rightPanel.useStore((state) => state.panelResizing)
   const lastHoverSnapshotAtRef = useRef(0)
+
+  useEffect(() => {
+    if (!panelResizing) {
+      lastHoverSnapshotAtRef.current = 0
+    }
+  }, [panelResizing, panelWidth])
+
   const handleResizeHoverStart = useCallback(() => {
     const now = Date.now()
     if (now - lastHoverSnapshotAtRef.current <= 800) {

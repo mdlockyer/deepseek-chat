@@ -49,6 +49,14 @@ const DEFAULT_BOUNDS: BrowserBounds = {
   height: 700,
 }
 
+const boundsEqual = (a: BrowserBounds | null, b: BrowserBounds | null): boolean =>
+  a !== null &&
+  b !== null &&
+  Math.abs(a.x - b.x) < 0.5 &&
+  Math.abs(a.y - b.y) < 0.5 &&
+  Math.abs(a.width - b.width) < 0.5 &&
+  Math.abs(a.height - b.height) < 0.5
+
 export const getSessionBrowser = (
   state: Pick<BrowserStoreState, 'sessions'>,
   sessionId: string | null | undefined
@@ -213,28 +221,90 @@ export const createBrowserState = (deps: BrowserStateDeps) => {
       panel.isOpen(state.activeSessionId)
     )
 
-  let visibilitySyncSeq = 0
+  let nativeSyncRunning = false
+  let nativeSyncDirty = false
+  let nativeSyncForceBounds = false
+  let nativeSyncWaiters: (() => void)[] = []
+  let lastNativeTabId: string | null = null
+  let lastNativeVisible: boolean | null = null
+  let lastNativeBounds: BrowserBounds | null = null
+  let lastNativeZoom: number | null = null
 
-  const syncNativeVisibility = async () => {
+  const resetNativeSyncCache = (tabId?: string) => {
+    if (tabId !== undefined && lastNativeTabId !== tabId) {
+      return
+    }
+    lastNativeTabId = null
+    lastNativeVisible = null
+    lastNativeBounds = null
+    lastNativeZoom = null
+  }
+
+  const syncNativeVisibility = (options: { forceBounds?: boolean } = {}): Promise<void> => {
     if (!desktop) {
-      return
+      return Promise.resolve()
     }
-    const seq = ++visibilitySyncSeq
-    const state = get()
-    const session = getActiveSessionBrowser(state)
-    const active = session.tabs.find((t) => t.id === session.activeTabId)
-    const visible = shouldShowNativeWebview(state)
-    if (!active || !nativeCreated.has(active.id)) {
-      await native.setVisible(false).catch(() => {})
-      return
+    nativeSyncDirty = true
+    if (options.forceBounds) {
+      nativeSyncForceBounds = true
     }
-    await native.setActiveTab(active.id, state.bounds ?? DEFAULT_BOUNDS, visible).catch(() => {})
-    if (seq !== visibilitySyncSeq) {
-      return
+    const done = new Promise<void>((resolve) => {
+      nativeSyncWaiters.push(resolve)
+    })
+    if (nativeSyncRunning) {
+      return done
     }
-    if (visible && state.bounds) {
-      await native.setBounds(state.bounds, active.zoom).catch(() => {})
-    }
+    nativeSyncRunning = true
+    void (async () => {
+      try {
+        while (nativeSyncDirty) {
+          nativeSyncDirty = false
+          const forceBounds = nativeSyncForceBounds
+          nativeSyncForceBounds = false
+          const state = get()
+          const layout = panel.getLayout()
+          const session = getActiveSessionBrowser(state)
+          const active = session.tabs.find((t) => t.id === session.activeTabId)
+          const visible = shouldShowNativeWebview(state)
+          if (!active || !nativeCreated.has(active.id)) {
+            if (lastNativeVisible !== false || lastNativeTabId !== null) {
+              await native.setVisible(false).catch(() => {})
+              lastNativeTabId = null
+              lastNativeVisible = false
+            }
+            continue
+          }
+          const bounds = state.bounds ?? DEFAULT_BOUNDS
+          const zoom = active.zoom
+          const tabOrVisChanged = lastNativeTabId !== active.id || lastNativeVisible !== visible
+          const layoutStable = !layout.animating && !layout.resizing
+          const geomChanged =
+            forceBounds ||
+            !boundsEqual(lastNativeBounds, bounds) ||
+            lastNativeZoom === null ||
+            Math.abs(lastNativeZoom - zoom) >= 0.001
+          if (tabOrVisChanged) {
+            await native.setActiveTab(active.id, bounds, visible, zoom).catch(() => {})
+            lastNativeTabId = active.id
+            lastNativeVisible = visible
+            lastNativeBounds = bounds
+            lastNativeZoom = zoom
+          } else if (layoutStable && geomChanged) {
+            await native.setBounds(bounds, zoom).catch(() => {})
+            lastNativeBounds = bounds
+            lastNativeZoom = zoom
+          }
+        }
+      } finally {
+        nativeSyncRunning = false
+        const waiters = nativeSyncWaiters
+        nativeSyncWaiters = []
+        for (const resolve of waiters) {
+          resolve()
+        }
+      }
+    })()
+    return done
   }
 
   const bindBrowserEvents = () => {
@@ -317,6 +387,7 @@ export const createBrowserState = (deps: BrowserStateDeps) => {
     const unsubSidePanel = panel.subscribe(() => {
       const layout = panel.getLayout()
       const overlayLockEngaged = layout.overlayLocked && !prevLayout.overlayLocked
+      const resizingEnded = !layout.resizing && prevLayout.resizing
       let changed =
         layout.animating !== prevLayout.animating ||
         layout.resizing !== prevLayout.resizing ||
@@ -339,6 +410,27 @@ export const createBrowserState = (deps: BrowserStateDeps) => {
           }
           nextSessions[sid] = { ...session, panelOpen: false }
           changed = true
+        }
+      }
+      if (resizingEnded && current.activeSessionId) {
+        const activeSess = Object.hasOwn(nextSessions, current.activeSessionId)
+          ? nextSessions[current.activeSessionId]
+          : null
+        if (activeSess && activeSess.activeTabId) {
+          const activeTab = activeSess.tabs.find((t) => t.id === activeSess.activeTabId)
+          if (activeTab?.snapshotUrl) {
+            if (nextSessions === current.sessions) {
+              nextSessions = { ...current.sessions }
+            }
+            nextSessions[current.activeSessionId] = {
+              ...activeSess,
+              tabs: activeSess.tabs.map((tab) =>
+                tab.id === activeSess.activeTabId
+                  ? { ...tab, snapshotUrl: null, snapshotWidth: null, snapshotHeight: null }
+                  : tab
+              ),
+            }
+          }
         }
       }
       if (nextSessions !== current.sessions) {
@@ -405,6 +497,7 @@ export const createBrowserState = (deps: BrowserStateDeps) => {
       resolveLoadWaiters(tabId)
       pendingCreates.delete(tabId)
       if (nativeCreated.delete(tabId) && desktop) {
+        resetNativeSyncCache(tabId)
         await native.closeTab(tabId).catch(() => {})
       }
     }
@@ -432,8 +525,10 @@ export const createBrowserState = (deps: BrowserStateDeps) => {
         await native.closeTab(tabId).catch(() => {})
       }
     }
+    resetNativeSyncCache()
     if (desktop) {
       await native.setVisible(false).catch(() => {})
+      lastNativeVisible = false
     }
   }
 
@@ -598,6 +693,7 @@ export const createBrowserState = (deps: BrowserStateDeps) => {
     resolveLoadWaiters(tabId)
     pendingCreates.delete(tabId)
     if (nativeCreated.delete(tabId) && desktop) {
+      resetNativeSyncCache(tabId)
       await native.closeTab(tabId).catch(() => {})
     }
     if (get().activeSessionId === sessionId) {
@@ -713,44 +809,50 @@ export const createBrowserState = (deps: BrowserStateDeps) => {
     set({ stageSize: size })
   }
 
-  const setBrowserPanelBounds = (bounds: BrowserBounds, zoom?: number) => {
+  const setBrowserPanelBounds = (
+    bounds: BrowserBounds,
+    zoom?: number,
+    options: { force?: boolean } = {}
+  ) => {
     const state = get()
     const prev = state.bounds
     const sessionId = state.activeSessionId
     const activeSession = getSessionBrowser(state, sessionId)
     const active = activeSession.tabs.find((t) => t.id === activeSession.activeTabId)
-    const boundsSame =
-      prev !== null &&
-      Math.abs(prev.x - bounds.x) < 0.5 &&
-      Math.abs(prev.y - bounds.y) < 0.5 &&
-      Math.abs(prev.width - bounds.width) < 0.5 &&
-      Math.abs(prev.height - bounds.height) < 0.5
+    const boundsSame = boundsEqual(prev, bounds)
     const zoomSame = zoom === undefined || !active || Math.abs(active.zoom - zoom) < 0.001
-    if (boundsSame && zoomSame) {
+    if (!boundsSame || !zoomSame) {
+      set((current) => {
+        const currSessionId = current.activeSessionId
+        const currSession = getSessionBrowser(current, currSessionId)
+        return {
+          bounds,
+          ...(zoom !== undefined && currSessionId && currSession.activeTabId
+            ? {
+                sessions: {
+                  ...current.sessions,
+                  [currSessionId]: {
+                    ...currSession,
+                    tabs: currSession.tabs.map((tab) =>
+                      tab.id === currSession.activeTabId ? { ...tab, zoom } : tab
+                    ),
+                  },
+                },
+              }
+            : {}),
+        }
+      })
+    }
+    const layout = panel.getLayout()
+    if (!desktop || layout.animating || layout.resizing) {
       return
     }
-    set((current) => {
-      const currSessionId = current.activeSessionId
-      const currSession = getSessionBrowser(current, currSessionId)
-      return {
-        bounds,
-        ...(zoom !== undefined && currSessionId && currSession.activeTabId
-          ? {
-              sessions: {
-                ...current.sessions,
-                [currSessionId]: {
-                  ...currSession,
-                  tabs: currSession.tabs.map((tab) =>
-                    tab.id === currSession.activeTabId ? { ...tab, zoom } : tab
-                  ),
-                },
-              },
-            }
-          : {}),
-      }
-    })
-    if (shouldShowNativeWebview(get()) && desktop) {
-      void native.setBounds(bounds, zoom).catch(() => {})
+    const nativeStale =
+      options.force ||
+      !boundsEqual(lastNativeBounds, bounds) ||
+      (zoom !== undefined && (lastNativeZoom === null || Math.abs(lastNativeZoom - zoom) >= 0.001))
+    if (!boundsSame || !zoomSame || nativeStale) {
+      void syncNativeVisibility({ forceBounds: options.force })
     }
   }
 
@@ -785,6 +887,11 @@ export const createBrowserState = (deps: BrowserStateDeps) => {
     }
     if (desktop && nativeCreated.has(tabId)) {
       await native.setZoom(tabId, fit.zoom).catch(() => {})
+      const latest = get()
+      const activeSess = getActiveSessionBrowser(latest)
+      if (activeSess.activeTabId === tabId) {
+        await syncNativeVisibility()
+      }
     }
     return fit
   }
@@ -807,15 +914,18 @@ export const createBrowserState = (deps: BrowserStateDeps) => {
     if (!active || !isHttpUrl(active.url) || !nativeCreated.has(active.id)) {
       return
     }
+    const capturedTabId = active.id
+    const capturedUrl = active.url
     try {
-      const snap = await native.takeSnapshot(active.id, 1280)
-      if (panel.getLayout().resizing) {
+      const snap = await native.takeSnapshot(capturedTabId, 1280)
+      const latestTab = getSessionBrowser(get(), sessionId).tabs.find((t) => t.id === capturedTabId)
+      if (!latestTab || latestTab.url !== capturedUrl) {
         return
       }
       updateSessionBrowser(sessionId, (curr) => ({
         ...curr,
         tabs: curr.tabs.map((t) =>
-          t.id === active.id
+          t.id === capturedTabId
             ? {
                 ...t,
                 snapshotUrl: snap.dataUrl,

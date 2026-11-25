@@ -217,9 +217,10 @@ export const browserCloseTab = (tabId: string): Promise<void> =>
 export const browserSetActiveTab = (
   tabId: string | null,
   bounds: BrowserBounds | null,
-  visible: boolean
+  visible: boolean,
+  zoom?: number
 ): Promise<void> =>
-  invoke<null>('browser_set_active_tab', { tabId, bounds, visible }).then(() => undefined)
+  invoke<null>('browser_set_active_tab', { tabId, bounds, visible, zoom }).then(() => undefined)
 
 export const browserSetBounds = (bounds: BrowserBounds, zoom?: number): Promise<void> =>
   invoke<null>('browser_set_bounds', { bounds, zoom }).then(() => undefined)

@@ -21,9 +21,17 @@ export const SidePanel = ({
   const { mounted, exiting } = usePresence(open, PANEL_DURATION_MS)
   const panelRef = useRef<HTMLElement>(null)
   const dragCleanupRef = useRef<(() => void) | null>(null)
+  const releaseFramesRef = useRef<number[]>([])
   const prevOpenRef = useRef(open)
   const [entering, setEntering] = useState(open)
   const [resizingWidth, setResizingWidth] = useState<number | null>(null)
+
+  const cancelReleaseFrames = () => {
+    for (const id of releaseFramesRef.current) {
+      cancelAnimationFrame(id)
+    }
+    releaseFramesRef.current = []
+  }
 
   if (open !== prevOpenRef.current) {
     prevOpenRef.current = open
@@ -56,7 +64,13 @@ export const SidePanel = ({
     return () => window.clearTimeout(timer)
   }, [entering, rightPanel])
 
-  useEffect(() => () => dragCleanupRef.current?.(), [])
+  useEffect(
+    () => () => {
+      cancelReleaseFrames()
+      dragCleanupRef.current?.()
+    },
+    []
+  )
 
   useEffect(() => {
     if (exiting) {
@@ -81,6 +95,7 @@ export const SidePanel = ({
     }
     event.preventDefault()
     event.stopPropagation()
+    cancelReleaseFrames()
     dragCleanupRef.current?.()
     if (entering) {
       setEntering(false)
@@ -150,11 +165,17 @@ export const SidePanel = ({
       cleanup()
       rightPanel.setWidth(latestWidth)
       setResizingWidth(null)
-      requestAnimationFrame(() => {
-        if (dragCleanupRef.current === null && rightPanel.useStore.getState().panelResizing) {
-          rightPanel.setResizing(false)
-        }
+      cancelReleaseFrames()
+      const f1 = requestAnimationFrame(() => {
+        const f2 = requestAnimationFrame(() => {
+          releaseFramesRef.current = []
+          if (dragCleanupRef.current === null && rightPanel.useStore.getState().panelResizing) {
+            rightPanel.setResizing(false)
+          }
+        })
+        releaseFramesRef.current = [f2]
       })
+      releaseFramesRef.current = [f1]
     }
 
     dragCleanupRef.current = forceCancel

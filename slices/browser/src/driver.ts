@@ -6,7 +6,8 @@
 
 const SHARED_HELPERS = `
 const __DS_KEY = Symbol.for('__ds_browser_driver__');
-const __dsStore = window[__DS_KEY] || (window[__DS_KEY] = { refs: new Map(), seq: 0 });
+const __dsStore = window[__DS_KEY] || (window[__DS_KEY] = { refs: new Map(), elToRef: new WeakMap(), seq: 0 });
+if (!__dsStore.elToRef) __dsStore.elToRef = new WeakMap();
 
 const __isVisible = (el) => {
   if (!el || !(el instanceof Element)) return false;
@@ -116,8 +117,12 @@ export const buildSnapshotScript = (options: SnapshotOptions = {}): string => {
 try {
   ${SHARED_HELPERS}
   const opts = ${args};
-  __dsStore.refs = new Map();
-  __dsStore.seq = 0;
+  for (const [existingRef, weak] of __dsStore.refs.entries()) {
+    const existingEl = weak.deref();
+    if (!existingEl || !existingEl.isConnected) {
+      __dsStore.refs.delete(existingRef);
+    }
+  }
 
   const INTERACTIVE_ROLES = new Set([
     'button', 'link', 'textbox', 'searchbox', 'combobox', 'listbox',
@@ -188,7 +193,11 @@ try {
   const picked = rawElements.slice(0, opts.maxElements);
 
   const elements = picked.map(({ el, rect, inView }) => {
-    const ref = 'e' + (++__dsStore.seq);
+    let ref = __dsStore.elToRef.get(el);
+    if (!ref) {
+      ref = 'e' + (++__dsStore.seq);
+      __dsStore.elToRef.set(el, ref);
+    }
     __dsStore.refs.set(ref, new WeakRef(el));
     const tag = el.tagName.toLowerCase();
     const role = (el.getAttribute('role') || (
@@ -284,63 +293,6 @@ try {
 }
 `
 }
-
-export const buildShowSomBadgesScript = (zoom = 1): string => {
-  const safeZoom = Number.isFinite(zoom) && zoom > 0 ? zoom : 1
-  const inv = Math.min(4, Math.max(1, 1 / safeZoom))
-  const fontSize = Math.round(10 * inv)
-  const lineHeight = Math.round(12 * inv)
-  const padY = Math.max(1, Math.round(1 * inv))
-  const padX = Math.max(4, Math.round(4 * inv))
-  const border = Math.max(1, Math.round(inv))
-  const radius = Math.max(4, Math.round(4 * inv))
-  const edgeW = Math.round(36 * inv)
-  const edgeH = Math.round(18 * inv)
-  return `
-try {
-  ${SHARED_HELPERS}
-  document.querySelectorAll('[data-ds-som="1"]').forEach((n) => n.remove());
-  const container = document.createElement('div');
-  container.setAttribute('data-ds-overlay', '1');
-  container.setAttribute('data-ds-som', '1');
-  container.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:2147483647;';
-  for (const [ref, weak] of __dsStore.refs.entries()) {
-    const el = weak.deref();
-    if (!el || !el.isConnected || !__isVisible(el)) continue;
-    const rect = el.getBoundingClientRect();
-    if (!__inViewport(rect)) continue;
-    const tag = document.createElement('span');
-    tag.textContent = ref;
-    tag.style.cssText = [
-      'position:fixed',
-      'left:' + Math.max(2, Math.min(window.innerWidth - ${edgeW}, rect.left)) + 'px',
-      'top:' + Math.max(2, Math.min(window.innerHeight - ${edgeH}, rect.top)) + 'px',
-      'padding:${padY}px ${padX}px',
-      'border-radius:${radius}px',
-      'background:#1b1b1c',
-      'color:#ffffff',
-      'border:${border}px solid #5686fe',
-      'font:600 ${fontSize}px/${lineHeight}px ui-monospace,SFMono-Regular,Menlo,monospace',
-      'box-shadow:0 1px 3px rgba(0,0,0,0.4)',
-    ].join(';');
-    container.appendChild(tag);
-  }
-  (document.documentElement || document.body).appendChild(container);
-  return JSON.stringify({ ok: true });
-} catch (err) {
-  return JSON.stringify({ ok: false, error: String(err) });
-}
-`
-}
-
-export const buildHideSomBadgesScript = (): string => `
-try {
-  document.querySelectorAll('[data-ds-som="1"]').forEach((n) => n.remove());
-  return JSON.stringify({ ok: true });
-} catch {
-  return JSON.stringify({ ok: true });
-}
-`
 
 export const buildClickScript = (params: {
   ref?: string

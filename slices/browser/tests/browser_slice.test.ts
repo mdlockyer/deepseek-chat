@@ -10,6 +10,7 @@ import type {
 import { memoryStore } from '@deepseek-chat/spine/ports'
 import { EventLog } from '@deepseek-chat/spine/runtime'
 import {
+  computeSomBadgeBoxes,
   createBrowserSlice,
   isHttpUrl,
   normalizeOmniboxInput,
@@ -53,8 +54,8 @@ const fakeHost = () => {
     setOptions: record('setOptions') as BrowserHost['setOptions'],
     createTab: record('createTab') as BrowserHost['createTab'],
     closeTab: record('closeTab') as BrowserHost['closeTab'],
-    setActiveTab: (tabId, bounds, visible) => {
-      calls.push({ name: 'setActiveTab', args: [tabId, bounds, visible] })
+    setActiveTab: (tabId, bounds, visible, zoom) => {
+      calls.push({ name: 'setActiveTab', args: [tabId, bounds, visible, zoom] })
       lastActive.tabId = tabId
       lastActive.visible = visible
       return Promise.resolve()
@@ -712,5 +713,380 @@ describe('browser: ToolCapability, toggle, presenter, and archive serialization'
     )
     assert.equal(summary?.lane, 'browser')
     env.browser.dispose()
+  })
+})
+
+describe('browser: bounds sync, stable refs, and SoM screenshot badges', () => {
+  it('applies fresh bounds and zoom after resize without stale-closure clobbering', async () => {
+    const env = await withVisiblePage()
+    const baseSetActiveTab = env.host.host.setActiveTab
+    const pendingActive: (() => void)[] = []
+    let interceptNext = false
+
+    env.host.host.setActiveTab = (tabId, bounds, visible, zoom) => {
+      const p = baseSetActiveTab(tabId, bounds, visible, zoom)
+      if (interceptNext) {
+        interceptNext = false
+        return new Promise<void>((resolve) => {
+          pendingActive.push(() => void p.then(resolve))
+        })
+      }
+      return p
+    }
+
+    // 1. During panel resize, bounds/zoom update in state without firing native setBounds.
+    const boundsBeforeDrag = env.host.named('setBounds').length
+    env.panel.slot.setResizing(true)
+    await settle()
+    const mobileBounds = { x: 740, y: 106, width: 328, height: 710 }
+    env.browser.setPanelBounds(mobileBounds, 0.84)
+    await settle()
+    assert.equal(
+      env.host.named('setBounds').length,
+      boundsBeforeDrag,
+      'no native setBounds while resizing'
+    )
+
+    // 2. When resizing ends, setActiveTab receives the fresh bounds & zoom atomically.
+    // Even if a newer bounds update arrives while setActiveTab is in flight, it wins afterward.
+    interceptNext = true
+    env.panel.slot.setResizing(false)
+    await Promise.resolve()
+    const settledBounds = { x: 760, y: 106, width: 328, height: 710 }
+    env.browser.setPanelBounds(settledBounds, 0.78)
+    const release = pendingActive.shift()
+    assert.ok(release, 'intercepted in-flight setActiveTab')
+    release()
+    await settle()
+
+    const activeCall = env.host.named('setActiveTab').at(-1)
+    assert.deepEqual(activeCall?.args[1], mobileBounds)
+    assert.equal(activeCall?.args[2], true)
+    assert.equal(activeCall?.args[3], 0.84)
+
+    const finalBoundsCall = env.host.named('setBounds').at(-1)
+    assert.deepEqual(finalBoundsCall?.args[0], settledBounds)
+    assert.equal(finalBoundsCall?.args[1], 0.78)
+
+    // 3. Forced sync (e.g. window resize with unchanged CSS rect) still calls native setBounds.
+    const countBeforeForce = env.host.named('setBounds').length
+    env.browser.setPanelBounds(settledBounds, 0.78, { force: true })
+    await settle()
+    assert.equal(env.host.named('setBounds').length, countBeforeForce + 1)
+
+    // 4. Hover snapshot started just before drag is preserved when resizing begins mid-capture.
+    const pendingSnaps: ((v: { dataUrl: string; width: number; height: number }) => void)[] = []
+    env.host.host.takeSnapshot = () =>
+      new Promise((resolve) => {
+        pendingSnaps.push(resolve)
+      })
+    const snapPromise = env.browser.refreshSnapshot()
+    env.panel.slot.setResizing(true)
+    const resolveSnap = pendingSnaps.shift()
+    assert.ok(resolveSnap)
+    resolveSnap({ dataUrl: 'data:image/jpeg;base64,FRESH', width: 328, height: 710 })
+    await snapPromise
+    assert.equal(env.browser.getSession('s1').tabs[0]?.snapshotUrl, 'data:image/jpeg;base64,FRESH')
+    env.browser.dispose()
+  })
+
+  it('keeps element refs stable across scroll and DOM insertions, and rejects detached refs', async () => {
+    class FakeElement {
+      tagName: string
+      attrs = new Map<string, string>()
+      children: FakeElement[] = []
+      isConnected = true
+      innerText: string
+      rect: {
+        left: number
+        top: number
+        right: number
+        bottom: number
+        width: number
+        height: number
+      }
+      constructor(tag: string, label: string, top: number) {
+        this.tagName = tag.toUpperCase()
+        this.innerText = label
+        this.rect = { left: 10, top, right: 110, bottom: top + 30, width: 100, height: 30 }
+      }
+      getAttribute(name: string) {
+        return this.attrs.get(name) ?? null
+      }
+      hasAttribute(name: string) {
+        return this.attrs.has(name)
+      }
+      getBoundingClientRect() {
+        return this.rect
+      }
+      scrollIntoView() {}
+      focus() {}
+      click() {}
+      dispatchEvent() {
+        return true
+      }
+    }
+    class FakeHTMLElement extends FakeElement {}
+    class FakeSVGElement extends FakeElement {}
+    class FakeInput extends FakeHTMLElement {
+      type = 'text'
+      value = ''
+      disabled = false
+      labels: FakeElement[] = []
+    }
+    class FakeTextarea extends FakeHTMLElement {
+      value = ''
+      disabled = false
+      labels: FakeElement[] = []
+    }
+    class FakeSelect extends FakeHTMLElement {
+      value = ''
+      disabled = false
+      options: FakeElement[] = []
+      labels: FakeElement[] = []
+    }
+    class FakeAnchor extends FakeHTMLElement {
+      href = ''
+    }
+
+    const body = new FakeHTMLElement('body', 'Form page', 0)
+    const btnA = new FakeHTMLElement('button', 'First', 20)
+    const btnB = new FakeHTMLElement('button', 'Second', 80)
+    const btnC = new FakeHTMLElement('button', 'Third', 140)
+    body.children = [btnA, btnB, btnC]
+
+    const fakeWindow: Record<PropertyKey, unknown> = {
+      innerWidth: 800,
+      innerHeight: 600,
+      scrollX: 0,
+      scrollY: 0,
+      scrollBy: () => {},
+      scrollTo: () => {},
+    }
+    const fakeDocument = {
+      body,
+      documentElement: {
+        clientWidth: 800,
+        clientHeight: 600,
+        scrollWidth: 800,
+        scrollHeight: 1200,
+        appendChild: () => {},
+      },
+      title: 'Test Form',
+      readyState: 'complete',
+      activeElement: body,
+      getElementById: () => null,
+      querySelector: () => null,
+      querySelectorAll: () => [],
+      createElement: () => new FakeHTMLElement('div', '', 0),
+    }
+
+    class FakeEvent {
+      type: string
+      constructor(type: string) {
+        this.type = type
+      }
+    }
+
+    const runInFakeDom = (script: string): string => {
+      const fn = new Function(
+        'window',
+        'document',
+        'location',
+        'getComputedStyle',
+        'Element',
+        'HTMLElement',
+        'SVGElement',
+        'HTMLInputElement',
+        'HTMLTextAreaElement',
+        'HTMLSelectElement',
+        'HTMLAnchorElement',
+        'PointerEvent',
+        'MouseEvent',
+        script
+      )
+      return fn(
+        fakeWindow,
+        fakeDocument,
+        { href: 'https://example.com/' },
+        () => ({ display: 'block', visibility: 'visible', opacity: '1' }),
+        FakeElement,
+        FakeHTMLElement,
+        FakeSVGElement,
+        FakeInput,
+        FakeTextarea,
+        FakeSelect,
+        FakeAnchor,
+        FakeEvent,
+        FakeEvent
+      ) as string
+    }
+
+    const env = await withVisiblePage()
+    env.host.host.evalJs = async (_tabId, script, isolated) =>
+      isolated ? runInFakeDom(script) : JSON.stringify({ ok: true, value: null })
+
+    const first = await env.browser.run(
+      'browser_observe',
+      {},
+      { signal: signal(), sessionId: 's1' }
+    )
+    assert.equal(first.status, 'ok')
+    assert.match(first.text, /\[e1\] button "First"/)
+    assert.match(first.text, /\[e2\] button "Second"/)
+    assert.match(first.text, /\[e3\] button "Third"/)
+
+    // Scroll btnA out of view and prepend a brand-new button btnD before btnB.
+    btnA.rect = { left: 10, top: -120, right: 110, bottom: -90, width: 100, height: 30 }
+    const btnD = new FakeHTMLElement('button', 'Inserted', 40)
+    body.children = [btnA, btnD, btnB, btnC]
+
+    const second = await env.browser.run(
+      'browser_scroll',
+      { direction: 'down', amount: 120 },
+      { signal: signal(), sessionId: 's1' }
+    )
+    assert.equal(second.status, 'ok')
+    assert.match(second.text, /\[e1\] button "First" \(offscreen\)/)
+    assert.match(second.text, /\[e2\] button "Second"/)
+    assert.match(second.text, /\[e3\] button "Third"/)
+    assert.match(second.text, /\[e4\] button "Inserted"/)
+
+    // Detach btnB: clicking e2 must fail as stale rather than targeting another element.
+    btnB.isConnected = false
+    body.children = [btnA, btnD, btnC]
+    await env.browser.run('browser_observe', {}, { signal: signal(), sessionId: 's1' })
+    const staleClick = await env.browser.run(
+      'browser_click',
+      { ref: 'e2' },
+      { signal: signal(), sessionId: 's1' }
+    )
+    assert.equal(staleClick.status, 'error')
+    assert.match(staleClick.text, /stale/)
+    env.browser.dispose()
+  })
+
+  it('computes SoM badge geometry accurately and composites badges onto model screenshots while keeping preview clean', async () => {
+    // 1. Pure layout mapping across Retina/zoom scaling, edge clamping, offscreen filtering, and collision nudging.
+    const layout = computeSomBadgeBoxes(
+      [
+        { ref: 'e1', inView: true, rect: { x: 10, y: 20, w: 100, h: 32 } },
+        { ref: 'e2', inView: true, rect: { x: 10, y: 20, w: 100, h: 32 } },
+        { ref: 'e3', inView: true, rect: { x: 385, y: 840, w: 20, h: 20 } },
+        { ref: 'e4', inView: false, rect: { x: 10, y: 1200, w: 100, h: 32 } },
+      ],
+      { width: 390, height: 844 },
+      { width: 780, height: 1688 }
+    )
+    assert.equal(layout.badges.length, 3)
+    assert.equal(layout.badges[0]?.ref, 'e1')
+    assert.equal(layout.badges[0]?.x, 20)
+    assert.equal(layout.badges[0]?.y, 40)
+    assert.ok(
+      (layout.badges[1]?.x ?? 0) > (layout.badges[0]?.x ?? 0),
+      'overlapping badge nudges right'
+    )
+    assert.ok(
+      (layout.badges[2]?.x ?? 0) + (layout.badges[2]?.w ?? 0) <= 780 - 2 &&
+        (layout.badges[2]?.y ?? 0) + (layout.badges[2]?.h ?? 0) <= 1688 - 2,
+      'edge badge stays clamped inside image'
+    )
+
+    // 2. End-to-end browser_observe({ screenshot: true }) produces clean previewImages and badged images in one capture.
+    const drawnRefs: string[] = []
+    const prevDocument = globalThis.document
+    const prevImage = globalThis.Image
+    const fakeCtx = {
+      font: '',
+      fillStyle: '',
+      strokeStyle: '',
+      lineWidth: 1,
+      textAlign: '',
+      textBaseline: '',
+      shadowColor: '',
+      shadowBlur: 0,
+      shadowOffsetY: 0,
+      drawImage: () => {},
+      measureText: (text: string) => ({ width: text.length * 8 }),
+      save: () => {},
+      restore: () => {},
+      strokeRect: () => {},
+      beginPath: () => {},
+      moveTo: () => {},
+      lineTo: () => {},
+      quadraticCurveTo: () => {},
+      closePath: () => {},
+      fill: () => {},
+      stroke: () => {},
+      fillText: (text: string) => {
+        drawnRefs.push(text)
+      },
+    }
+    ;(globalThis as Record<string, unknown>).document = {
+      createElement: (tag: string) => {
+        assert.equal(tag, 'canvas')
+        return {
+          width: 0,
+          height: 0,
+          getContext: () => fakeCtx,
+          toDataURL: () => 'data:image/jpeg;base64,BADGED',
+        }
+      },
+    }
+    ;(globalThis as Record<string, unknown>).Image = class FakeImage {
+      naturalWidth = 800
+      naturalHeight = 600
+      width = 800
+      height = 600
+      onload: (() => void) | null = null
+      onerror: (() => void) | null = null
+      set src(_value: string) {
+        queueMicrotask(() => this.onload?.())
+      }
+    }
+
+    try {
+      const env = await withVisiblePage()
+      env.host.host.evalJs = async () =>
+        JSON.stringify({
+          ...SNAPSHOT,
+          totalInteractiveCount: 2,
+          elements: [
+            {
+              ref: 'e1',
+              role: 'button',
+              label: 'Submit',
+              inView: true,
+              rect: { x: 20, y: 40, w: 90, h: 32 },
+            },
+            {
+              ref: 'e2',
+              role: 'link',
+              label: 'Help',
+              inView: true,
+              rect: { x: 140, y: 40, w: 60, h: 24 },
+            },
+          ],
+        })
+      const snapshotsBefore = env.host.named('takeSnapshot').length
+      const observed = await env.browser.run(
+        'browser_observe',
+        { screenshot: true },
+        { signal: signal(), sessionId: 's1' }
+      )
+      assert.equal(observed.status, 'ok')
+      assert.equal(
+        env.host.named('takeSnapshot').length,
+        snapshotsBefore + 1,
+        'takes a single native screenshot per observe'
+      )
+      assert.deepEqual(observed.previewImages, ['data:image/png;base64,AA'])
+      assert.deepEqual(observed.images, ['data:image/jpeg;base64,BADGED'])
+      assert.deepEqual(drawnRefs, ['e1', 'e2'])
+      env.browser.dispose()
+    } finally {
+      ;(globalThis as Record<string, unknown>).document = prevDocument
+      ;(globalThis as Record<string, unknown>).Image = prevImage
+    }
   })
 })

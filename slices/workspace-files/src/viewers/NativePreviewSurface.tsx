@@ -1,7 +1,7 @@
-import { StageFrame, type StageFit, type ViewportSpec } from '@deepseek-chat/lib-stage'
+import { fitViewportToStage, StageFrame, type ViewportSpec } from '@deepseek-chat/lib-stage'
 import { Banner } from '@deepseek-chat/lib-ui'
 import clsx from 'clsx'
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useWorkspace } from '../context.js'
 import styles from '../PreviewPanel.module.css'
 
@@ -27,7 +27,16 @@ export const NativePreviewSurface = ({
   const panelResizing = panel.useLayout((layout) => layout.resizing)
   const overlayLocked = panel.useLayout((layout) => layout.overlayLocked)
   const storedWidth = panel.useLayout((layout) => layout.width)
-  const [stageFit, setStageFit] = useState<StageFit | null>(null)
+  const stageSize = panel.useStageSize()
+  const stageWidth = stageSize?.width ?? null
+  const stageHeight = stageSize?.height ?? null
+  const currentFit = useMemo(() => {
+    if (stageWidth === null || stageHeight === null) {
+      return null
+    }
+    return fitViewportToStage(viewport, stageWidth, stageHeight)
+  }, [viewport, stageWidth, stageHeight])
+  const resolvedZoom = currentFit?.zoom ?? 1
   const [snapshot, setSnapshot] = useState<{
     dataUrl: string
     width: number
@@ -36,6 +45,10 @@ export const NativePreviewSurface = ({
   const [error, setError] = useState<string | null>(null)
 
   const occluded = panelAnimating || panelResizing || overlayLocked
+  const layoutBlockedRef = useRef(panelAnimating || panelResizing)
+  layoutBlockedRef.current = panelAnimating || panelResizing
+  const resolvedZoomRef = useRef(resolvedZoom)
+  resolvedZoomRef.current = resolvedZoom
 
   // 推送文件内容到 Rust ds-preview 协议，并在首次挂载/内容变更时显示
   useEffect(() => {
@@ -106,10 +119,9 @@ export const NativePreviewSurface = ({
     }
   }, [host])
 
-  // 同步舞台区域逻辑坐标与缩放比例到原生 Webview
-  useLayoutEffect(() => {
+  const syncBounds = useCallback(() => {
     const el = viewportRef.current
-    if (!el || panelResizing) {
+    if (!el || layoutBlockedRef.current) {
       return
     }
     const rect = el.getBoundingClientRect()
@@ -124,18 +136,46 @@ export const NativePreviewSurface = ({
             width: Math.max(1, Math.floor(rect.right) - left),
             height: Math.max(1, Math.floor(rect.bottom) - top),
           },
-          stageFit?.zoom ?? 1
+          resolvedZoomRef.current
         )
         .catch(() => {})
     }
+  }, [host])
+
+  useLayoutEffect(() => {
+    const el = viewportRef.current
+    if (!el) {
+      return
+    }
+    const observer = new ResizeObserver(syncBounds)
+    observer.observe(el)
+    const stageCanvas = el.parentElement?.parentElement?.parentElement
+    if (stageCanvas && stageCanvas !== el) {
+      observer.observe(stageCanvas)
+    }
+    window.addEventListener('resize', syncBounds)
+    return () => {
+      observer.disconnect()
+      window.removeEventListener('resize', syncBounds)
+    }
+  }, [syncBounds])
+
+  // 同步舞台区域逻辑坐标与缩放比例到原生 Webview
+  useLayoutEffect(() => {
+    syncBounds()
   }, [
-    host,
+    syncBounds,
     storedWidth,
+    panelAnimating,
     panelResizing,
     occluded,
-    stageFit?.boxWidth,
-    stageFit?.boxHeight,
-    stageFit?.zoom,
+    viewport?.width,
+    viewport?.height,
+    stageWidth,
+    stageHeight,
+    currentFit?.boxWidth,
+    currentFit?.boxHeight,
+    resolvedZoom,
   ])
 
   const hasCustomViewport = viewport !== null
@@ -145,7 +185,6 @@ export const NativePreviewSurface = ({
     <StageFrame
       host={panel}
       viewport={viewport}
-      onFitChange={setStageFit}
       onViewportResizeHoverStart={previewState.triggerNativePreviewSnapshot}
       onViewportCommit={onViewportCommit}
       banner={
