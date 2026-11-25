@@ -1058,6 +1058,8 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
     empty: useChatStore((state) => state.sessions.length === 0),
   })
 
+  const turnSnapshotCache = new WeakMap<AssistantMessage, TurnSnapshot>()
+
   const getTurnSnapshot = (sessionId: string, messageId: string): TurnSnapshot | null => {
     const state = get()
     const session = Object.hasOwn(state.sessionCache, sessionId)
@@ -1067,14 +1069,29 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
     if (!found || found.role !== 'assistant') {
       return null
     }
-    return {
+    const streaming = Object.hasOwn(state.streaming, sessionId) && found.status === 'streaming'
+    const cached = turnSnapshotCache.get(found)
+    if (
+      cached &&
+      cached.sessionId === sessionId &&
+      cached.messageId === found.id &&
+      cached.status === found.status &&
+      cached.blocks === found.blocks &&
+      cached.streaming === streaming &&
+      cached.capabilityState === found.capabilityState
+    ) {
+      return cached
+    }
+    const snapshot: TurnSnapshot = {
       sessionId,
       messageId: found.id,
       status: found.status,
       blocks: found.blocks,
-      streaming: Object.hasOwn(state.streaming, sessionId) && found.status === 'streaming',
+      streaming,
       capabilityState: found.capabilityState,
     }
+    turnSnapshotCache.set(found, snapshot)
+    return snapshot
   }
 
   const subscribeToTurns = (listener: () => void) => {

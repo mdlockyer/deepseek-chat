@@ -147,3 +147,108 @@ describe('conversations: IndexedDB session store', () => {
     store.close?.()
   })
 })
+
+describe('conversations: getTurnSnapshot referential stability', () => {
+  it('returns the same TurnSnapshot reference while unchanged and a new reference after updates', async () => {
+    const slice = createTestSlice()
+    await slice.commands.init()
+    await slice.replaceSessions(async () => ({
+      sessions: [
+        {
+          id: 's-snap',
+          title: 'Thinking chat',
+          createdAt: 1,
+          updatedAt: 2,
+          rootMessageId: 'u1',
+          messages: [
+            {
+              id: 'u1',
+              role: 'user',
+              content: 'Think about this',
+              files: [],
+              createdAt: 1,
+              selectedChildId: 'a1',
+            },
+            {
+              id: 'a1',
+              role: 'assistant',
+              parentId: 'u1',
+              createdAt: 2,
+              model: null,
+              prefix: false,
+              status: 'done',
+              thinking: true,
+              blocks: [
+                { type: 'thinking', thinking: 'Step 1', startedAt: 1000, endedAt: 3000 },
+                { type: 'text', text: 'Answer' },
+              ],
+            },
+          ],
+        },
+      ],
+      blobs: [],
+    }))
+    await slice.commands.selectSession('s-snap')
+
+    const first = slice.getTurnSnapshot('s-snap', 'a1')
+    const second = slice.getTurnSnapshot('s-snap', 'a1')
+    assert.ok(first)
+    assert.equal(
+      Object.is(first, second),
+      true,
+      'getTurnSnapshot must return a cached reference for useSyncExternalStore'
+    )
+    assert.equal(slice.getTurnSnapshot('s-snap', 'missing'), null)
+
+    // Updating the turn produces a new snapshot that is itself stable on subsequent reads
+    await slice.replaceSessions(async () => ({
+      sessions: [
+        {
+          id: 's-snap',
+          title: 'Thinking chat',
+          createdAt: 1,
+          updatedAt: 3,
+          rootMessageId: 'u1',
+          messages: [
+            {
+              id: 'u1',
+              role: 'user',
+              content: 'Think about this',
+              files: [],
+              createdAt: 1,
+              selectedChildId: 'a1',
+            },
+            {
+              id: 'a1',
+              role: 'assistant',
+              parentId: 'u1',
+              createdAt: 2,
+              model: null,
+              prefix: false,
+              status: 'done',
+              thinking: true,
+              blocks: [
+                { type: 'thinking', thinking: 'Step 1\nStep 2', startedAt: 1000, endedAt: 4000 },
+                { type: 'text', text: 'Updated answer' },
+              ],
+            },
+          ],
+        },
+      ],
+      blobs: [],
+    }))
+    await slice.commands.selectSession('s-snap')
+
+    const third = slice.getTurnSnapshot('s-snap', 'a1')
+    const fourth = slice.getTurnSnapshot('s-snap', 'a1')
+    assert.ok(third)
+    assert.notEqual(third, first)
+    assert.equal(Object.is(third, fourth), true)
+    assert.equal(
+      third.blocks[0]?.type === 'thinking' ? third.blocks[0].thinking : '',
+      'Step 1\nStep 2'
+    )
+
+    slice.dispose()
+  })
+})

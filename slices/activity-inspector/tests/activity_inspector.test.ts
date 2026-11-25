@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
+import { createElement } from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
 import type { ToolStepPresenter } from '@deepseek-chat/lib-tools'
 import type {
   ActiveSessionChanged,
@@ -250,5 +252,45 @@ describe('slice-activity-inspector: lane coalescing, presenters, fallback, and s
       sources.other.map((s) => s.url),
       ['https://other.test']
     )
+  })
+})
+
+describe('slice-activity-inspector: ActivityPanel rendering', () => {
+  it('renders thinking-only turns expanded with reasoning markdown without crashing', () => {
+    const log = new EventLog()
+    const panel = fakePanel()
+    const blocks: TurnSnapshot['blocks'] = [
+      { type: 'thinking', thinking: 'First **reasoning** step', startedAt: 1000, endedAt: 4000 },
+      { type: 'text', text: 'Final answer' },
+    ]
+    const slice = createActivityInspectorSlice({
+      log,
+      panel: panel.slot,
+      turnSource: {
+        // Deliberately returns a fresh wrapper each call to verify defensive snapshot handling.
+        getTurn: (sessionId, messageId) => ({
+          sessionId,
+          messageId,
+          status: 'done',
+          streaming: false,
+          blocks,
+        }),
+        subscribe: () => () => undefined,
+      },
+      getPresenter: () => null,
+      openInApp: null,
+    })
+
+    log.publish<TurnInspectionRequested>({
+      type: 'TurnInspectionRequested',
+      sessionId: 's1',
+      messageId: 'm1',
+      tab: 'activity',
+    })
+
+    const html = renderToStaticMarkup(createElement(slice.ActivityPanel))
+    assert.match(html, /Thought for 3s/)
+    assert.match(html, /<strong><span>reasoning<\/span><\/strong>/)
+    slice.dispose()
   })
 })

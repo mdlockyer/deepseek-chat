@@ -37,6 +37,7 @@ Pure exports: `buildActivityTimeline`, `extractTurnSources`.
 4. **Sources ordering.** Deduplicated sources preserve first-seen 1-based citation numbers; the
    `Sources` tab lists cited sources first followed by all remaining uncited sources.
 5. **Multi-instance isolation.** All Zustand state and subscriptions live inside the factory closure.
+6. **Snapshot stability.** `ActivityPanel` stabilizes `TurnSnapshot` references across identical `useSyncExternalStore` reads so a `TurnSnapshotSource` that wraps fields in fresh objects cannot trigger an infinite render loop.
 
 ## Facts
 

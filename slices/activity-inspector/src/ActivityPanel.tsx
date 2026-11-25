@@ -164,11 +164,31 @@ export const createActivityPanel = (state: ActivityPanelState, deps: ActivityIns
     }
     const activeTarget = target ?? lastTargetRef.current
 
+    const cachedTurnRef = useRef<TurnSnapshot | null>(null)
     const getSnapshot = useCallback((): TurnSnapshot | null => {
       if (!activeTarget) {
+        cachedTurnRef.current = null
         return null
       }
-      return deps.turnSource.getTurn(activeTarget.sessionId, activeTarget.messageId)
+      const next = deps.turnSource.getTurn(activeTarget.sessionId, activeTarget.messageId)
+      const prev = cachedTurnRef.current
+      if (prev === next) {
+        return prev
+      }
+      if (
+        prev &&
+        next &&
+        prev.sessionId === next.sessionId &&
+        prev.messageId === next.messageId &&
+        prev.status === next.status &&
+        prev.streaming === next.streaming &&
+        prev.blocks === next.blocks &&
+        prev.capabilityState === next.capabilityState
+      ) {
+        return prev
+      }
+      cachedTurnRef.current = next
+      return next
     }, [activeTarget])
 
     const turn = useSyncExternalStore(deps.turnSource.subscribe, getSnapshot, getSnapshot)
