@@ -649,3 +649,68 @@ describe('browser: tool runs', () => {
     assert.equal(invalid.status, 'error')
   })
 })
+
+describe('browser: ToolCapability, toggle, presenter, and archive serialization', () => {
+  it('exposes toggle on desktop only, persists chat-demo:browser, and serializes actions', async () => {
+    const webOnly = setup({ desktop: false })
+    assert.equal(webOnly.browser.capability.toggle, undefined)
+    assert.deepEqual(
+      webOnly.browser.capability.declareTools({
+        questionText: '',
+        enabledCapabilities: { browser: true },
+        declaredToolsSoFar: [],
+      }),
+      []
+    )
+
+    const store = memoryStore()
+    const env = setup({ desktop: true, store })
+    const toggle = env.browser.capability.toggle
+    assert.ok(toggle)
+    assert.equal(toggle.isEnabled(), false)
+    toggle.setEnabled(true)
+    assert.equal(toggle.isEnabled(), true)
+    assert.equal(store.get('chat-demo:browser'), 'true')
+
+    assert.equal(
+      env.browser.capability.declareTools({
+        questionText: '',
+        enabledCapabilities: { browser: true },
+        declaredToolsSoFar: [],
+      }).length,
+      11
+    )
+
+    env.browser.start()
+    env.activate('s1')
+    const ctx = {
+      sessionId: 's1',
+      replyId: 'r1',
+      signal: signal(),
+      caller: { kind: 'reply' as const },
+      citedUrls: new Map<string, number>(),
+      isActive: () => true,
+      onProgress: () => {},
+      readReplyState: () => undefined,
+      writeReplyState: () => {},
+    }
+    const nav = await env.browser.capability.run(
+      { id: 'b1', name: 'browser_navigate', input: { url: 'https://example.com/' } },
+      ctx
+    )
+    assert.equal(nav.status, 'ok')
+    const navArchive = env.browser.capability.serializeForArchive?.(
+      { id: 'b1', name: 'browser_navigate', input: { url: 'https://example.com/' } },
+      { tool_use_id: 'b1', content: nav.content, status: 'ok', payload: nav.payload }
+    )
+    assert.equal(navArchive?.[0]?.type, 'TOOL_OPEN')
+
+    const summary = env.browser.capability.presenter?.summarize(
+      { id: 'b1', name: 'browser_navigate', input: { url: 'https://example.com/' } },
+      { tool_use_id: 'b1', content: nav.content, status: 'ok', payload: nav.payload },
+      { streaming: false }
+    )
+    assert.equal(summary?.lane, 'browser')
+    env.browser.dispose()
+  })
+})

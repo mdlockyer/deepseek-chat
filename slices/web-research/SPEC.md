@@ -12,20 +12,22 @@ one shared rate limiter and per-reply credit budget.
 
 `createWebResearchSlice({ fetch, store, secret, localScrape?, params? })` returns:
 
-| Member                                                                     | Meaning                                                                                                         |
-| :------------------------------------------------------------------------- | :-------------------------------------------------------------------------------------------------------------- |
-| `toolNames`                                                                | `{ search: 'web_search', scrape: 'web_scrape', research: 'research' }`. Persisted in history; never rename.     |
-| `declareTools({ searchEnabled, questionText })`                            | Tools to declare for a turn (see invariant 1).                                                                  |
-| `instructions` / `instructionsFor(audience, declaredNames?)`               | System-prompt section worded for `reply` or `agent` callers, interpolating configured parameters.               |
-| `researchProfile`                                                          | Clean-context subagent profile (`deepseek-flash`, thinking on, `web_search` + `web_scrape`, `finish_research`). |
-| `handles(name)`                                                            | Whether a direct tool call belongs to this slice (`web_search`, `web_scrape`).                                  |
-| `run(name, input, { signal, inputJson?, citedUrls?, caller?, replyKey? })` | Run one call through the shared rate limiter and credit budget. Always resolves to a `WebToolResult`.           |
-| `verifyKey(key, signal?)`                                                  | `{ kind: 'valid' } \| { kind: 'invalid' } \| { kind: 'unreachable' } \| { kind: 'failed', message }`.           |
-| `getApiKey()`                                                              | The saved key, or `null` (keyless, or still loading on desktop).                                                |
-| `getKeyState()` / `useKeyState()`                                          | `{ status: 'loading' }` or `{ status: 'ready', apiKey: string \| null }`.                                       |
-| `hydrate()`                                                                | Desktop: read the key from the secret slot (migrating a legacy web-storage key). Web: no-op. Never rejects.     |
-| `setApiKey(key \| null)`                                                   | Save (trimmed) or remove. Rejects if the desktop secret cannot be written; state unchanged then.                |
-| `useKeyEditor()` + `KeySettings({ editor })`                               | Settings view; the editor hook keeps typed input across section switches.                                       |
+| Member                                                                     | Meaning                                                                                                                                                   |
+| :------------------------------------------------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `toolNames`                                                                | `{ search: 'web_search', scrape: 'web_scrape', research: 'research' }`. Persisted in history; never rename.                                               |
+| `declareTools({ searchEnabled, questionText })`                            | Tools to declare for a turn (see invariant 1).                                                                                                            |
+| `instructions` / `instructionsFor(audience, declaredNames?)`               | System-prompt section worded for `reply` or `agent` callers, interpolating configured parameters.                                                         |
+| `researchProfile`                                                          | Clean-context subagent profile (`deepseek-flash`, thinking on, `web_search` + `web_scrape`, `finish_research`).                                           |
+| `capability`                                                               | Open `ToolCapability` (`id: 'web-research'`, owns `chat-demo:search` toggle, race-free `formatContentWithCitations`, `presenter`, `serializeForArchive`). |
+| `handles(name)`                                                            | Whether a direct tool call belongs to this slice (`web_search`, `web_scrape`).                                                                            |
+| `run(name, input, { signal, inputJson?, citedUrls?, caller?, replyKey? })` | Run one call through the shared rate limiter and credit budget. Always resolves to a `WebToolResult`.                                                     |
+| `verifyKey(key, signal?)`                                                  | `{ kind: 'valid' } \| { kind: 'invalid' } \| { kind: 'unreachable' } \| { kind: 'failed', message }`.                                                     |
+| `getApiKey()`                                                              | The saved key, or `null` (keyless, or still loading on desktop).                                                                                          |
+| `getKeyState()` / `useKeyState()`                                          | `{ status: 'loading' }` or `{ status: 'ready', apiKey: string \| null }`.                                                                                 |
+| `hydrate()`                                                                | Desktop: read the key from the secret slot (migrating a legacy web-storage key). Web: no-op. Never rejects.                                               |
+| `setApiKey(key \| null)`                                                   | Save (trimmed) or remove. Rejects if the desktop secret cannot be written; state unchanged then.                                                          |
+| `useKeyEditor()` + `KeySettings({ editor })`                               | Settings view; the editor hook keeps typed input across section switches.                                                                                 |
+| `dispose()`                                                                | Clears in-memory scrape caches and toggle subscribers.                                                                                                    |
 
 The key is read on every call, so a key change applies to the next call.
 

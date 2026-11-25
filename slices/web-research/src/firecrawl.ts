@@ -359,6 +359,33 @@ export const truncateToolText = (text: string, limit: number): string =>
     ? text
     : `${text.slice(0, limit)}\n\n[Truncated after ${limit.toLocaleString('en-US')} characters]`
 
+export const formatSearchResultsText = (
+  query: string,
+  sources: readonly WebSearchSource[],
+  citedUrls: ReadonlyMap<string, number> | undefined,
+  audience: WebAudience,
+  maxToolTextChars: number
+): string => {
+  const trimmedQuery = query.trim()
+  if (sources.length === 0) {
+    return `No search results found for "${trimmedQuery}".`
+  }
+  let nextIndex = (citedUrls?.size ?? 0) + 1
+  const lines = sources.map((source) => {
+    const index = citedUrls?.get(source.url) ?? nextIndex++
+    const parts = [`[${index}] ${source.title}`, `URL: ${source.url}`]
+    if (source.snippet) {
+      parts.push(`Snippet: ${source.snippet}`)
+    }
+    return parts.join('\n')
+  })
+  const body =
+    audience === 'agent'
+      ? lines.join('\n\n')
+      : `${lines.join('\n\n')}\n\nWhen referencing these sources in your answer, cite them inline using [ref:1], [ref:2], etc. matching the numbers above, placed directly before punctuation with no leading space (for example: "Revenue grew 40%[ref:1].").`
+  return truncateToolText(body, maxToolTextChars)
+}
+
 export const formatScrapeOutcome = (input: {
   url: string
   title: string | null
@@ -389,8 +416,6 @@ export const createFirecrawlClient = (
       ...(key ? { Authorization: `Bearer ${key}` } : {}),
     }
   }
-
-  const truncate = (text: string): string => truncateToolText(text, params.maxToolTextChars)
 
   /** GET /v2/team/credit-usage spends no credits. */
   const verifyKey = async (apiKey: string, signal?: AbortSignal): Promise<KeyVerification> => {
@@ -468,24 +493,13 @@ export const createFirecrawlClient = (
     }
 
     const sources = normalizeSearchItems(payload)
-    if (sources.length === 0) {
-      return { text: `No search results found for "${trimmedQuery}".`, sources: [] }
-    }
-
-    let nextIndex = (options.citedUrls?.size ?? 0) + 1
-    const lines = sources.map((source) => {
-      const index = options.citedUrls?.get(source.url) ?? nextIndex++
-      const parts = [`[${index}] ${source.title}`, `URL: ${source.url}`]
-      if (source.snippet) {
-        parts.push(`Snippet: ${source.snippet}`)
-      }
-      return parts.join('\n')
-    })
-    const body =
-      audience === 'agent'
-        ? lines.join('\n\n')
-        : `${lines.join('\n\n')}\n\nWhen referencing these sources in your answer, cite them inline using [ref:1], [ref:2], etc. matching the numbers above, placed directly before punctuation with no leading space (for example: "Revenue grew 40%[ref:1].").`
-    const text = truncate(body)
+    const text = formatSearchResultsText(
+      trimmedQuery,
+      sources,
+      options.citedUrls,
+      audience,
+      params.maxToolTextChars
+    )
     return { text, sources }
   }
 

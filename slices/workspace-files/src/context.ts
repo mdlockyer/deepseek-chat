@@ -1,6 +1,7 @@
 import type { NoticePort, PanelSlot } from '@deepseek-chat/spine/ports'
 import { createContext, useContext, type ComponentType } from 'react'
 import type { PreviewState } from './state.js'
+import type { FileRecord } from './workspace.js'
 
 export type PreviewBounds = { x: number; y: number; width: number; height: number }
 
@@ -32,6 +33,7 @@ export type WorkspaceEnv = {
   readonly panel: PanelSlot
   readonly host: PreviewHost | null
   readonly views: WorkspaceViews
+  readonly useSessionFiles: (sessionId: string | null) => readonly FileRecord[]
   readonly loadFile: (fileId: string) => Promise<Blob | undefined>
   readonly saveFile: (name: string, blob: Blob) => Promise<void>
   readonly copyText: (text: string) => Promise<boolean>

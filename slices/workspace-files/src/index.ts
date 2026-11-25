@@ -1,18 +1,42 @@
-import type { SessionDeleted, SessionHistoryReplaced } from '@deepseek-chat/spine/facts/session'
-import { noopNoticePort, type NoticePort, type PanelSlot } from '@deepseek-chat/spine/ports'
+import type { DeliveredFileRef, ToolCapability } from '@deepseek-chat/lib-tools'
+import { IconBrowseOutline16, IconButton } from '@deepseek-chat/lib-ui'
+import type {
+  SessionDeleted,
+  SessionFileDescriptor,
+  SessionFilesChanged,
+  SessionHistoryReplaced,
+  ToolFileDelivered,
+} from '@deepseek-chat/spine/facts/session'
+import {
+  noopNoticePort,
+  type BlobStore,
+  type NoticePort,
+  type PanelSlot,
+} from '@deepseek-chat/spine/ports'
 import type { EventLog } from '@deepseek-chat/spine/runtime'
+import { createElement, useMemo, type ComponentType } from 'react'
+import { create } from 'zustand'
 import type { PreviewHost, WorkspaceViews } from './context.js'
+import headerToggleStyles from './HeaderToggle.module.css'
+import { workspaceMessages } from './messages.js'
+import { serializeWorkspaceFileForArchive, workspaceFilesPresenter } from './presenter.js'
 import { createPreviewPanel } from './PreviewPanel.js'
 import { createPreviewState, type PreviewViewMode, type SessionPreviewState } from './state.js'
 import {
   PREVIEW_TOOL_INSTRUCTIONS,
   PREVIEW_TOOL_NAMES,
   PREVIEW_TOOLS,
+  READ_FILE_TOOL_NAME,
   runPreviewTool,
   type FileToolDefinition,
   type PreviewToolRunResult,
 } from './tools.js'
-import type { FileRecord } from './workspace.js'
+import {
+  collectWorkspaceArtifacts,
+  makeArtifactKey,
+  makeUploadPreviewKey,
+  type FileRecord,
+} from './workspace.js'
 
 export type { PreviewBounds, PreviewHost, WorkspaceViews } from './context.js'
 export type { PreviewViewMode, SessionPreviewState } from './state.js'
@@ -54,8 +78,10 @@ export type WorkspaceFilesDeps = {
   readonly panel: PanelSlot
   /** Desktop isolated preview webview; `null` on the web (iframe / built-in PDF viewer). */
   readonly host: PreviewHost | null
-  /** Stored file contents by id. */
-  readonly loadFile: (fileId: string) => Promise<Blob | undefined>
+  /** Domain-blind blob store for reading and persisting file bytes. */
+  readonly blobs?: BlobStore
+  /** Legacy read-only file loader (used when `blobs` is not supplied). */
+  readonly loadFile?: (fileId: string) => Promise<Blob | undefined>
   /** Saves a file for the user (desktop: save dialog; web: download). */
   readonly saveFile: (name: string, blob: Blob) => Promise<void>
   readonly copyText: (text: string) => Promise<boolean>
@@ -65,23 +91,224 @@ export type WorkspaceFilesDeps = {
   readonly newId?: () => string
 }
 
+const EMPTY_FILE_RECORDS: readonly FileRecord[] = []
+
+const toFileRecord = (file: SessionFileDescriptor): FileRecord =>
+  file.kind === 'upload'
+    ? {
+        kind: 'upload',
+        fileId: file.fileId,
+        name: file.name,
+        size: file.size,
+        mimeType: file.mimeType,
+        messageId: file.messageId,
+        createdAt: file.createdAt,
+      }
+    : {
+        kind: 'presented',
+        fileId: file.fileId,
+        name: file.name,
+        ...(file.path ? { path: file.path } : {}),
+        ...(file.title ? { title: file.title } : {}),
+        size: file.size,
+        mimeType: file.mimeType,
+        ...(file.version !== undefined ? { version: file.version } : {}),
+        source: file.producer === 'python' ? 'python' : 'model',
+        ...(file.producedByTool || file.producer
+          ? { producedBy: file.producedByTool ?? file.producer }
+          : {}),
+        messageId: file.messageId,
+        createdAt: file.createdAt,
+      }
+
 export const createWorkspaceFilesSlice = (deps: WorkspaceFilesDeps) => {
   const state = createPreviewState(deps.panel)
   const notify = deps.notify ?? noopNoticePort
   const newId = deps.newId ?? (() => crypto.randomUUID())
+  const blobs = deps.blobs
+  const loadFile = blobs
+    ? (fileId: string) => blobs.get(fileId)
+    : (deps.loadFile ?? (async () => undefined))
+
+  const useFilesBySession = create<{ bySession: Record<string, readonly FileRecord[]> }>(() => ({
+    bySession: {},
+  }))
+
+  const getRecords = (sessionId: string): readonly FileRecord[] =>
+    Object.hasOwn(useFilesBySession.getState().bySession, sessionId)
+      ? (useFilesBySession.getState().bySession[sessionId] ?? EMPTY_FILE_RECORDS)
+      : EMPTY_FILE_RECORDS
+
+  const useSessionFiles = (sessionId: string | null): readonly FileRecord[] =>
+    useFilesBySession((current) =>
+      sessionId && Object.hasOwn(current.bySession, sessionId)
+        ? (current.bySession[sessionId] ?? EMPTY_FILE_RECORDS)
+        : EMPTY_FILE_RECORDS
+    )
 
   const unsubscribers = [
+    deps.log.subscribe<SessionFilesChanged>(
+      'SessionFilesChanged',
+      ({ fact }) => {
+        const mapped = fact.files.map(toFileRecord)
+        useFilesBySession.setState((current) => ({
+          bySession: { ...current.bySession, [fact.sessionId]: mapped },
+        }))
+      },
+      { replaySticky: true }
+    ),
+    deps.log.subscribe<ToolFileDelivered>('ToolFileDelivered', ({ fact }) => {
+      const key = makeArtifactKey(fact.file.path ?? fact.file.name)
+      state.revealPresentedFile(fact.sessionId, key, { openPanel: fact.isActiveSession })
+    }),
     deps.log.subscribe<SessionDeleted>('SessionDeleted', ({ fact }) => {
       state.disposeSessionPreview(fact.sessionId)
+      useFilesBySession.setState((current) => {
+        if (!Object.hasOwn(current.bySession, fact.sessionId)) {
+          return current
+        }
+        return {
+          bySession: Object.fromEntries(
+            Object.entries(current.bySession).filter(([key]) => key !== fact.sessionId)
+          ),
+        }
+      })
     }),
     deps.log.subscribe<SessionHistoryReplaced>('SessionHistoryReplaced', () => {
       state.clearAllSessionPreviews()
+      useFilesBySession.setState({ bySession: {} })
     }),
   ]
+
+  const openDeliveredFile = (sessionId: string, file: DeliveredFileRef) => {
+    const key = makeArtifactKey(file.path ?? file.name)
+    const artifact = collectWorkspaceArtifacts(getRecords(sessionId)).find(
+      (item) => item.key === key
+    )
+    const isLatest = !artifact || artifact.latest.fileId === file.id
+    state.openPreviewFile(sessionId, key, file.id, isLatest)
+  }
+
+  const openUploadFile = (sessionId: string, fileId: string) => {
+    state.openPreviewFile(sessionId, makeUploadPreviewKey(fileId), fileId, true)
+  }
+
+  const useIsDeliveredFileShown = (sessionId: string, file: DeliveredFileRef): boolean => {
+    const isOpen = deps.panel.useLayout(() => deps.panel.isOpen(sessionId))
+    const session = state.usePreviewStore((current) => state.getSessionPreview(current, sessionId))
+    const records = useSessionFiles(sessionId)
+    if (!isOpen) {
+      return false
+    }
+    const key = makeArtifactKey(file.path ?? file.name)
+    if (session.activeKey !== key) {
+      return false
+    }
+    const pinned = session.selectedFileIdByKey[key]
+    if (pinned) {
+      return pinned === file.id
+    }
+    const artifact = collectWorkspaceArtifacts(records).find((item) => item.key === key)
+    return !artifact || artifact.latest.fileId === file.id
+  }
+
+  const useIsUploadFileShown = (sessionId: string, fileId: string): boolean => {
+    const isOpen = deps.panel.useLayout(() => deps.panel.isOpen(sessionId))
+    const session = state.usePreviewStore((current) => state.getSessionPreview(current, sessionId))
+    return isOpen && session.activeKey === makeUploadPreviewKey(fileId)
+  }
+
+  const HeaderToggle: ComponentType<{ readonly sessionId: string }> = ({ sessionId }) => {
+    const t = workspaceMessages.useTranslate()
+    const records = useSessionFiles(sessionId)
+    const sessionPreview = state.usePreviewStore((current) =>
+      state.getSessionPreview(current, sessionId)
+    )
+    const open = deps.panel.useLayout(() => deps.panel.isOpen(sessionId))
+    const artifactKeys = useMemo(
+      () => collectWorkspaceArtifacts(records).map((item) => item.key),
+      [records]
+    )
+    const visible = artifactKeys.length > 0 || sessionPreview.uploadKeys.length > 0
+    if (!visible) {
+      return null
+    }
+    return createElement(IconButton, {
+      size: 'm',
+      tone: 'primary',
+      className: open ? headerToggleStyles.active : undefined,
+      icon: createElement(IconBrowseOutline16),
+      tooltip: t(open ? 'previewClosePanel' : 'previewOpenPanel'),
+      tooltipPlacement: 'bottom',
+      'aria-pressed': open,
+      onClick: () => state.togglePreviewPanel(sessionId, artifactKeys),
+    })
+  }
+
+  const capability: ToolCapability = {
+    id: 'workspace-files',
+    declareTools: () => PREVIEW_TOOLS,
+    instructions: (names, audience) =>
+      audience === 'reply' && [...names].some((name) => PREVIEW_TOOL_NAMES.has(name))
+        ? PREVIEW_TOOL_INSTRUCTIONS
+        : null,
+    describe: (name, audience) =>
+      audience === 'reply' ? (PREVIEW_TOOLS.find((tool) => tool.name === name) ?? null) : null,
+    handles: (name) => PREVIEW_TOOL_NAMES.has(name),
+    effectOf: (name) => (name === READ_FILE_TOOL_NAME ? 'read' : 'artifact'),
+    run: async (call, ctx) => {
+      const outcome = await runPreviewTool(call.name, call.input, {
+        records: getRecords(ctx.sessionId),
+        replyId: ctx.replyId,
+        loadFile,
+        newId,
+      })
+      let text = outcome.text
+      let delivered: DeliveredFileRef[] | undefined
+      if (outcome.file) {
+        let saved = true
+        if (blobs) {
+          try {
+            await blobs.put([{ id: outcome.file.ref.id, blob: outcome.file.blob }])
+          } catch {
+            saved = false
+            text +=
+              '\n[Saving the file in the browser failed, so the user cannot preview or download it.]'
+          }
+        }
+        if (saved) {
+          delivered = [
+            {
+              id: outcome.file.ref.id,
+              name: outcome.file.ref.name,
+              size: outcome.file.ref.size,
+              mimeType: outcome.file.ref.mimeType,
+              ...(outcome.file.ref.path ? { path: outcome.file.ref.path } : {}),
+              ...(outcome.file.ref.title ? { title: outcome.file.ref.title } : {}),
+              ...(outcome.file.ref.version !== undefined
+                ? { version: outcome.file.ref.version }
+                : {}),
+              producer: 'workspace-files',
+            },
+          ]
+        }
+      }
+      return {
+        content: text,
+        status: outcome.status,
+        durationMs: outcome.durationMs,
+        payload: outcome.fileAction,
+        ...(delivered ? { files: delivered } : {}),
+      }
+    },
+    presenter: workspaceFilesPresenter,
+    serializeForArchive: serializeWorkspaceFileForArchive,
+  }
 
   return {
     toolNames: PREVIEW_TOOL_NAMES,
     instructions: PREVIEW_TOOL_INSTRUCTIONS,
+    capability,
     /** The file tools are offered on every turn. */
     declareTools: (): FileToolDefinition[] => PREVIEW_TOOLS,
     handles: (toolName: string) => PREVIEW_TOOL_NAMES.has(toolName),
@@ -97,7 +324,7 @@ export const createWorkspaceFilesSlice = (deps: WorkspaceFilesDeps) => {
       runPreviewTool(toolName, input, {
         records: options.records,
         replyId: options.replyId,
-        loadFile: deps.loadFile,
+        loadFile,
         newId,
       }),
 
@@ -109,6 +336,11 @@ export const createWorkspaceFilesSlice = (deps: WorkspaceFilesDeps) => {
     ) => state.revealPresentedFile(sessionId, key, options),
     /** The user opened a file card: show it (a specific version when not the latest). */
     openFile: state.openPreviewFile,
+    openDeliveredFile,
+    openUploadFile,
+    useIsDeliveredFileShown,
+    useIsUploadFileShown,
+    HeaderToggle,
     togglePanel: state.togglePreviewPanel,
     closePanel: state.closePreviewPanel,
     getSession: (sessionId: string): SessionPreviewState =>
@@ -124,7 +356,8 @@ export const createWorkspaceFilesSlice = (deps: WorkspaceFilesDeps) => {
       panel: deps.panel,
       host: deps.host,
       views: deps.views,
-      loadFile: deps.loadFile,
+      useSessionFiles,
+      loadFile,
       saveFile: deps.saveFile,
       copyText: deps.copyText,
       notify,

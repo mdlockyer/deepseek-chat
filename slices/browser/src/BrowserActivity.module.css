@@ -1,0 +1,92 @@
+@layer slice {
+  .root {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ui-space-2);
+  }
+
+  .toggleHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--ui-text-primary);
+    cursor: pointer;
+    text-align: left;
+  }
+
+  .title {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--ui-space-1-5);
+    min-width: 0;
+    font: var(--ui-type-label-strong);
+  }
+
+  .meta {
+    font: var(--ui-type-micro);
+    color: var(--ui-text-muted);
+  }
+
+  .chevron {
+    color: var(--ui-text-muted);
+    flex-shrink: 0;
+  }
+
+  .actions {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ui-space-2);
+  }
+
+  .actionRow {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ui-space-1);
+  }
+
+  .actionLine {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: var(--ui-space-1-5);
+    font: var(--ui-type-caption);
+    color: var(--ui-text-secondary);
+  }
+
+  .stepIndex {
+    color: var(--ui-text-muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .link {
+    color: var(--ui-text-accent);
+    text-decoration: none;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
+
+    @media (hover: hover) {
+      &:hover {
+        text-decoration: underline;
+      }
+    }
+  }
+
+  .error {
+    font: var(--ui-type-micro);
+    color: var(--ui-text-danger);
+    white-space: pre-wrap;
+  }
+
+  .screenshot {
+    display: block;
+    width: 100%;
+    border-radius: var(--ui-radius-sm);
+    border: 1px solid var(--ui-border-subtle);
+  }
+}

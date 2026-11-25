@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import type { PanelLayout, PanelSlot } from '@deepseek-chat/spine/ports'
-import type { SessionDeleted, SessionHistoryReplaced } from '@deepseek-chat/spine/facts/session'
+import { memoryBlobStore, type PanelLayout, type PanelSlot } from '@deepseek-chat/spine/ports'
+import type {
+  SessionDeleted,
+  SessionFilesChanged,
+  SessionHistoryReplaced,
+  ToolFileDelivered,
+} from '@deepseek-chat/spine/facts/session'
 import { EventLog } from '@deepseek-chat/spine/runtime'
 import {
   classifyPreviewKind,
@@ -670,5 +675,156 @@ describe('workspace-files: a version is what one reply left a file as (SPEC 2–
         ['py3', 2],
       ]
     )
+  })
+})
+
+describe('workspace-files: ToolCapability, BlobStore, and Spine facts', () => {
+  it('persists and reads files via BlobStore + sticky SessionFilesChanged and auto-reveals on ToolFileDelivered', async () => {
+    const panel = fakePanel('s1')
+    const log = new EventLog()
+    const blobs = memoryBlobStore()
+    let counter = 0
+
+    // Publish sticky files BEFORE creating the slice to prove replaySticky works.
+    log.publishSticky<SessionFilesChanged>('s1', {
+      type: 'SessionFilesChanged',
+      sessionId: 's1',
+      files: [
+        {
+          kind: 'upload',
+          fileId: 'u1',
+          name: 'brief.txt',
+          size: 5,
+          mimeType: 'text/plain',
+          messageId: 'm0',
+          createdAt: 100,
+        },
+      ],
+    })
+    await blobs.put([{ id: 'u1', blob: new Blob(['hello'], { type: 'text/plain' }) }])
+
+    const files = createWorkspaceFilesSlice({
+      log,
+      panel: panel.slot,
+      host: null,
+      blobs,
+      saveFile: async () => {},
+      copyText: async () => true,
+      views: noViews,
+      newId: () => `blob-${++counter}`,
+    })
+
+    assert.equal(files.capability.id, 'workspace-files')
+    assert.equal(files.capability.effectOf('read_file'), 'read')
+    assert.equal(files.capability.effectOf('present_file'), 'artifact')
+    assert.equal(files.capability.effectOf('edit_file'), 'artifact')
+
+    const ctx = {
+      sessionId: 's1',
+      replyId: 'r1',
+      signal: new AbortController().signal,
+      caller: { kind: 'reply' as const },
+      citedUrls: new Map<string, number>(),
+      isActive: () => true,
+      onProgress: () => {},
+      readReplyState: () => undefined,
+      writeReplyState: () => {},
+    }
+
+    const readUpload = await files.capability.run(
+      { id: 'c1', name: 'read_file', input: { path: 'brief.txt' } },
+      ctx
+    )
+    assert.equal(readUpload.status, 'ok')
+    assert.match(readUpload.content, /hello$/)
+
+    const presentedRes = await files.capability.run(
+      {
+        id: 'c2',
+        name: 'present_file',
+        input: { path: 'report.md', content: '# Hi', title: 'Report' },
+      },
+      ctx
+    )
+    assert.equal(presentedRes.status, 'ok')
+    assert.equal(presentedRes.files?.length, 1)
+    const ref = presentedRes.files?.[0]
+    assert.ok(ref)
+    assert.equal(ref.producer, 'workspace-files')
+    assert.equal(await (await blobs.get(ref.id))?.text(), '# Hi')
+
+    // Reactive auto-reveal via ToolFileDelivered: background does not open panel, active does.
+    log.publish<ToolFileDelivered>({
+      type: 'ToolFileDelivered',
+      sessionId: 's2',
+      messageId: 'r2',
+      isActiveSession: false,
+      file: {
+        kind: 'delivered',
+        fileId: 'bg-1',
+        name: 'chart.png',
+        path: 'chart.png',
+        size: 10,
+        mimeType: 'image/png',
+        producer: 'python',
+        messageId: 'r2',
+        createdAt: 200,
+      },
+    })
+    assert.equal(panel.slot.isOpen('s2'), false)
+    assert.equal(files.getSession('s2').activeKey, makeArtifactKey('chart.png'))
+
+    log.publish<ToolFileDelivered>({
+      type: 'ToolFileDelivered',
+      sessionId: 's1',
+      messageId: 'r1',
+      isActiveSession: true,
+      file: {
+        kind: 'delivered',
+        fileId: ref.id,
+        name: ref.name,
+        path: ref.path,
+        title: ref.title,
+        size: ref.size,
+        mimeType: ref.mimeType,
+        version: ref.version,
+        producer: ref.producer,
+        messageId: 'r1',
+        createdAt: 201,
+      },
+    })
+    assert.equal(panel.slot.isOpen('s1'), true)
+    assert.equal(files.getSession('s1').activeKey, makeArtifactKey('report.md'))
+
+    // Presenter & archive serialization
+    const summary = files.capability.presenter?.summarize(
+      { id: 'c2', name: 'present_file', input: { path: 'report.md' } },
+      {
+        tool_use_id: 'c2',
+        content: presentedRes.content,
+        status: 'ok',
+        payload: presentedRes.payload,
+      },
+      { streaming: false }
+    )
+    assert.equal(summary?.lane, 'files')
+    assert.equal(summary?.detail, 'Report')
+
+    const archive = files.capability.serializeForArchive?.(
+      {
+        id: 'c2',
+        name: 'present_file',
+        input: { path: 'report.md', content: '# Hi', title: 'Report' },
+      },
+      {
+        tool_use_id: 'c2',
+        content: presentedRes.content,
+        status: 'ok',
+        payload: presentedRes.payload,
+      }
+    )
+    assert.equal(archive?.[0]?.type, 'MARKDOWN')
+    assert.match(archive?.[0]?.type === 'MARKDOWN' ? archive[0].content : '', /\*\*Report\*\*/)
+    files.dispose()
   })
 })

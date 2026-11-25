@@ -1,0 +1,44 @@
+@layer slice {
+  .root {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ui-space-2-5);
+  }
+
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--ui-space-2);
+  }
+
+  .title {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--ui-space-1-5);
+    font: var(--ui-type-label-strong);
+    color: var(--ui-text-primary);
+  }
+
+  .meta {
+    font: var(--ui-type-micro);
+    color: var(--ui-text-muted);
+  }
+
+  .error {
+    color: var(--ui-text-danger);
+  }
+
+  .output {
+    margin: 0;
+    padding: var(--ui-space-2);
+    border-radius: var(--ui-radius-sm);
+    background: var(--ui-surface-sunken);
+    font-family: var(--ui-font-mono);
+    font-size: var(--ui-font-size-xs);
+    color: var(--ui-text-secondary);
+    overflow-x: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+}

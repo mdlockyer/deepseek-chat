@@ -291,6 +291,9 @@ importers:
       '@deepseek-chat/lib-stage':
         specifier: workspace:*
         version: link:../../libs/stage
+      '@deepseek-chat/lib-tools':
+        specifier: workspace:*
+        version: link:../../libs/tools
       '@deepseek-chat/lib-ui':
         specifier: workspace:*
         version: link:../../libs/ui
@@ -370,6 +373,9 @@ importers:
 
   slices/python:
     dependencies:
+      '@deepseek-chat/lib-tools':
+        specifier: workspace:*
+        version: link:../../libs/tools
       '@deepseek-chat/lib-ui':
         specifier: workspace:*
         version: link:../../libs/ui
@@ -418,6 +424,9 @@ importers:
 
   slices/web-research:
     dependencies:
+      '@deepseek-chat/lib-tools':
+        specifier: workspace:*
+        version: link:../../libs/tools
       '@deepseek-chat/lib-ui':
         specifier: workspace:*
         version: link:../../libs/ui
@@ -433,6 +442,9 @@ importers:
       '@deepseek-chat/lib-stage':
         specifier: workspace:*
         version: link:../../libs/stage
+      '@deepseek-chat/lib-tools':
+        specifier: workspace:*
+        version: link:../../libs/tools
       '@deepseek-chat/lib-ui':
         specifier: workspace:*
         version: link:../../libs/ui

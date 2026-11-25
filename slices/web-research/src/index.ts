@@ -1,3 +1,5 @@
+import type { ToolCapability } from '@deepseek-chat/lib-tools'
+import { IconGlobeLanguageOutline14 } from '@deepseek-chat/lib-ui'
 import type { HttpFetch, KeyValueStore, SecretSlot } from '@deepseek-chat/spine/ports'
 import { createElement, useSyncExternalStore, type ComponentType } from 'react'
 import {
@@ -5,6 +7,7 @@ import {
   createFirecrawlClient,
   describeFirecrawlFailure,
   formatScrapeOutcome,
+  formatSearchResultsText,
   getRetryable429DelayMs,
   isHttpUrl,
   type FirecrawlParams,
@@ -21,6 +24,8 @@ import {
   createFirecrawlLimiter,
   searchCredits,
 } from './limiter.js'
+import { webResearchMessages } from './messages.js'
+import { serializeWebResearchForArchive, webResearchPresenter } from './presenter.js'
 import {
   RESEARCH_TOOL,
   RESEARCH_TOOL_NAME,
@@ -115,6 +120,7 @@ export type WebResearchSlice = {
   instructionsFor(audience: WebAudience, declaredNames?: ReadonlySet<string>): string
   /** Deep research subagent profile owned by this slice. */
   readonly researchProfile: ResearchProfile
+  readonly capability: ToolCapability
   declareTools(turn: { searchEnabled: boolean; questionText: string }): WebToolDefinition[]
   handles(toolName: string): boolean
   run(toolName: string, input: unknown, options: WebRunOptions): Promise<WebToolResult>
@@ -129,6 +135,7 @@ export type WebResearchSlice = {
   setApiKey(apiKey: string | null): Promise<void>
   useKeyEditor(): KeyEditor
   KeySettings: ComponentType<{ editor: KeyEditor }>
+  dispose(): void
 }
 
 const buildSearchTool = (params: FirecrawlParams): WebToolDefinition => ({
@@ -163,13 +170,15 @@ const buildScrapeTool = (hasLocalScrape: boolean): WebToolDefinition => ({
   },
 })
 
+const SEARCH_TOGGLE_KEY = 'chat-demo:search'
+
 const buildReplyWebInstructions = (includeResearch: boolean, hasLocalScrape: boolean): string => {
   const base = [
     'Web Research (`web_search`, `web_scrape`):',
     hasLocalScrape
-      ? 'You have fast headless web tools: `web_search` searches the live web via Firecrawl, while `web_scrape` fetches and converts public webpages and text-based PDFs into clean Markdown locally on this machine (using no Firecrawl credits, with an isolated offscreen render fallback for JavaScript-heavy pages; private, localhost, and link-local/metadata network addresses are blocked by design for SSRF safety). Reach for `web_search` and `web_scrape` when you need current facts, documentation, papers, or clean Markdown from a URL; they are much faster and lighter than driving the built-in browser. Save the built-in browser for interactive flows, logged-in sessions, localhost apps, or visual inspection.'
-      : 'You have fast headless web tools powered by Firecrawl. Reach for `web_search` and `web_scrape` when you need current facts, documentation, or clean Markdown from a URL; they are much faster and lighter than driving the built-in browser. Save the built-in browser for interactive flows, logged-in sessions, JavaScript-heavy apps, or visual inspection.',
-    'When citing `web_search` results in your chat reply, place inline markers like `[ref:1]`, `[ref:2]` matching the 1-based result numbers returned by `web_search`, directly before punctuation with no leading space (for example: `Revenue grew 40%[ref:1].`). The app renders them as clickable source links and populates the Sources panel. (Files presented with `present_file` render standalone Markdown and do not resolve `[ref:n]`, so use regular `[title](url)` links inside files and `[ref:n]` in your chat reply.)',
+      ? 'You have fast headless web tools: `web_search` searches the live web via Firecrawl, while `web_scrape` fetches and converts public webpages and text-based PDFs into clean Markdown locally on this machine (using no Firecrawl credits, with an isolated offscreen render fallback for JavaScript-heavy pages; private, localhost, and link-local/metadata network addresses are blocked by design for SSRF safety). Reach for `web_search` and `web_scrape` when you need current facts, documentation, papers, or clean Markdown from a URL.'
+      : 'You have fast headless web tools powered by Firecrawl. Reach for `web_search` and `web_scrape` when you need current facts, documentation, or clean Markdown from a URL.',
+    'When citing `web_search` results in your chat reply, place inline markers like `[ref:1]`, `[ref:2]` matching the 1-based result numbers returned by `web_search`, directly before punctuation with no leading space (for example: `Revenue grew 40%[ref:1].`). The app renders them as clickable source links and populates the Sources panel.',
   ].join('\n')
   return includeResearch ? `${base}\n\n${buildLeadResearchInstructions(hasLocalScrape)}` : base
 }
@@ -511,18 +520,151 @@ export const createWebResearchSlice = (deps: WebResearchDeps): WebResearchSlice 
   const BoundKeySettings: ComponentType<{ editor: KeyEditor }> = ({ editor }) =>
     createElement(KeySettings, { editor, localScrape: hasLocalScrape })
 
+  let searchEnabled = deps.store.get(SEARCH_TOGGLE_KEY) === 'true'
+  const toggleListeners = new Set<() => void>()
+  const setSearchEnabled = (next: boolean) => {
+    if (searchEnabled === next) {
+      return
+    }
+    searchEnabled = next
+    deps.store.set(SEARCH_TOGGLE_KEY, String(next))
+    for (const listener of [...toggleListeners]) {
+      listener()
+    }
+  }
+
+  const declareTools = ({
+    searchEnabled: enabled,
+    questionText,
+  }: {
+    searchEnabled: boolean
+    questionText: string
+  }) =>
+    enabled
+      ? [searchTool, scrapeTool, RESEARCH_TOOL]
+      : containsHttpUrl(questionText)
+        ? [scrapeTool]
+        : []
+
+  const handles = (toolName: string) =>
+    toolName === WEB_SEARCH_TOOL_NAME || toolName === WEB_SCRAPE_TOOL_NAME
+
+  const capability: ToolCapability = {
+    id: 'web-research',
+    toggle: {
+      id: 'web-research',
+      label: () => webResearchMessages.translate('webSearchToggleLabel'),
+      icon: createElement(IconGlobeLanguageOutline14),
+      isEnabled: () => searchEnabled,
+      setEnabled: setSearchEnabled,
+      subscribe: (listener) => {
+        toggleListeners.add(listener)
+        return () => {
+          toggleListeners.delete(listener)
+        }
+      },
+    },
+    declareTools: ({ questionText, enabledCapabilities }) =>
+      declareTools({
+        searchEnabled: Boolean(enabledCapabilities['web-research']),
+        questionText,
+      }),
+    instructions: (names, audience) =>
+      names.has(WEB_SEARCH_TOOL_NAME) ||
+      names.has(WEB_SCRAPE_TOOL_NAME) ||
+      names.has(RESEARCH_TOOL_NAME)
+        ? instructionsFor(audience, names)
+        : null,
+    describe: (name, audience) => {
+      if (name === WEB_SEARCH_TOOL_NAME) {
+        return searchTool
+      }
+      if (name === WEB_SCRAPE_TOOL_NAME) {
+        return scrapeTool
+      }
+      if (audience === 'reply' && name === RESEARCH_TOOL_NAME) {
+        return RESEARCH_TOOL
+      }
+      return null
+    },
+    handles,
+    effectOf: (name) => (name === RESEARCH_TOOL_NAME ? 'spawn' : 'read'),
+    agentProfile: (name) => (name === RESEARCH_TOOL_NAME ? researchProfile : null),
+    run: async (call, ctx) => {
+      const startedAt = Date.now()
+      const replyKey = ctx.replyId ? `${ctx.sessionId}:${ctx.replyId}` : ctx.sessionId
+      const outcome =
+        call.name === WEB_SEARCH_TOOL_NAME
+          ? await runSearch(call.input, {
+              signal: ctx.signal,
+              inputJson: ctx.inputJson ?? call.inputJson,
+              citedUrls: ctx.caller.kind === 'reply' ? ctx.citedUrls : undefined,
+              caller: ctx.caller,
+              replyKey,
+            })
+          : call.name === WEB_SCRAPE_TOOL_NAME
+            ? await runScrape(call.input, {
+                signal: ctx.signal,
+                inputJson: ctx.inputJson ?? call.inputJson,
+                caller: ctx.caller,
+                replyKey,
+              })
+            : { status: 'error' as const, content: `Unknown tool: ${call.name}` }
+      const durationMs = Date.now() - startedAt
+      if (call.name === WEB_SEARCH_TOOL_NAME) {
+        const raw =
+          call.input && typeof call.input === 'object' ? (call.input as { query?: unknown }) : null
+        const query = typeof raw?.query === 'string' ? raw.query.trim() : ''
+        const sources = outcome.searchResults
+        return {
+          content: outcome.content,
+          status: outcome.status,
+          durationMs,
+          ...(sources ? { sources } : {}),
+          payload: { kind: 'search', query },
+          ...(ctx.caller.kind === 'reply' && sources && sources.length > 0
+            ? {
+                formatContentWithCitations: (urlToIndex: ReadonlyMap<string, number>) =>
+                  formatSearchResultsText(
+                    query,
+                    sources,
+                    urlToIndex,
+                    'reply',
+                    params.maxToolTextChars
+                  ),
+              }
+            : {}),
+        }
+      }
+      if (call.name === WEB_SCRAPE_TOOL_NAME) {
+        const raw =
+          call.input && typeof call.input === 'object' ? (call.input as { url?: unknown }) : null
+        const rawUrl = typeof raw?.url === 'string' ? raw.url.trim() : ''
+        return {
+          content: outcome.content,
+          status: outcome.status,
+          durationMs,
+          payload: {
+            kind: 'scrape',
+            url: outcome.scrapedPage?.url ?? rawUrl,
+            title: outcome.scrapedPage?.title ?? null,
+          },
+        }
+      }
+      return { content: outcome.content, status: outcome.status, durationMs }
+    },
+    presenter: webResearchPresenter,
+    serializeForArchive: serializeWebResearchForArchive,
+  }
+
   return {
     toolNames,
     instructions: buildReplyWebInstructions(true, hasLocalScrape),
     instructionsFor,
     researchProfile,
-    declareTools: ({ searchEnabled, questionText }) =>
-      searchEnabled
-        ? [searchTool, scrapeTool, RESEARCH_TOOL]
-        : containsHttpUrl(questionText)
-          ? [scrapeTool]
-          : [],
-    handles: (toolName) => toolName === WEB_SEARCH_TOOL_NAME || toolName === WEB_SCRAPE_TOOL_NAME,
+    capability,
+    declareTools,
+    handles,
     run: (toolName, input, options) => {
       if (toolName === WEB_SEARCH_TOOL_NAME) {
         return runSearch(input, options)
@@ -540,5 +682,9 @@ export const createWebResearchSlice = (deps: WebResearchDeps): WebResearchSlice 
     setApiKey: keys.setApiKey,
     useKeyEditor: createUseKeyEditor(keys, client.verifyKey),
     KeySettings: BoundKeySettings,
+    dispose: () => {
+      replyScrapes.clear()
+      toggleListeners.clear()
+    },
   }
 }

@@ -14,13 +14,14 @@ conversation can hand back to the model. Two engines, chosen at init:
 
 `createPythonSlice(deps)` returns:
 
-| Member                                                  | Meaning                                                                              |
-| :------------------------------------------------------ | :----------------------------------------------------------------------------------- |
-| `toolName`, `tool`                                      | Model-visible tool definition; wording depends on the engine.                        |
-| `run(code, { signal, sessionId?, uploads?, onPhase? })` | Run code; always resolves to a `PythonRunResult`, never rejects.                     |
-| `runtime`                                               | Native only (`null` on web): `status()` and `reset()` of the managed Python install. |
-| `RuntimeSetting`                                        | Settings row: runtime status and reset (native); renders nothing on web.             |
-| `dispose()`                                             | Unsubscribe from the Spine.                                                          |
+| Member                                                  | Meaning                                                                                                                                                                                 |
+| :------------------------------------------------------ | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `capability`                                            | Open `ToolCapability` (`id: 'python'`, owns `chat-demo:python` toggle, `presenter`, `serializeForArchive`, mounts `SessionFilesChanged` files and persists generated files to `blobs`). |
+| `toolName`, `tool`, `instructions`                      | Model-visible tool definition and instructions; wording depends on the engine.                                                                                                          |
+| `run(code, { signal, sessionId?, uploads?, onPhase? })` | Run code; always resolves to a `PythonRunResult`, never rejects.                                                                                                                        |
+| `runtime`                                               | Native only (`null` on web): `status()` and `reset()` of the managed Python install.                                                                                                    |
+| `RuntimeSetting`                                        | Settings row: runtime status and reset (native); renders nothing on web.                                                                                                                |
+| `dispose()`                                             | Unsubscribe from the Spine and clear listeners.                                                                                                                                         |
 
 ## Behavioural invariants
 
@@ -49,7 +50,7 @@ conversation can hand back to the model. Two engines, chosen at init:
 
 ## Facts
 
-- **Consumes:** `SessionDeleted`, `SessionHistoryReplaced` (`spine/facts/session`).
+- **Consumes:** `SessionFilesChanged` (sticky), `SessionDeleted`, `SessionHistoryReplaced` (`spine/facts/session`).
 - **Publishes:** none.
 
 ## Tunable parameters

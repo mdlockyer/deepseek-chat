@@ -50,10 +50,10 @@ export const createPreviewPanel = (env: WorkspaceEnv) => {
     records,
     topActions,
   }: {
-    /** Files of the active chat's visible branch, in conversation order. */
-    records: readonly FileRecord[]
+    /** Optional explicit files; defaults to the slice's reactive `SessionFilesChanged` store. */
+    records?: readonly FileRecord[]
     topActions?: ReactNode
-  }) => (
+  } = {}) => (
     <WorkspaceProvider value={env}>
       <PreviewPanelContent records={records} topActions={topActions} />
     </WorkspaceProvider>
@@ -63,10 +63,10 @@ export const createPreviewPanel = (env: WorkspaceEnv) => {
 
 /** 右侧文件预览面板内容（托管在共享 SidePanel 壳层内，单行 52px 顶栏） */
 const PreviewPanelContent = ({
-  records,
+  records: explicitRecords,
   topActions,
 }: {
-  records: readonly FileRecord[]
+  records?: readonly FileRecord[]
   topActions?: ReactNode
 }) => {
   const t = workspaceMessages.useTranslate()
@@ -81,6 +81,8 @@ const PreviewPanelContent = ({
     usePreviewStore,
   } = env.state
   const activeSessionId = env.panel.useLayout((layout) => layout.activeSessionId)
+  const reactiveRecords = env.useSessionFiles(activeSessionId)
+  const records = explicitRecords ?? reactiveRecords
   const stageSize = env.panel.useStageSize()
   const sessionPreview = usePreviewStore((state) =>
     activeSessionId && Object.hasOwn(state.sessions, activeSessionId)

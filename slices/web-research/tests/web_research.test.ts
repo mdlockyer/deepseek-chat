@@ -579,3 +579,105 @@ describe('web-research: desktop migration never overwrites a newer or unreadable
     assert.equal(store.get(KEY), 'fc-legacy', 'the legacy copy stays for the next launch')
   })
 })
+
+describe('web-research: ToolCapability, toggle, citation renumbering, and archive serialization', () => {
+  it('owns chat-demo:search toggle, formats race-free citations, and serializes search/scrape', async () => {
+    const store = memoryStore()
+    const { web } = setup(
+      (call) =>
+        call.url.endsWith('/search')
+          ? json({
+              success: true,
+              data: {
+                web: [
+                  { url: 'https://a.example/', title: 'Alpha', description: 'First.' },
+                  { url: 'https://b.example/', title: 'Beta', description: 'Second.' },
+                ],
+              },
+            })
+          : json({
+              success: true,
+              data: {
+                markdown: '# Page',
+                metadata: { title: 'Page Title', sourceURL: 'https://a.example/' },
+              },
+            }),
+      { store }
+    )
+
+    const toggle = web.capability.toggle
+    assert.ok(toggle)
+    assert.equal(toggle.isEnabled(), false)
+    let notifications = 0
+    toggle.subscribe(() => {
+      notifications += 1
+    })
+    toggle.setEnabled(true)
+    assert.equal(toggle.isEnabled(), true)
+    assert.equal(store.get('chat-demo:search'), 'true')
+    assert.equal(notifications, 1)
+
+    assert.equal(web.capability.effectOf('web_search'), 'read')
+    assert.equal(web.capability.effectOf('web_scrape'), 'read')
+    assert.equal(web.capability.effectOf('research'), 'spawn')
+    assert.ok(web.capability.agentProfile?.('research'))
+    assert.equal(web.capability.describe?.('research', 'agent'), null)
+    assert.ok(web.capability.describe?.('research', 'reply'))
+
+    const ctx = {
+      sessionId: 's1',
+      replyId: 'r1',
+      signal: signal(),
+      caller: { kind: 'reply' as const },
+      citedUrls: new Map<string, number>(),
+      isActive: () => true,
+      onProgress: () => {},
+      readReplyState: () => undefined,
+      writeReplyState: () => {},
+    }
+
+    const searchRes = await web.capability.run(
+      { id: 'c1', name: 'web_search', input: { query: 'test query' } },
+      ctx
+    )
+    assert.equal(searchRes.status, 'ok')
+    assert.equal(searchRes.sources?.length, 2)
+    assert.ok(searchRes.formatContentWithCitations)
+    const renumbered = searchRes.formatContentWithCitations(
+      new Map([
+        ['https://a.example/', 5],
+        ['https://b.example/', 6],
+      ])
+    )
+    assert.match(renumbered, /^\[5\] Alpha/m)
+    assert.match(renumbered, /^\[6\] Beta/m)
+
+    const searchArchive = web.capability.serializeForArchive?.(
+      { id: 'c1', name: 'web_search', input: { query: 'test query' } },
+      {
+        tool_use_id: 'c1',
+        content: searchRes.content,
+        status: 'ok',
+        sources: searchRes.sources,
+        payload: searchRes.payload,
+      }
+    )
+    assert.equal(searchArchive?.[0]?.type, 'TOOL_SEARCH')
+    if (searchArchive?.[0]?.type === 'TOOL_SEARCH') {
+      assert.deepEqual(searchArchive[0].queries, ['test query'])
+      assert.equal(searchArchive[0].results.length, 2)
+    }
+
+    const scrapeRes = await web.capability.run(
+      { id: 'c2', name: 'web_scrape', input: { url: 'https://a.example/' } },
+      ctx
+    )
+    assert.equal(scrapeRes.status, 'ok')
+    const scrapeArchive = web.capability.serializeForArchive?.(
+      { id: 'c2', name: 'web_scrape', input: { url: 'https://a.example/' } },
+      { tool_use_id: 'c2', content: scrapeRes.content, status: 'ok', payload: scrapeRes.payload }
+    )
+    assert.equal(scrapeArchive?.[0]?.type, 'TOOL_OPEN')
+    web.dispose()
+  })
+})

@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import type { SessionDeleted, SessionHistoryReplaced } from '@deepseek-chat/spine/facts/session'
+import type {
+  SessionDeleted,
+  SessionFilesChanged,
+  SessionHistoryReplaced,
+} from '@deepseek-chat/spine/facts/session'
+import { memoryBlobStore, memoryStore } from '@deepseek-chat/spine/ports'
 import { EventLog } from '@deepseek-chat/spine/runtime'
 import {
   createPythonSlice,
@@ -443,5 +448,146 @@ describe('python slice: managed runtime and tool', () => {
     assert.match(native.description, /sandboxed Python 3 REPL on the local machine/)
     assert.match(web.description, /Pyodide/)
     assert.deepEqual(native.input_schema.required, ['code'])
+  })
+
+  it('owns its chat-demo:python toggle, mounts SessionFilesChanged uploads, and writes outputs to BlobStore', async () => {
+    const store = memoryStore()
+    const blobs = memoryBlobStore()
+    await blobs.put([
+      { id: 'up-1', blob: new Blob(['a,b'], { type: 'text/csv' }) },
+      { id: 'doc-v1', blob: new Blob(['old'], { type: 'text/markdown' }) },
+      { id: 'doc-v2', blob: new Blob(['new'], { type: 'text/markdown' }) },
+      { id: 'py-old', blob: new Blob(['x'], { type: 'image/png' }) },
+    ])
+
+    let counter = 0
+    const { fake, events, python } = setup({
+      store,
+      blobs,
+      newId: () => `gen-${++counter}`,
+    })
+
+    // Toggle persistence under chat-demo:python
+    const toggle = python.capability.toggle
+    assert.ok(toggle)
+    assert.equal(toggle.isEnabled(), false)
+    let notified = 0
+    const unsub = toggle.subscribe(() => {
+      notified += 1
+    })
+    toggle.setEnabled(true)
+    assert.equal(toggle.isEnabled(), true)
+    assert.equal(store.get('chat-demo:python'), 'true')
+    assert.equal(notified, 1)
+    unsub()
+
+    assert.deepEqual(
+      python.capability
+        .declareTools({
+          questionText: '',
+          enabledCapabilities: { python: true },
+          declaredToolsSoFar: [],
+        })
+        .map((t) => t.name),
+      ['python']
+    )
+    assert.deepEqual(
+      python.capability.declareTools({
+        questionText: '',
+        enabledCapabilities: { python: false },
+        declaredToolsSoFar: [],
+      }),
+      []
+    )
+
+    // SessionFilesChanged mounts uploads + latest non-python delivered files (excluding python outputs).
+    events.publishSticky<SessionFilesChanged>('s1', {
+      type: 'SessionFilesChanged',
+      sessionId: 's1',
+      files: [
+        {
+          kind: 'upload',
+          fileId: 'up-1',
+          name: 'raw.csv',
+          size: 3,
+          mimeType: 'text/csv',
+          messageId: 'u1',
+          createdAt: 1,
+        },
+        {
+          kind: 'delivered',
+          fileId: 'doc-v1',
+          name: 'report.md',
+          path: 'report.md',
+          size: 3,
+          mimeType: 'text/markdown',
+          producer: 'workspace-files',
+          messageId: 'a1',
+          createdAt: 2,
+        },
+        {
+          kind: 'delivered',
+          fileId: 'py-old',
+          name: 'chart.png',
+          path: 'chart.png',
+          size: 1,
+          mimeType: 'image/png',
+          producer: 'python',
+          messageId: 'a1',
+          createdAt: 3,
+        },
+        {
+          kind: 'delivered',
+          fileId: 'doc-v2',
+          name: 'report.md',
+          path: 'report.md',
+          size: 3,
+          mimeType: 'text/markdown',
+          producer: 'workspace-files',
+          messageId: 'a2',
+          createdAt: 4,
+        },
+      ],
+    })
+
+    fake.setReply(async () =>
+      response({
+        stdout: 'ok\n',
+        files: [{ name: 'out.txt', mimeType: 'text/plain', dataBase64: 'aGk=' }],
+      })
+    )
+
+    const ctx = {
+      sessionId: 's1',
+      replyId: 'r1',
+      signal: new AbortController().signal,
+      caller: { kind: 'reply' as const },
+      citedUrls: new Map<string, number>(),
+      isActive: () => true,
+      onProgress: () => {},
+      readReplyState: () => undefined,
+      writeReplyState: () => {},
+    }
+
+    const res = await python.capability.run(
+      { id: 'c1', name: 'python', input: { code: 'print("ok")' } },
+      ctx
+    )
+    assert.equal(res.status, 'ok')
+    assert.deepEqual(fake.staged, ['s1:up-1', 's1:doc-v2'])
+    assert.equal(res.files?.length, 1)
+    assert.equal(res.files?.[0]?.producer, 'python')
+    assert.equal(await (await blobs.get('gen-1'))?.text(), 'hi')
+
+    const bad = await python.capability.run({ id: 'c2', name: 'python', input: { src: '1' } }, ctx)
+    assert.equal(bad.status, 'error')
+    assert.match(bad.content, /Invalid input/)
+
+    const archive = python.capability.serializeForArchive?.(
+      { id: 'c1', name: 'python', input: { code: 'print("ok")' } },
+      { tool_use_id: 'c1', content: res.content, status: 'ok' }
+    )
+    assert.equal(archive?.length, 2)
+    python.dispose()
   })
 })

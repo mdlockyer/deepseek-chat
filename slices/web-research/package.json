@@ -7,6 +7,7 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
+    "@deepseek-chat/lib-tools": "workspace:*",
     "@deepseek-chat/lib-ui": "workspace:*",
     "@deepseek-chat/spine": "workspace:*"
   },

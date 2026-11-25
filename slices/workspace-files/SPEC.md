@@ -10,21 +10,23 @@ panel's views; the chat owns storing messages and file contents.
 
 ## Public entrypoint
 
-`createWorkspaceFilesSlice({ log, panel, host, loadFile, saveFile, copyText, views, newId? })`
+`createWorkspaceFilesSlice({ log, panel, host, blobs?, loadFile?, saveFile, copyText, views, notify?, newId? })`
 returns:
 
-| Member                                                 | Meaning                                                                                                                                                                                  |
-| :----------------------------------------------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `declareTools()`, `instructions`, `handles(name)`      | The three file tools, offered on every turn, and their system-prompt text (when to make a file; present it once, complete; it cannot be opened by other tools; revise with `edit_file`). |
-| `toolNames`                                            | `present_file`, `edit_file`, `read_file`. Persisted in chat history; never rename.                                                                                                       |
-| `run(name, input, { records, replyId })`               | Run one tool against the chat's files, for the reply `replyId`. Always resolves to `{ status, text, file?, fileAction, durationMs }`.                                                    |
-| `reveal(sessionId, key, { openPanel?, defaultMode? })` | Show a newly stored file.                                                                                                                                                                |
-| `openFile(sessionId, key, fileId?, isLatest?)`         | The user opened a file card or attachment.                                                                                                                                               |
-| `togglePanel(sessionId, fallbackKeys)`, `closePanel()` | The chat's preview panel.                                                                                                                                                                |
-| `getSession(id)`, `useSession(id)`                     | A chat's preview state: `{ activeKey, uploadKeys, selectedFileIdByKey, viewModeByKey, viewportByKey }`.                                                                                  |
-| `refreshSnapshot()`                                    | Refresh the still image shown while the native preview is hidden.                                                                                                                        |
-| `PreviewPanel({ records, topActions? })`               | The panel view for the chat on screen.                                                                                                                                                   |
-| `dispose()`                                            | Stop listening to facts.                                                                                                                                                                 |
+| Member                                                 | Meaning                                                                                                                                                     |
+| :----------------------------------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `capability`                                           | Open `ToolCapability` (`id: 'workspace-files'`, `effectOf: read_file -> 'read' else 'artifact'`, reads/writes `blobs`, `presenter`, `serializeForArchive`). |
+| `declareTools()`, `instructions`, `handles(name)`      | The three file tools, offered on every turn, and their system-prompt text (when to make a file; present it once, complete; revise with `edit_file`).        |
+| `toolNames`                                            | `present_file`, `edit_file`, `read_file`. Persisted in chat history; never rename.                                                                          |
+| `run(name, input, { records, replyId })`               | Run one tool against the chat's files, for the reply `replyId`. Always resolves to `{ status, text, file?, fileAction, durationMs }`.                       |
+| `reveal(sessionId, key, { openPanel?, defaultMode? })` | Show a newly stored file (also triggered reactively on `ToolFileDelivered`).                                                                                |
+| `openFile`, `openDeliveredFile`, `openUploadFile`      | Open a file card or attachment (pinning historical versions automatically).                                                                                 |
+| `HeaderToggle`                                         | Session header toggle button (renders only when the session has artifacts or opened uploads).                                                               |
+| `togglePanel(sessionId, fallbackKeys)`, `closePanel()` | The chat's preview panel.                                                                                                                                   |
+| `getSession(id)`, `useSession(id)`                     | A chat's preview state: `{ activeKey, uploadKeys, selectedFileIdByKey, viewModeByKey, viewportByKey }`.                                                     |
+| `refreshSnapshot()`                                    | Refresh the still image shown while the native preview is hidden.                                                                                           |
+| `PreviewPanel({ records?, topActions? })`              | The panel view for the chat on screen (`records` defaults to the reactive `SessionFilesChanged` store).                                                     |
+| `dispose()`                                            | Stop listening to facts.                                                                                                                                    |
 
 Pure helpers exported by the package: `collectWorkspaceArtifacts`, `normalizeWorkspacePath`,
 `makeArtifactKey`, `makeUploadPreviewKey`, `inferMimeType`, `classifyPreviewKind`,
@@ -84,8 +86,10 @@ Inputs and ports:
    keys given, the active file is kept as is.
 10. **Per-chat state.** Active file, pins, view modes and viewports belong to one chat; a chat
     never seen has the empty state.
-11. **Lifecycle facts.** `SessionDeleted` drops that chat's preview state; `SessionHistoryReplaced`
-    drops every chat's.
+11. **Lifecycle facts.** Sticky `SessionFilesChanged` maintains the per-chat file index used by
+    `capability.run` and `PreviewPanel`; discrete `ToolFileDelivered` reveals newly delivered files
+    (opening the panel only when `isActiveSession` is true). `SessionDeleted` drops that chat's
+    preview and file state; `SessionHistoryReplaced` drops every chat's.
 12. **Surfaces.** On the desktop, HTML and PDF render in the host's isolated webview; on the web,
     HTML renders in a sandboxed iframe and PDF in the browser's viewer. Markdown, Mermaid, SVG,
     images, CSV/TSV tables and code render in the page on both.
