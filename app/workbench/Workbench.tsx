@@ -53,8 +53,10 @@ import {
 import { applyDocumentTheme, type ThemeMode } from '@deepseek-chat/spine/design'
 import clsx from 'clsx'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { SsaDemo } from './SsaDemo.js'
 import styles from './Workbench.module.css'
 
+type WorkbenchTab = 'ssa' | 'kit'
 type BrandPreset = 'default' | 'emerald' | 'terracotta'
 
 const OVERRIDE_KEYS = [
@@ -284,6 +286,9 @@ const RADIUS_TOKENS = [
 export const Workbench = () => {
   const notices = useMemo(() => createNoticeBus(), [])
   const overlays = useMemo(() => createOverlayCoordinator(), [])
+  const [workbenchTab, setWorkbenchTab] = useState<WorkbenchTab>(() =>
+    new URLSearchParams(window.location.search).get('tab') === 'ssa' ? 'ssa' : 'kit'
+  )
   const [theme, setTheme] = useState<ThemeMode>('light')
   const [brand, setBrand] = useState<BrandPreset>('default')
   const [reflow320, setReflow320] = useState(false)
@@ -360,6 +365,15 @@ export const Workbench = () => {
             <Badge tone="accent">@deepseek-chat/lib-ui</Badge>
           </div>
           <div className={styles.controls}>
+            <SegmentedControl<WorkbenchTab>
+              ariaLabel="Workbench section"
+              value={workbenchTab}
+              onChange={setWorkbenchTab}
+              options={[
+                { value: 'ssa', label: 'SSA Live Demo' },
+                { value: 'kit', label: 'Component Kit' },
+              ]}
+            />
             <SegmentedControl<ThemeMode>
               ariaLabel="Theme mode"
               value={theme}
@@ -387,562 +401,568 @@ export const Workbench = () => {
           </div>
         </header>
 
-        <main className={clsx(styles.body, reflow320 && styles.reflowFrame)}>
-          <section className={styles.hero}>
-            <h2 className={styles.heroTitle}>Sealed Design System &amp; Token Contract</h2>
-            <p className={styles.heroSubtitle}>
-              Every primitive below reads semantic <code>--ui-*</code> tokens from{' '}
-              <code>spine/design/tokens.css</code>. Toggle Light/Dark or switch Brand Preset above
-              to re-theme all 18 primitives at runtime with zero component code changes.
-            </p>
-            <div className={styles.heroMeta}>
-              <Badge tone="success">167 semantic tokens</Badge>
-              <Badge tone="success">WCAG 2.2 AA verified</Badge>
-              <Badge tone="neutral">Native &lt;dialog&gt; top-layer</Badge>
-              <Badge tone="neutral">Tree-shaken from production</Badge>
-            </div>
-          </section>
-
-          <section className={styles.section} aria-labelledby="wb-actions">
-            <div className={styles.sectionHeader}>
-              <h2 id="wb-actions" className={styles.sectionTitle}>
-                1. Actions, Chips &amp; Icon Controls
-              </h2>
-              <p className={styles.sectionNote}>
-                5 variants, 2 sizes, loading &amp; disabled states, 44px coarse pointer targets
+        {workbenchTab === 'ssa' ? (
+          <SsaDemo />
+        ) : (
+          <main className={clsx(styles.body, reflow320 && styles.reflowFrame)}>
+            <section className={styles.hero}>
+              <h2 className={styles.heroTitle}>Sealed Design System &amp; Token Contract</h2>
+              <p className={styles.heroSubtitle}>
+                Every primitive below reads semantic <code>--ui-*</code> tokens from{' '}
+                <code>spine/design/tokens.css</code>. Toggle Light/Dark or switch Brand Preset above
+                to re-theme all 18 primitives at runtime with zero component code changes.
               </p>
-            </div>
-            <div className={styles.grid}>
-              <div className={styles.card}>
-                <h3 className={styles.cardTitle}>Button Variants (size=&quot;m&quot;)</h3>
-                <div className={styles.row}>
-                  <Button variant="primary">Primary</Button>
-                  <Button variant="outlined">Outlined</Button>
-                  <Button variant="ghost">Ghost</Button>
-                  <Button variant="danger">Danger</Button>
-                  <Button variant="dangerOutlined">Danger Outlined</Button>
-                </div>
-                <div className={styles.row}>
-                  <Button variant="primary" size="s">
-                    Small Primary
-                  </Button>
-                  <Button variant="outlined" size="s" loading>
-                    Saving…
-                  </Button>
-                  <Button variant="primary" disabled>
-                    Disabled
-                  </Button>
-                  <LinkButton href="#wb-tokens">LinkButton</LinkButton>
-                </div>
+              <div className={styles.heroMeta}>
+                <Badge tone="success">167 semantic tokens</Badge>
+                <Badge tone="success">WCAG 2.2 AA verified</Badge>
+                <Badge tone="neutral">Native &lt;dialog&gt; top-layer</Badge>
+                <Badge tone="neutral">Tree-shaken from production</Badge>
               </div>
+            </section>
 
-              <div className={styles.card}>
-                <h3 className={styles.cardTitle}>IconButton, Tooltip &amp; Chip</h3>
-                <div className={styles.row}>
-                  <IconButton
-                    size="xs"
-                    icon={<IconCopyOutline16 />}
-                    tooltip="Size xs (28px)"
-                    aria-label="Copy xs"
-                  />
-                  <IconButton
-                    size="sm"
-                    icon={<IconEditOutline16 />}
-                    tooltip="Size sm (32px)"
-                    aria-label="Edit sm"
-                  />
-                  <IconButton
-                    size="m"
-                    tone="primary"
-                    icon={<IconPanelLeftOutline16 />}
-                    tooltip="Size m primary (36px)"
-                    aria-label="Toggle panel"
-                  />
-                  <IconButton
-                    size="xl"
-                    tone="primary"
-                    icon={<IconRefreshOutline16 />}
-                    tooltip="Size xl (44px)"
-                    aria-label="Refresh"
-                  />
-                </div>
-                <div className={styles.row}>
-                  <Chip icon={<IconSearchOutline16 />}>Back to Activity</Chip>
-                  <Chip active icon={<IconBrowseOutline16 />}>
-                    Active Filter
-                  </Chip>
-                  <Chip icon={<IconGlobeLanguageOutline16 />} disabled>
-                    Disabled Chip
-                  </Chip>
-                </div>
+            <section className={styles.section} aria-labelledby="wb-actions">
+              <div className={styles.sectionHeader}>
+                <h2 id="wb-actions" className={styles.sectionTitle}>
+                  1. Actions, Chips &amp; Icon Controls
+                </h2>
+                <p className={styles.sectionNote}>
+                  5 variants, 2 sizes, loading &amp; disabled states, 44px coarse pointer targets
+                </p>
               </div>
-            </div>
-          </section>
-
-          <section className={styles.section} aria-labelledby="wb-inputs">
-            <div className={styles.sectionHeader}>
-              <h2 id="wb-inputs" className={styles.sectionTitle}>
-                2. Form Fields &amp; Selection Controls
-              </h2>
-              <p className={styles.sectionNote}>
-                Wired aria-describedby, aria-invalid, keyboard navigation, and native switch roles
-              </p>
-            </div>
-            <div className={styles.grid}>
-              <div className={styles.card}>
-                <h3 className={styles.cardTitle}>TextField &amp; PasswordField</h3>
-                <div className={styles.stack}>
-                  <TextField
-                    label="Workspace Title"
-                    hint="Visible across tabs and previews"
-                    value={textValue}
-                    onChange={(event) => setTextValue(event.target.value)}
-                  />
-                  <TextField
-                    label="Validation State"
-                    value=""
-                    placeholder="Required value"
-                    error="Enter at least one character to continue."
-                    onChange={() => {}}
-                  />
-                  <PasswordField
-                    label="Secret Credential"
-                    value={secretValue}
-                    onChange={(event) => setSecretValue(event.target.value)}
-                  />
-                </div>
-              </div>
-
-              <div className={styles.card}>
-                <h3 className={styles.cardTitle}>Select, Switch &amp; SegmentedControl</h3>
-                <div className={styles.stack}>
-                  <Select
-                    ariaLabel="Language select"
-                    value={selectValue}
-                    onChange={setSelectValue}
-                    options={[
-                      { value: 'en', label: 'English (US)' },
-                      { value: 'zh', label: '简体中文' },
-                      { value: 'ja', label: '日本語' },
-                    ]}
-                  />
-                  <Switch
-                    block
-                    icon={<IconThinkOutline16 />}
-                    label="Deep Reasoning Mode"
-                    checked={switchOne}
-                    onChange={setSwitchOne}
-                  />
-                  <Switch
-                    block
-                    icon={<IconCodeOutline14 />}
-                    label="Code Sandbox"
-                    checked={switchTwo}
-                    onChange={setSwitchTwo}
-                  />
-                  <SegmentedControl<'preview' | 'source' | 'diff'>
-                    ariaLabel="Document view mode"
-                    value={segmentValue}
-                    onChange={setSegmentValue}
-                    options={[
-                      { value: 'preview', label: 'Preview' },
-                      { value: 'source', label: 'Source' },
-                      { value: 'diff', label: 'Diff' },
-                    ]}
-                  />
-                </div>
-              </div>
-
-              <div className={styles.card}>
-                <h3 className={styles.cardTitle}>RadioCardGroup</h3>
-                <RadioCardGroup<'light' | 'dark' | 'system'>
-                  ariaLabel="Appearance preference"
-                  value={radioValue}
-                  onChange={setRadioValue}
-                  options={[
-                    { value: 'light', label: 'Light', icon: <IconLightOutline16 /> },
-                    { value: 'dark', label: 'Dark', icon: <IconDarkOutline16 /> },
-                    { value: 'system', label: 'System', icon: <IconSettingsOutline16 /> },
-                  ]}
-                />
-              </div>
-            </div>
-          </section>
-
-          <section className={styles.section} aria-labelledby="wb-overlays">
-            <div className={styles.sectionHeader}>
-              <h2 id="wb-overlays" className={styles.sectionTitle}>
-                3. Overlays, Feedback &amp; Layout Primitives
-              </h2>
-              <p className={styles.sectionNote}>
-                Top-layer native &lt;dialog&gt;, anchored Popover/Menu/HoverCard, NoticePort toasts
-              </p>
-            </div>
-            <div className={styles.grid}>
-              <div className={styles.card}>
-                <h3 className={styles.cardTitle}>Dialog, Popover, Menu &amp; HoverCard</h3>
-                <div className={styles.row}>
-                  <Button variant="primary" size="s" onClick={() => setDialogOpen(true)}>
-                    Open Confirm Dialog
-                  </Button>
-                  <Button variant="outlined" size="s" onClick={() => setSheetOpen(true)}>
-                    Open Dialog + Nested Select
-                  </Button>
-                </div>
-                <div className={styles.row}>
-                  <span ref={popoverAnchorRef}>
-                    <Button
-                      variant="outlined"
-                      size="s"
-                      onClick={() => setPopoverOpen((value) => !value)}
-                    >
-                      Toggle Popover
+              <div className={styles.grid}>
+                <div className={styles.card}>
+                  <h3 className={styles.cardTitle}>Button Variants (size=&quot;m&quot;)</h3>
+                  <div className={styles.row}>
+                    <Button variant="primary">Primary</Button>
+                    <Button variant="outlined">Outlined</Button>
+                    <Button variant="ghost">Ghost</Button>
+                    <Button variant="danger">Danger</Button>
+                    <Button variant="dangerOutlined">Danger Outlined</Button>
+                  </div>
+                  <div className={styles.row}>
+                    <Button variant="primary" size="s">
+                      Small Primary
                     </Button>
-                  </span>
-                  <Popover
-                    open={popoverOpen}
-                    onOpenChange={setPopoverOpen}
-                    anchorRef={popoverAnchorRef}
-                    ariaLabel="Sample popover"
-                  >
-                    <div className={styles.popoverBody}>
-                      <span className={styles.cardTitle}>Anchored Popover</span>
-                      <span className={styles.cardSubtitle}>
-                        Clamps inside viewport, locks OverlayPort, and restores focus on Escape.
-                      </span>
-                      <Button variant="primary" size="s" onClick={() => setPopoverOpen(false)}>
-                        Done
-                      </Button>
-                    </div>
-                  </Popover>
+                    <Button variant="outlined" size="s" loading>
+                      Saving…
+                    </Button>
+                    <Button variant="primary" disabled>
+                      Disabled
+                    </Button>
+                    <LinkButton href="#wb-tokens">LinkButton</LinkButton>
+                  </div>
+                </div>
 
-                  <Menu
-                    ariaLabel="Sample actions menu"
+                <div className={styles.card}>
+                  <h3 className={styles.cardTitle}>IconButton, Tooltip &amp; Chip</h3>
+                  <div className={styles.row}>
+                    <IconButton
+                      size="xs"
+                      icon={<IconCopyOutline16 />}
+                      tooltip="Size xs (28px)"
+                      aria-label="Copy xs"
+                    />
+                    <IconButton
+                      size="sm"
+                      icon={<IconEditOutline16 />}
+                      tooltip="Size sm (32px)"
+                      aria-label="Edit sm"
+                    />
+                    <IconButton
+                      size="m"
+                      tone="primary"
+                      icon={<IconPanelLeftOutline16 />}
+                      tooltip="Size m primary (36px)"
+                      aria-label="Toggle panel"
+                    />
+                    <IconButton
+                      size="xl"
+                      tone="primary"
+                      icon={<IconRefreshOutline16 />}
+                      tooltip="Size xl (44px)"
+                      aria-label="Refresh"
+                    />
+                  </div>
+                  <div className={styles.row}>
+                    <Chip icon={<IconSearchOutline16 />}>Back to Activity</Chip>
+                    <Chip active icon={<IconBrowseOutline16 />}>
+                      Active Filter
+                    </Chip>
+                    <Chip icon={<IconGlobeLanguageOutline16 />} disabled>
+                      Disabled Chip
+                    </Chip>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section className={styles.section} aria-labelledby="wb-inputs">
+              <div className={styles.sectionHeader}>
+                <h2 id="wb-inputs" className={styles.sectionTitle}>
+                  2. Form Fields &amp; Selection Controls
+                </h2>
+                <p className={styles.sectionNote}>
+                  Wired aria-describedby, aria-invalid, keyboard navigation, and native switch roles
+                </p>
+              </div>
+              <div className={styles.grid}>
+                <div className={styles.card}>
+                  <h3 className={styles.cardTitle}>TextField &amp; PasswordField</h3>
+                  <div className={styles.stack}>
+                    <TextField
+                      label="Workspace Title"
+                      hint="Visible across tabs and previews"
+                      value={textValue}
+                      onChange={(event) => setTextValue(event.target.value)}
+                    />
+                    <TextField
+                      label="Validation State"
+                      value=""
+                      placeholder="Required value"
+                      error="Enter at least one character to continue."
+                      onChange={() => {}}
+                    />
+                    <PasswordField
+                      label="Secret Credential"
+                      value={secretValue}
+                      onChange={(event) => setSecretValue(event.target.value)}
+                    />
+                  </div>
+                </div>
+
+                <div className={styles.card}>
+                  <h3 className={styles.cardTitle}>Select, Switch &amp; SegmentedControl</h3>
+                  <div className={styles.stack}>
+                    <Select
+                      ariaLabel="Language select"
+                      value={selectValue}
+                      onChange={setSelectValue}
+                      options={[
+                        { value: 'en', label: 'English (US)' },
+                        { value: 'zh', label: '简体中文' },
+                        { value: 'ja', label: '日本語' },
+                      ]}
+                    />
+                    <Switch
+                      block
+                      icon={<IconThinkOutline16 />}
+                      label="Deep Reasoning Mode"
+                      checked={switchOne}
+                      onChange={setSwitchOne}
+                    />
+                    <Switch
+                      block
+                      icon={<IconCodeOutline14 />}
+                      label="Code Sandbox"
+                      checked={switchTwo}
+                      onChange={setSwitchTwo}
+                    />
+                    <SegmentedControl<'preview' | 'source' | 'diff'>
+                      ariaLabel="Document view mode"
+                      value={segmentValue}
+                      onChange={setSegmentValue}
+                      options={[
+                        { value: 'preview', label: 'Preview' },
+                        { value: 'source', label: 'Source' },
+                        { value: 'diff', label: 'Diff' },
+                      ]}
+                    />
+                  </div>
+                </div>
+
+                <div className={styles.card}>
+                  <h3 className={styles.cardTitle}>RadioCardGroup</h3>
+                  <RadioCardGroup<'light' | 'dark' | 'system'>
+                    ariaLabel="Appearance preference"
+                    value={radioValue}
+                    onChange={setRadioValue}
                     options={[
-                      {
-                        type: 'command',
-                        key: 'rename',
-                        label: 'Rename Item',
-                        shortcut: '⌘R',
-                        icon: <IconEditOutline16 />,
-                        onSelect: () => notices.show({ text: () => 'Selected: Rename Item' }),
-                      },
-                      { type: 'separator', key: 'sep-1' },
-                      {
-                        type: 'radio',
-                        key: 'fit',
-                        label: 'Fit to Stage',
-                        checked: menuRadio === 'fit',
-                        onSelect: () => setMenuRadio('fit'),
-                      },
-                      {
-                        type: 'radio',
-                        key: 'actual',
-                        label: 'Actual Size (100%)',
-                        checked: menuRadio === 'actual',
-                        onSelect: () => setMenuRadio('actual'),
-                      },
-                      {
-                        type: 'switch',
-                        key: 'grid',
-                        label: 'Show Guides',
-                        checked: menuChecked,
-                        keepOpen: true,
-                        onSelect: () => setMenuChecked((value) => !value),
-                      },
-                      { type: 'separator', key: 'sep-2' },
-                      {
-                        type: 'command',
-                        key: 'delete',
-                        label: 'Delete Permanently',
-                        danger: true,
-                        icon: <IconTrashOutline16 />,
-                        onSelect: () =>
-                          notices.show({
-                            text: () => 'Deleted item (demo notice)',
-                            tone: 'error',
-                          }),
-                      },
+                      { value: 'light', label: 'Light', icon: <IconLightOutline16 /> },
+                      { value: 'dark', label: 'Dark', icon: <IconDarkOutline16 /> },
+                      { value: 'system', label: 'System', icon: <IconSettingsOutline16 /> },
                     ]}
-                  >
-                    {({ triggerProps }) => (
-                      <Button variant="outlined" size="s" {...triggerProps}>
-                        <IconEllipsisOutline16 />
-                        Open Menu
-                      </Button>
-                    )}
-                  </Menu>
-
-                  <HoverCard
-                    renderTrigger={({ domRef, domProps }) => (
-                      <span ref={domRef} {...domProps} tabIndex={0}>
-                        <Badge tone="accent">Hover / Focus Card</Badge>
-                      </span>
-                    )}
-                  >
-                    <div className={styles.hoverPreview}>
-                      <span className={styles.hoverPreviewTitle}>Portal HoverCard</span>
-                      <span>
-                        Opens on hover or keyboard focus and stays open while moving into the card.
-                      </span>
-                    </div>
-                  </HoverCard>
-                </div>
-                <div className={styles.row}>
-                  <Button
-                    variant="ghost"
-                    size="s"
-                    onClick={() => notices.show({ text: () => 'Settings saved via NoticePort' })}
-                  >
-                    Trigger Toast
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="s"
-                    onClick={() =>
-                      notices.show({
-                        text: () => 'Request failed — check your connection.',
-                        tone: 'error',
-                        link: { text: () => 'Inspect Tokens', href: '#wb-tokens' },
-                      })
-                    }
-                  >
-                    Trigger Error Toast
-                  </Button>
-                </div>
-              </div>
-
-              <div className={styles.card}>
-                <h3 className={styles.cardTitle}>Badges, Banners &amp; Spinners</h3>
-                <div className={styles.row}>
-                  <Badge tone="neutral">Neutral</Badge>
-                  <Badge tone="accent">Accent</Badge>
-                  <Badge tone="success">Verified</Badge>
-                  <Badge tone="warning">Pending</Badge>
-                  <Badge tone="danger">Error</Badge>
-                  <Spinner size="sm" />
-                  <Spinner size="md" />
-                  <Spinner size="lg" />
-                </div>
-                <div className={styles.stack}>
-                  <Banner tone="info">
-                    <strong>Info:</strong> Semantic surface &amp; border swap automatically under
-                    dark mode.
-                  </Banner>
-                  <Banner
-                    tone="warning"
-                    action={
-                      <Button variant="outlined" size="s" onClick={() => setBrand('default')}>
-                        Reset
-                      </Button>
-                    }
-                  >
-                    <strong>Warning:</strong> Brand overrides remain strictly within WCAG 2.2 AA
-                    contrast.
-                  </Banner>
-                  <Banner tone="error">
-                    <strong>Error:</strong> Actionable failure state using semantic danger tokens.
-                  </Banner>
-                </div>
-              </div>
-
-              <div className={styles.card}>
-                <h3 className={styles.cardTitle}>SettingGroup, Tabs &amp; PanelHeader</h3>
-                <div className={styles.panelPreview}>
-                  <PanelHeader
-                    title="Inspector Panel"
-                    subtitle="Standardized header chrome"
-                    actions={
-                      <Tooltip content="Verified">
-                        <IconButton
-                          size="xs"
-                          icon={<IconCheckOutline16 />}
-                          aria-label="Verified action"
-                        />
-                      </Tooltip>
-                    }
                   />
                 </div>
-                <SettingGroup>
-                  <SettingRow
-                    label="Inline Destructive Confirm"
-                    description="Two-step confirmation without leaving the row."
-                    action={
-                      <SettingInlineConfirm
-                        confirming={confirming}
-                        triggerLabel="Reset"
-                        confirmLabel="Confirm Reset"
-                        cancelLabel="Cancel"
-                        onOpen={() => setConfirming(true)}
-                        onCancel={() => setConfirming(false)}
-                        onConfirm={() => {
-                          setConfirming(false)
-                          notices.show({ text: () => 'Reset confirmed' })
-                        }}
-                      />
-                    }
-                  />
-                </SettingGroup>
-                <Tabs value={activeTab} onChange={setActiveTab} className={styles.tabsPreview}>
-                  <TabList ariaLabel="Architecture layers">
-                    <Tab value="tokens">Tokens</Tab>
-                    <Tab value="primitives">Primitives</Tab>
-                    <Tab value="contracts">Contracts</Tab>
-                  </TabList>
-                  <TabPanel value="tokens" className={styles.tabPanelBox}>
-                    <code>spine/design/tokens.css</code> defines private primitives and semantic
-                    aliases.
-                  </TabPanel>
-                  <TabPanel value="primitives" className={styles.tabPanelBox}>
-                    <code>@deepseek-chat/lib-ui</code> ships 18 accessible primitives with zero UI
-                    dependencies.
-                  </TabPanel>
-                  <TabPanel value="contracts" className={styles.tabPanelBox}>
-                    <code>check:dag</code> and <code>check:design</code> verify every boundary in
-                    CI.
-                  </TabPanel>
-                </Tabs>
               </div>
+            </section>
 
-              <div className={styles.card}>
-                <h3 className={styles.cardTitle}>HoverGlide, FileGlyph &amp; EmptyState</h3>
-                <div className={styles.glideList} {...hoverGlide.containerProps}>
-                  <div {...hoverGlide.indicatorProps} />
-                  {(['item-1', 'item-2', 'item-3'] as const).map((id, index) => (
-                    <button
-                      key={id}
-                      type="button"
-                      className={clsx(
-                        styles.glideItem,
-                        activeGlide === id && styles.glideItemActive
-                      )}
-                      {...hoverGlideItem(activeGlide === id)}
-                      onClick={() => setActiveGlide(id)}
+            <section className={styles.section} aria-labelledby="wb-overlays">
+              <div className={styles.sectionHeader}>
+                <h2 id="wb-overlays" className={styles.sectionTitle}>
+                  3. Overlays, Feedback &amp; Layout Primitives
+                </h2>
+                <p className={styles.sectionNote}>
+                  Top-layer native &lt;dialog&gt;, anchored Popover/Menu/HoverCard, NoticePort
+                  toasts
+                </p>
+              </div>
+              <div className={styles.grid}>
+                <div className={styles.card}>
+                  <h3 className={styles.cardTitle}>Dialog, Popover, Menu &amp; HoverCard</h3>
+                  <div className={styles.row}>
+                    <Button variant="primary" size="s" onClick={() => setDialogOpen(true)}>
+                      Open Confirm Dialog
+                    </Button>
+                    <Button variant="outlined" size="s" onClick={() => setSheetOpen(true)}>
+                      Open Dialog + Nested Select
+                    </Button>
+                  </div>
+                  <div className={styles.row}>
+                    <span ref={popoverAnchorRef}>
+                      <Button
+                        variant="outlined"
+                        size="s"
+                        onClick={() => setPopoverOpen((value) => !value)}
+                      >
+                        Toggle Popover
+                      </Button>
+                    </span>
+                    <Popover
+                      open={popoverOpen}
+                      onOpenChange={setPopoverOpen}
+                      anchorRef={popoverAnchorRef}
+                      ariaLabel="Sample popover"
                     >
-                      <span>Gliding Navigation Row {index + 1}</span>
-                      <Badge tone={activeGlide === id ? 'accent' : 'neutral'}>
-                        {activeGlide === id ? 'Active' : 'Idle'}
-                      </Badge>
-                    </button>
-                  ))}
-                </div>
-                <div className={styles.glyphGrid}>
-                  {FILE_GLYPHS.map((item) => (
-                    <div key={item.kind} className={styles.glyphItem}>
-                      <FileGlyph kind={item.kind} />
-                      <span>{item.label}</span>
-                    </div>
-                  ))}
-                </div>
-                <EmptyState
-                  icon={<IconBrowseOutline16 />}
-                  title="Empty State Primitive"
-                  description="Reusable zero-data layout with consistent typography and spacing."
-                />
-              </div>
-            </div>
-          </section>
+                      <div className={styles.popoverBody}>
+                        <span className={styles.cardTitle}>Anchored Popover</span>
+                        <span className={styles.cardSubtitle}>
+                          Clamps inside viewport, locks OverlayPort, and restores focus on Escape.
+                        </span>
+                        <Button variant="primary" size="s" onClick={() => setPopoverOpen(false)}>
+                          Done
+                        </Button>
+                      </div>
+                    </Popover>
 
-          <section id="wb-tokens" className={styles.section} aria-labelledby="wb-tokens-heading">
-            <div className={styles.sectionHeader}>
-              <h2 id="wb-tokens-heading" className={styles.sectionTitle}>
-                4. Live Computed Token &amp; WCAG 2.2 AA Contrast Inspector
-              </h2>
-              <p className={styles.sectionNote}>
-                Computed dynamically from active <code>:root</code> styles ({theme} mode · {brand}{' '}
-                preset)
-              </p>
-            </div>
-            <div className={styles.tableWrap}>
-              <table className={styles.table}>
-                <thead>
-                  <tr>
-                    <th>Semantic Pair</th>
-                    <th>Foreground</th>
-                    <th>Background</th>
-                    <th>Ratio</th>
-                    <th>WCAG 2.2</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {contrastRows.map((row) => {
-                    const passes = row.ratio !== null && row.ratio >= row.minRatio
-                    const aaa = row.ratio !== null && row.ratio >= 7.0
-                    return (
-                      <tr key={row.label}>
-                        <td>{row.label}</td>
-                        <td>
-                          <span className={styles.swatchCell}>
-                            <span
-                              className={styles.swatch}
-                              style={{ backgroundColor: `var(${row.fg})` }}
-                            />
-                            <code className={styles.tokenCode}>{row.fg}</code>
-                          </span>
-                        </td>
-                        <td>
-                          <span className={styles.swatchCell}>
-                            <span
-                              className={styles.swatch}
-                              style={{ backgroundColor: `var(${row.bg})` }}
-                            />
-                            <code className={styles.tokenCode}>{row.bg}</code>
-                          </span>
-                        </td>
-                        <td>{row.ratio !== null ? `${row.ratio.toFixed(2)}:1` : '—'}</td>
-                        <td>
-                          <Badge tone={passes ? 'success' : 'danger'}>
-                            {passes ? (aaa ? 'AAA Pass' : 'AA Pass') : 'Fail'}
-                          </Badge>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
+                    <Menu
+                      ariaLabel="Sample actions menu"
+                      options={[
+                        {
+                          type: 'command',
+                          key: 'rename',
+                          label: 'Rename Item',
+                          shortcut: '⌘R',
+                          icon: <IconEditOutline16 />,
+                          onSelect: () => notices.show({ text: () => 'Selected: Rename Item' }),
+                        },
+                        { type: 'separator', key: 'sep-1' },
+                        {
+                          type: 'radio',
+                          key: 'fit',
+                          label: 'Fit to Stage',
+                          checked: menuRadio === 'fit',
+                          onSelect: () => setMenuRadio('fit'),
+                        },
+                        {
+                          type: 'radio',
+                          key: 'actual',
+                          label: 'Actual Size (100%)',
+                          checked: menuRadio === 'actual',
+                          onSelect: () => setMenuRadio('actual'),
+                        },
+                        {
+                          type: 'switch',
+                          key: 'grid',
+                          label: 'Show Guides',
+                          checked: menuChecked,
+                          keepOpen: true,
+                          onSelect: () => setMenuChecked((value) => !value),
+                        },
+                        { type: 'separator', key: 'sep-2' },
+                        {
+                          type: 'command',
+                          key: 'delete',
+                          label: 'Delete Permanently',
+                          danger: true,
+                          icon: <IconTrashOutline16 />,
+                          onSelect: () =>
+                            notices.show({
+                              text: () => 'Deleted item (demo notice)',
+                              tone: 'error',
+                            }),
+                        },
+                      ]}
+                    >
+                      {({ triggerProps }) => (
+                        <Button variant="outlined" size="s" {...triggerProps}>
+                          <IconEllipsisOutline16 />
+                          Open Menu
+                        </Button>
+                      )}
+                    </Menu>
 
-            <div className={styles.grid}>
-              <div className={styles.card}>
-                <h3 className={styles.cardTitle}>Spacing &amp; Radius Scales</h3>
-                <div className={styles.specimenRow}>
-                  {SPACING_TOKENS.map(([token, px]) => (
-                    <div key={token} className={styles.spaceSpecimen}>
-                      <div className={styles.spaceBar} style={{ width: `var(${token})` }} />
-                      <span>{px}</span>
-                    </div>
-                  ))}
+                    <HoverCard
+                      renderTrigger={({ domRef, domProps }) => (
+                        <span ref={domRef} {...domProps} tabIndex={0}>
+                          <Badge tone="accent">Hover / Focus Card</Badge>
+                        </span>
+                      )}
+                    >
+                      <div className={styles.hoverPreview}>
+                        <span className={styles.hoverPreviewTitle}>Portal HoverCard</span>
+                        <span>
+                          Opens on hover or keyboard focus and stays open while moving into the
+                          card.
+                        </span>
+                      </div>
+                    </HoverCard>
+                  </div>
+                  <div className={styles.row}>
+                    <Button
+                      variant="ghost"
+                      size="s"
+                      onClick={() => notices.show({ text: () => 'Settings saved via NoticePort' })}
+                    >
+                      Trigger Toast
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="s"
+                      onClick={() =>
+                        notices.show({
+                          text: () => 'Request failed — check your connection.',
+                          tone: 'error',
+                          link: { text: () => 'Inspect Tokens', href: '#wb-tokens' },
+                        })
+                      }
+                    >
+                      Trigger Error Toast
+                    </Button>
+                  </div>
                 </div>
-                <div className={styles.specimenRow}>
-                  {RADIUS_TOKENS.map(([token, label]) => (
-                    <div key={token} className={styles.spaceSpecimen}>
-                      <div
-                        className={styles.radiusSpecimen}
-                        style={{ borderRadius: `var(${token})` }}
-                      />
-                      <span>{label}</span>
-                    </div>
-                  ))}
+
+                <div className={styles.card}>
+                  <h3 className={styles.cardTitle}>Badges, Banners &amp; Spinners</h3>
+                  <div className={styles.row}>
+                    <Badge tone="neutral">Neutral</Badge>
+                    <Badge tone="accent">Accent</Badge>
+                    <Badge tone="success">Verified</Badge>
+                    <Badge tone="warning">Pending</Badge>
+                    <Badge tone="danger">Error</Badge>
+                    <Spinner size="sm" />
+                    <Spinner size="md" />
+                    <Spinner size="lg" />
+                  </div>
+                  <div className={styles.stack}>
+                    <Banner tone="info">
+                      <strong>Info:</strong> Semantic surface &amp; border swap automatically under
+                      dark mode.
+                    </Banner>
+                    <Banner
+                      tone="warning"
+                      action={
+                        <Button variant="outlined" size="s" onClick={() => setBrand('default')}>
+                          Reset
+                        </Button>
+                      }
+                    >
+                      <strong>Warning:</strong> Brand overrides remain strictly within WCAG 2.2 AA
+                      contrast.
+                    </Banner>
+                    <Banner tone="error">
+                      <strong>Error:</strong> Actionable failure state using semantic danger tokens.
+                    </Banner>
+                  </div>
+                </div>
+
+                <div className={styles.card}>
+                  <h3 className={styles.cardTitle}>SettingGroup, Tabs &amp; PanelHeader</h3>
+                  <div className={styles.panelPreview}>
+                    <PanelHeader
+                      title="Inspector Panel"
+                      subtitle="Standardized header chrome"
+                      actions={
+                        <Tooltip content="Verified">
+                          <IconButton
+                            size="xs"
+                            icon={<IconCheckOutline16 />}
+                            aria-label="Verified action"
+                          />
+                        </Tooltip>
+                      }
+                    />
+                  </div>
+                  <SettingGroup>
+                    <SettingRow
+                      label="Inline Destructive Confirm"
+                      description="Two-step confirmation without leaving the row."
+                      action={
+                        <SettingInlineConfirm
+                          confirming={confirming}
+                          triggerLabel="Reset"
+                          confirmLabel="Confirm Reset"
+                          cancelLabel="Cancel"
+                          onOpen={() => setConfirming(true)}
+                          onCancel={() => setConfirming(false)}
+                          onConfirm={() => {
+                            setConfirming(false)
+                            notices.show({ text: () => 'Reset confirmed' })
+                          }}
+                        />
+                      }
+                    />
+                  </SettingGroup>
+                  <Tabs value={activeTab} onChange={setActiveTab} className={styles.tabsPreview}>
+                    <TabList ariaLabel="Architecture layers">
+                      <Tab value="tokens">Tokens</Tab>
+                      <Tab value="primitives">Primitives</Tab>
+                      <Tab value="contracts">Contracts</Tab>
+                    </TabList>
+                    <TabPanel value="tokens" className={styles.tabPanelBox}>
+                      <code>spine/design/tokens.css</code> defines private primitives and semantic
+                      aliases.
+                    </TabPanel>
+                    <TabPanel value="primitives" className={styles.tabPanelBox}>
+                      <code>@deepseek-chat/lib-ui</code> ships 18 accessible primitives with zero UI
+                      dependencies.
+                    </TabPanel>
+                    <TabPanel value="contracts" className={styles.tabPanelBox}>
+                      <code>check:dag</code> and <code>check:design</code> verify every boundary in
+                      CI.
+                    </TabPanel>
+                  </Tabs>
+                </div>
+
+                <div className={styles.card}>
+                  <h3 className={styles.cardTitle}>HoverGlide, FileGlyph &amp; EmptyState</h3>
+                  <div className={styles.glideList} {...hoverGlide.containerProps}>
+                    <div {...hoverGlide.indicatorProps} />
+                    {(['item-1', 'item-2', 'item-3'] as const).map((id, index) => (
+                      <button
+                        key={id}
+                        type="button"
+                        className={clsx(
+                          styles.glideItem,
+                          activeGlide === id && styles.glideItemActive
+                        )}
+                        {...hoverGlideItem(activeGlide === id)}
+                        onClick={() => setActiveGlide(id)}
+                      >
+                        <span>Gliding Navigation Row {index + 1}</span>
+                        <Badge tone={activeGlide === id ? 'accent' : 'neutral'}>
+                          {activeGlide === id ? 'Active' : 'Idle'}
+                        </Badge>
+                      </button>
+                    ))}
+                  </div>
+                  <div className={styles.glyphGrid}>
+                    {FILE_GLYPHS.map((item) => (
+                      <div key={item.kind} className={styles.glyphItem}>
+                        <FileGlyph kind={item.kind} />
+                        <span>{item.label}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <EmptyState
+                    icon={<IconBrowseOutline16 />}
+                    title="Empty State Primitive"
+                    description="Reusable zero-data layout with consistent typography and spacing."
+                  />
                 </div>
               </div>
+            </section>
 
-              <div className={styles.card}>
-                <h3 className={styles.cardTitle}>Typography Scale</h3>
-                <div className={styles.typeRow}>
-                  <span className={styles.typeH1}>Heading 1 — 24px / 34px</span>
-                  <span className={styles.typeH2}>Heading 2 — 22px / 32px</span>
-                  <span className={styles.typeH3}>Heading 3 — 20px / 30px</span>
-                  <span className={styles.typeBody}>Body prose — 16px / 28px</span>
-                  <span className={styles.typeLabel}>Control label — 14px / 22px</span>
-                  <span className={styles.typeCaption}>Caption metadata — 13px / 20px</span>
-                  <span>
-                    Inline <code className={styles.typeCode}>--ui-type-code-inline</code> specimen
-                  </span>
+            <section id="wb-tokens" className={styles.section} aria-labelledby="wb-tokens-heading">
+              <div className={styles.sectionHeader}>
+                <h2 id="wb-tokens-heading" className={styles.sectionTitle}>
+                  4. Live Computed Token &amp; WCAG 2.2 AA Contrast Inspector
+                </h2>
+                <p className={styles.sectionNote}>
+                  Computed dynamically from active <code>:root</code> styles ({theme} mode · {brand}{' '}
+                  preset)
+                </p>
+              </div>
+              <div className={styles.tableWrap}>
+                <table className={styles.table}>
+                  <thead>
+                    <tr>
+                      <th>Semantic Pair</th>
+                      <th>Foreground</th>
+                      <th>Background</th>
+                      <th>Ratio</th>
+                      <th>WCAG 2.2</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {contrastRows.map((row) => {
+                      const passes = row.ratio !== null && row.ratio >= row.minRatio
+                      const aaa = row.ratio !== null && row.ratio >= 7.0
+                      return (
+                        <tr key={row.label}>
+                          <td>{row.label}</td>
+                          <td>
+                            <span className={styles.swatchCell}>
+                              <span
+                                className={styles.swatch}
+                                style={{ backgroundColor: `var(${row.fg})` }}
+                              />
+                              <code className={styles.tokenCode}>{row.fg}</code>
+                            </span>
+                          </td>
+                          <td>
+                            <span className={styles.swatchCell}>
+                              <span
+                                className={styles.swatch}
+                                style={{ backgroundColor: `var(${row.bg})` }}
+                              />
+                              <code className={styles.tokenCode}>{row.bg}</code>
+                            </span>
+                          </td>
+                          <td>{row.ratio !== null ? `${row.ratio.toFixed(2)}:1` : '—'}</td>
+                          <td>
+                            <Badge tone={passes ? 'success' : 'danger'}>
+                              {passes ? (aaa ? 'AAA Pass' : 'AA Pass') : 'Fail'}
+                            </Badge>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className={styles.grid}>
+                <div className={styles.card}>
+                  <h3 className={styles.cardTitle}>Spacing &amp; Radius Scales</h3>
+                  <div className={styles.specimenRow}>
+                    {SPACING_TOKENS.map(([token, px]) => (
+                      <div key={token} className={styles.spaceSpecimen}>
+                        <div className={styles.spaceBar} style={{ width: `var(${token})` }} />
+                        <span>{px}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className={styles.specimenRow}>
+                    {RADIUS_TOKENS.map(([token, label]) => (
+                      <div key={token} className={styles.spaceSpecimen}>
+                        <div
+                          className={styles.radiusSpecimen}
+                          style={{ borderRadius: `var(${token})` }}
+                        />
+                        <span>{label}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className={styles.card}>
+                  <h3 className={styles.cardTitle}>Typography Scale</h3>
+                  <div className={styles.typeRow}>
+                    <span className={styles.typeH1}>Heading 1 — 24px / 34px</span>
+                    <span className={styles.typeH2}>Heading 2 — 22px / 32px</span>
+                    <span className={styles.typeH3}>Heading 3 — 20px / 30px</span>
+                    <span className={styles.typeBody}>Body prose — 16px / 28px</span>
+                    <span className={styles.typeLabel}>Control label — 14px / 22px</span>
+                    <span className={styles.typeCaption}>Caption metadata — 13px / 20px</span>
+                    <span>
+                      Inline <code className={styles.typeCode}>--ui-type-code-inline</code> specimen
+                    </span>
+                  </div>
                 </div>
               </div>
-            </div>
-          </section>
-        </main>
+            </section>
+          </main>
+        )}
 
         <Dialog
           open={dialogOpen}

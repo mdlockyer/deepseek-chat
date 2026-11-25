@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "rspack serve -c rspack.config.ts",
     "dev:workbench": "rspack serve -c rspack.config.ts --open /?workbench=1",
+    "dev:ssa": "rspack serve -c rspack.config.ts --open '/?workbench=1&tab=ssa'",
     "build": "rm -rf dist && NODE_ENV=production rspack build -c rspack.config.ts",
     "type": "tsc -p tsconfig.json",
     "lint": "oxlint app spine slices libs scripts/check-dag.mjs scripts/check-design.mjs rspack.config.ts",

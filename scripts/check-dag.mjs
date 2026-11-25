@@ -1,18 +1,16 @@
 #!/usr/bin/env node
 /**
- * Sealed Slice Architecture boundary check.
+ * Sealed Slice Architecture boundary & discipline check.
  *
  * Tiers: app (app/) -> slices/* -> libs/* -> spine. Enforces:
- * - spine imports no library, slice or app code, and spine/{runtime,ports,design} import no
- *   spine/facts;
- * - a library (domain-free code shared by slices) imports only itself, the spine's domain-blind
- *   parts, and external packages;
- * - a slice imports only itself, @deepseek-chat/spine/*, libraries, and external packages;
- * - a slice's or library's package.json depends on no slice and exports exactly ".";
- * - code outside a slice or library reaches it only through its package name, never a deep or
- *   relative path;
- * - each slice has SPEC.md, src/index.ts(x), and tests/; each library has src/index.ts(x) and
- *   tests/.
+ * - DAG: strict tier ordering, zero lateral slice imports, single "." public export per package,
+ *   no deep imports, tests import package names only;
+ * - ANATOMY: each slice has SPEC.md, src/index.ts(x), tests/;
+ * - S1 (NO-SINGLETON): no module-level Zustand `create(` or `indexedDB.open(`/`openDB(` in slices;
+ * - S2 (DISPOSE): every slice entrypoint exports a `create*Slice` factory returning `dispose`;
+ * - S3 (NO-LATE-BINDINGS): no `lateBindings` files or imports anywhere in `app/`;
+ * - S4 (DOMAIN-BLIND-CONVERSATIONS): no sibling-slice tool/runtime identifiers in conversations/src;
+ * - S5 (APP-OWNERSHIP): no direct `SettingRow` or feature `chat-demo:*` keys in production `app/`.
  *
  * Exits 1 with every violation listed.
  */
@@ -33,6 +31,24 @@ const LIB_PKG_PREFIX = `${SCOPE}lib-`
 const DOMAIN_BLIND = ['runtime', 'ports', 'design'].map((dir) => path.join(spineDir, dir))
 const FACTS_DIR = path.join(spineDir, 'facts')
 const SOURCE_EXT = /\.(?:[cm]?[jt]sx?|css)$/
+const CODE_EXT = /\.(?:[cm]?[jt]sx?)$/
+
+const S4_BANNED_IN_CONVERSATIONS = [
+  'pyodide',
+  'firecrawl',
+  'browserAction',
+  'fileAction',
+  'askAction',
+  'ask_user',
+  'AskUser',
+  'present_file',
+  'edit_file',
+  'read_file',
+  'web_scrape',
+  'subagentRuntime',
+]
+const S4_REGEX = new RegExp(`\\b(?:${S4_BANNED_IN_CONVERSATIONS.join('|')})\\b`, 'g')
+const S5_ALLOWED_APP_STORAGE_KEYS = new Set(['chat-demo:browser-panel-width'])
 
 const errors = []
 const fail = (kind, message) => errors.push(`[${kind}] ${message}`)
@@ -59,13 +75,9 @@ const listSourceFiles = (dir) => {
 }
 
 const IMPORT_PATTERNS = [
-  // import x from '…', import '…', export … from '…', import type … from '…'
   /\b(?:import|export)\s+(?:type\s+)?(?:[\w*{}\s,$]+?\s+from\s+)?['"]([^'"]+)['"]/g,
-  // import('…')
   /\bimport\(\s*['"]([^'"]+)['"]\s*\)/g,
-  // new URL('…', import.meta.url) — workers and assets
   /\bnew\s+URL\(\s*['"]([^'"]+)['"]\s*,\s*import\.meta\.url\s*\)/g,
-  // CSS @import '…'
   /@import\s+(?:url\()?['"]([^'"]+)['"]/g,
 ]
 
@@ -78,6 +90,92 @@ const extractImports = (file) => {
     }
   }
   return [...specs]
+}
+
+/**
+ * Strips comments and string/template literals while preserving line numbers and brace structure,
+ * returning only top-level (brace-depth 0) code segments for S1 module-scope checks.
+ */
+const extractTopLevelCode = (source) => {
+  let out = ''
+  let depth = 0
+  let i = 0
+  const n = source.length
+  while (i < n) {
+    const ch = source[i]
+    const next = source[i + 1]
+    // Line comment
+    if (ch === '/' && next === '/') {
+      while (i < n && source[i] !== '\n') {
+        i += 1
+      }
+      continue
+    }
+    // Block comment
+    if (ch === '/' && next === '*') {
+      i += 2
+      while (i < n && !(source[i] === '*' && source[i + 1] === '/')) {
+        if (source[i] === '\n') {
+          out += '\n'
+        }
+        i += 1
+      }
+      i += 2
+      continue
+    }
+    // Single or double quoted string
+    if (ch === "'" || ch === '"') {
+      const quote = ch
+      i += 1
+      while (i < n && source[i] !== quote) {
+        if (source[i] === '\\') {
+          i += 2
+          continue
+        }
+        if (source[i] === '\n') {
+          out += '\n'
+        }
+        i += 1
+      }
+      i += 1
+      continue
+    }
+    // Template literal
+    if (ch === '`') {
+      i += 1
+      while (i < n && source[i] !== '`') {
+        if (source[i] === '\\') {
+          i += 2
+          continue
+        }
+        if (source[i] === '\n') {
+          out += '\n'
+        }
+        i += 1
+      }
+      i += 1
+      continue
+    }
+    if (ch === '{') {
+      depth += 1
+      out += ' '
+      i += 1
+      continue
+    }
+    if (ch === '}') {
+      depth = Math.max(0, depth - 1)
+      out += ' '
+      i += 1
+      continue
+    }
+    if (depth === 0 || ch === '\n') {
+      out += ch
+    } else {
+      out += ' '
+    }
+    i += 1
+  }
+  return out
 }
 
 const readJson = (file) => JSON.parse(fs.readFileSync(file, 'utf8'))
@@ -147,7 +245,6 @@ for (const file of listSourceFiles(spineDir)) {
 const LIB_UI_PKG = `${LIB_PKG_PREFIX}ui`
 const LIBS_REQUIRING_SPEC = new Set(['ui', 'stage', 'tools'])
 
-/** package.json shape shared by slices and libraries. */
 const checkManifest = (kind, name, dir, expectedPkg) => {
   const pkgPath = path.join(dir, 'package.json')
   if (!fs.existsSync(pkgPath)) {
@@ -182,7 +279,7 @@ const checkManifest = (kind, name, dir, expectedPkg) => {
   }
 }
 
-// 2. Libraries: anatomy, manifest, and imports (spine's domain-blind parts, lib-ui for non-ui libs, and externals only).
+// 2. Libraries: anatomy, manifest, and imports.
 for (const [name, dir] of libDirs) {
   if (LIBS_REQUIRING_SPEC.has(name) && !fs.existsSync(path.join(dir, 'SPEC.md'))) {
     fail('ANATOMY', `library "${name}" is missing SPEC.md`)
@@ -228,17 +325,29 @@ for (const [name, dir] of libDirs) {
   }
 }
 
-// 3. Slices: anatomy, manifest, and imports.
+// 3. Slices: anatomy, manifest, imports, plus SSA mechanical rules S1, S2, S4.
 for (const [name, dir] of sliceDirs) {
   const expectedPkg = `${SLICE_PKG_PREFIX}${name}`
-  const hasEntry = ['index.ts', 'index.tsx'].some((entry) =>
-    fs.existsSync(path.join(dir, 'src', entry))
-  )
+  const entryPath = ['index.ts', 'index.tsx']
+    .map((entry) => path.join(dir, 'src', entry))
+    .find((candidate) => fs.existsSync(candidate))
   if (!fs.existsSync(path.join(dir, 'SPEC.md'))) {
     fail('ANATOMY', `slice "${name}" is missing SPEC.md`)
   }
-  if (!hasEntry) {
+  if (!entryPath) {
     fail('ANATOMY', `slice "${name}" is missing src/index.ts(x)`)
+  } else {
+    // S2: every slice entrypoint must export a `create*Slice` factory returning `dispose`.
+    const entrySource = fs.readFileSync(entryPath, 'utf8')
+    const factoryMatch = /export\s+const\s+(create[A-Z]\w*Slice)\b/.exec(entrySource)
+    if (!factoryMatch) {
+      fail('S2-DISPOSE', `slice "${name}" entrypoint ${rel(entryPath)} must export create*Slice`)
+    } else if (!/\bdispose\b/.test(entrySource.slice(factoryMatch.index))) {
+      fail(
+        'S2-DISPOSE',
+        `slice "${name}" factory ${factoryMatch[1]} in ${rel(entryPath)} must return a dispose() method`
+      )
+    }
   }
   if (!fs.existsSync(path.join(dir, 'tests'))) {
     fail('ANATOMY', `slice "${name}" is missing tests/`)
@@ -248,7 +357,8 @@ for (const [name, dir] of sliceDirs) {
   const testsDir = path.join(dir, 'tests')
   const srcDir = path.join(dir, 'src')
   for (const file of listSourceFiles(dir)) {
-    for (const spec of extractImports(file)) {
+    const imports = extractImports(file)
+    for (const spec of imports) {
       const target = sliceOfPackage(spec)
       if (target) {
         if (target.name !== name) {
@@ -276,13 +386,54 @@ for (const [name, dir] of sliceDirs) {
         }
       }
     }
+
+    if (isInside(srcDir, file) && CODE_EXT.test(file)) {
+      const source = fs.readFileSync(file, 'utf8')
+      const topLevel = extractTopLevelCode(source)
+
+      // S1: no module-level Zustand `create(` or `indexedDB.open(`/`openDB(` in slices.
+      const importsZustand = imports.includes('zustand')
+      if (importsZustand && /\bcreate\s*(?:<[^()]*>)?\s*\(/.test(topLevel)) {
+        fail(
+          'S1-SINGLETON',
+          `slice "${name}" file ${rel(file)} creates a Zustand store at module scope; create stores inside a factory`
+        )
+      }
+      if (/\b(?:indexedDB\.open|openDB)\s*\(/.test(topLevel)) {
+        fail(
+          'S1-SINGLETON',
+          `slice "${name}" file ${rel(file)} opens IndexedDB at module scope; scope DB handles inside a factory`
+        )
+      }
+
+      // S4: conversations must stay domain-blind to sibling tool slices.
+      if (name === 'conversations') {
+        const hits = [...new Set([...source.matchAll(S4_REGEX)].map((m) => m[0]))]
+        if (hits.length > 0) {
+          fail(
+            'S4-DOMAIN-BLIND',
+            `conversations file ${rel(file)} references sibling-slice identifier(s): ${hits.join(', ')}`
+          )
+        }
+      }
+    }
   }
 }
 
-// 4. App tier and everything else: slices and libraries only through their single public export.
+// 4. App tier: single-export DAG rules plus S3 and S5.
+const workbenchDir = path.join(root, 'app', 'workbench')
+const appTestsDir = path.join(root, 'app', 'tests')
 for (const appDir of appDirs) {
   for (const file of listSourceFiles(appDir)) {
-    for (const spec of extractImports(file)) {
+    // S3: no lateBindings files or imports in app/.
+    if (/latebindings/i.test(path.basename(file))) {
+      fail('S3-LATE-BINDINGS', `forbidden late-bindings module ${rel(file)}`)
+    }
+    const imports = extractImports(file)
+    for (const spec of imports) {
+      if (/latebindings/i.test(spec)) {
+        fail('S3-LATE-BINDINGS', `${rel(file)} imports forbidden late-bindings module "${spec}"`)
+      }
       const target = sliceOfPackage(spec)
       if (target?.deep) {
         fail('DAG', `${rel(file)} deep-imports slice internals "${spec}"`)
@@ -305,6 +456,27 @@ for (const appDir of appDirs) {
         }
       }
     }
+
+    // S5: production app/ owns no SettingRow rows and no feature chat-demo:* storage keys.
+    if (CODE_EXT.test(file) && !isInside(workbenchDir, file) && !isInside(appTestsDir, file)) {
+      const source = fs.readFileSync(file, 'utf8')
+      if (/\bSettingRow\b/.test(source)) {
+        fail(
+          'S5-APP-OWNERSHIP',
+          `app file ${rel(file)} renders SettingRow directly; settings rows belong to their owning slice`
+        )
+      }
+      const keyMatches = [...source.matchAll(/['"](chat-demo:[a-z0-9-]+)['"]/gi)].map((m) => m[1])
+      const forbiddenKeys = [
+        ...new Set(keyMatches.filter((k) => !S5_ALLOWED_APP_STORAGE_KEYS.has(k))),
+      ]
+      if (forbiddenKeys.length > 0) {
+        fail(
+          'S5-APP-OWNERSHIP',
+          `app file ${rel(file)} hardcodes slice-owned storage key(s): ${forbiddenKeys.join(', ')}`
+        )
+      }
+    }
   }
 }
 
@@ -322,5 +494,5 @@ process.stdout.write(
     libNames.length > 0 ? ` (${libNames.join(', ')})` : ''
   }, ${sliceNames.length} slice(s)${
     sliceNames.length > 0 ? ` (${sliceNames.join(', ')})` : ''
-  }, app tier. No lateral imports.\n`
+  }, app tier. Rules S1–S5 verified. No lateral imports.\n`
 )
