@@ -27,6 +27,26 @@
     margin-left: auto;
   }
 
+  .sessionActions {
+    display: flex;
+    align-items: center;
+    gap: var(--ui-space-1);
+  }
+
+  .sessionActions:empty {
+    display: none;
+  }
+
+  /* 仅当会话级面板按钮实际渲染时，用细分割线将它们与应用级「设置」区隔 */
+  .sessionActions:not(:empty)::after {
+    content: '';
+    flex-shrink: 0;
+    width: 1px;
+    height: 16px;
+    margin: 0 var(--ui-space-1);
+    background-color: var(--ui-border-default);
+  }
+
   .title {
     max-width: 480px;
     padding: 0 var(--ui-space-3);
@@ -39,9 +59,9 @@
     transition: margin-left var(--ui-duration-panel) var(--ui-ease-panel);
   }
 
-  /* 收起后让开左上角按钮组（96–174px）：18 + 162 + 12 = 192px 起 */
+  /* 收起后让开左上角按钮组：桌面端 18 + (96 + 66) + 12 = 192px 起，网页端 110px 起 */
   .withCollapsedSider {
-    margin-left: 162px;
+    margin-left: calc(var(--collapsed-sider-left, 96px) + 66px);
   }
 
   .inputContainer {

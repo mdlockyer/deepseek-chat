@@ -9,6 +9,29 @@
       var(--ui-space-1);
   }
 
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding-left: var(--ui-space-2);
+    user-select: none;
+  }
+
+  .brandMark {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    color: var(--ui-accent-fill);
+  }
+
+  .brandName {
+    font-size: 15px;
+    line-height: 20px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    color: var(--ui-text-primary);
+  }
+
   .title {
     flex: 1;
     min-width: 0;
@@ -18,5 +41,12 @@
     text-overflow: ellipsis;
     font: var(--ui-type-label-strong);
     color: var(--ui-text-primary);
+  }
+
+  .actions {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    margin-left: auto;
   }
 }

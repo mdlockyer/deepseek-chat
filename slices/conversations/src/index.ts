@@ -26,9 +26,11 @@ export {
 export type { StreamTrace, StreamTraceBlock } from './streamTrace.js'
 export type {
   ChatFile,
+  CollapsedTransition,
   ConversationsViewDeps,
   InspectionTarget,
   SettingsSection,
+  SiderMode,
   VoiceViews,
 } from './views.js'
 export type { ClientTool } from '@deepseek-chat/lib-agent'
@@ -96,6 +98,9 @@ export const createConversationsSlice = (deps: ConversationsDeps) => {
       const { ready, sessions, activeId, streaming } = runtime.useChatStore.getState()
       return { ready, sessions, activeId, replying: Object.keys(streaming) }
     },
+
+    /** Notifies listeners whenever session readiness, list, active selection, or streaming state changes. */
+    subscribe: (listener: () => void) => runtime.useChatStore.subscribe(() => listener()),
 
     /** Instance-scoped DeepThink toggle (`chat-demo:thinking`). */
     getThinking: () => runtime.useThinkingStore.getState().thinking,

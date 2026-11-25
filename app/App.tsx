@@ -1,9 +1,10 @@
 import { MarkdownTheme } from '@deepseek-chat/lib-markdown'
 import { ToastViewport, UiProvider, usePresence } from '@deepseek-chat/lib-ui'
+import type { CollapsedTransition, SiderMode } from '@deepseek-chat/slice-conversations'
 import { PANEL_DURATION_MS } from '@deepseek-chat/spine/design'
 import { useLocale } from '@deepseek-chat/spine/i18n'
 import clsx from 'clsx'
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { AppErrorBoundary } from './AppErrorBoundary.js'
 import styles from './App.module.css'
 import { translate } from './i18n/index.js'
@@ -20,18 +21,24 @@ import { useIsMobile, useMobileViewport, usePreventPageScroll } from './viewport
  */
 export const App = ({ embedded = false }: { embedded?: boolean }) => {
   const runtime = useAppRuntime()
-  const { account, browser, conversations, preferences } = runtime.slices
+  const { browser, conversations, preferences } = runtime.slices
   const { ChatMain, ChatSaveBanner, CollapsedSider, MobileSider, Sider } = conversations
 
   const isMobile = useIsMobile() && !embedded
   const dark = useRuntimeTheme(preferences) === 'dark'
   const locale = useLocale()
-  const desktopSettingsReady = account.useState().status === 'ready'
-  const siderCollapsed = runtime.layout.useStore((state) => state.siderCollapsed) && !isMobile
+  const layoutState = runtime.layout.useStore()
+  const siderMode: SiderMode = isMobile ? 'absent' : layoutState.mode
+  const lastCollapsedRevealRef = useRef<CollapsedTransition>('fade')
+  if (layoutState.mode === 'collapsed') {
+    lastCollapsedRevealRef.current = layoutState.reveal
+  }
+  const collapsedExitMode: CollapsedTransition =
+    layoutState.mode === 'collapsed' ? 'morph' : layoutState.collapsedExit
   const frameRef = useMobileViewport(isMobile)
   const activeId = conversations.useActiveSessionId()
   const { mounted: showCollapsedSider, exiting: collapsedSiderExiting } = usePresence(
-    siderCollapsed,
+    siderMode === 'collapsed',
     PANEL_DURATION_MS
   )
 
@@ -48,12 +55,6 @@ export const App = ({ embedded = false }: { embedded?: boolean }) => {
   conversations.useChatLifecycle()
 
   useEffect(() => (browser ? browser.start() : undefined), [browser])
-
-  useEffect(() => {
-    if (runtime.autoPromptApiKey && desktopSettingsReady) {
-      runtime.settingsDialog.ensureApiKey()
-    }
-  }, [desktopSettingsReady, runtime])
 
   useEffect(() => {
     if (embedded) {
@@ -97,18 +98,24 @@ export const App = ({ embedded = false }: { embedded?: boolean }) => {
           ) : (
             <>
               <Sider
-                collapsed={siderCollapsed}
-                controlsHidden={siderCollapsed}
-                controlsLanding={collapsedSiderExiting}
+                collapsed={siderMode !== 'expanded'}
+                controlsHidden={siderMode === 'collapsed'}
+                controlsLanding={collapsedSiderExiting && collapsedExitMode === 'morph'}
               />
-              {showCollapsedSider ? <CollapsedSider exiting={collapsedSiderExiting} /> : null}
+              {showCollapsedSider ? (
+                <CollapsedSider
+                  exiting={collapsedSiderExiting}
+                  enterMode={lastCollapsedRevealRef.current}
+                  exitMode={collapsedExitMode}
+                />
+              ) : null}
             </>
           )}
           <main className={styles.main}>
             <ChatSaveBanner />
             <div className={styles.content}>
               <AppErrorBoundary resetKey={activeId}>
-                <ChatMain siderCollapsed={siderCollapsed} />
+                <ChatMain siderMode={siderMode} />
               </AppErrorBoundary>
             </div>
           </main>

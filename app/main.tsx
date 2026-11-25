@@ -53,7 +53,6 @@ if (__DEV__ && new URLSearchParams(window.location.search).get('workbench') === 
     browserLanguage: typeof navigator === 'undefined' ? 'zh' : navigator.language,
     saveFile,
     syncDocumentTheme: true,
-    autoPromptApiKey: true,
     desktop: isDesktopApp
       ? {
           browserHost: desktopBrowserHost,

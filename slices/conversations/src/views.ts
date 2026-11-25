@@ -34,6 +34,12 @@ export type InspectionTarget = {
 
 export type SettingsSection = 'general' | 'apiKey' | 'data'
 
+/** Visual presence of the desktop session rail: absent when no sessions exist, collapsed to a top-left pill, or expanded. */
+export type SiderMode = 'absent' | 'collapsed' | 'expanded'
+
+/** How the collapsed top-left pill enters or leaves: morphing to/from the open sidebar toggle, or fading in place. */
+export type CollapsedTransition = 'morph' | 'fade'
+
 /** What the chat UI needs from the app shell around it. Optional ports degrade cleanly when omitted. */
 export type ConversationsViewDeps = {
   readonly voice: VoiceViews | null
@@ -50,6 +56,8 @@ export type ConversationsViewDeps = {
   readonly useIsFileShown?: (sessionId: string, file: ChatFile) => boolean
   /** Optional reactive readout of the active inspector target so triggers can show pressed state. */
   readonly useActiveInspectionTarget?: () => InspectionTarget | null
+  /** Optional reactive readout of whether an API key still needs to be configured (false while hydrating). */
+  readonly useNeedsApiKey?: () => boolean
   readonly openSettings: (section: SettingsSection) => void
   /** Opens a link inside the app (desktop: built-in browser); `null`: ordinary links. */
   readonly openInApp: ((url: string) => void) | null

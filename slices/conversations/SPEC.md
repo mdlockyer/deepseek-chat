@@ -16,21 +16,21 @@ the `EventLog`, and optional view ports.
 `createConversationsSlice(deps)` creates an isolated slice instance (multiple independent instances
 may coexist in the same process) and returns:
 
-| Member                                           | Meaning                                                                                                                                                                                      |
-| :----------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `stopReply(sessionId)`                           | Stops that chat's reply in progress.                                                                                                                                                         |
-| `commands`                                       | Headless operations: `init`, `newChat`, `selectSession`, `renameSession`, `removeSession`, `setDraft`, `attach`, `send`, `regenerate`, `continueReply`, `edit`, `selectVersion`, `whenIdle`. |
-| `getState()`                                     | Session summaries (newest first), `activeId`, `ready`, and `replying` session IDs.                                                                                                           |
-| `getThinking()`, `setThinking(enabled)`          | Instance-scoped DeepThink toggle (`chat-demo:thinking`).                                                                                                                                     |
-| `getChatMessages(id)`, `useChatMessages(id)`     | A loaded chat's visible branch (empty while not loaded).                                                                                                                                     |
-| `getTurnSnapshot(sid, mid)`, `subscribeToTurns`  | Referentially stable read-only live turn snapshot source consumed by `slices/activity-inspector` (safe for `useSyncExternalStore`).                                                          |
-| `snapshotForExport()`, `replaceSessions(fn)`     | Atomic storage ports consumed by `slices/history-backup`.                                                                                                                                    |
-| `useHistoryState()`, `describeReplyNotice(msg)`  | History replacement/empty state and plain reply error/template text.                                                                                                                         |
-| `request`                                        | Instance-scoped DeepSeek HTTP helper bound to `deps.fetch`.                                                                                                                                  |
-| `useChatLifecycle()`, `useActiveSessionId()`     | Lifecycle hooks for upload notices, persistence flush, mobile drawer, and init.                                                                                                              |
-| `Sider`, `MobileSider`, `CollapsedSider`         | Bound session-list views.                                                                                                                                                                    |
-| `ChatMain({ siderCollapsed })`, `ChatSaveBanner` | Bound chat/welcome main area and save-failure banner.                                                                                                                                        |
-| `dispose()`                                      | Aborts active streams, cancels timers, unsubscribes from `EventLog`, closes DB.                                                                                                              |
+| Member                                          | Meaning                                                                                                                                                                                      |
+| :---------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `stopReply(sessionId)`                          | Stops that chat's reply in progress.                                                                                                                                                         |
+| `commands`                                      | Headless operations: `init`, `newChat`, `selectSession`, `renameSession`, `removeSession`, `setDraft`, `attach`, `send`, `regenerate`, `continueReply`, `edit`, `selectVersion`, `whenIdle`. |
+| `getState()`, `subscribe(listener)`             | Session summaries (newest first), `activeId`, `ready`, `replying` session IDs, and change subscription.                                                                                      |
+| `getThinking()`, `setThinking(enabled)`         | Instance-scoped DeepThink toggle (`chat-demo:thinking`).                                                                                                                                     |
+| `getChatMessages(id)`, `useChatMessages(id)`    | A loaded chat's visible branch (empty while not loaded).                                                                                                                                     |
+| `getTurnSnapshot(sid, mid)`, `subscribeToTurns` | Referentially stable read-only live turn snapshot source consumed by `slices/activity-inspector` (safe for `useSyncExternalStore`).                                                          |
+| `snapshotForExport()`, `replaceSessions(fn)`    | Atomic storage ports consumed by `slices/history-backup`.                                                                                                                                    |
+| `useHistoryState()`, `describeReplyNotice(msg)` | History replacement/empty state and plain reply error/template text.                                                                                                                         |
+| `request`                                       | Instance-scoped DeepSeek HTTP helper bound to `deps.fetch`.                                                                                                                                  |
+| `useChatLifecycle()`, `useActiveSessionId()`    | Lifecycle hooks for upload notices, persistence flush, mobile drawer, and init.                                                                                                              |
+| `Sider`, `MobileSider`, `CollapsedSider`        | Bound session-list views (`CollapsedSider` supports `enterMode` / `exitMode`: `'morph' \| 'fade'`).                                                                                          |
+| `ChatMain({ siderMode })`, `ChatSaveBanner`     | Bound chat/welcome main area (`siderMode`: `'absent' \| 'collapsed' \| 'expanded'`), top-right Settings trigger, and save-failure banner.                                                    |
+| `dispose()`                                     | Aborts active streams, cancels timers, unsubscribes from `EventLog`, closes DB.                                                                                                              |
 
 The package also exports pure model functions (`branches`, `reply`, `view`, `workStrip`, `citations`,
 `autoTitle`, `requestWith`, `ServerSentEventDecoder`) and session store factories
@@ -38,21 +38,21 @@ The package also exports pure model functions (`branches`, `reply`, `view`, `wor
 
 ## Ports (`ConversationsDeps`)
 
-| Port                      | Meaning                                                                                                                                                                |
-| :------------------------ | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
-| `log`                     | Spine `EventLog` for session facts published and browser facts consumed.                                                                                               |
-| `apiOrigin`, `fetch`      | DeepSeek API origin and platform HTTP transport.                                                                                                                       |
-| `store`                   | Key-value store for `chat-demo:thinking`.                                                                                                                              |
-| `blobs: BlobStore`        | Domain-blind blob store for user uploads and delivered files.                                                                                                          |
-| `sessions?: SessionStore` | Optional session store (defaults to IndexedDB `deepseek-sessions`).                                                                                                    |
-| `tools?: ToolRegistry`    | Aggregated `ToolCapability` registry (defaults to empty for bare chat).                                                                                                |
-| `platform`                | `'desktop'                                                                                                                                                             | 'web'`for`latest_reminder`. |
-| `getApiKey()`             | DeepSeek API key, or `null`.                                                                                                                                           |
-| `getLocationLabel(loc)`   | User location label for `latest_reminder` (`''` when unset).                                                                                                           |
-| `onStreamTrace`           | Optional diagnostics hook reporting request timings without content.                                                                                                   |
-| `autoTitle`               | Enables detached cache-riding auto-title refresh (default `true`).                                                                                                     |
-| `notify`                  | Optional `NoticePort` for upload/copy/delete toasts.                                                                                                                   |
-| `ui`                      | Optional view slots (`voice`, `headerActions`, `composerDock`, `openFile`, `useActiveInspectionTarget`, `openInApp`, `saveFile`, `openSettings`, `setSiderCollapsed`). |
+| Port                      | Meaning                                                                                                                                                                                  |
+| :------------------------ | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
+| `log`                     | Spine `EventLog` for session facts published and browser facts consumed.                                                                                                                 |
+| `apiOrigin`, `fetch`      | DeepSeek API origin and platform HTTP transport.                                                                                                                                         |
+| `store`                   | Key-value store for `chat-demo:thinking`.                                                                                                                                                |
+| `blobs: BlobStore`        | Domain-blind blob store for user uploads and delivered files.                                                                                                                            |
+| `sessions?: SessionStore` | Optional session store (defaults to IndexedDB `deepseek-sessions`).                                                                                                                      |
+| `tools?: ToolRegistry`    | Aggregated `ToolCapability` registry (defaults to empty for bare chat).                                                                                                                  |
+| `platform`                | `'desktop'                                                                                                                                                                               | 'web'`for`latest_reminder`. |
+| `getApiKey()`             | DeepSeek API key, or `null`.                                                                                                                                                             |
+| `getLocationLabel(loc)`   | User location label for `latest_reminder` (`''` when unset).                                                                                                                             |
+| `onStreamTrace`           | Optional diagnostics hook reporting request timings without content.                                                                                                                     |
+| `autoTitle`               | Enables detached cache-riding auto-title refresh (default `true`).                                                                                                                       |
+| `notify`                  | Optional `NoticePort` for upload/copy/delete toasts.                                                                                                                                     |
+| `ui`                      | Optional view slots (`voice`, `headerActions`, `composerDock`, `openFile`, `useActiveInspectionTarget`, `useNeedsApiKey`, `openInApp`, `saveFile`, `openSettings`, `setSiderCollapsed`). |
 
 ## Spine facts
 

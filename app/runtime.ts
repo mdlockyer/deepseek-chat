@@ -65,6 +65,7 @@ import {
 import { EventLog } from '@deepseek-chat/spine/runtime'
 import type { ComponentType } from 'react'
 import { create } from 'zustand'
+import { createSiderLayoutController, type SiderLayoutController } from './layout.js'
 import { createRightPanelController, type RightPanelController } from './rightPanel/state.js'
 import { createId } from './utils/id.js'
 import { workspaceViews } from './workspaceViews.js'
@@ -112,7 +113,6 @@ export type AppRuntimeConfig = {
   readonly onStreamTrace?: (trace: StreamTrace) => void
   readonly autoTitle?: boolean
   readonly syncDocumentTheme?: boolean
-  readonly autoPromptApiKey?: boolean
 }
 
 /**
@@ -194,9 +194,7 @@ export const createAppRuntime = (config: AppRuntimeConfig = {}) => {
   const notices = createNoticeBus()
   const overlays = createOverlayCoordinator()
   const rightPanel: RightPanelController = createRightPanelController(store, log)
-
-  const useLayout = create<{ siderCollapsed: boolean }>(() => ({ siderCollapsed: false }))
-  const setSiderCollapsed = (siderCollapsed: boolean) => useLayout.setState({ siderCollapsed })
+  const layout: SiderLayoutController = createSiderLayoutController(log)
 
   const useSettingsDialog = create<{ open: boolean; section: SettingsSection }>(() => ({
     open: false,
@@ -375,6 +373,10 @@ export const createAppRuntime = (config: AppRuntimeConfig = {}) => {
       useActiveInspectionTarget: enabled.activityInspector
         ? () => activityInspector?.useActiveTarget() ?? null
         : undefined,
+      useNeedsApiKey: () => {
+        const state = account.useState()
+        return state.status === 'ready' && !state.apiKey
+      },
       openSettings,
       openInApp: browser?.available
         ? (url: string) => {
@@ -382,9 +384,11 @@ export const createAppRuntime = (config: AppRuntimeConfig = {}) => {
           }
         : null,
       saveFile,
-      setSiderCollapsed,
+      setSiderCollapsed: layout.setSiderCollapsed,
     },
   })
+
+  layout.bindSessions(conversations)
 
   activityInspector = enabled.activityInspector
     ? createActivityInspectorSlice({
@@ -432,7 +436,11 @@ export const createAppRuntime = (config: AppRuntimeConfig = {}) => {
     : null
 
   const hydrate = async (): Promise<void> => {
-    await Promise.all([account.hydrate(), webResearch?.hydrate() ?? Promise.resolve()])
+    await Promise.all([
+      account.hydrate(),
+      webResearch?.hydrate() ?? Promise.resolve(),
+      conversations.commands.init(),
+    ])
   }
 
   let disposed = false
@@ -444,6 +452,7 @@ export const createAppRuntime = (config: AppRuntimeConfig = {}) => {
     unsubOverlays()
     releaseUiOverlay?.()
     releaseUiOverlay = null
+    layout.dispose()
     historyBackup?.dispose()
     activityInspector?.dispose()
     conversations.dispose()
@@ -466,7 +475,6 @@ export const createAppRuntime = (config: AppRuntimeConfig = {}) => {
     platform,
     enabled,
     syncDocumentTheme: config.syncDocumentTheme ?? false,
-    autoPromptApiKey: config.autoPromptApiKey ?? false,
     onOpenSettingsShortcut: desktop.onOpenSettings ?? null,
     log,
     notices,
@@ -475,8 +483,9 @@ export const createAppRuntime = (config: AppRuntimeConfig = {}) => {
     tools: toolRegistry,
     rightPanel,
     layout: {
-      useStore: useLayout,
-      setSiderCollapsed,
+      useStore: layout.useStore,
+      getState: layout.getState,
+      setSiderCollapsed: layout.setSiderCollapsed,
     },
     settingsDialog: {
       useStore: useSettingsDialog,

@@ -360,7 +360,6 @@ const useManagedRuntime = (
       extraCapabilities: includeDropIn ? [createDemoCalculatorCapability()] : [],
       autoTitle: false,
       syncDocumentTheme: false,
-      autoPromptApiKey: false,
     })
     return next
   }, [enabledSlices, includeDropIn, label])

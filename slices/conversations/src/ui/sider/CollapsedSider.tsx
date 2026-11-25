@@ -4,6 +4,7 @@ import clsx from 'clsx'
 import { useLayoutEffect, useRef } from 'react'
 import { useConversations } from '../../context.js'
 import { useTranslate } from '../../messages.js'
+import type { CollapsedTransition } from '../../views.js'
 import { NewChatIcon } from './NewChatIcon.js'
 import styles from './Sider.module.css'
 
@@ -12,14 +13,25 @@ const COLLAPSED_PILL_WIDTH = 78
 const SINGLE_BUTTON_WIDTH = 40
 
 /**
- * 收起后标题行上的按钮组：沿顶栏水平滑至交通灯右侧并顺滑展开为 78px 胶囊。
+ * 收起后标题行上的按钮组：从已展开侧边栏收起时沿顶栏滑至交通灯右侧并变形为 78px 胶囊；
+ * 从零会话首次出现或清空全部会话时在原位柔和淡入/淡出，避免凭空横飞。
  */
-export const CollapsedSider = ({ exiting = false }: { exiting?: boolean }) => {
+export const CollapsedSider = ({
+  exiting = false,
+  enterMode = 'morph',
+  exitMode = 'morph',
+}: {
+  exiting?: boolean
+  enterMode?: CollapsedTransition
+  exitMode?: CollapsedTransition
+}) => {
   const t = useTranslate()
   const { deps, newChat } = useConversations()
   const groupRef = useRef<HTMLDivElement | null>(null)
   const toggleRef = useRef<HTMLSpanElement | null>(null)
   const wasMountedRef = useRef(false)
+  const fadeEnter = !exiting && enterMode === 'fade'
+  const fadeExit = exiting && exitMode === 'fade'
 
   useLayoutEffect(() => {
     const isFreshMount = !wasMountedRef.current
@@ -27,11 +39,23 @@ export const CollapsedSider = ({ exiting = false }: { exiting?: boolean }) => {
 
     const group = groupRef.current
     const toggle = toggleRef.current
+    if (!group || !toggle) {
+      return
+    }
+
+    if (fadeEnter || fadeExit) {
+      group.classList.remove(styles.collapsedStatic)
+      group.style.transition = ''
+      group.style.transform = ''
+      group.style.width = ''
+      return
+    }
+
     const sider =
-      group?.closest('[data-app-shell]')?.querySelector<HTMLElement>('[data-sider-root]') ??
+      group.closest('[data-app-shell]')?.querySelector<HTMLElement>('[data-sider-root]') ??
       document.querySelector<HTMLElement>('[data-sider-root]')
     const source = sider?.querySelector<HTMLElement>(TOGGLE_SELECTOR)
-    if (!sider || !group || !toggle || !source) {
+    if (!sider || !source) {
       return
     }
     if (isFreshMount && !exiting && getComputedStyle(sider).visibility !== 'visible') {
@@ -73,11 +97,16 @@ export const CollapsedSider = ({ exiting = false }: { exiting?: boolean }) => {
       group.style.transform = `translateX(${dx}px)`
       group.style.width = `${SINGLE_BUTTON_WIDTH}px`
     }
-  }, [exiting])
+  }, [exiting, fadeEnter, fadeExit])
 
   return (
     <div
-      className={clsx(styles.collapsed, exiting && styles.collapsedExiting)}
+      className={clsx(
+        styles.collapsed,
+        exiting && styles.collapsedExiting,
+        fadeEnter && styles.collapsedFadeIn,
+        fadeExit && styles.collapsedFadeOut
+      )}
       data-tauri-drag-region="deep"
     >
       <div ref={groupRef} className={styles.collapsedGroup}>

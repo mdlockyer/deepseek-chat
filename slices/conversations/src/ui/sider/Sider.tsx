@@ -3,7 +3,6 @@ import {
   Dialog,
   IconButton,
   IconPanelLeftOutline16,
-  IconSettingsOutline16,
   useHoverGlide,
   useOverlayLock,
   usePresence,
@@ -19,7 +18,7 @@ import { NewChatIcon } from './NewChatIcon.js'
 import { SessionItem } from './SessionItem.js'
 import styles from './Sider.module.css'
 
-/** 展开的侧边栏：名称与收起按钮、开启新对话、按时间分组的会话列表、底部设置；移动端放在抽屉里，收起按钮关闭抽屉 */
+/** 展开的侧边栏：收起按钮、开启新对话、按时间分组的会话列表；移动端放在抽屉里，收起按钮关闭抽屉 */
 export const Sider = ({
   mobile = false,
   collapsed = false,
@@ -114,6 +113,7 @@ export const Sider = ({
         controlsHidden && styles.controlsHidden,
         controlsLanding && styles.controlsLanding
       )}
+      aria-hidden={collapsed || undefined}
       data-sider-root
     >
       <div className={styles.siderInner}>
@@ -163,18 +163,6 @@ export const Sider = ({
               ))}
             </ul>
           </div>
-        </div>
-        <div className={styles.bottom}>
-          <button
-            type="button"
-            className={styles.settings}
-            onClick={() => deps.ui.openSettings('general')}
-          >
-            <span className={styles.settingsIcon}>
-              <IconSettingsOutline16 />
-            </span>
-            <span className={styles.settingsLabel}>{t('settings')}</span>
-          </button>
         </div>
       </div>
       <Dialog

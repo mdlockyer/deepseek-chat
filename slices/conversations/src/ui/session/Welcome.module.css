@@ -5,15 +5,17 @@
     display: flex;
   }
 
-  /* 新对话：品牌放在会话标题的位置，左对齐与标题一致，垂直中心与交通灯同一线 */
+  /* 新对话：品牌放在会话标题的位置，左对齐与标题一致，垂直中心与交通灯同一线；右侧常驻设置按钮 */
   .detailBrand {
     position: absolute;
     top: 0;
     right: 0;
     left: 0;
+    z-index: var(--ui-z-chrome);
     display: flex;
     align-items: center;
-    gap: 7px;
+    justify-content: space-between;
+    gap: var(--ui-space-2);
     box-sizing: border-box;
     height: var(--ui-panel-header-height);
     padding: 0 14px 0 30px;
@@ -21,10 +23,30 @@
     transition: padding-left var(--ui-duration-panel) var(--ui-ease-panel);
   }
 
-  /* 侧边栏收起时让开交通灯与左上角按钮组（96–174px）：192px，与 SessionView 标题同位置。
+  /* 零会话隐藏侧边栏时：桌面端让开交通灯（96px），网页端保持常规左距（30px） */
+  .withAbsentSider {
+    padding-left: var(--absent-brand-left, 30px);
+  }
+
+  /* 侧边栏收起时让开交通灯与左上角按钮组：桌面端 192px、网页端 110px，与 SessionView 标题同位置。
      用内边距而不是外边距，整行保持满宽，仍可拖动窗口 */
   .withCollapsedSider {
-    padding-left: 192px;
+    padding-left: calc(var(--collapsed-sider-left, 96px) + 96px);
+  }
+
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    user-select: none;
+  }
+
+  .headerActions {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    gap: var(--ui-space-1);
+    margin-left: auto;
   }
 
   .brandMark {
@@ -74,6 +96,78 @@
     color: var(--ui-text-primary);
   }
 
+  /* 未配置 API Key 时的轻量引导胶囊：低于输入框层级，点击直达设置中的 API 密钥页 */
+  .apiKeyCue {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--ui-space-2);
+    max-width: 100%;
+    min-height: var(--ui-control-md);
+    margin-top: var(--ui-space-4);
+    padding: var(--ui-space-1-5) var(--ui-space-2-5) var(--ui-space-1-5) var(--ui-space-3);
+    border: 1px solid var(--ui-border-default);
+    border-radius: var(--ui-radius-pill);
+    background-color: var(--ui-surface-sunken);
+    color: var(--ui-text-secondary);
+    font: var(--ui-type-caption);
+    cursor: pointer;
+    user-select: none;
+    transition:
+      background-color var(--ui-duration-normal) var(--ui-ease-standard),
+      border-color var(--ui-duration-normal) var(--ui-ease-standard),
+      color var(--ui-duration-normal) var(--ui-ease-standard);
+
+    @media (hover: hover) {
+      &:hover {
+        background-color: var(--ui-surface-control);
+        border-color: var(--ui-border-hover-neutral);
+        color: var(--ui-text-primary);
+
+        .apiKeyCueArrow {
+          color: var(--ui-text-primary);
+          transform: translateX(2px);
+        }
+      }
+    }
+
+    &:active {
+      background-color: var(--ui-interactive-active);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--ui-focus-ring);
+      outline-offset: 2px;
+    }
+  }
+
+  .apiKeyCueIcon {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    color: var(--ui-text-accent);
+  }
+
+  .apiKeyCueText {
+    min-width: 0;
+    text-align: left;
+  }
+
+  .apiKeyCueArrow {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    color: var(--ui-text-muted);
+    transition:
+      color var(--ui-duration-normal) var(--ui-ease-standard),
+      transform var(--ui-duration-normal) var(--ui-ease-standard);
+  }
+
+  @media (pointer: coarse) {
+    .apiKeyCue {
+      min-height: var(--ui-control-xl);
+    }
+  }
+
   @media (max-width: 439px) {
     .greeting {
       font-size: var(--ui-font-size-xl);
@@ -99,6 +193,11 @@
     .greeting {
       flex-shrink: 0;
       margin: auto 0;
+    }
+
+    .apiKeyCue {
+      flex-shrink: 0;
+      margin-top: var(--ui-space-2-5);
     }
 
     .caveat {

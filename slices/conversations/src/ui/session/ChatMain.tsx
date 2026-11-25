@@ -3,9 +3,11 @@ import { useEffect } from 'react'
 import { useConversations } from '../../context.js'
 import { useTranslate } from '../../messages.js'
 import type { ConversationsRuntime } from '../../runtime.js'
+import type { SiderMode } from '../../views.js'
 import styles from './ChatMain.module.css'
 import { MobileHeader } from './MobileHeader.js'
 import { SessionView } from './SessionView.js'
+import { SettingsHeaderButton } from './SettingsHeaderButton.js'
 import { Welcome } from './Welcome.js'
 
 /** 保存失败时的提示条，可重试 */
@@ -29,12 +31,13 @@ export const createChatHooks = (runtime: ConversationsRuntime) => {
   const useChatLifecycle = () => {
     const isMobile = useIsMobile()
     const activeId = runtime.useChatStore((state) => state.activeId)
+    const hasSessions = runtime.useChatStore((state) => state.sessions.length > 0)
 
     useEffect(() => runtime.uploads.onUploadNotice(runtime.showNotice), [])
     useEffect(() => runtime.bindChatPersistence(), [])
     useEffect(() => {
       runtime.closeMobileSider()
-    }, [activeId, isMobile])
+    }, [activeId, hasSessions, isMobile])
     useEffect(() => {
       void runtime.initChat()
     }, [])
@@ -46,7 +49,7 @@ export const createChatHooks = (runtime: ConversationsRuntime) => {
 }
 
 /** 主区域：加载中/失败、会话页或欢迎页 */
-export const ChatMain = ({ siderCollapsed }: { siderCollapsed: boolean }) => {
+export const ChatMain = ({ siderMode }: { siderMode: SiderMode }) => {
   const t = useTranslate()
   const isMobile = useIsMobile()
   const { useChatStore, initChat, selectSession } = useConversations()
@@ -69,7 +72,13 @@ export const ChatMain = ({ siderCollapsed }: { siderCollapsed: boolean }) => {
     const failed = !ready ? initError : sessionLoadError
     return (
       <div className={styles.loadingView}>
-        {isMobile ? <MobileHeader /> : null}
+        {isMobile ? (
+          <MobileHeader />
+        ) : (
+          <div className={styles.loadingHeader} data-tauri-drag-region>
+            <SettingsHeaderButton />
+          </div>
+        )}
         <div className={styles.loadingState} role="status" aria-live="polite">
           <span>
             {failed
@@ -96,8 +105,8 @@ export const ChatMain = ({ siderCollapsed }: { siderCollapsed: boolean }) => {
     )
   }
   return session ? (
-    <SessionView session={session} streaming={streaming} siderCollapsed={siderCollapsed} />
+    <SessionView session={session} streaming={streaming} siderMode={siderMode} />
   ) : (
-    <Welcome siderCollapsed={siderCollapsed} />
+    <Welcome siderMode={siderMode} />
   )
 }

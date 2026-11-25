@@ -1,6 +1,8 @@
 @layer slice {
   .frame {
     --titlebar-inset: 0px;
+    --collapsed-sider-left: 14px;
+    --absent-brand-left: 30px;
     position: absolute;
     inset: 0;
     display: flex;
@@ -9,9 +11,12 @@
   }
 
   /* 桌面版把标题栏做成透明的覆盖层：内容从窗口顶部开始，交通灯浮在侧边栏上方。
-     --titlebar-inset：交通灯占的高度，用于折叠后的按钮组与窄屏顶栏 */
+     --titlebar-inset：交通灯占的高度，用于窄屏顶栏；
+     --collapsed-sider-left / --absent-brand-left：左侧让开交通灯后的起始位置 */
   .frame.desktop {
     --titlebar-inset: 36px;
+    --collapsed-sider-left: 96px;
+    --absent-brand-left: 96px;
   }
 
   .main {

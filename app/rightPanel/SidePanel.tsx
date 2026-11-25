@@ -36,8 +36,7 @@ export const SidePanel = ({
     if (!open) {
       return
     }
-    const { siderCollapsed } = layout.useStore.getState()
-    if (!siderCollapsed && window.innerWidth - storedWidth - 261 < 420) {
+    if (layout.getState().mode === 'expanded' && window.innerWidth - storedWidth - 261 < 420) {
       layout.setSiderCollapsed(true)
     }
   }, [layout, open, storedWidth])

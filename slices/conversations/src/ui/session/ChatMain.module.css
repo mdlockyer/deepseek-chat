@@ -19,6 +19,16 @@
     animation: loading-in var(--ui-duration-normal) var(--ui-ease-standard) both;
   }
 
+  .loadingHeader {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    flex-shrink: 0;
+    box-sizing: border-box;
+    height: var(--ui-panel-header-height);
+    padding: 0 14px;
+  }
+
   @keyframes loading-in {
     from {
       opacity: 0;

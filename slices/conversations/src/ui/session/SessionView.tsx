@@ -4,10 +4,12 @@ import { useConversations } from '../../context.js'
 import { sessionTitle } from '../../format.js'
 import { useTranslate } from '../../messages.js'
 import { type Session } from '../../types.js'
+import type { SiderMode } from '../../views.js'
 import { ChatInput } from '../chatInput/ChatInput.js'
 import { MessageList } from '../messages/MessageList.js'
 import { MobileHeader } from './MobileHeader.js'
 import styles from './SessionView.module.css'
+import { SettingsHeaderButton } from './SettingsHeaderButton.js'
 
 const useNoDock = () => false
 
@@ -15,11 +17,11 @@ const useNoDock = () => false
 export const SessionView = ({
   session,
   streaming,
-  siderCollapsed,
+  siderMode,
 }: {
   session: Session
   streaming: boolean
-  siderCollapsed: boolean
+  siderMode: SiderMode
 }) => {
   const t = useTranslate()
   const isMobile = useIsMobile()
@@ -34,18 +36,21 @@ export const SessionView = ({
       ) : (
         <div className={styles.header} data-tauri-drag-region>
           <div
-            className={clsx(styles.title, siderCollapsed && styles.withCollapsedSider)}
+            className={clsx(styles.title, siderMode === 'collapsed' && styles.withCollapsedSider)}
             data-tauri-drag-region
           >
             {title}
           </div>
-          {headerActions.length > 0 ? (
-            <div className={styles.headerActions}>
-              {headerActions.map((Action, index) => (
-                <Action key={index} sessionId={session.id} />
-              ))}
-            </div>
-          ) : null}
+          <div className={styles.headerActions}>
+            {headerActions.length > 0 ? (
+              <div className={styles.sessionActions}>
+                {headerActions.map((Action, index) => (
+                  <Action key={index} sessionId={session.id} />
+                ))}
+              </div>
+            ) : null}
+            <SettingsHeaderButton />
+          </div>
         </div>
       )}
       <MessageList
