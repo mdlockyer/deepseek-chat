@@ -566,7 +566,16 @@ describe('slice-activity-inspector: redesigned ActivityPanel rendering', () => {
       /PRIVATE_IP_BLOCKED/,
       'Evidence Shelf surfaces failed error preview'
     )
-    assert.match(collapsedHtml, /Inspect/, 'Evidence Shelf provides direct Inspect jump button')
+    assert.match(
+      collapsedHtml,
+      /aria-label="Inspect failed step: First human step"/,
+      'Evidence Shelf renders the failed step as a direct clickable jump row'
+    )
+    assert.doesNotMatch(
+      collapsedHtml,
+      />Inspect</,
+      'Evidence Shelf omits separate floating Inspect button in favor of whole-row click'
+    )
     assert.match(
       collapsedHtml,
       /Visuals \(1\)/,

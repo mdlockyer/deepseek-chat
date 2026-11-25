@@ -1,4 +1,4 @@
-import { Banner, Button, IconWarningOutline16 } from '@deepseek-chat/lib-ui'
+import { IconChevronRightOutline14, IconWarningOutline16 } from '@deepseek-chat/lib-ui'
 import { activityInspectorMessages } from './messages.js'
 import type { ActivityFailedStep, ActivityVisualItem } from './timeline.js'
 import styles from './ActivityPanel.module.css'
@@ -26,31 +26,43 @@ export const EvidenceShelf = ({
   return (
     <section className={styles.evidenceShelf} aria-label={t('panelTitle')}>
       {failedSteps.length === 1 ? (
-        <Banner
-          tone="error"
-          compact
-          role="status"
-          icon={<IconWarningOutline16 />}
-          action={
-            <Button
-              variant="ghost"
-              size="s"
-              className={styles.errorJumpButton}
-              onClick={() => onInspectStep(failedSteps[0].callId)}
-            >
-              {t('inspectAction')}
-            </Button>
+        <button
+          type="button"
+          className={styles.errorCalloutButton}
+          title={
+            failedSteps[0].preview
+              ? `${failedSteps[0].label}: ${failedSteps[0].preview}`
+              : failedSteps[0].label
           }
+          aria-label={t('inspectErrorStep', { label: failedSteps[0].label })}
+          onClick={() => onInspectStep(failedSteps[0].callId)}
         >
-          <div className={styles.errorSummaryTitle}>{failedSteps[0].label}</div>
-          {failedSteps[0].preview ? (
-            <div className={styles.errorSummaryPreview}>{failedSteps[0].preview}</div>
-          ) : null}
-        </Banner>
+          <span className={styles.errorCalloutIcon} aria-hidden="true">
+            <IconWarningOutline16 />
+          </span>
+          <span className={styles.errorCalloutBody}>
+            <span className={styles.errorSummaryTitle}>{failedSteps[0].label}</span>
+            {failedSteps[0].preview ? (
+              <span className={styles.errorSummaryPreview}>{failedSteps[0].preview}</span>
+            ) : null}
+          </span>
+          <span className={styles.errorCalloutChevron} aria-hidden="true">
+            <IconChevronRightOutline14 />
+          </span>
+        </button>
       ) : failedSteps.length > 1 ? (
-        <Banner tone="error" compact role="status" icon={<IconWarningOutline16 />}>
-          <div className={styles.errorSummaryTitle}>
-            {t('evidenceErrorsMany', { count: failedSteps.length })}
+        <div
+          className={styles.errorCalloutGroup}
+          role="group"
+          aria-label={t('evidenceErrorsMany', { count: failedSteps.length })}
+        >
+          <div className={styles.errorGroupHeader}>
+            <span className={styles.errorCalloutIcon} aria-hidden="true">
+              <IconWarningOutline16 />
+            </span>
+            <span className={styles.errorSummaryTitle}>
+              {t('evidenceErrorsMany', { count: failedSteps.length })}
+            </span>
           </div>
           <div className={styles.errorSummaryList}>
             {failedSteps.map((step) => (
@@ -58,13 +70,18 @@ export const EvidenceShelf = ({
                 key={step.callId}
                 type="button"
                 className={styles.errorSummaryLink}
+                title={step.preview ? `${step.label}: ${step.preview}` : step.label}
+                aria-label={t('inspectErrorStep', { label: step.label })}
                 onClick={() => onInspectStep(step.callId)}
               >
-                {step.label}
+                <span className={styles.errorSummaryLinkText}>{step.label}</span>
+                <span className={styles.errorCalloutChevron} aria-hidden="true">
+                  <IconChevronRightOutline14 />
+                </span>
               </button>
             ))}
           </div>
-        </Banner>
+        </div>
       ) : null}
 
       {visuals.length > 0 ? (
