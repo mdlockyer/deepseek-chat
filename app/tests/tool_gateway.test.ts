@@ -4,13 +4,9 @@
  */
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import {
-  ASK_USER_TOOL_NAME,
-  skipAskUser,
-  submitAskUser,
-  type Message,
-  type ToolRunContext,
-} from '@deepseek-chat/slice-conversations'
+import { ASK_USER_TOOL_NAME } from '@deepseek-chat/slice-ask-user'
+import type { Message, ToolRunContext } from '@deepseek-chat/slice-conversations'
+import { askUser } from '../composition.js'
 import { collectPythonUploads, toolGateway } from '../toolGateway.js'
 
 const declaredNames = (toggles: { search: boolean; python: boolean }) =>
@@ -86,7 +82,7 @@ describe('app wiring: tool gateway', () => {
       },
       context()
     )
-    assert.equal(submitAskUser('wiring', { theme: 'Dark' }), true)
+    assert.equal(askUser.submit('wiring', { theme: 'Dark' }), true)
     const res1 = await ask1
     assert.equal(res1.status, 'ok')
     assert.equal(res1.askAction?.status, 'answered')
@@ -105,7 +101,7 @@ describe('app wiring: tool gateway', () => {
       },
       context()
     )
-    assert.equal(skipAskUser('wiring'), true)
+    assert.equal(askUser.skip('wiring'), true)
     const res2 = await ask2
     assert.equal(res2.status, 'ok')
     assert.equal(res2.askAction?.status, 'skipped')

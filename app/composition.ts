@@ -4,6 +4,7 @@
  */
 import { createNoticeBus, createOverlayCoordinator } from '@deepseek-chat/lib-ui'
 import { createAccountSlice } from '@deepseek-chat/slice-account'
+import { createAskUserSlice } from '@deepseek-chat/slice-ask-user'
 import { createBrowserSlice } from '@deepseek-chat/slice-browser'
 import { createPreferencesSlice } from '@deepseek-chat/slice-preferences'
 import { createPythonSlice } from '@deepseek-chat/slice-python'
@@ -105,6 +106,8 @@ export const voice = createVoiceSlice({
   store: localStore,
   notify: notices,
 })
+
+export const askUser = createAskUserSlice({ log: spine })
 
 export const browser = createBrowserSlice({
   log: spine,

@@ -1,7 +1,5 @@
+import type { ToolDefinition, ToolRunResult } from '@deepseek-chat/lib-tools'
 import { create } from 'zustand'
-import type { ClientTool } from '@deepseek-chat/lib-agent'
-import type { AskActionItem, AskActionMeta } from './types.js'
-import type { ToolResult } from './tools.js'
 
 export const ASK_USER_TOOL_NAME = 'ask_user'
 
@@ -20,14 +18,27 @@ export type AskUserQuestion = {
   readonly allowCustom: boolean
 }
 
+export type AskActionItem = {
+  readonly id: string
+  readonly header: string
+  readonly question: string
+  readonly answer?: string | string[]
+}
+
+export type AskActionMeta = {
+  readonly status: 'answered' | 'skipped'
+  readonly items: AskActionItem[]
+}
+
 export type PendingAskUser = {
   readonly sessionId: string
   readonly questions: readonly AskUserQuestion[]
   readonly submit: (answers: Record<string, string | string[]>) => void
   readonly skip: () => void
+  readonly abort: () => void
 }
 
-export const ASK_USER_TOOL: ClientTool = {
+export const ASK_USER_TOOL: ToolDefinition = {
   name: ASK_USER_TOOL_NAME,
   description:
     'Ask the user 1–4 short, structured clarifying questions in a compact card docked above the chat input, and wait for their selection or custom answer before continuing.',
@@ -168,140 +179,178 @@ export const parseAskUserInput = (raw: unknown): ParseAskUserResult => {
   return { ok: true, questions }
 }
 
-type AskUserState = {
+type AskUserStoreState = {
   pendingBySession: Record<string, PendingAskUser | undefined>
 }
 
-export const useAskUserStore = create<AskUserState>(() => ({
-  pendingBySession: {},
-}))
+export const createAskUserState = () => {
+  const useStore = create<AskUserStoreState>(() => ({
+    pendingBySession: {},
+  }))
 
-const setPending = (sessionId: string, pending: PendingAskUser | undefined) =>
-  useAskUserStore.setState((state) => {
-    if (pending === undefined) {
-      if (!Object.hasOwn(state.pendingBySession, sessionId)) {
-        return state
+  const setPending = (sessionId: string, pending: PendingAskUser | undefined) =>
+    useStore.setState((state) => {
+      if (pending === undefined) {
+        if (!Object.hasOwn(state.pendingBySession, sessionId)) {
+          return state
+        }
+        const next = Object.fromEntries(
+          Object.entries(state.pendingBySession).filter(([key]) => key !== sessionId)
+        )
+        return { pendingBySession: next }
       }
-      const next = Object.fromEntries(
-        Object.entries(state.pendingBySession).filter(([key]) => key !== sessionId)
-      )
-      return { pendingBySession: next }
-    }
-    return { pendingBySession: { ...state.pendingBySession, [sessionId]: pending } }
-  })
-
-/** Submits answers for the active pending prompt in a session (used by UI and tests). */
-export const submitAskUser = (
-  sessionId: string,
-  answers: Record<string, string | string[]>
-): boolean => {
-  const pending = useAskUserStore.getState().pendingBySession[sessionId]
-  if (!pending) {
-    return false
-  }
-  pending.submit(answers)
-  return true
-}
-
-/** Skips the active pending prompt in a session, asking the model to use its best judgment. */
-export const skipAskUser = (sessionId: string): boolean => {
-  const pending = useAskUserStore.getState().pendingBySession[sessionId]
-  if (!pending) {
-    return false
-  }
-  pending.skip()
-  return true
-}
-
-/**
- * Runs an `ask_user` tool call: publishes the pending prompt for `sessionId` and waits until the
- * user answers, skips, or the turn's AbortSignal fires.
- */
-export const runAskUser = (
-  rawInput: unknown,
-  options: { readonly sessionId: string; readonly signal: AbortSignal }
-): Promise<ToolResult> => {
-  const startedAt = Date.now()
-  if (options.signal.aborted) {
-    return Promise.resolve({
-      status: 'aborted',
-      content: 'Aborted by user.',
-      durationMs: 0,
+      return { pendingBySession: { ...state.pendingBySession, [sessionId]: pending } }
     })
-  }
-  const parsed = parseAskUserInput(rawInput)
-  if (!parsed.ok) {
-    return Promise.resolve({
-      status: 'error',
-      content: parsed.error,
-      durationMs: Date.now() - startedAt,
-    })
-  }
-  const { questions } = parsed
-  const { sessionId, signal } = options
 
-  return new Promise<ToolResult>((resolve) => {
-    let settled = false
-    const finish = (result: ToolResult) => {
-      if (settled) {
-        return
-      }
-      settled = true
-      signal.removeEventListener('abort', onAbort)
-      if (useAskUserStore.getState().pendingBySession[sessionId] === pending) {
-        setPending(sessionId, undefined)
-      }
-      resolve({ ...result, durationMs: Date.now() - startedAt })
+  const submit = (sessionId: string, answers: Record<string, string | string[]>): boolean => {
+    const pending = useStore.getState().pendingBySession[sessionId]
+    if (!pending) {
+      return false
     }
+    pending.submit(answers)
+    return true
+  }
 
-    const onAbort = () => {
-      finish({ status: 'aborted', content: 'Aborted by user.' })
+  const skip = (sessionId: string): boolean => {
+    const pending = useStore.getState().pendingBySession[sessionId]
+    if (!pending) {
+      return false
     }
+    pending.skip()
+    return true
+  }
 
-    const pending: PendingAskUser = {
-      sessionId,
-      questions,
-      submit: (rawAnswers) => {
-        const answers: Record<string, string | string[]> = {}
-        const items: AskActionItem[] = questions.map((q) => {
-          const rawValue = rawAnswers[q.id]
-          if (Array.isArray(rawValue)) {
-            const cleaned = rawValue.map((v) => v.trim()).filter(Boolean)
-            if (cleaned.length > 0) {
+  const cancelSession = (sessionId: string) => {
+    const pending = useStore.getState().pendingBySession[sessionId]
+    pending?.abort()
+  }
+
+  const cancelAll = () => {
+    const all = Object.values(useStore.getState().pendingBySession)
+    for (const pending of all) {
+      pending?.abort()
+    }
+  }
+
+  const run = (
+    rawInput: unknown,
+    options: { readonly sessionId: string; readonly signal: AbortSignal }
+  ): Promise<ToolRunResult & { readonly askAction?: AskActionMeta }> => {
+    const startedAt = Date.now()
+    if (options.signal.aborted) {
+      return Promise.resolve({
+        status: 'aborted',
+        content: 'Aborted by user.',
+        durationMs: 0,
+      })
+    }
+    const parsed = parseAskUserInput(rawInput)
+    if (!parsed.ok) {
+      return Promise.resolve({
+        status: 'error',
+        content: parsed.error,
+        durationMs: Date.now() - startedAt,
+      })
+    }
+    const { questions } = parsed
+    const { sessionId, signal } = options
+
+    return new Promise((resolve) => {
+      let settled = false
+      const finish = (result: ToolRunResult & { readonly askAction?: AskActionMeta }) => {
+        if (settled) {
+          return
+        }
+        settled = true
+        signal.removeEventListener('abort', onAbort)
+        if (useStore.getState().pendingBySession[sessionId] === pending) {
+          setPending(sessionId, undefined)
+        }
+        resolve({ ...result, durationMs: Date.now() - startedAt })
+      }
+
+      const onAbort = () => {
+        finish({ status: 'aborted', content: 'Aborted by user.' })
+      }
+
+      const pending: PendingAskUser = {
+        sessionId,
+        questions,
+        abort: onAbort,
+        submit: (rawAnswers) => {
+          const answers: Record<string, string | string[]> = {}
+          const items: AskActionItem[] = questions.map((q) => {
+            const rawValue = rawAnswers[q.id]
+            if (Array.isArray(rawValue)) {
+              const cleaned = rawValue.map((v) => v.trim()).filter(Boolean)
+              if (cleaned.length > 0) {
+                answers[q.id] = cleaned
+                return { id: q.id, header: q.header, question: q.question, answer: cleaned }
+              }
+            } else if (typeof rawValue === 'string' && rawValue.trim()) {
+              const cleaned = rawValue.trim()
               answers[q.id] = cleaned
               return { id: q.id, header: q.header, question: q.question, answer: cleaned }
             }
-          } else if (typeof rawValue === 'string' && rawValue.trim()) {
-            const cleaned = rawValue.trim()
-            answers[q.id] = cleaned
-            return { id: q.id, header: q.header, question: q.question, answer: cleaned }
-          }
-          return { id: q.id, header: q.header, question: q.question }
-        })
-        const askAction: AskActionMeta = { status: 'answered', items }
-        finish({
-          status: 'ok',
-          content: JSON.stringify({ status: 'answered', answers }),
-          askAction,
-        })
-      },
-      skip: () => {
-        const askAction: AskActionMeta = {
-          status: 'skipped',
-          items: questions.map((q) => ({ id: q.id, header: q.header, question: q.question })),
-        }
-        finish({
-          status: 'ok',
-          content: JSON.stringify({
-            status: 'skipped',
-            note: 'User skipped the questions and asked you to proceed using your best judgment.',
-          }),
-          askAction,
-        })
-      },
-    }
+            return { id: q.id, header: q.header, question: q.question }
+          })
+          const askAction: AskActionMeta = { status: 'answered', items }
+          finish({
+            status: 'ok',
+            content: JSON.stringify({ status: 'answered', answers }),
+            askAction,
+            payload: askAction,
+            frontStageNote: {
+              status: 'done',
+              items: items.map((item) => ({
+                id: item.id,
+                label: item.header,
+                question: item.question,
+                ...(item.answer !== undefined ? { value: item.answer } : {}),
+              })),
+            },
+          })
+        },
+        skip: () => {
+          const items = questions.map((q) => ({
+            id: q.id,
+            header: q.header,
+            question: q.question,
+          }))
+          const askAction: AskActionMeta = { status: 'skipped', items }
+          finish({
+            status: 'ok',
+            content: JSON.stringify({
+              status: 'skipped',
+              note: 'User skipped the questions and asked you to proceed using your best judgment.',
+            }),
+            askAction,
+            payload: askAction,
+            frontStageNote: {
+              status: 'skipped',
+              items: items.map((item) => ({
+                id: item.id,
+                label: item.header,
+                question: item.question,
+              })),
+            },
+          })
+        },
+      }
 
-    signal.addEventListener('abort', onAbort, { once: true })
-    setPending(sessionId, pending)
-  })
+      signal.addEventListener('abort', onAbort, { once: true })
+      setPending(sessionId, pending)
+    })
+  }
+
+  return {
+    useStore,
+    submit,
+    skip,
+    cancelSession,
+    cancelAll,
+    run,
+  }
 }
+
+export type AskUserState = ReturnType<typeof createAskUserState>

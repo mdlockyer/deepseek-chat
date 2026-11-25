@@ -8,14 +8,15 @@ import clsx from 'clsx'
 import { deps } from '../../env.js'
 import { sessionTitle } from '../../format.js'
 import { useTranslate } from '../../messages.js'
+import { stopReply } from '../../store.js'
 import { type Session } from '../../types.js'
 import type { ChatPanels } from '../../views.js'
-import { useAskUserStore } from '../../askUser.js'
-import { AskUserCard } from '../ask/AskUserCard.js'
 import { ChatInput } from '../chatInput/ChatInput.js'
 import { MessageList } from '../messages/MessageList.js'
 import { MobileHeader } from './MobileHeader.js'
 import styles from './SessionView.module.css'
+
+const useNoDock = () => false
 
 /** 会话页：标题栏（移动端为顶栏）+ 消息列表，输入框吸底 */
 export const SessionView = ({
@@ -29,9 +30,9 @@ export const SessionView = ({
 }) => {
   const t = useTranslate()
   const isMobile = useIsMobile()
-  const { panels } = deps().ui
+  const { panels, composerDock: ComposerDock, useHasComposerDock = useNoDock } = deps().ui
   const filesToggle = panels.files.useToggle(session)
-  const hasPendingAsk = useAskUserStore((state) => Boolean(state.pendingBySession[session.id]))
+  const hasDock = useHasComposerDock(session.id)
   const title = sessionTitle(session, t('untitledChat'))
   return (
     <div className={styles.view}>
@@ -71,8 +72,8 @@ export const SessionView = ({
         streaming={streaming}
         footer={
           <div className={styles.inputContainer}>
-            {hasPendingAsk ? (
-              <AskUserCard sessionId={session.id} />
+            {hasDock && ComposerDock ? (
+              <ComposerDock sessionId={session.id} onStopReply={() => stopReply(session.id)} />
             ) : (
               <ChatInput sessionId={session.id} />
             )}

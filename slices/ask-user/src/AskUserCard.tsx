@@ -1,17 +1,22 @@
 import { Button, IconCheckedOutline14 } from '@deepseek-chat/lib-ui'
 import clsx from 'clsx'
 import { useEffect, useState } from 'react'
-import { useAskUserStore, type AskUserQuestion, type PendingAskUser } from '../../askUser.js'
-import { useTranslate } from '../../messages.js'
-import { stopReply } from '../../store.js'
+import type { AskUserQuestion, AskUserState, PendingAskUser } from './askUser.js'
+import { askUserMessages } from './messages.js'
 import styles from './AskUserCard.module.css'
 
 const hasAnswer = (value: string | string[] | undefined): boolean =>
   Array.isArray(value) ? value.length > 0 : typeof value === 'string' && value.trim().length > 0
 
-const AskUserCardBody = ({ pending }: { pending: PendingAskUser }) => {
-  const t = useTranslate()
-  const { sessionId, questions, submit, skip } = pending
+const AskUserCardBody = ({
+  pending,
+  onStopReply,
+}: {
+  pending: PendingAskUser
+  onStopReply: () => void
+}) => {
+  const t = askUserMessages.useTranslate()
+  const { questions, submit, skip } = pending
   const isSingleQuestion = questions.length === 1
   const [activeIndex, setActiveIndex] = useState(0)
   const [answers, setAnswers] = useState<Record<string, string | string[]>>({})
@@ -64,7 +69,6 @@ const AskUserCardBody = ({ pending }: { pending: PendingAskUser }) => {
     const nextCustom = { ...customById, [current.id]: '' }
     setAnswers(nextAnswers)
     setCustomById(nextCustom)
-    // Single-question single-select submits immediately in 1 click.
     if (isSingleQuestion) {
       submit(buildFinalAnswers(nextAnswers, nextCustom))
       return
@@ -169,12 +173,8 @@ const AskUserCardBody = ({ pending }: { pending: PendingAskUser }) => {
           <button type="button" className={styles.headerAction} onClick={skip}>
             {t('askSkip')}
           </button>
-          <button
-            type="button"
-            className={styles.headerAction}
-            onClick={() => stopReply(sessionId)}
-          >
-            {t('chatInputStopButtonTooltip')}
+          <button type="button" className={styles.headerAction} onClick={onStopReply}>
+            {t('askStop')}
           </button>
         </div>
       </div>
@@ -301,10 +301,25 @@ const AskUserCardBody = ({ pending }: { pending: PendingAskUser }) => {
   )
 }
 
-export const AskUserCard = ({ sessionId }: { sessionId: string }) => {
-  const pending = useAskUserStore((state) => state.pendingBySession[sessionId])
-  if (!pending) {
-    return null
+export const createAskUserDock = (state: AskUserState) => {
+  const ComposerDock = ({
+    sessionId,
+    onStopReply,
+  }: {
+    sessionId: string
+    onStopReply: () => void
+  }) => {
+    const pending = state.useStore((s) => s.pendingBySession[sessionId])
+    if (!pending) {
+      return null
+    }
+    return (
+      <AskUserCardBody
+        key={pending.questions.map((q) => q.id).join(',')}
+        pending={pending}
+        onStopReply={onStopReply}
+      />
+    )
   }
-  return <AskUserCardBody key={pending.questions.map((q) => q.id).join(',')} pending={pending} />
+  return ComposerDock
 }

@@ -5,8 +5,6 @@ import {
   WAIT_TOOL_NAME,
   buildReplyView,
   needsWorkingIndicator,
-  toLocalSession,
-  toSessionFile,
   type AgentProfile,
   type AgentSource,
   type AssistantMessage,
@@ -226,35 +224,14 @@ describe('conversations subagent runtime (Phase 2 tests 2–19)', () => {
     assert.ok(serializedLead.includes('Alpha finding [ref:1]'))
     assert.ok(!serializedLead.includes('finish_task'))
 
-    // Test 8: archive round-trip preserves roles and text while omitting child transcripts.
+    // Child run persisted on the reply and wait result kept in reply blocks.
     const reply = lastReply()
     assert.equal(reply.agents?.length, 1)
     assert.equal(reply.agents?.[0]?.state.status, 'finished')
-    const session: Session = {
-      id: 'arch-1',
-      title: 'Archive Check',
-      createdAt: 1_000,
-      updatedAt: 2_000,
-      messages: [
-        { id: 'u1', role: 'user', content: leadSecret, files: [], createdAt: 1_000 },
-        reply,
-      ],
-    }
-    const archived = toSessionFile(session, () => null)
-    const serializedArchive = JSON.stringify(archived)
-    assert.ok(!serializedArchive.includes('finish_task'), 'child transcript omitted from archive')
-    assert.ok(serializedArchive.includes('Alpha finding'), 'wait result text preserved in archive')
-    const restored = toLocalSession(archived).session
-    assert.deepEqual(
-      restored.messages.map((m) => m.role),
-      ['user', 'assistant']
-    )
     assert.ok(
-      restored.messages[1]?.role === 'assistant' &&
-        restored.messages[1].blocks.some(
-          (b) => b.type === 'text' && b.text.includes('Lead final answer')
-        )
+      reply.blocks.some((b) => b.type === 'tool_result' && b.content.includes('Alpha finding'))
     )
+    assert.ok(reply.blocks.some((b) => b.type === 'text' && b.text.includes('Lead final answer')))
   })
 
   it('enforces read-only allow-list and depth 1 without calling gateway for forbidden tools (test 4)', async () => {

@@ -64,4 +64,7 @@ export type ConversationsViewDeps = {
   /** Saves a file for the user (desktop: save dialog; web: download). */
   readonly saveFile: (name: string, blob: Blob) => Promise<void>
   readonly setSiderCollapsed: (collapsed: boolean) => void
+  /** Optional interactive dock rendered in place of the composer when active (e.g. ask-user). */
+  readonly composerDock?: ComponentType<{ sessionId: string; onStopReply: () => void }>
+  readonly useHasComposerDock?: (sessionId: string) => boolean
 }

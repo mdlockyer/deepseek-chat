@@ -523,6 +523,31 @@ export const replaceHistory = async (write: () => Promise<void>): Promise<number
   }
 }
 
+export const snapshotSessionsForExport = () => {
+  const { sessions, sessionCache } = get()
+  return {
+    summaries: sessions,
+    loadSession: async (id: string): Promise<Session | undefined> =>
+      Object.hasOwn(sessionCache, id) ? sessionCache[id] : db.loadSession(id),
+  }
+}
+
+export const replaceSessions = (
+  prepare: () => Promise<{
+    readonly sessions: readonly Session[]
+    readonly blobs: readonly { readonly id: string; readonly blob: Blob }[]
+  }>
+): Promise<number> =>
+  replaceHistory(async () => {
+    const { sessions, blobs } = await prepare()
+    for (const session of sessions) {
+      await db.addStagingSession(session)
+    }
+    if (blobs.length > 0) {
+      await db.saveStagingFiles([...blobs])
+    }
+  })
+
 export const newChat = () => {
   if (!get().importingHistory) {
     set({ activeId: null })

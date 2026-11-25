@@ -3,21 +3,21 @@ import type {
   WebFetchResult,
   WebFetchToolResultBlock,
 } from '@deepseek-chat/lib-agent'
-import type {
-  AssistantMessage,
-  FileAttachment,
-  Message,
-  ReplyBlock,
-  ReplyStatus,
-  Session,
-  UserMessage,
-} from '../types.js'
 import { fail } from './errors.js'
 import type { ChatMessage, FileEntry, Fragment, SessionFile } from './format.js'
 import { sessionFilesDir } from './paths.js'
+import type {
+  BackupAssistantMessage,
+  BackupFileAttachment,
+  BackupMessage,
+  BackupReplyBlock,
+  BackupReplyStatus,
+  BackupSession,
+  BackupUserMessage,
+} from './types.js'
 
 export type LocalSession = {
-  session: Session
+  session: BackupSession
   /** 本会话目录下应存在的图片：ZIP 条目名 → 文件 ID */
   images: Map<string, string>
 }
@@ -33,17 +33,16 @@ const isWebUrl = (value: string) => {
   }
 }
 
-const toFile = (file: FileEntry): FileAttachment => ({
+const toFile = (file: FileEntry): BackupFileAttachment => ({
   id: file.id,
   serverId: null,
   name: file.file_name,
   size: file.file_size,
   isImage: file.is_image,
-  // 图片身份来自归档；原件随后从 ZIP 读取后补充具体 MIME。
   mimeType: '',
 })
 
-const toUser = (message: ChatMessage): UserMessage => ({
+const toUser = (message: ChatMessage): BackupUserMessage => ({
   id: String(message.id),
   role: 'user',
   createdAt: time(message.inserted_at),
@@ -51,13 +50,12 @@ const toUser = (message: ChatMessage): UserMessage => ({
   files: message.fragments.flatMap((item) => (item.type === 'FILE' ? item.files.map(toFile) : [])),
 })
 
-/** 归档不带原调用 ID，以消息和片段位置生成稳定 ID，调用与结果共用。 */
 const toolBlocks = (
   id: string,
   input: ServerToolUseBlock['input'],
   kind: ServerToolUseBlock['kind'],
-  result?: ReplyBlock
-): ReplyBlock[] => [
+  result?: BackupReplyBlock
+): BackupReplyBlock[] => [
   {
     type: 'server_tool_use',
     id,
@@ -99,20 +97,13 @@ const unavailable: WebFetchToolResultBlock['content'] = {
   error_code: 'unavailable',
 }
 
-/**
- * 片段一次性转换为正式内容块，展示、请求和导出共用：
- * - 普通搜索与边想边搜共用 TOOL_SEARCH，以同一回复是否有打开 / 查找网页来区分；
- * - READ_LINK 将 URL、标题和签名存入工具结果；仅含签名的结果也保留；
- * - 没有链接的 TOOL_OPEN 不展示；
- * - 没有对应展示的片段直接丢弃。
- */
-const toBlocks = (fragments: Fragment[], messageId: string): ReplyBlock[] => {
+const toBlocks = (fragments: Fragment[], messageId: string): BackupReplyBlock[] => {
   const searchKind = fragments.some(
     (item) => item.type === 'TOOL_OPEN' || item.type === 'TOOL_FIND'
   )
     ? 'deep_search'
     : 'search'
-  return fragments.flatMap((item, index): ReplyBlock[] => {
+  return fragments.flatMap((item, index): BackupReplyBlock[] => {
     const id = `history-${messageId}-${index}`
     switch (item.type) {
       case 'RESPONSE':
@@ -205,8 +196,7 @@ const toBlocks = (fragments: Fragment[], messageId: string): ReplyBlock[] => {
   })
 }
 
-/** 统一为正式回复状态：失败不进入上下文，未完成的按已停止处理。 */
-const replyStatus: Record<ChatMessage['status'], ReplyStatus> = {
+const replyStatus: Record<ChatMessage['status'], BackupReplyStatus> = {
   FINISHED: 'done',
   CONTENT_FILTER: 'done',
   FAILED: 'error',
@@ -216,7 +206,7 @@ const replyStatus: Record<ChatMessage['status'], ReplyStatus> = {
   WIP: 'stopped',
 }
 
-const toAssistant = (message: ChatMessage): AssistantMessage => {
+const toAssistant = (message: ChatMessage): BackupAssistantMessage => {
   const id = String(message.id)
   const blocks = toBlocks(message.fragments, id)
   const refused = message.status === 'CONTENT_FILTER'
@@ -227,9 +217,9 @@ const toAssistant = (message: ChatMessage): AssistantMessage => {
     model: null,
     thinking: message.thinking_enabled,
     search: message.search_enabled,
+    enabledCapabilities: message.search_enabled ? { 'web-research': true } : {},
     prefix: false,
     status: replyStatus[message.status],
-    // 拒绝回复丢弃模型正文和思考，保留模板提示与工具步骤。
     ...(refused ? { stopReason: 'refusal' as const } : {}),
     blocks: refused
       ? blocks.filter(
@@ -239,13 +229,9 @@ const toAssistant = (message: ChatMessage): AssistantMessage => {
   }
 }
 
-/**
- * 按 id 排序还原消息树：父消息的 id 必须更小、角色交替、根为提问。
- * current_message_id 到根的路径为当前分支；其余节点默认选中 id 最大的子消息。
- */
-const buildTree = (file: SessionFile): Pick<Session, 'messages' | 'rootMessageId'> => {
+const buildTree = (file: SessionFile): Pick<BackupSession, 'messages' | 'rootMessageId'> => {
   const sorted = file.messages.toSorted((a, b) => a.id - b.id)
-  const byId = new Map<number, Message>()
+  const byId = new Map<number, BackupMessage>()
   const messages = sorted.map((message) => {
     const { id, parent_id } = message
     const parent = parent_id === null ? undefined : byId.get(parent_id)
@@ -268,7 +254,6 @@ const buildTree = (file: SessionFile): Pick<Session, 'messages' | 'rootMessageId
     return { messages, rootMessageId: null }
   }
   let current = byId.get(file.current_message_id) ?? fail('backupInvalidBranches')
-  // 当前消息就是用户停留的位置，后面即使还有消息也不继续展开。
   current.selectedChildId = undefined
   while (current.parentId) {
     const parent = byId.get(Number(current.parentId)) ?? fail('backupInvalidBranches')
@@ -280,9 +265,8 @@ const buildTree = (file: SessionFile): Pick<Session, 'messages' | 'rootMessageId
 
 /** 转换单个会话，并列出本会话目录下需要从 ZIP 读取的图片。 */
 export const toLocalSession = (file: SessionFile): LocalSession => {
-  const session: Session = {
+  const session: BackupSession = {
     id: file.id,
-    // 空标题按「新对话」显示，导出时还原为 null。
     title: file.title ?? '',
     createdAt: time(file.inserted_at),
     updatedAt: time(file.updated_at),
@@ -298,12 +282,10 @@ export const toLocalSession = (file: SessionFile): LocalSession => {
         if (!entry.is_image) {
           continue
         }
-        // 读取端把条目名规范为 NFC，引用也按同样规则比较。
         const path = entry.export_path?.normalize('NFC')
         if (path === undefined) {
           continue
         }
-        // 图片只能在本会话目录下，同一条目不能对应不同文件。
         if (
           !path.startsWith(sessionFilesDir(file.id)) ||
           (images.get(path) ?? entry.id) !== entry.id

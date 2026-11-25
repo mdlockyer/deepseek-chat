@@ -1,15 +1,11 @@
 /**
  * Conversations: chats, their branches and replies, the DeepSeek API client, attachments and
- * drafts, the composer, the session list, the local store (IndexedDB), history import/export,
- * and the chat's views.
- *
- * One instance per app: `createConversationsSlice` installs the ports once at startup.
+ * drafts, the composer, the session list, the local store (IndexedDB), and the chat's views.
  */
-import { BackupError, clearHistory, exportHistory, importHistory } from './backup.js'
 import { hydrateComposerOptions } from './composerOptions.js'
 import { loadFile } from './db.js'
+import { describeReply } from './describe.js'
 import { installDeps, type ConversationsDeps } from './env.js'
-import { translate } from './messages.js'
 import { getChatMessages, useChatMessages, useHistoryState } from './sessionAccess.js'
 import { addDraftFiles, setDraftText } from './drafts.js'
 import {
@@ -20,9 +16,11 @@ import {
   regenerateReply,
   removeSession,
   renameSession,
+  replaceSessions,
   selectMessageVersion,
   selectSession,
   sendMessage,
+  snapshotSessionsForExport,
   stopReply,
   useChatStore,
   waitForIdle,
@@ -86,7 +84,6 @@ export type {
   UserMessage,
   WebSearchSourceMeta,
 } from './types.js'
-export type { AskUserOption, AskUserQuestion, PendingAskUser } from './askUser.js'
 
 export const createConversationsSlice = (deps: ConversationsDeps) => {
   installDeps(deps)
@@ -138,14 +135,12 @@ export const createConversationsSlice = (deps: ConversationsDeps) => {
     getChatMessages,
     useChatMessages,
 
-    // History import/export (ZIP, format v3) and clearing.
-    exportHistory,
-    importHistory,
-    clearHistory,
+    // Storage ports consumed by slices/history-backup via app composition.
+    snapshotForExport: snapshotSessionsForExport,
+    replaceSessions,
     useHistoryState,
-    /** Why an import failed, as text in the language current when it is shown; `null` if unknown. */
-    historyErrorText: (error: unknown): (() => string) | null =>
-      error instanceof BackupError ? () => translate((error as BackupError).key) : null,
+    describeReplyNotice: (message: Parameters<typeof describeReply>[0]): string | null =>
+      describeReply(message)?.text ?? null,
 
     // Views and their lifecycle.
     /** Call once from the app shell, outside any error boundary. */
@@ -168,16 +163,6 @@ export type ConversationsSlice = ReturnType<typeof createConversationsSlice>
 // ---------- Pure model functions (also the boundary tests' surface) ----------
 
 export { ApiError, request } from './apiClient.js'
-export {
-  ASK_USER_INSTRUCTIONS,
-  ASK_USER_TOOL,
-  ASK_USER_TOOL_NAME,
-  parseAskUserInput,
-  runAskUser,
-  skipAskUser,
-  submitAskUser,
-  useAskUserStore,
-} from './askUser.js'
 export {
   AUTO_TITLE_KEEP,
   MAX_AUTO_TITLE_CHARS,
@@ -209,10 +194,3 @@ export {
   type SubagentsPhase,
   type TurnWorkStripState,
 } from './activityView.js'
-
-/** History archive codec (pure): the v3 export format's sessions and its ZIP container. */
-export { readSessionFile } from './history/schema.js'
-export { toSessionFile } from './history/toArchive.js'
-export { toLocalSession } from './history/toLocal.js'
-export { ArchiveError, readArchive, readEntry } from './history/zipReader.js'
-export { writeArchive } from './history/zipWriter.js'

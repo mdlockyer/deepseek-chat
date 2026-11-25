@@ -2,12 +2,9 @@
  * The conversations slice's tool gateway: adapts the slices that run client tools (workspace
  * files, web research, Python, the built-in browser) to the chat's tool-call loop.
  */
+import { ASK_USER_TOOL_NAME } from '@deepseek-chat/slice-ask-user'
 import { BROWSER_TOOL_NAMES } from '@deepseek-chat/slice-browser'
 import {
-  ASK_USER_INSTRUCTIONS,
-  ASK_USER_TOOL,
-  ASK_USER_TOOL_NAME,
-  runAskUser,
   type AgentProfile,
   type ClientTool,
   type Message,
@@ -32,7 +29,7 @@ import {
   normalizeWorkspacePath,
 } from '@deepseek-chat/slice-workspace-files'
 import { createId } from './utils/id.js'
-import { browser, python, webResearch } from './composition.js'
+import { askUser, browser, python, webResearch } from './composition.js'
 import { toFileRecords } from './fileRecords.js'
 import { workspaceFiles } from './workspaceFiles.js'
 
@@ -148,7 +145,7 @@ const withSummaryParam = (tool: DeclaredTool): DeclaredTool => {
 const describe = (name: string): ClientTool | null => {
   const candidates: ClientTool[] = [
     ...workspaceFiles.declareTools(),
-    ASK_USER_TOOL,
+    askUser.tool,
     ...webResearch.declareTools({ searchEnabled: true, questionText: '' }),
     python.tool,
     ...browser.declareTools({ enabled: true }),
@@ -164,7 +161,7 @@ export const toolGateway: ToolGateway = {
   declare: ({ search, python: pythonEnabled, browser: browserEnabled, questionText }) =>
     [
       ...workspaceFiles.declareTools(),
-      ASK_USER_TOOL,
+      askUser.tool,
       ...webResearch.declareTools({ searchEnabled: search, questionText }),
       ...(pythonEnabled ? [python.tool] : []),
       ...browser.declareTools({ enabled: browserEnabled }),
@@ -175,7 +172,7 @@ export const toolGateway: ToolGateway = {
     const hasWeb = has(webResearch.handles) || names.has(RESEARCH_TOOL_NAME)
     return [
       ...(has(workspaceFiles.handles) ? [workspaceFiles.instructions] : []),
-      ...(names.has(ASK_USER_TOOL_NAME) ? [ASK_USER_INSTRUCTIONS] : []),
+      ...(names.has(ASK_USER_TOOL_NAME) ? [askUser.instructions] : []),
       ...(hasWeb ? [webResearch.instructionsFor(audience, names)] : []),
       ...(names.has(python.toolName) ? [python.instructions] : []),
       ...(has(browser.handles) ? [browser.instructions] : []),
@@ -196,10 +193,16 @@ export const toolGateway: ToolGateway = {
     const startedAt = Date.now()
 
     if (call.name === ASK_USER_TOOL_NAME) {
-      return runAskUser(call.input, {
+      const outcome = await askUser.run(call.input, {
         sessionId: context.sessionId,
         signal: context.signal,
       })
+      return {
+        content: outcome.content,
+        status: outcome.status,
+        durationMs: outcome.durationMs,
+        ...(outcome.askAction ? { askAction: outcome.askAction } : {}),
+      }
     }
 
     if (webResearch.handles(call.name)) {

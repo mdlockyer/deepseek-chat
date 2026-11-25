@@ -6,6 +6,7 @@ import { createChatPanels } from './chatPanels.js'
 import {
   API_ORIGIN,
   account,
+  askUser,
   browser,
   httpFetch,
   notices,
@@ -56,6 +57,8 @@ export const conversations = createConversationsSlice({
     openInApp: isDesktopApp ? (url) => void browser.openUrl(url, { initiator: 'user' }) : null,
     saveFile,
     setSiderCollapsed,
+    composerDock: askUser.ComposerDock,
+    useHasComposerDock: askUser.useHasPending,
   },
 })
 

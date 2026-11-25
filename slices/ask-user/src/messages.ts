@@ -1,0 +1,36 @@
+import { defineMessages } from '@deepseek-chat/spine/i18n'
+
+export const askUserMessages = defineMessages({
+  'zh-CN': {
+    askWaiting: '等待你的回答',
+    askAnswered: '已回答',
+    askSkipped: '已跳过，由 DeepSeek 决定',
+    askCardTitle: '补充确认',
+    askSkip: '跳过',
+    askSubmit: '发送',
+    askNext: '继续',
+    askBack: '上一步',
+    askStop: '停止生成',
+    askRecommended: '推荐',
+    askOtherLabel: '其他回答',
+    askOtherPlaceholder: '输入其他回答…',
+    askFreeTextPlaceholder: '输入你的回答…',
+    askEmptyError: '请选择一个选项、输入回答，或点击跳过。',
+  },
+  'en-US': {
+    askWaiting: 'Waiting for your answer',
+    askAnswered: 'Answered',
+    askSkipped: 'Skipped, using best judgment',
+    askCardTitle: 'Quick question',
+    askSkip: 'Skip',
+    askSubmit: 'Send',
+    askNext: 'Continue',
+    askBack: 'Back',
+    askStop: 'Stop',
+    askRecommended: 'Recommended',
+    askOtherLabel: 'Other answer',
+    askOtherPlaceholder: 'Other…',
+    askFreeTextPlaceholder: 'Type your answer…',
+    askEmptyError: 'Choose an option, type an answer, or click Skip.',
+  },
+})

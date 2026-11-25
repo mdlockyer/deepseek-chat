@@ -1,0 +1,19 @@
+{
+  "name": "@deepseek-chat/slice-history-backup",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@deepseek-chat/lib-agent": "workspace:*",
+    "@deepseek-chat/lib-tools": "workspace:*",
+    "@deepseek-chat/lib-ui": "workspace:*",
+    "@deepseek-chat/spine": "workspace:*",
+    "fflate": "0.8.3"
+  },
+  "peerDependencies": {
+    "react": "18.3.1"
+  }
+}

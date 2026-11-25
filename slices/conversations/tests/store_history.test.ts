@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
+import type { Session } from '@deepseek-chat/slice-conversations'
 import type { SessionDeleted, SessionHistoryReplaced } from '@deepseek-chat/spine/facts/session'
 import { createStoreEnv, say, seeded } from './store_harness.js'
 
@@ -165,8 +166,7 @@ describe('conversations store: facts and history', () => {
     assert.equal(deleted.length, factsBefore + 1)
   })
 
-  it('round-trips the history through export and import; a failed import changes nothing', async () => {
-    // Every chat on the list, loaded: title and visible branch.
+  it('replaces all sessions atomically and publishes one SessionHistoryReplaced; failures change nothing', async () => {
     const snapshot = async () => {
       const chats: string[] = []
       for (const summary of env.slice.getState().sessions) {
@@ -177,25 +177,34 @@ describe('conversations store: facts and history', () => {
     }
     const before = await snapshot()
     assert.ok(before.length >= 3, 'the earlier tests left several chats, some with branches')
-    const { blob } = await env.slice.exportHistory()
+    const exportedSessions: Session[] = []
+    const snap = env.slice.snapshotForExport()
+    for (const summary of snap.summaries) {
+      const full = await snap.loadSession(summary.id)
+      assert.ok(full)
+      exportedSessions.push(full)
+    }
 
-    // A file that is not an archive: rejected, nothing replaced, no fact.
+    // A failing prepare changes nothing and publishes no fact.
     const replacedBefore = replaced.length
     await assert.rejects(() =>
-      env.slice.importHistory(new File(['not a zip'], 'broken.zip', { type: 'application/zip' }))
+      env.slice.replaceSessions(async () => {
+        throw new Error('corrupt backup')
+      })
     )
     assert.equal(replaced.length, replacedBefore)
     assert.deepEqual(await snapshot(), before)
 
     // Clearing: one fact, no chats.
-    await env.slice.clearHistory()
+    await env.slice.replaceSessions(async () => ({ sessions: [], blobs: [] }))
     assert.equal(replaced.length, replacedBefore + 1)
     assert.deepEqual(env.slice.getState().sessions, [])
 
-    // Importing the export: one fact, the same chats.
-    const count = await env.slice.importHistory(
-      new File([blob], 'export.zip', { type: 'application/zip' })
-    )
+    // Restoring: one fact, the same chats.
+    const count = await env.slice.replaceSessions(async () => ({
+      sessions: exportedSessions,
+      blobs: [],
+    }))
     assert.equal(replaced.length, replacedBefore + 2)
     assert.equal(count, before.length)
     assert.deepEqual(await snapshot(), before)
