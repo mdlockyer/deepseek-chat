@@ -22,8 +22,8 @@ export type SessionCountSource = {
   readonly subscribe: (listener: () => void) => () => void
 }
 
-const ABSENT_STATE: SiderLayoutState = { mode: 'absent', collapsedExit: 'fade' }
-const EXPANDED_STATE: SiderLayoutState = { mode: 'expanded', collapsedExit: 'morph' }
+const absentState = (): SiderLayoutState => ({ mode: 'absent', collapsedExit: 'fade' })
+const expandedState = (): SiderLayoutState => ({ mode: 'expanded', collapsedExit: 'morph' })
 
 /** Pure state transition for the desktop sidebar lifecycle (`absent` / `collapsed` / `expanded`). */
 export const transitionSiderLayout = (
@@ -32,13 +32,13 @@ export const transitionSiderLayout = (
 ): SiderLayoutState => {
   switch (event.type) {
     case 'hydrated':
-      return event.sessionCount > 0 ? EXPANDED_STATE : ABSENT_STATE
+      return event.sessionCount > 0 ? expandedState() : absentState()
     case 'sessionsChanged':
       if (event.sessionCount === 0) {
-        return state.mode === 'absent' ? state : ABSENT_STATE
+        return state.mode === 'absent' ? state : absentState()
       }
       if (state.mode === 'absent') {
-        return event.fromHistoryReplace ? EXPANDED_STATE : { mode: 'collapsed', reveal: 'fade' }
+        return event.fromHistoryReplace ? expandedState() : { mode: 'collapsed', reveal: 'fade' }
       }
       return state
     case 'setCollapsed':
@@ -48,7 +48,7 @@ export const transitionSiderLayout = (
       if (event.collapsed) {
         return state.mode === 'collapsed' ? state : { mode: 'collapsed', reveal: 'morph' }
       }
-      return state.mode === 'expanded' ? state : EXPANDED_STATE
+      return state.mode === 'expanded' ? state : expandedState()
   }
 }
 
@@ -56,7 +56,7 @@ export const siderModeOf = (state: SiderLayoutState): SiderMode => state.mode
 
 /** Factory-scoped desktop sidebar layout controller bound to a runtime's Spine EventLog. */
 export const createSiderLayoutController = (log: EventLog) => {
-  const useStore = create<SiderLayoutState>(() => ABSENT_STATE)
+  const useStore = create<SiderLayoutState>(absentState)
   let hydrated = false
   let lastSessionCount = 0
   let pendingHistoryReplace = false

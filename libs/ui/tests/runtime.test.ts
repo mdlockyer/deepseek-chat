@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { afterEach, beforeEach, describe, it, mock } from 'node:test'
-import { createElement } from 'react'
+import { act, createElement, useSyncExternalStore } from 'react'
+import { createRoot } from 'react-dom/client'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { setLocale } from '@deepseek-chat/spine/i18n'
 import {
@@ -19,6 +20,7 @@ import {
   leaveGlideTarget,
   measureGlideRect,
   syncGlideRect,
+  usePresence,
   type GlideRect,
 } from '@deepseek-chat/lib-ui'
 
@@ -209,5 +211,203 @@ describe('lib-ui HoverGlide state machine & geometry', () => {
     assert.deepEqual(hoverGlideItem(true), { [HOVER_GLIDE_ITEM_ATTR]: 'muted' })
     const html = renderToStaticMarkup(createElement(HoverGlideIndicator))
     assert.match(html, /aria-hidden="true"/)
+  })
+})
+
+const installMinimalDom = () => {
+  const prevWindow = globalThis.window
+  const prevDocument = globalThis.document
+  const prevHtmlElement = globalThis.HTMLElement
+  const prevActEnv = (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT
+
+  const FakeIFrame = function FakeIFrame() {}
+  class FakeNode {
+    nodeType: number
+    nodeName: string
+    tagName: string
+    nodeValue = ''
+    childNodes: FakeNode[] = []
+    parentNode: FakeNode | null = null
+    ownerDocument: unknown
+    style: Record<string, string> = {}
+    namespaceURI = 'http://www.w3.org/1999/xhtml'
+
+    constructor(nodeType: number, nodeName: string, ownerDocument: unknown) {
+      this.nodeType = nodeType
+      this.nodeName = nodeName
+      this.tagName = nodeName
+      this.ownerDocument = ownerDocument
+    }
+
+    appendChild(child: FakeNode) {
+      child.parentNode = this
+      this.childNodes.push(child)
+      return child
+    }
+
+    removeChild(child: FakeNode) {
+      this.childNodes = this.childNodes.filter((item) => item !== child)
+      child.parentNode = null
+      return child
+    }
+
+    insertBefore(child: FakeNode, ref: FakeNode | null) {
+      child.parentNode = this
+      const index = ref ? this.childNodes.indexOf(ref) : -1
+      if (index >= 0) {
+        this.childNodes.splice(index, 0, child)
+      } else {
+        this.childNodes.push(child)
+      }
+      return child
+    }
+
+    addEventListener() {}
+    removeEventListener() {}
+    setAttribute() {}
+    removeAttribute() {}
+
+    get firstChild(): FakeNode | null {
+      return this.childNodes[0] ?? null
+    }
+
+    get nextSibling(): FakeNode | null {
+      if (!this.parentNode) {
+        return null
+      }
+      const index = this.parentNode.childNodes.indexOf(this)
+      return this.parentNode.childNodes[index + 1] ?? null
+    }
+
+    set textContent(value: string) {
+      this.childNodes = value ? [doc.createTextNode(String(value))] : []
+    }
+
+    get textContent(): string {
+      return this.nodeType === 3
+        ? this.nodeValue
+        : this.childNodes.map((child) => child.textContent).join('')
+    }
+  }
+
+  const win = {
+    setTimeout: (...args: Parameters<typeof setTimeout>) => globalThis.setTimeout(...args),
+    clearTimeout: (...args: Parameters<typeof clearTimeout>) => globalThis.clearTimeout(...args),
+    matchMedia: () => ({ matches: false }),
+    addEventListener() {},
+    removeEventListener() {},
+    navigator: { userAgent: '' },
+    HTMLIFrameElement: FakeIFrame,
+  }
+
+  const doc = {
+    nodeType: 9,
+    defaultView: win,
+    documentElement: null as FakeNode | null,
+    body: null as FakeNode | null,
+    activeElement: null,
+    createElement(tag: string) {
+      return new FakeNode(1, tag.toUpperCase(), doc)
+    },
+    createTextNode(text: string) {
+      const node = new FakeNode(3, '#text', doc)
+      node.nodeValue = text
+      return node
+    },
+    addEventListener() {},
+    removeEventListener() {},
+  }
+  doc.documentElement = doc.createElement('html')
+  doc.body = doc.createElement('body')
+
+  Object.assign(globalThis, {
+    window: win,
+    document: doc,
+    HTMLElement: FakeNode,
+    IS_REACT_ACT_ENVIRONMENT: true,
+  })
+
+  return {
+    container: doc.createElement('div') as unknown as HTMLElement,
+    restore() {
+      Object.assign(globalThis, {
+        window: prevWindow,
+        document: prevDocument,
+        HTMLElement: prevHtmlElement,
+        IS_REACT_ACT_ENVIRONMENT: prevActEnv,
+      })
+    },
+  }
+}
+
+describe('lib-ui usePresence', () => {
+  it('stays in sync with useSyncExternalStore across repeated open/close cycles returning to prior snapshots', async () => {
+    const dom = installMinimalDom()
+    const EXPANDED = { mode: 'expanded' as const }
+    let snapshot: { readonly mode: 'expanded' | 'collapsed' } = EXPANDED
+    const listeners = new Set<() => void>()
+    const store = {
+      getState: () => snapshot,
+      setState: (next: { readonly mode: 'expanded' | 'collapsed' }) => {
+        snapshot = next
+        for (const listener of listeners) {
+          listener()
+        }
+      },
+      subscribe: (listener: () => void) => {
+        listeners.add(listener)
+        return () => {
+          listeners.delete(listener)
+        }
+      },
+    }
+
+    const Probe = () => {
+      const current = useSyncExternalStore(store.subscribe, store.getState)
+      const { mounted, exiting } = usePresence(current.mode === 'collapsed', 25)
+      return createElement('div', null, `${current.mode}:${mounted}:${exiting}`)
+    }
+
+    const root = createRoot(dom.container)
+    try {
+      await act(async () => {
+        root.render(createElement(Probe))
+      })
+      assert.equal(dom.container.textContent, 'expanded:false:false')
+
+      // Transition to collapsed: mounted turns true immediately without stalling external store state.
+      await act(async () => {
+        store.setState({ mode: 'collapsed' })
+      })
+      assert.equal(dom.container.textContent, 'collapsed:true:false')
+
+      // Transition back to the exact prior snapshot reference (EXPANDED): must re-render and enter exit phase.
+      await act(async () => {
+        store.setState(EXPANDED)
+      })
+      assert.equal(dom.container.textContent, 'expanded:true:true')
+
+      // After exit duration elapses, unmounts cleanly.
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 40))
+      })
+      assert.equal(dom.container.textContent, 'expanded:false:false')
+
+      // Second close -> reopen cycle must work identically.
+      await act(async () => {
+        store.setState({ mode: 'collapsed' })
+      })
+      assert.equal(dom.container.textContent, 'collapsed:true:false')
+
+      await act(async () => {
+        store.setState(EXPANDED)
+      })
+      assert.equal(dom.container.textContent, 'expanded:true:true')
+    } finally {
+      await act(async () => {
+        root.unmount()
+      })
+      dom.restore()
+    }
   })
 })

@@ -161,14 +161,11 @@ export const useIsMobile = (): boolean =>
 
 /** Keeps a closing overlay mounted for `durationMs` so its exit transition completes cleanly. */
 export const usePresence = (open: boolean, durationMs: number) => {
-  const [mounted, setMounted] = useState(open)
-  if (open && !mounted) {
-    setMounted(true)
-  }
+  const [present, setPresent] = useState(open)
 
   useEffect(() => {
     if (open) {
-      setMounted(true)
+      setPresent(true)
       return
     }
     const reduced =
@@ -176,13 +173,14 @@ export const usePresence = (open: boolean, durationMs: number) => {
       typeof window.matchMedia === 'function' &&
       window.matchMedia(REDUCED_MOTION_QUERY).matches
     if (durationMs <= 0 || reduced) {
-      setMounted(false)
+      setPresent(false)
       return
     }
-    const timer = window.setTimeout(() => setMounted(false), durationMs)
+    const timer = window.setTimeout(() => setPresent(false), durationMs)
     return () => window.clearTimeout(timer)
   }, [open, durationMs])
 
+  const mounted = open || present
   return { mounted, exiting: mounted && !open }
 }
 
