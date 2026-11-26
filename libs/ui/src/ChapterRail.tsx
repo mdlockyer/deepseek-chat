@@ -227,7 +227,12 @@ export const ChapterRail = forwardRef<ChapterRailHandle, ChapterRailProps>(funct
       return
     }
     event.preventDefault()
-    target.setPointerCapture?.(event.pointerId)
+    try {
+      target.setPointerCapture(event.pointerId)
+    } catch {
+      // Capture is a nicety for drags that leave the rail; a pointer the browser no longer tracks
+      // (or a synthetic one) still scrubs while it stays over the rail.
+    }
     scrubRef.current = {
       pointerId: event.pointerId,
       y: event.clientY,
