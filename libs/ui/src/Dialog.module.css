@@ -11,17 +11,21 @@
     opacity: 0;
     transition-property: opacity, display, overlay;
     transition-duration: var(--ui-duration-normal);
-    transition-timing-function: var(--ui-ease-panel);
+    transition-timing-function: var(--ui-ease-fade);
     transition-behavior: allow-discrete;
 
+    /* The scrim fades on the same duration and curve as the dialog so the two
+       arrive together. Only opacity animates: a fixed colour faded by opacity is
+       composited, whereas animating background-color or backdrop-filter repaints
+       (and re-blurs) the whole page behind the dialog on every frame. */
     &::backdrop {
-      background-color: transparent;
-      backdrop-filter: blur(0px);
+      background-color: var(--ui-surface-scrim);
+      opacity: 0;
       overflow: hidden;
       overscroll-behavior: contain;
-      transition-property: background-color, backdrop-filter, display, overlay;
+      transition-property: opacity, display, overlay;
       transition-duration: var(--ui-duration-normal);
-      transition-timing-function: var(--ui-ease-standard);
+      transition-timing-function: var(--ui-ease-fade);
       transition-behavior: allow-discrete;
     }
   }
@@ -38,12 +42,10 @@
     }
 
     &::backdrop {
-      background-color: var(--ui-surface-scrim);
-      backdrop-filter: blur(2px);
+      opacity: 1;
 
       @starting-style {
-        background-color: transparent;
-        backdrop-filter: blur(0px);
+        opacity: 0;
       }
     }
   }
