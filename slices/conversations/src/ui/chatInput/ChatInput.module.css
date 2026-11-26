@@ -1,7 +1,16 @@
 @layer slice {
+  /* The box plus the row under it; the row reflows by the composer's own width. */
+  .composer {
+    container-type: inline-size;
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+  }
+
   .wrapper {
     --line-height: 24px;
-    --input-padding-top: 12px;
+    --input-padding-y: 4px;
+    position: relative;
     display: flex;
     flex-direction: column;
     box-sizing: border-box;
@@ -168,19 +177,14 @@
     background-color: var(--ui-danger-solid);
   }
 
-  .textareaWrapper {
-    position: relative;
-    width: 100%;
-  }
-
   .textarea,
   .mirror {
     display: block;
     box-sizing: border-box;
     width: 100%;
-    min-height: calc(var(--line-height) * 2 + var(--input-padding-top));
+    min-height: calc(var(--line-height) + var(--input-padding-y) * 2);
     margin: 0;
-    padding: var(--input-padding-top) var(--ui-space-3) 0 var(--ui-space-4);
+    padding: var(--input-padding-y) 0;
     border: none;
     font: inherit;
     line-height: inherit;
@@ -211,13 +215,6 @@
     visibility: hidden;
   }
 
-  @media not all and (min-width: 440px) {
-    .textarea,
-    .mirror {
-      min-height: calc(var(--line-height) * 1.25 + var(--input-padding-top));
-    }
-  }
-
   .mirror {
     visibility: hidden;
     pointer-events: none;
@@ -235,111 +232,80 @@
     }
 
     .attachments,
-    .functionRow {
+    .inputRow {
       flex-shrink: 0;
     }
   }
 
-  .functionRow {
+  /* Text field and send / stop on one row; the button stays on the last line as text grows. */
+  .inputRow {
     display: flex;
+    align-items: flex-end;
+    gap: var(--ui-space-3);
+    padding: var(--ui-space-3) var(--ui-space-3) var(--ui-space-3) var(--ui-space-6);
+  }
+
+  .textareaWrapper {
+    position: relative;
+    flex: 1;
+    min-width: 0;
+  }
+
+  /* Row under the box: tools left, caveat centred on the box, model pill right. */
+  .toolbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
     align-items: center;
-    justify-content: space-between;
-    gap: var(--ui-space-2);
-    padding: var(--ui-space-1-5) var(--ui-space-3) var(--ui-space-2-5);
+    gap: var(--ui-space-3);
+    min-height: var(--ui-control-lg);
+    margin-top: var(--ui-space-2);
+    padding: 0 var(--ui-space-1);
   }
 
   .left {
     display: flex;
     align-items: center;
-    gap: var(--ui-space-2);
+    gap: var(--ui-space-0-5);
     min-width: 0;
   }
 
-  .contextMeter {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--ui-space-2);
-    min-height: var(--ui-control-sm);
-    padding: 0 var(--ui-space-2);
-    border: 1px solid var(--ui-border-subtle);
-    border-radius: var(--ui-radius-pill);
-    background-color: var(--ui-surface-sunken);
-    color: var(--ui-text-secondary);
-    font: var(--ui-type-caption);
-    font-variant-numeric: tabular-nums;
-    cursor: pointer;
-    outline: none;
-    transition:
-      background-color var(--ui-duration-normal) var(--ui-ease-standard),
-      border-color var(--ui-duration-normal) var(--ui-ease-standard),
-      color var(--ui-duration-normal) var(--ui-ease-standard);
-
-    @media (hover: hover) {
-      &:hover {
-        background-color: var(--ui-interactive-hover);
-        color: var(--ui-text-primary);
-      }
-    }
-
-    &:active {
-      background-color: var(--ui-interactive-active);
-    }
-
-    &:focus-visible {
-      outline: 2px solid var(--ui-focus-ring);
-      outline-offset: 2px;
-    }
-
-    @media (pointer: coarse) {
-      min-height: var(--ui-control-xl);
-      padding: 0 var(--ui-space-3);
-    }
-  }
-
-  .contextMeterOpen {
-    background-color: var(--ui-interactive-active);
-    color: var(--ui-text-primary);
-  }
-
-  .contextMeterTrack {
-    display: inline-flex;
-    width: 28px;
-    height: 4px;
-    overflow: hidden;
-    border-radius: var(--ui-radius-pill);
-    background-color: var(--ui-border-default);
-  }
-
-  .contextMeterFill {
-    display: block;
-    height: 100%;
-    border-radius: var(--ui-radius-pill);
-    background-color: var(--ui-handle-fill);
-    transition: width var(--ui-duration-normal) var(--ui-ease-standard);
-  }
-
-  .contextMeterFillWarn {
-    background-color: var(--ui-warning-solid);
-  }
-
-  .contextMeterText {
-    white-space: nowrap;
-  }
-
-  .contextPopover {
+  .right {
     display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: var(--ui-space-2-5);
-    width: 264px;
-    padding: var(--ui-space-3);
-    border-radius: var(--ui-radius-lg);
+    justify-content: flex-end;
+    min-width: 0;
   }
 
-  .contextPopoverText {
+  .caveat {
     margin: 0;
-    color: var(--ui-text-secondary);
     font: var(--ui-type-caption);
+    color: var(--ui-text-muted);
+    text-align: center;
+    white-space: nowrap;
+    user-select: none;
+  }
+
+  /* Too narrow to centre the caveat between the two groups: it moves to its own line. */
+  @container (max-width: 560px) {
+    .toolbar {
+      grid-template-columns: auto minmax(0, 1fr);
+      row-gap: 0;
+    }
+
+    .right {
+      grid-column: 2;
+      grid-row: 1;
+    }
+
+    .caveat {
+      grid-column: 1 / -1;
+      grid-row: 2;
+      padding-bottom: var(--ui-space-1);
+      white-space: normal;
+    }
+
+    .toolbar > span:empty {
+      display: none;
+    }
   }
 
   .compactingStatus {
@@ -348,22 +314,13 @@
     white-space: nowrap;
   }
 
-  .right {
-    display: flex;
-    flex-shrink: 0;
-    align-items: center;
-    gap: var(--ui-space-1);
-    margin-left: auto;
-  }
-
   .sendButton {
     display: flex;
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    width: 34px;
-    height: 34px;
-    margin-left: var(--ui-space-1-5);
+    width: var(--ui-control-sm);
+    height: var(--ui-control-sm);
     padding: 0;
     border: none;
     border-radius: var(--ui-radius-pill);
@@ -386,6 +343,16 @@
     &:focus-visible {
       outline: 2px solid var(--ui-focus-ring);
       outline-offset: 2px;
+    }
+
+    /* Stop while a reply streams: a neutral, high-contrast square, not the send accent. */
+    &.stopButton {
+      background: var(--ui-text-primary);
+      color: var(--ui-surface-canvas);
+    }
+
+    &.stopButton:hover {
+      background: var(--ui-text-secondary);
     }
 
     /* Nothing to send yet: neutral, so the accent appears only once the button does something. */

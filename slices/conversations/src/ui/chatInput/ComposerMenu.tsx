@@ -3,7 +3,6 @@ import {
   IconPaperclipOutline16,
   IconPlusOutline14,
   Popover,
-  Switch,
   Tooltip,
 } from '@deepseek-chat/lib-ui'
 import clsx from 'clsx'
@@ -31,15 +30,63 @@ export const isUploadShortcut = (
   !event.shiftKey &&
   event.key.toLowerCase() === 'u'
 
-/** 输入框左下角 `+` 菜单：整合上传文件与推理/工具开关，减少底部常驻胶囊噪音 */
+export type MenuRowDirection = 1 | -1 | 'first' | 'last'
+
+/** Moves focus between a menu's enabled `data-composer-row` buttons (wrapping at the ends). */
+export const focusMenuRow = (container: HTMLElement | null, direction: MenuRowDirection) => {
+  if (!container) {
+    return
+  }
+  const rows = Array.from(
+    container.querySelectorAll<HTMLButtonElement>('button[data-composer-row]:not(:disabled)')
+  )
+  if (rows.length === 0) {
+    return
+  }
+  if (direction === 'first') {
+    rows[0]?.focus({ preventScroll: true })
+    return
+  }
+  if (direction === 'last') {
+    rows.at(-1)?.focus({ preventScroll: true })
+    return
+  }
+  const activeIndex = rows.indexOf(document.activeElement as HTMLButtonElement)
+  const nextIndex =
+    activeIndex === -1
+      ? direction === 1
+        ? 0
+        : rows.length - 1
+      : (activeIndex + direction + rows.length) % rows.length
+  rows[nextIndex]?.focus({ preventScroll: true })
+}
+
+/** Arrow / Home / End navigation for a menu surface; returns true when it handled the key. */
+export const handleMenuRowKey = (container: HTMLElement | null, key: string): boolean => {
+  const direction: MenuRowDirection | null =
+    key === 'ArrowDown'
+      ? 1
+      : key === 'ArrowUp'
+        ? -1
+        : key === 'Home'
+          ? 'first'
+          : key === 'End'
+            ? 'last'
+            : null
+  if (direction === null) {
+    return false
+  }
+  focusMenuRow(container, direction)
+  return true
+}
+
+/** `+` under the composer: add files, and compact the conversation when it has history. */
 export const ComposerMenu = ({
-  tools,
   disabled = false,
   canCompact = false,
   onUploadFiles,
   onCompact,
 }: {
-  tools: ComposerToolSwitch[]
   disabled?: boolean
   canCompact?: boolean
   onUploadFiles: () => void
@@ -51,34 +98,10 @@ export const ComposerMenu = ({
   const listRef = useRef<HTMLDivElement>(null)
   const focusLastOnOpenRef = useRef(false)
 
-  const focusRow = useCallback((direction: 1 | -1 | 'first' | 'last') => {
-    const container = listRef.current
-    if (!container) {
-      return
-    }
-    const rows = Array.from(
-      container.querySelectorAll<HTMLButtonElement>('button[data-composer-row]:not(:disabled)')
-    )
-    if (rows.length === 0) {
-      return
-    }
-    if (direction === 'first') {
-      rows[0]?.focus({ preventScroll: true })
-      return
-    }
-    if (direction === 'last') {
-      rows.at(-1)?.focus({ preventScroll: true })
-      return
-    }
-    const activeIndex = rows.indexOf(document.activeElement as HTMLButtonElement)
-    const nextIndex =
-      activeIndex === -1
-        ? direction === 1
-          ? 0
-          : rows.length - 1
-        : (activeIndex + direction + rows.length) % rows.length
-    rows[nextIndex]?.focus({ preventScroll: true })
-  }, [])
+  const focusRow = useCallback(
+    (direction: MenuRowDirection) => focusMenuRow(listRef.current, direction),
+    []
+  )
 
   useEffect(() => {
     if (!open || !focusLastOnOpenRef.current) {
@@ -89,11 +112,7 @@ export const ComposerMenu = ({
     return () => cancelAnimationFrame(frame)
   }, [open, focusRow])
 
-  const activeLabels = tools.filter((item) => item.checked).map((item) => item.label)
-  const tooltipText =
-    activeLabels.length > 0
-      ? t('composerMenuActiveTooltip', { tools: activeLabels.join(', ') })
-      : t('composerMenuTooltip')
+  const tooltipText = t('composerMenuTooltip')
 
   return (
     <>
@@ -118,7 +137,6 @@ export const ComposerMenu = ({
           <span className={styles.plusIcon}>
             <IconPlusOutline14 />
           </span>
-          {activeLabels.length > 0 ? <span className={styles.activeDot} aria-hidden /> : null}
         </button>
       </Tooltip>
       <Popover
@@ -128,7 +146,7 @@ export const ComposerMenu = ({
         side="top"
         align="start"
         offset={8}
-        measureKey={`${tools.length}:${onCompact ? 1 : 0}`}
+        measureKey={onCompact ? 'compact' : 'files'}
         autoFocusSurface
         role="dialog"
         ariaLabel={t('composerMenuTooltip')}
@@ -140,18 +158,8 @@ export const ComposerMenu = ({
             onUploadFiles()
             return
           }
-          if (event.key === 'ArrowDown') {
+          if (handleMenuRowKey(listRef.current, event.key)) {
             event.preventDefault()
-            focusRow(1)
-          } else if (event.key === 'ArrowUp') {
-            event.preventDefault()
-            focusRow(-1)
-          } else if (event.key === 'Home') {
-            event.preventDefault()
-            focusRow('first')
-          } else if (event.key === 'End') {
-            event.preventDefault()
-            focusRow('last')
           }
         }}
       >
@@ -189,18 +197,6 @@ export const ComposerMenu = ({
               <span className={styles.rowLabel}>{t('compactConversation')}</span>
             </button>
           ) : null}
-          <div className={styles.divider} role="separator" />
-          {tools.map((tool) => (
-            <Switch
-              key={tool.key}
-              block
-              data-composer-row=""
-              icon={tool.icon}
-              label={tool.label}
-              checked={tool.checked}
-              onChange={tool.onToggle}
-            />
-          ))}
         </div>
       </Popover>
     </>

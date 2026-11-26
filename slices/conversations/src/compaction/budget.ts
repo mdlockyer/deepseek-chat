@@ -16,8 +16,6 @@ export type CompactionPolicy = {
   readonly maxCheckpointTokens: number
   /** Target token budget for recent messages kept verbatim (20K at <=200K -> 40K at >=1M, capped at 25% of window). */
   readonly keepRecentTokens: number
-  /** Token count at which the composer context meter becomes visible (40% of `line`). */
-  readonly meterVisibleTokens: number
 }
 
 const MIN_WINDOW = 4_096
@@ -54,7 +52,6 @@ export const computeCompactionPolicy = (spec: ModelSpec): CompactionPolicy => {
   const maxCheckpointTokens = Math.max(512, Math.floor(line * 0.5))
   const rawKeep = Math.round(20_000 + 20_000 * t)
   const keepRecentTokens = Math.max(512, Math.min(rawKeep, Math.floor(contextWindow * 0.25)))
-  const meterVisibleTokens = Math.floor(line * 0.4)
 
   return {
     contextWindow,
@@ -64,7 +61,6 @@ export const computeCompactionPolicy = (spec: ModelSpec): CompactionPolicy => {
     line,
     maxCheckpointTokens,
     keepRecentTokens,
-    meterVisibleTokens,
   }
 }
 

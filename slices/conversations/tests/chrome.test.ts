@@ -8,6 +8,7 @@ import {
   type AssistantMessage,
   type CompactionCheckpoint,
 } from '@deepseek-chat/slice-conversations'
+import { createDeepSeekProvider } from '@deepseek-chat/lib-agent'
 import { setLocale } from '@deepseek-chat/spine/i18n'
 import { createTestSlice } from './harness.js'
 
@@ -124,6 +125,58 @@ describe('conversations: permanent top-right Settings & first-launch chrome', ()
     slice.dispose()
   })
 
+  it('keeps only the draft in the composer box and summarises model and switches in the pill under it', async () => {
+    const provider = createDeepSeekProvider({
+      apiOrigin: 'https://api.test',
+      fetch: (url, init) => globalThis.fetch(url, init),
+      getApiKey: () => 'sk-test',
+    })
+    const modelLabel = provider.modelSpec(provider.defaultModel).label
+    const slice = createTestSlice({ provider })
+    await slice.commands.init()
+    await slice.replaceSessions(async () => ({
+      sessions: [
+        {
+          id: 's1',
+          title: 'Active thread',
+          createdAt: 1,
+          updatedAt: 2,
+          rootMessageId: 'u1',
+          messages: [{ id: 'u1', role: 'user', content: 'Hello', files: [], createdAt: 1 }],
+        },
+      ],
+      blobs: [],
+    }))
+    slice.commands.selectSession('s1')
+    await new Promise((resolve) => setTimeout(resolve, 10))
+    const render = () =>
+      renderWithEnglish(() =>
+        renderToStaticMarkup(createElement(slice.ChatMain, { siderMode: 'collapsed' }))
+      )
+
+    slice.setThinking(true)
+    const thinkingOn = render()
+    assert.match(thinkingOn, /placeholder="Reply"/)
+    assert.match(thinkingOn, /<button[^>]*aria-label="Add files and more"/)
+    assert.equal(thinkingOn.match(/AI responses may be inaccurate\./g)?.length, 1)
+    assert.match(
+      thinkingOn,
+      new RegExp(
+        `<button[^>]*aria-label="${modelLabel}, with DeepThink on"[^>]*aria-haspopup="dialog"`
+      )
+    )
+
+    slice.setThinking(false)
+    const thinkingOff = render()
+    assert.match(
+      thinkingOff,
+      new RegExp(`<button[^>]*aria-label="${modelLabel}"[^>]*aria-haspopup="dialog"`)
+    )
+    assert.doesNotMatch(thinkingOff, /DeepThink on/)
+
+    slice.dispose()
+  })
+
   it('renders SiderToolbar with one toggle that follows the sidebar mode, and hides "+" while the sidebar is open', async () => {
     const slice = createTestSlice()
     await slice.commands.init()
@@ -156,7 +209,7 @@ describe('conversations: permanent top-right Settings & first-launch chrome', ()
     slice.dispose()
   })
 
-  it('renders CompactionDivider only on its owning branch, hides context meter below 40% line, and shows it above 40%', async () => {
+  it('renders CompactionDivider only on its owning branch', async () => {
     const slice = createTestSlice()
     await slice.commands.init()
 
@@ -174,7 +227,7 @@ describe('conversations: permanent top-right Settings & first-launch chrome', ()
       tokensAfter: 1_400,
     }
 
-    // Small session (below 40% of 524k line): divider renders, context meter stays hidden, zero middots.
+    // Session with a checkpoint: divider renders with zero middots.
     await slice.replaceSessions(async () => ({
       sessions: [
         {
@@ -249,17 +302,14 @@ describe('conversations: permanent top-right Settings & first-launch chrome', ()
     )
     assert.match(smallHtml, /data-compaction-divider="cp-ui-1"/)
     assert.match(smallHtml, /Context compacted/)
-    assert.doesNotMatch(smallHtml, /data-context-meter/)
     assert.doesNotMatch(smallHtml, /Context compacted[^<]*·/)
 
-    // Large session (> 40% of 524k line = 245k tokens): contextual meter renders cleanly with zero middots.
+    // Session without a checkpoint on its branch: no divider.
     slice.commands.selectSession('s-large')
     await new Promise((resolve) => setTimeout(resolve, 10))
     const largeHtml = renderWithEnglish(() =>
       renderToStaticMarkup(createElement(slice.ChatMain, { siderMode: 'collapsed' }))
     )
-    assert.match(largeHtml, /data-context-meter/)
-    assert.match(largeHtml, /245k \/ 524k/)
     assert.doesNotMatch(largeHtml, /data-compaction-divider/)
 
     // Turn Work Strip surfaces compacting calmly in both waiting (turn-start) and live (mid-turn) states.

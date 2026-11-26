@@ -62,11 +62,13 @@ export const SessionView = ({
         footer={
           <div className={styles.inputContainer}>
             {hasDock && ComposerDock ? (
-              <ComposerDock sessionId={session.id} onStopReply={() => stopReply(session.id)} />
+              <>
+                <ComposerDock sessionId={session.id} onStopReply={() => stopReply(session.id)} />
+                <div className={styles.caveat}>{t('contentCaveat')}</div>
+              </>
             ) : (
-              <ChatInput sessionId={session.id} />
+              <ChatInput sessionId={session.id} caveat />
             )}
-            <div className={styles.caveat}>{t('contentCaveat')}</div>
           </div>
         }
       />

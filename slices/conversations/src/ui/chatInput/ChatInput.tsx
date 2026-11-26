@@ -1,26 +1,23 @@
 import type { ToolRegistry } from '@deepseek-chat/lib-tools'
 import {
-  Button,
   IconSendOutline16,
   IconStopFill16,
   IconThinkOutline16,
-  Popover,
   useIsMobile,
 } from '@deepseek-chat/lib-ui'
 import clsx from 'clsx'
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ACCEPT } from '../../attachments.js'
 import { getVisibleMessages } from '../../branches.js'
-import { estimateSessionContext } from '../../compaction/estimate.js'
 import { useConversations } from '../../context.js'
 import { EMPTY_DRAFT, prepareDraftMessage } from '../../drafts.js'
 import { useTranslate } from '../../messages.js'
 import { getContextRounds } from '../../reply.js'
-import { formatCompactTokenCount } from '../messages/CompactionDivider.js'
 import styles from './ChatInput.module.css'
 import { ComposerMenu, isUploadShortcut, type ComposerToolSwitch } from './ComposerMenu.js'
 import { DraftAttachments } from './DraftAttachments.js'
 import { DragMask, useFileDrop } from './DragMask.js'
+import { ModelMenu } from './ModelMenu.js'
 
 const NO_VOICE = {
   status: 'idle' as const,
@@ -53,12 +50,29 @@ const useCapabilityToggles = (tools: ToolRegistry): ComposerToolSwitch[] => {
   }))
 }
 
-/** 输入框：自适应高度的文本框 + 文件 + 深度思考与已挂载能力开关 + 语音输入（可选） + 发送 / 停止 */
-export const ChatInput = memo(function ChatInput({ sessionId }: { sessionId: string | null }) {
-  return <Input key={sessionId === null ? 'new' : `session:${sessionId}`} sessionId={sessionId} />
+/**
+ * Composer. The box holds only the draft: attachments, the auto-growing text field and
+ * send / stop. The row under it holds "+" (files, compact) and voice on the left, the AI caveat
+ * centred, and the model pill (model, DeepThink and tool switches) on the right.
+ */
+export const ChatInput = memo(function ChatInput({
+  sessionId,
+  caveat = false,
+}: {
+  sessionId: string | null
+  /** Show the AI caveat centred under the box (conversation view). */
+  caveat?: boolean
+}) {
+  return (
+    <Input
+      key={sessionId === null ? 'new' : `session:${sessionId}`}
+      sessionId={sessionId}
+      caveat={caveat}
+    />
+  )
 })
 
-const Input = ({ sessionId }: { sessionId: string | null }) => {
+const Input = ({ sessionId, caveat }: { sessionId: string | null; caveat: boolean }) => {
   const t = useTranslate()
   const {
     deps,
@@ -99,33 +113,13 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
   const capabilitySwitches = useCapabilityToggles(tools)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-  const meterAnchorRef = useRef<HTMLButtonElement>(null)
-  const [meterOpen, setMeterOpen] = useState(false)
 
   const visibleMessages = useMemo(() => (session ? getVisibleMessages(session) : []), [session])
   const hasCompactableTurns = useMemo(
     () => getContextRounds(visibleMessages).length > 0,
     [visibleMessages]
   )
-  const contextEstimate = useMemo(() => {
-    if (!session || visibleMessages.length === 0) {
-      return null
-    }
-    return estimateSessionContext({
-      visibleMessages,
-      checkpoints: session.checkpoints,
-      modelSpec: provider.modelSpec(provider.defaultModel),
-      pendingDraftText: text,
-    })
-  }, [provider, session, text, visibleMessages])
-
-  const showContextMeter =
-    contextEstimate !== null && contextEstimate.tokens >= contextEstimate.policy.meterVisibleTokens
-  const meterRatio = contextEstimate
-    ? Math.min(1, contextEstimate.tokens / Math.max(1, contextEstimate.policy.line))
-    : 0
-  const meterUsedLabel = contextEstimate ? formatCompactTokenCount(contextEstimate.tokens) : ''
-  const meterLineLabel = contextEstimate ? formatCompactTokenCount(contextEstimate.policy.line) : ''
+  const modelLabel = provider.modelSpec(provider.defaultModel).label
   const canCompact = !importingHistory && !streaming && !compacting && hasCompactableTurns
 
   const openFilePicker = useCallback(() => {
@@ -218,168 +212,70 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
   ]
 
   return (
-    <div
-      className={styles.wrapper}
-      onClick={(event) => {
-        if (event.target === event.currentTarget) {
-          textareaRef.current?.focus({ preventScroll: true })
-        }
-      }}
-      onKeyDown={(event) => {
-        if (isUploadShortcut(event.nativeEvent)) {
-          event.preventDefault()
-          openFilePicker()
-        }
-      }}
-    >
-      <DraftAttachments items={attachments} onRetry={retryFile} onRemove={removeFile} />
-      <div className={styles.textareaWrapper}>
-        <textarea
-          ref={textareaRef}
-          className={clsx(styles.textarea, recording && isMobile && styles.textareaHidden)}
-          placeholder={t('chatInputPlaceholderChat')}
-          rows={2}
-          autoFocus={!isMobile}
-          disabled={importingHistory}
-          value={text}
-          onChange={(event) => setText(event.target.value)}
-          onMouseDown={(event) => {
-            if (isMobile && event.button === 0 && document.activeElement !== event.currentTarget) {
-              event.preventDefault()
-              event.currentTarget.focus({ preventScroll: true })
-            }
-          }}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
-              event.preventDefault()
-              send()
-            }
-          }}
-          onPaste={(event) => {
-            const files = Array.from(event.clipboardData.files)
-            if (files.length > 0) {
-              event.preventDefault()
-              acceptFiles(files)
-            }
-          }}
-        />
-        {recording && isMobile && voiceViews ? (
-          <voiceViews.Spectrum getAnalyser={voice.getAnalyser} />
-        ) : null}
-        <div className={styles.mirror} aria-hidden>
-          {`${text}\n`}
-        </div>
-      </div>
-      <div className={styles.functionRow}>
-        <div className={styles.left}>
-          <ComposerMenu
-            tools={composerTools}
-            disabled={importingHistory || compacting}
-            canCompact={canCompact}
-            onUploadFiles={openFilePicker}
-            onCompact={sessionId ? () => void compactSession(sessionId) : undefined}
-          />
-          {showContextMeter && !compacting ? (
-            <>
-              <button
-                ref={meterAnchorRef}
-                type="button"
-                className={clsx(styles.contextMeter, meterOpen && styles.contextMeterOpen)}
-                aria-haspopup="dialog"
-                aria-expanded={meterOpen}
-                aria-label={t('contextMeterAriaLabel', {
-                  used: meterUsedLabel,
-                  line: meterLineLabel,
-                })}
-                data-context-meter=""
-                onClick={() => setMeterOpen((open) => !open)}
-              >
-                <span className={styles.contextMeterTrack} aria-hidden="true">
-                  <span
-                    className={clsx(
-                      styles.contextMeterFill,
-                      meterRatio >= 0.8 && styles.contextMeterFillWarn
-                    )}
-                    style={{ width: `${Math.round(meterRatio * 100)}%` }}
-                  />
-                </span>
-                <span className={styles.contextMeterText}>
-                  {t('contextMeterLabel', { used: meterUsedLabel, line: meterLineLabel })}
-                </span>
-              </button>
-              <Popover
-                open={meterOpen}
-                onOpenChange={setMeterOpen}
-                anchorRef={meterAnchorRef}
-                side="top"
-                align="start"
-                offset={8}
-                role="dialog"
-                ariaLabel={t('contextMeterAriaLabel', {
-                  used: meterUsedLabel,
-                  line: meterLineLabel,
-                })}
-                className={styles.contextPopover}
-              >
-                <p className={styles.contextPopoverText}>
-                  {t('contextMeterPopoverSummary', {
-                    used: meterUsedLabel,
-                    line: meterLineLabel,
-                  })}
-                </p>
-                <Button
-                  variant="outlined"
-                  size="s"
-                  disabled={!canCompact}
-                  onClick={() => {
-                    setMeterOpen(false)
-                    if (sessionId) {
-                      void compactSession(sessionId)
-                    }
-                  }}
-                >
-                  {t('compactConversation')}
-                </Button>
-              </Popover>
-            </>
-          ) : null}
-          {compacting && !streaming ? (
-            <span className={styles.compactingStatus} role="status" aria-live="polite">
-              {t('compactingConversation')}
-            </span>
-          ) : null}
-        </div>
-        <input
-          ref={fileInputRef}
-          type="file"
-          multiple
-          hidden
-          accept={ACCEPT}
-          onChange={(event) => {
-            acceptFiles(Array.from(event.target.files ?? []))
-            event.target.value = ''
-          }}
-        />
-        <div className={styles.right}>
-          {voiceViews ? (
-            <voiceViews.VoiceButton
-              status={voice.status}
-              disabled={!voice.available}
-              seconds={voice.seconds}
-              onClick={() => {
+    <div className={styles.composer}>
+      <div
+        className={styles.wrapper}
+        onClick={(event) => {
+          if (event.target === event.currentTarget) {
+            textareaRef.current?.focus({ preventScroll: true })
+          }
+        }}
+        onKeyDown={(event) => {
+          if (isUploadShortcut(event.nativeEvent)) {
+            event.preventDefault()
+            openFilePicker()
+          }
+        }}
+      >
+        <DraftAttachments items={attachments} onRetry={retryFile} onRemove={removeFile} />
+        <div className={styles.inputRow}>
+          <div className={styles.textareaWrapper}>
+            <textarea
+              ref={textareaRef}
+              className={clsx(styles.textarea, recording && isMobile && styles.textareaHidden)}
+              placeholder={t(
+                sessionId === null ? 'chatInputPlaceholderChat' : 'chatInputPlaceholderReply'
+              )}
+              rows={1}
+              autoFocus={!isMobile}
+              disabled={importingHistory}
+              value={text}
+              onChange={(event) => setText(event.target.value)}
+              onMouseDown={(event) => {
                 if (
-                  voice.status !== 'idle' ||
-                  (!useChatStore.getState().importingHistory && ensureApiKey())
+                  isMobile &&
+                  event.button === 0 &&
+                  document.activeElement !== event.currentTarget
                 ) {
-                  void voice.toggle()
+                  event.preventDefault()
+                  event.currentTarget.focus({ preventScroll: true })
+                }
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
+                  event.preventDefault()
+                  send()
+                }
+              }}
+              onPaste={(event) => {
+                const files = Array.from(event.clipboardData.files)
+                if (files.length > 0) {
+                  event.preventDefault()
+                  acceptFiles(files)
                 }
               }}
             />
-          ) : null}
+            {recording && isMobile && voiceViews ? (
+              <voiceViews.Spectrum getAnalyser={voice.getAnalyser} />
+            ) : null}
+            <div className={styles.mirror} aria-hidden>
+              {`${text}\n`}
+            </div>
+          </div>
           {busy && sessionId ? (
             <button
               type="button"
-              className={styles.sendButton}
+              className={clsx(styles.sendButton, styles.stopButton)}
               aria-label={t('chatInputStopButtonTooltip')}
               onClick={() => stopReply(sessionId)}
             >
@@ -397,8 +293,53 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
             </button>
           )}
         </div>
+        {dragging ? <DragMask /> : null}
       </div>
-      {dragging ? <DragMask /> : null}
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        hidden
+        accept={ACCEPT}
+        onChange={(event) => {
+          acceptFiles(Array.from(event.target.files ?? []))
+          event.target.value = ''
+        }}
+      />
+      <div className={styles.toolbar}>
+        <div className={styles.left}>
+          <ComposerMenu
+            disabled={importingHistory || compacting}
+            canCompact={canCompact}
+            onUploadFiles={openFilePicker}
+            onCompact={sessionId ? () => void compactSession(sessionId) : undefined}
+          />
+          {voiceViews ? (
+            <voiceViews.VoiceButton
+              status={voice.status}
+              disabled={!voice.available}
+              seconds={voice.seconds}
+              onClick={() => {
+                if (
+                  voice.status !== 'idle' ||
+                  (!useChatStore.getState().importingHistory && ensureApiKey())
+                ) {
+                  void voice.toggle()
+                }
+              }}
+            />
+          ) : null}
+          {compacting && !streaming ? (
+            <span className={styles.compactingStatus} role="status" aria-live="polite">
+              {t('compactingConversation')}
+            </span>
+          ) : null}
+        </div>
+        {caveat ? <p className={styles.caveat}>{t('contentCaveat')}</p> : <span />}
+        <div className={styles.right}>
+          <ModelMenu modelLabel={modelLabel} tools={composerTools} disabled={importingHistory} />
+        </div>
+      </div>
     </div>
   )
 }

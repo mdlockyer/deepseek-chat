@@ -89,6 +89,10 @@ factories (`createIndexedDbSessionStore`, `memorySessionStore`).
    turns with the same declared tools for KV-cache reuse.
 6. **DeepThink toggle.** Persisted under `chat-demo:thinking` as `'true'` / `'false'` via `deps.store`.
    All other composer toggles come dynamically from `tools.toggles`.
+   The composer box holds only the draft (attachments, text, send / stop). Under it, `+` offers
+   file upload and conversation compaction, and the model pill shows the model's label plus one
+   icon per toggle that is on; it opens the menu with DeepThink and every tool toggle. The
+   composer shows no context meter; compaction stays automatic and reachable from `+`.
 7. **Branches.** A chat is a tree. Sending appends below the visible leaf; editing adds a sibling
    user node and reply; regenerating adds a sibling assistant node; switching versions updates
    `selectedChildId` and re-publishes `SessionFilesChanged`.
@@ -151,6 +155,5 @@ factories (`createIndexedDbSessionStore`, `memorySessionStore`).
 | Concurrent uploads                          | 3                                           |
 | Compaction line scaling                     | 70% at <=200K -> 50% at >=1M (`ModelSpec`)  |
 | Verbatim dialogue retention budget          | 20K at <=200K -> 40K at >=1M (<=25% window) |
-| Composer context meter visibility threshold | 40% of compaction line                      |
 | Stall delay before "Working…"               | 1.5 s                                       |
 | Inline trace preview cap                    | 6 steps (`INLINE_TRACE_PREVIEW_LIMIT`)      |

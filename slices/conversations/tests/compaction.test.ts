@@ -90,7 +90,6 @@ describe('compaction: window-adaptive policy and trigger selection', () => {
     assert.equal(flashPolicy.line, 524_288)
     assert.equal(flashPolicy.keepRecentTokens, 40_000)
     assert.equal(flashPolicy.maxCheckpointTokens, 262_144)
-    assert.equal(flashPolicy.meterVisibleTokens, Math.floor(524_288 * 0.4))
     // 393K maxOutputTokens is capped to 10% of 1M so responseReserve never eats a third of the window.
     assert.equal(flashPolicy.responseReserve, Math.floor(1_048_576 * 0.1) + 4_096)
     assert.ok(flashPolicy.line < flashPolicy.ceiling)
