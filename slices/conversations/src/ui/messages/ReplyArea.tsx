@@ -3,7 +3,6 @@ import {
   Button,
   HoverGlide,
   IconCheckedOutline14,
-  IconChevronDownOutline14,
   IconChevronRightOutline14,
   hoverGlideItem,
 } from '@deepseek-chat/lib-ui'
@@ -26,6 +25,7 @@ import {
 import { FileCard } from '../files/FileCard.js'
 import { ChatMarkdown as Markdown } from './ChatMarkdown.js'
 import styles from './ReplyArea.module.css'
+import { Reveal } from './Reveal.js'
 import './thinking.markdown.css'
 import { WhaleLoader } from './WhaleLoader.js'
 
@@ -100,7 +100,6 @@ export const ReplyArea = memo(function ReplyArea({
   const toggleExpanded = () => setExpanded((value) => !value)
   const inspectActivity = (callId?: string) =>
     requestTurnInspection(sessionId, message.id, 'activity', callId)
-  const trace = expanded ? buildInlineTrace(view) : null
 
   const trackStatusLabel = (track: LiveTrack): string | null => {
     if (track.status === 'running') {
@@ -140,21 +139,31 @@ export const ReplyArea = memo(function ReplyArea({
               <WhaleLoader width={strip.waitingForUser ? 15 : 16} still={strip.waitingForUser} />
             </span>
             <span className={styles.headline}>{strip.headline}</span>
-            <span className={styles.chevron} aria-hidden="true">
-              {expanded ? <IconChevronDownOutline14 /> : <IconChevronRightOutline14 />}
+            <span
+              className={clsx(styles.chevron, expanded && styles.chevronOpen)}
+              aria-hidden="true"
+            >
+              <IconChevronRightOutline14 />
             </span>
           </button>
 
-          {expanded && trace ? (
-            <InlineTraceInlay
-              messageId={message.id}
-              trace={trace}
-              streaming={streaming}
-              thinkingOnly={trace.items.length === 0 && trace.thinkingMarkdown !== null}
-              isInspecting={isInspecting}
-              onInspect={inspectActivity}
-            />
-          ) : strip.liveTracks.length > 0 ? (
+          <Reveal open={expanded}>
+            {() => {
+              const trace = buildInlineTrace(view)
+              return (
+                <InlineTraceInlay
+                  messageId={message.id}
+                  trace={trace}
+                  streaming={streaming}
+                  thinkingOnly={trace.items.length === 0 && trace.thinkingMarkdown !== null}
+                  isInspecting={isInspecting}
+                  onInspect={inspectActivity}
+                />
+              )
+            }}
+          </Reveal>
+
+          {expanded ? null : strip.liveTracks.length > 0 ? (
             <div className={styles.liveTracks} role="status" aria-live="polite">
               {strip.liveTracks.map((track) => {
                 const isRunning = track.status === 'running'
@@ -226,21 +235,26 @@ export const ReplyArea = memo(function ReplyArea({
               <WhaleLoader width={15} still />
             </span>
             <span className={styles.settledLabel}>{strip.label}</span>
-            <span className={styles.chevron} aria-hidden="true">
-              {expanded ? <IconChevronDownOutline14 /> : <IconChevronRightOutline14 />}
+            <span
+              className={clsx(styles.chevron, expanded && styles.chevronOpen)}
+              aria-hidden="true"
+            >
+              <IconChevronRightOutline14 />
             </span>
           </button>
 
-          {expanded && trace ? (
-            <InlineTraceInlay
-              messageId={message.id}
-              trace={trace}
-              streaming={false}
-              thinkingOnly={strip.thinkingOnly}
-              isInspecting={isInspecting}
-              onInspect={inspectActivity}
-            />
-          ) : null}
+          <Reveal open={expanded}>
+            {() => (
+              <InlineTraceInlay
+                messageId={message.id}
+                trace={buildInlineTrace(view)}
+                streaming={false}
+                thinkingOnly={strip.thinkingOnly}
+                isInspecting={isInspecting}
+                onInspect={inspectActivity}
+              />
+            )}
+          </Reveal>
         </div>
       ) : null}
 

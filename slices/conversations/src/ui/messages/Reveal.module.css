@@ -1,0 +1,34 @@
+@layer slice {
+  /* Collapsed by default. The negative margin cancels the parent's flex gap so the
+     row below lands exactly where it was before the reveal mounted. */
+  .reveal {
+    display: grid;
+    grid-template-rows: 0fr;
+    margin-top: calc(var(--ui-space-1) * -1);
+    opacity: 0;
+    transition:
+      grid-template-rows var(--ui-duration-panel-close) var(--ui-ease-panel),
+      margin-top var(--ui-duration-panel-close) var(--ui-ease-panel),
+      opacity var(--ui-duration-fast) var(--ui-ease-fade);
+  }
+
+  .reveal[data-phase='opening'],
+  .reveal[data-phase='open'] {
+    grid-template-rows: 1fr;
+    margin-top: 0;
+    opacity: 1;
+    transition:
+      grid-template-rows var(--ui-duration-panel) var(--ui-ease-panel),
+      margin-top var(--ui-duration-panel) var(--ui-ease-panel),
+      opacity var(--ui-duration-normal) var(--ui-ease-fade) var(--ui-duration-fast);
+  }
+
+  .inner {
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .reveal[data-phase='open'] > .inner {
+    overflow: visible;
+  }
+}

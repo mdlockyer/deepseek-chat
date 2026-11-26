@@ -119,6 +119,11 @@
     align-items: center;
     flex-shrink: 0;
     color: var(--ui-text-muted);
+    transition: transform var(--ui-duration-normal) var(--ui-ease-standard);
+  }
+
+  .chevronOpen {
+    transform: rotate(90deg);
   }
 
   .liveDetailRail {
