@@ -43,7 +43,7 @@
   .title {
     margin-top: var(--ui-space-4);
     font-size: var(--ui-font-size-xl);
-    line-height: 28px;
+    line-height: var(--ui-leading-lg);
   }
 
   .desc {

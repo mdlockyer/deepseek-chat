@@ -55,7 +55,7 @@
     width: 380px;
     max-width: 100%;
     max-height: calc(100dvh - var(--ui-space-8));
-    padding: 22px var(--ui-space-6);
+    padding: var(--ui-space-6);
     border-radius: var(--ui-radius-xl);
     font: var(--ui-type-label);
     color: var(--ui-text-primary);
@@ -103,7 +103,7 @@
     margin: 0;
     font: var(--ui-type-h4);
     font-weight: 500;
-    line-height: 24px;
+    line-height: var(--ui-leading-md);
     color: var(--ui-text-primary);
   }
 

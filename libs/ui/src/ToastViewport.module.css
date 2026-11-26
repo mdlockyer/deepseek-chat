@@ -9,7 +9,7 @@
     width: fit-content;
     max-width: min(calc(100vw - 28px), 480px);
     margin: 0 auto;
-    padding: var(--ui-space-3) 18px;
+    padding: var(--ui-space-3) var(--ui-space-4);
     border-radius: var(--ui-radius-md);
     border: 1px solid var(--ui-border-inverse);
     font: var(--ui-type-label);

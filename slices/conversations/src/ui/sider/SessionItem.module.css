@@ -57,7 +57,7 @@
     flex: 1;
     min-width: 0;
     height: 100%;
-    padding: 9px var(--ui-space-1) 9px var(--ui-space-2-5);
+    padding: var(--ui-space-2) var(--ui-space-1) var(--ui-space-2) var(--ui-space-2-5);
     border: 0;
     border-radius: var(--ui-radius-md);
     background: none;
@@ -79,7 +79,7 @@
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
-    line-height: 18px;
+    line-height: var(--ui-leading-sm);
   }
 
   .untitled {
@@ -95,7 +95,7 @@
     right: var(--ui-space-3);
     pointer-events: none;
     font-size: var(--ui-font-size-xs);
-    line-height: 16px;
+    line-height: var(--ui-leading-xs);
     font-variant-numeric: tabular-nums;
     color: var(--ui-text-muted);
     transition: opacity var(--ui-duration-normal) var(--ui-ease-standard);
@@ -158,11 +158,11 @@
     }
 
     .row {
-      padding: 11px var(--ui-space-1) 11px var(--ui-space-3);
+      padding: var(--ui-space-3) var(--ui-space-1) var(--ui-space-3) var(--ui-space-3);
     }
 
     .title {
-      line-height: 22px;
+      line-height: var(--ui-leading-sm);
     }
 
     .renameInput {

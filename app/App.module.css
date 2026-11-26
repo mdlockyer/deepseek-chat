@@ -2,7 +2,7 @@
   .frame {
     --titlebar-inset: 0px;
     --collapsed-sider-left: 14px;
-    --absent-brand-left: 30px;
+    --absent-brand-left: 32px;
     position: absolute;
     inset: 0;
     display: flex;

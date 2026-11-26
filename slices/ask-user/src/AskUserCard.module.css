@@ -58,7 +58,7 @@
     color: var(--ui-text-muted);
     font: inherit;
     font-size: var(--ui-font-size-sm);
-    line-height: 18px;
+    line-height: var(--ui-leading-sm);
     font-weight: 400;
     white-space: nowrap;
     cursor: pointer;
@@ -97,7 +97,7 @@
 
   .headerAction {
     min-height: var(--ui-control-xs);
-    padding: 0 9px;
+    padding: 0 var(--ui-space-2);
     border: none;
     border-radius: var(--ui-radius-sm);
     background: transparent;
@@ -122,8 +122,8 @@
   .question {
     margin: 0 0 var(--ui-space-2);
     padding: 0 var(--ui-space-1);
-    font-size: 15px;
-    line-height: 22px;
+    font-size: var(--ui-font-size-lg);
+    line-height: var(--ui-leading-sm);
     font-weight: 500;
     color: var(--ui-text-primary);
   }
@@ -139,7 +139,7 @@
     align-items: flex-start;
     gap: var(--ui-space-2-5);
     width: 100%;
-    padding: 9px var(--ui-space-2-5);
+    padding: var(--ui-space-2) var(--ui-space-2-5);
     box-sizing: border-box;
     border-radius: var(--ui-radius-sm);
     border: none;
@@ -225,21 +225,21 @@
 
   .optionLabel {
     font-size: var(--ui-font-size-md);
-    line-height: 20px;
+    line-height: var(--ui-leading-sm);
     font-weight: 500;
     color: var(--ui-text-primary);
   }
 
   .recommended {
     font-size: var(--ui-font-size-xs);
-    line-height: 16px;
+    line-height: var(--ui-leading-xs);
     font-weight: 400;
     color: var(--ui-text-accent);
   }
 
   .optionDesc {
     font-size: var(--ui-font-size-sm);
-    line-height: 18px;
+    line-height: var(--ui-leading-sm);
     color: var(--ui-text-secondary);
   }
 
@@ -272,7 +272,7 @@
     flex-shrink: 0;
     width: 18px;
     font-size: var(--ui-font-size-md);
-    line-height: 20px;
+    line-height: var(--ui-leading-sm);
     color: var(--ui-text-muted);
   }
 
@@ -286,7 +286,7 @@
     color: var(--ui-text-primary);
     font: inherit;
     font-size: var(--ui-font-size-md);
-    line-height: 20px;
+    line-height: var(--ui-leading-sm);
     outline: none;
 
     &::placeholder {
@@ -305,7 +305,7 @@
 
   .errorText {
     font-size: var(--ui-font-size-xs);
-    line-height: 16px;
+    line-height: var(--ui-leading-xs);
     color: var(--ui-text-danger);
   }
 

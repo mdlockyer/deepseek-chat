@@ -333,7 +333,7 @@
     -webkit-box-orient: vertical;
     overflow: hidden;
     font: var(--ui-type-caption-strong);
-    line-height: 18px;
+    line-height: var(--ui-leading-sm);
     color: var(--ui-text-primary);
     overflow-wrap: anywhere;
   }

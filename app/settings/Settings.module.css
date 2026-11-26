@@ -4,7 +4,7 @@
     /* 高度随分组内容变化：三个分组的内容长度差别很大，固定高度会留下大片空白 */
     height: auto;
     max-height: calc(100dvh - var(--ui-space-8));
-    padding: 19px var(--ui-space-6) 22px;
+    padding: var(--ui-space-5) var(--ui-space-6) var(--ui-space-6);
   }
 
   .dialogMain {
@@ -33,7 +33,7 @@
     width: calc(100% - var(--ui-space-2));
     min-height: var(--ui-control-lg);
     margin: 0 var(--ui-space-1);
-    padding: 9px var(--ui-space-2-5) 9px var(--ui-space-2);
+    padding: var(--ui-space-2) var(--ui-space-2-5) var(--ui-space-2) var(--ui-space-2);
     border-radius: var(--ui-radius-md);
   }
 

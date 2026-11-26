@@ -308,6 +308,13 @@ const DARK_MODE_LEAK_RE =
   /\[data-theme\b|data-ds-dark-theme|\bbody\.(?:dark|light)\b|prefers-color-scheme/g
 const UI_VAR_REF_RE = /var\(\s*(--ui-[a-z0-9-]+)/g
 const Z_INDEX_NUM_RE = /\bz-index\s*:\s*(\d+)\b/g
+const RAW_TYPE_RE =
+  /(?<![\w-])(?:font-size|line-height)\s*:\s*[\d.]+px\b|(?<![\w-])font\s*:\s*[^;]*?\b\d+px\s*\/\s*\d+px/g
+const SPACING_DECL_RE =
+  /(?<![\w-])((?:padding|margin)(?:-(?:top|right|bottom|left|inline|block)(?:-(?:start|end))?)?|(?:row-|column-)?gap)\s*:\s*([^;]+);/g
+const SPACING_SCALE = new Set([0, 1, 2, 4, 6, 8, 10, 12, 14, 16, 20, 24, 32, 40, 48])
+const SPACING_LAYOUT_THRESHOLD = 48
+const BOX_SHADOW_RE = /(?<![\w-])box-shadow\s*:\s*([^;]+);/g
 
 for (const file of cssFiles) {
   const raw = fs.readFileSync(file, 'utf8')
@@ -356,6 +363,43 @@ for (const file of cssFiles) {
         'D5',
         `${rel(file)}:${lineNumberAt(stripped, match.index)} raw z-index ${match[1]} (use var(--ui-z-*))`
       )
+    }
+  }
+
+  // D8: Type sizes and line heights come from the type scale (exempt highlight.css)
+  if (file !== highlightPath) {
+    for (const match of stripped.matchAll(RAW_TYPE_RE)) {
+      fail(
+        'D8',
+        `${rel(file)}:${lineNumberAt(stripped, match.index)} raw "${match[0].trim()}" (use var(--ui-font-size-*), var(--ui-leading-*) or var(--ui-type-*))`
+      )
+    }
+  }
+
+  // D9: Spacing literals stay on the spacing scale; larger values are layout constants
+  for (const match of stripped.matchAll(SPACING_DECL_RE)) {
+    for (const px of match[2].matchAll(/(-?)(\d+(?:\.\d+)?)px/g)) {
+      const value = Number(px[2])
+      if (value <= SPACING_LAYOUT_THRESHOLD && !SPACING_SCALE.has(value)) {
+        fail(
+          'D9',
+          `${rel(file)}:${lineNumberAt(stripped, match.index)} ${match[1]} uses off-scale ${px[0]} (scale: ${[...SPACING_SCALE].join(', ')}px)`
+        )
+      }
+    }
+  }
+
+  // D10: Blurred shadows come from the elevation tokens; flat rings (blur 0) may be local
+  for (const match of stripped.matchAll(BOX_SHADOW_RE)) {
+    const value = match[1].replace(/var\([^()]*\)/g, 'TOKEN')
+    for (const layer of value.split(',')) {
+      const lengths = [...layer.matchAll(/-?\d*\.?\d+(?:px|em|rem)|(?<![\w.])0(?![\w.])/g)]
+      if (lengths.length >= 3 && !/^-?0(?:px|em|rem)?$/.test(lengths[2][0])) {
+        fail(
+          'D10',
+          `${rel(file)}:${lineNumberAt(stripped, match.index)} raw blurred box-shadow "${layer.trim()}" (use var(--ui-elevation-*))`
+        )
+      }
     }
   }
 }

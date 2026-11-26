@@ -1,10 +1,10 @@
 @layer slice {
   .uploadButton {
-    padding: 0 13px;
+    padding: 0 var(--ui-space-3);
   }
 
   .importConfirm {
-    padding-top: 26px;
+    padding-top: var(--ui-space-6);
     padding-bottom: var(--ui-space-6);
   }
 

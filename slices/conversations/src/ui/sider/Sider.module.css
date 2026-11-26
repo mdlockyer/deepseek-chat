@@ -38,7 +38,7 @@
     box-sizing: border-box;
     width: 261px;
     height: 100%;
-    padding: 0 13px 0 var(--ui-space-3);
+    padding: 0 calc(var(--ui-space-3) + 1px) 0 var(--ui-space-3);
   }
 
   .collapsedSider {
@@ -224,7 +224,7 @@
     z-index: var(--ui-z-panel);
     padding: var(--ui-space-0-5) var(--ui-space-2-5);
     font-size: var(--ui-font-size-xs);
-    line-height: 18px;
+    line-height: var(--ui-leading-sm);
     font-weight: 500;
     color: var(--ui-text-muted);
     background-color: var(--ui-surface-rail);
@@ -254,7 +254,7 @@
     gap: var(--ui-space-1);
     width: 78px;
     height: var(--ui-control-lg);
-    padding: 0 3px;
+    padding: 0 var(--ui-space-1);
     box-sizing: border-box;
     overflow: hidden;
     border-radius: var(--ui-radius-pill);
@@ -440,7 +440,7 @@
     }
 
     .sectionHeader {
-      padding: var(--ui-space-1) var(--ui-space-2-5) 3px;
+      padding: var(--ui-space-1) var(--ui-space-2-5) var(--ui-space-1);
       font: var(--ui-type-label);
     }
   }

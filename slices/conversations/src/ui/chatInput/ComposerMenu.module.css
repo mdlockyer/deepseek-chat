@@ -140,7 +140,7 @@
     flex-shrink: 0;
     font-family: inherit;
     font-size: var(--ui-font-size-xs);
-    line-height: 16px;
+    line-height: var(--ui-leading-xs);
     font-weight: 400;
     font-variant-numeric: tabular-nums;
     color: var(--ui-text-muted);

@@ -7,7 +7,7 @@
     animation: message-in var(--ui-duration-normal) var(--ui-ease-panel) both;
 
     &.isFirst {
-      padding-top: 34px;
+      padding-top: var(--ui-space-8);
     }
 
     &:hover .actions {
@@ -42,7 +42,7 @@
     padding: var(--ui-space-2-5) var(--ui-space-4);
     border-radius: var(--ui-radius-xl);
     font-size: var(--ui-font-size-lg);
-    line-height: 24px;
+    line-height: var(--ui-leading-md);
     color: var(--ui-text-primary);
     background-color: var(--ui-surface-tint);
     white-space: pre-wrap;
@@ -100,7 +100,7 @@
     resize: none;
     font: inherit;
     font-size: var(--ui-font-size-lg);
-    line-height: 24px;
+    line-height: var(--ui-leading-md);
     color: var(--ui-text-primary);
     background: transparent;
   }

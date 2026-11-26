@@ -118,7 +118,7 @@
     align-items: center;
     justify-content: center;
     border: none;
-    padding: 0 3px;
+    padding: 0 var(--ui-space-1);
     cursor: pointer;
     color: var(--ui-text-on-scrim);
     background-color: var(--ui-surface-scrim-strong);
@@ -132,7 +132,7 @@
   /* 不可重试：蒙层更浅，原因贴底 */
   .failedStatic {
     justify-content: flex-end;
-    padding-bottom: 7px;
+    padding-bottom: var(--ui-space-2);
     cursor: default;
     background-color: var(--ui-surface-scrim-soft);
   }
@@ -142,8 +142,8 @@
     overflow: hidden;
     max-width: 100%;
     margin-top: var(--ui-space-0-5);
-    font-size: 11px;
-    line-height: 14px;
+    font-size: var(--ui-font-size-xs);
+    line-height: var(--ui-leading-xs);
     font-weight: 500;
     text-align: center;
     word-break: break-word;

@@ -170,9 +170,9 @@
     flex: 1;
     min-width: 0;
     margin: 0;
-    padding: var(--ui-space-4) 18px var(--ui-space-6);
+    padding: var(--ui-space-4) var(--ui-space-4) var(--ui-space-6);
     font: inherit;
-    line-height: 22px;
+    line-height: var(--ui-leading-sm);
     white-space: pre-wrap;
     word-break: break-word;
     overflow-x: hidden;

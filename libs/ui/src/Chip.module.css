@@ -69,7 +69,7 @@
 
   @container (max-width: 459px) {
     .compactOnNarrow {
-      padding: 0 7px;
+      padding: 0 var(--ui-space-2);
 
       .label {
         display: none;

@@ -14,7 +14,7 @@
     flex-shrink: 0;
     /* 52px 让标题中心落在 26px，与新对话时的品牌行、交通灯同一水平线 */
     height: var(--ui-panel-header-height);
-    padding: 0 14px 0 18px;
+    padding: 0 var(--ui-space-3-5) 0 var(--ui-space-5);
     box-sizing: border-box;
     background: var(--ui-surface-canvas);
   }
@@ -93,8 +93,8 @@
   .caveat {
     width: 100%;
     padding: var(--ui-space-1-5) 0;
-    font-size: 11px;
-    line-height: 16px;
+    font-size: var(--ui-font-size-xs);
+    line-height: var(--ui-leading-xs);
     text-align: center;
     color: var(--ui-text-muted);
     user-select: none;

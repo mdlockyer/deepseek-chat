@@ -23,11 +23,15 @@
       font: var(--ui-type-h3);
     }
     h4 {
-      font: var(--ui-type-h4);
+      font: var(--ui-type-h3);
     }
     h5,
     h6 {
       font: var(--ui-type-body-strong);
+    }
+    h1,
+    h2 {
+      letter-spacing: var(--ui-tracking-tight);
     }
   }
 
@@ -83,12 +87,12 @@
     transition: box-shadow var(--ui-duration-normal) var(--ui-ease-standard);
     position: relative;
     text-decoration: none;
-    border-left: 3px solid transparent;
-    border-right: 3px solid transparent;
+    border-left: 2px solid transparent;
+    border-right: 2px solid transparent;
     border-top: 2px solid transparent;
     border-bottom: 2px solid transparent;
-    margin-left: -3px;
-    margin-right: -3px;
+    margin-left: -2px;
+    margin-right: -2px;
 
     &:hover,
     &:focus {
@@ -111,7 +115,7 @@
   .ds-markdown ul,
   .ds-markdown ol {
     margin: var(--ui-space-4) 0;
-    padding-left: 18px;
+    padding-left: var(--ui-space-5);
   }
 
   .ds-markdown li:not(:first-child) {
@@ -119,7 +123,7 @@
   }
 
   .ds-markdown li::marker {
-    line-height: 28px;
+    line-height: var(--ui-leading-prose);
     color: var(--ui-text-secondary);
   }
 
@@ -128,7 +132,7 @@
   }
 
   .ds-markdown ul > .ds-markdown-task-list-item > .ds-markdown-task-checkbox {
-    margin-left: -18px;
+    margin-left: calc(-1 * var(--ui-space-5));
   }
 
   .ds-markdown .ds-markdown-task-list-item > .ds-markdown-task-checkbox {
@@ -163,6 +167,7 @@
   }
 
   .ds-markdown table {
+    font-variant-numeric: tabular-nums;
     border-collapse: collapse;
     width: max-content;
     max-width: max-content;
@@ -212,7 +217,7 @@
     font-size: 0.875em !important;
     background-color: var(--ui-surface-code-inline);
     border-radius: 6px;
-    padding: 0 5px;
+    padding: 0 var(--ui-space-1-5);
   }
 
   .ds-markdown {
@@ -299,7 +304,7 @@
     user-select: none;
     white-space: nowrap;
     background-color: var(--ui-surface-tag);
-    font: 500 9px/14px var(--ui-font-mono);
+    font: 500 0.625em/1.4 var(--ui-font-mono);
     color: var(--ui-text-muted);
     display: inline-flex;
     justify-content: center;
@@ -333,7 +338,7 @@
   }
 
   .md-code-block:not(:last-child) {
-    margin-bottom: 11px;
+    margin-bottom: var(--ui-space-3);
   }
 
   .md-code-block-banner {

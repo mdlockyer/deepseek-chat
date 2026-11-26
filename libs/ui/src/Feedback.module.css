@@ -7,7 +7,7 @@
     padding: var(--ui-space-0-5) var(--ui-space-2);
     border-radius: var(--ui-radius-pill);
     font: var(--ui-type-micro);
-    line-height: 18px;
+    line-height: var(--ui-leading-sm);
     white-space: nowrap;
 
     svg {
@@ -150,9 +150,7 @@
 
   .emptyTitle {
     margin: 0;
-    font: var(--ui-type-label-strong);
-    font-size: 15px;
-    font-weight: 600;
+    font: var(--ui-type-h3);
     color: var(--ui-text-primary);
   }
 

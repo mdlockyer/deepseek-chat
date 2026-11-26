@@ -55,7 +55,7 @@
     gap: var(--ui-space-1-5);
     font: var(--ui-type-micro);
     font-weight: 400;
-    line-height: 18px;
+    line-height: var(--ui-leading-sm);
     color: var(--ui-text-danger);
 
     svg {

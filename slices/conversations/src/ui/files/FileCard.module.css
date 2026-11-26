@@ -122,7 +122,7 @@
   .subCaption {
     overflow: hidden;
     font-size: var(--ui-font-size-xs);
-    line-height: 18px;
+    line-height: var(--ui-leading-sm);
     white-space: nowrap;
     text-overflow: ellipsis;
     color: var(--ui-text-muted);

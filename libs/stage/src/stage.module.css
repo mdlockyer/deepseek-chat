@@ -43,7 +43,7 @@
   .viewportChip {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
+    gap: var(--ui-space-1-5);
     flex-shrink: 0;
     box-sizing: border-box;
     height: var(--ui-control-xs);
@@ -97,7 +97,7 @@
   }
 
   .viewportChipScale {
-    padding-left: 5px;
+    padding-left: var(--ui-space-1-5);
     border-left: 1px solid var(--ui-border-default);
     color: var(--ui-text-secondary);
   }
@@ -439,7 +439,7 @@
     box-sizing: border-box;
     width: var(--ui-space-5);
     height: var(--ui-space-5);
-    padding: 5px;
+    padding: var(--ui-space-1-5);
     cursor: nwse-resize;
     touch-action: none;
     user-select: none;
@@ -484,7 +484,7 @@
     background-color: var(--ui-surface-tooltip);
     color: var(--ui-text-on-toast);
     font: var(--ui-type-micro);
-    line-height: 18px;
+    line-height: var(--ui-leading-sm);
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
     pointer-events: none;

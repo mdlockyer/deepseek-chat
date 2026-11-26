@@ -55,7 +55,7 @@
     background-color: transparent;
     color: var(--ui-text-secondary);
     font: var(--ui-type-micro);
-    line-height: 18px;
+    line-height: var(--ui-leading-sm);
     cursor: pointer;
     user-select: none;
     transition:

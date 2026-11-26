@@ -27,7 +27,7 @@
     }
 
     hr {
-      margin: 28px 0;
+      margin: var(--ui-space-6) 0;
     }
 
     blockquote {
