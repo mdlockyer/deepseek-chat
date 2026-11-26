@@ -20,17 +20,69 @@ const extractBlockVars = (css: string, selector: string): Map<string, string> =>
   return vars
 }
 
+type ThemeName = 'light' | 'dark'
+
+/** Splits `a, b` at the top-level comma, ignoring commas nested inside parentheses. */
+const splitTopLevelComma = (text: string): [string, string] => {
+  let depth = 0
+  for (let i = 0; i < text.length; i += 1) {
+    if (text[i] === '(') {
+      depth += 1
+    } else if (text[i] === ')') {
+      depth -= 1
+    } else if (text[i] === ',' && depth === 0) {
+      return [text.slice(0, i).trim(), text.slice(i + 1).trim()]
+    }
+  }
+  throw new Error(`Expected two comma-separated values in "${text}"`)
+}
+
+/** Resolves a token for one theme, following var() references and light-dark() branches. */
 const resolveVar = (
   name: string,
   themeVars: Map<string, string>,
   baseVars: Map<string, string>,
+  theme: ThemeName,
   depth = 0
 ): string => {
   assert.ok(depth < 8, `Circular CSS variable reference at ${name}`)
   const raw = themeVars.get(name) ?? baseVars.get(name)
   assert.ok(raw !== undefined, `Undefined CSS variable ${name}`)
+  return resolveValue(raw, themeVars, baseVars, theme, depth)
+}
+
+const resolveValue = (
+  raw: string,
+  themeVars: Map<string, string>,
+  baseVars: Map<string, string>,
+  theme: ThemeName,
+  depth: number
+): string => {
+  const lightDark = /^light-dark\(([\s\S]*)\)$/.exec(raw)
+  if (lightDark) {
+    const [light, dark] = splitTopLevelComma(lightDark[1])
+    return resolveValue(theme === 'dark' ? dark : light, themeVars, baseVars, theme, depth + 1)
+  }
   const ref = /^var\((--[\w-]+)\)$/.exec(raw)
-  return ref ? resolveVar(ref[1], themeVars, baseVars, depth + 1) : raw
+  return ref ? resolveVar(ref[1], themeVars, baseVars, theme, depth + 1) : raw
+}
+
+/** OKLCH to gamma-encoded sRGB (CSS Color 4 matrices), clamped to the sRGB gamut. */
+const oklchToRgb = (l: number, c: number, h: number): [number, number, number] => {
+  const a = c * Math.cos((h * Math.PI) / 180)
+  const b = c * Math.sin((h * Math.PI) / 180)
+  const l3 = (l + 0.3963377774 * a + 0.2158037573 * b) ** 3
+  const m3 = (l - 0.1055613458 * a - 0.0638541728 * b) ** 3
+  const s3 = (l - 0.0894841775 * a - 1.291485548 * b) ** 3
+  const encode = (x: number) => {
+    const v = Math.min(1, Math.max(0, x))
+    return Math.round((v <= 0.0031308 ? 12.92 * v : 1.055 * v ** (1 / 2.4) - 0.055) * 255)
+  }
+  return [
+    encode(4.0767416621 * l3 - 3.3077115913 * m3 + 0.2309699292 * s3),
+    encode(-1.2684380046 * l3 + 2.6097574011 * m3 - 0.3413193965 * s3),
+    encode(-0.0041960863 * l3 - 0.7034186147 * m3 + 1.707614701 * s3),
+  ]
 }
 
 const parseRgb = (color: string): [number, number, number] => {
@@ -43,7 +95,14 @@ const parseRgb = (color: string): [number, number, number] => {
   if (rgb) {
     return [Number(rgb[1]), Number(rgb[2]), Number(rgb[3])]
   }
-  throw new Error(`Expected opaque hex/rgb color for WCAG check, got "${color}"`)
+  const oklch = /^oklch\(\s*([\d.]+)(%?)\s+([\d.]+)\s+([\d.]+)\s*\)$/i.exec(color)
+  if (oklch) {
+    const l = Number(oklch[1]) / (oklch[2] === '%' ? 100 : 1)
+    return oklchToRgb(l, Number(oklch[3]), Number(oklch[4]))
+  }
+  throw new Error(
+    `Expected an opaque hex, rgb() or oklch() color for the WCAG check, got "${color}"`
+  )
 }
 
 const luminance = ([r, g, b]: [number, number, number]) => {
@@ -68,6 +127,11 @@ describe('spine/design tokens.css contract', () => {
     assert.match(tokensCss, /^@layer reset, tokens, base, components, slice;/m)
   })
 
+  it('switches color-scheme in the dark block, which light-dark() tokens resolve against', () => {
+    assert.match(tokensCss, /:root\[data-theme='dark'\]\s*\{[^}]*color-scheme:\s*dark;/)
+    assert.match(tokensCss, /:root\s*\{[^}]*color-scheme:\s*light;/)
+  })
+
   it('defines every dark-theme override against an existing light-theme semantic token', () => {
     for (const key of darkVars.keys()) {
       assert.ok(key.startsWith('--ui-'), `Dark theme must not redefine private token ${key}`)
@@ -78,41 +142,46 @@ describe('spine/design tokens.css contract', () => {
   it('satisfies WCAG 2.2 AA contrast (>= 4.5:1 text, >= 3:1 UI/focus) in both light and dark themes', () => {
     const textPairs: ReadonlyArray<[string, string]> = [
       ['--ui-text-primary', '--ui-surface-canvas'],
-      ['--ui-text-primary', '--ui-surface-elevated'],
-      ['--ui-text-primary', '--ui-surface-popover'],
-      ['--ui-text-primary', '--ui-surface-rail'],
+      ['--ui-text-primary', '--ui-surface-overlay'],
+      ['--ui-text-primary', '--ui-surface-sunken'],
+      ['--ui-text-primary', '--ui-surface-raised-2'],
       ['--ui-text-secondary', '--ui-surface-canvas'],
-      ['--ui-text-secondary', '--ui-surface-popover'],
+      ['--ui-text-secondary', '--ui-surface-overlay'],
       ['--ui-text-secondary', '--ui-surface-sunken'],
-      ['--ui-text-secondary', '--ui-surface-control'],
-      ['--ui-text-secondary', '--ui-surface-tag'],
+      ['--ui-text-secondary', '--ui-surface-raised-1'],
+      ['--ui-text-secondary', '--ui-surface-raised-2'],
       ['--ui-text-muted', '--ui-surface-canvas'],
-      ['--ui-text-muted', '--ui-surface-rail'],
       ['--ui-text-muted', '--ui-surface-sunken'],
-      ['--ui-text-placeholder', '--ui-surface-input'],
-      ['--ui-text-accent', '--ui-surface-canvas'],
-      ['--ui-text-accent', '--ui-accent-soft'],
-      ['--ui-text-danger', '--ui-surface-canvas'],
-      ['--ui-text-danger', '--ui-surface-elevated'],
-      ['--ui-text-danger', '--ui-danger-soft'],
-      ['--ui-text-on-accent', '--ui-accent-fill'],
-      ['--ui-text-on-accent', '--ui-accent-hover'],
-      ['--ui-text-on-danger', '--ui-danger-fill'],
-      ['--ui-text-on-danger', '--ui-danger-hover'],
-      ['--ui-success-on-soft', '--ui-success-soft'],
-      ['--ui-warning-on-soft', '--ui-warning-soft'],
-      ['--ui-text-on-toast', '--ui-surface-toast'],
-      ['--ui-text-on-toast-link', '--ui-surface-toast'],
-      ['--ui-text-on-accent', '--ui-surface-tooltip'],
+      ['--ui-text-muted', '--ui-surface-raised-1'],
+      ['--ui-text-muted', '--ui-surface-input'],
+      ['--ui-text-muted', '--ui-surface-overlay'],
+      ['--ui-accent-text', '--ui-surface-canvas'],
+      ['--ui-accent-text', '--ui-surface-sunken'],
+      ['--ui-accent-text', '--ui-surface-raised-1'],
+      ['--ui-accent-text', '--ui-surface-raised-2'],
+      ['--ui-accent-text', '--ui-accent-subtle'],
+      ['--ui-accent-text', '--ui-accent-subtle-hover'],
+      ['--ui-danger-text', '--ui-surface-canvas'],
+      ['--ui-danger-text', '--ui-surface-overlay'],
+      ['--ui-danger-text', '--ui-danger-subtle'],
+      ['--ui-accent-on-solid', '--ui-accent-solid'],
+      ['--ui-accent-on-solid', '--ui-accent-solid-hover'],
+      ['--ui-danger-on-solid', '--ui-danger-solid'],
+      ['--ui-danger-on-solid', '--ui-danger-solid-hover'],
+      ['--ui-success-text', '--ui-success-subtle'],
+      ['--ui-warning-text', '--ui-warning-subtle'],
+      ['--ui-text-on-inverse', '--ui-surface-inverse'],
+      ['--ui-text-on-inverse-link', '--ui-surface-inverse'],
     ]
 
     const uiPairs: ReadonlyArray<[string, string]> = [
       ['--ui-focus-ring', '--ui-surface-canvas'],
-      ['--ui-focus-ring', '--ui-surface-popover'],
-      ['--ui-border-focus-neutral', '--ui-surface-input'],
-      ['--ui-border-accent', '--ui-surface-canvas'],
-      ['--ui-border-danger', '--ui-surface-canvas'],
-      ['--ui-handle-fill', '--ui-surface-code'],
+      ['--ui-focus-ring', '--ui-surface-overlay'],
+      ['--ui-focus-ring', '--ui-surface-sunken'],
+      ['--ui-accent-border', '--ui-surface-canvas'],
+      ['--ui-danger-border', '--ui-surface-canvas'],
+      ['--ui-handle-fill', '--ui-surface-sunken'],
+      ['--ui-surface-switch-off', '--ui-surface-canvas'],
     ]
 
     for (const [themeName, themeMap] of [
@@ -120,8 +189,8 @@ describe('spine/design tokens.css contract', () => {
       ['dark', darkVars],
     ] as const) {
       for (const [fgVar, bgVar] of textPairs) {
-        const fg = resolveVar(fgVar, themeMap, lightVars)
-        const bg = resolveVar(bgVar, themeMap, lightVars)
+        const fg = resolveVar(fgVar, themeMap, lightVars, themeName)
+        const bg = resolveVar(bgVar, themeMap, lightVars, themeName)
         const ratio = contrastRatio(fg, bg)
         assert.ok(
           ratio >= 4.5,
@@ -129,8 +198,8 @@ describe('spine/design tokens.css contract', () => {
         )
       }
       for (const [fgVar, bgVar] of uiPairs) {
-        const fg = resolveVar(fgVar, themeMap, lightVars)
-        const bg = resolveVar(bgVar, themeMap, lightVars)
+        const fg = resolveVar(fgVar, themeMap, lightVars, themeName)
+        const bg = resolveVar(bgVar, themeMap, lightVars, themeName)
         const ratio = contrastRatio(fg, bg)
         assert.ok(
           ratio >= 3.0,
@@ -145,10 +214,10 @@ describe('spine/design tokens.css contract', () => {
       ['light', lightVars],
       ['dark', darkVars],
     ] as const) {
-      const primary = resolveVar('--ui-text-primary', themeMap, lightVars)
-      const secondary = resolveVar('--ui-text-secondary', themeMap, lightVars)
-      const muted = resolveVar('--ui-text-muted', themeMap, lightVars)
-      const canvas = resolveVar('--ui-surface-canvas', themeMap, lightVars)
+      const primary = resolveVar('--ui-text-primary', themeMap, lightVars, themeName)
+      const secondary = resolveVar('--ui-text-secondary', themeMap, lightVars, themeName)
+      const muted = resolveVar('--ui-text-muted', themeMap, lightVars, themeName)
+      const canvas = resolveVar('--ui-surface-canvas', themeMap, lightVars, themeName)
       const primaryVsCanvas = contrastRatio(primary, canvas)
       const secondaryVsCanvas = contrastRatio(secondary, canvas)
       const mutedVsCanvas = contrastRatio(muted, canvas)

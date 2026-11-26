@@ -1,7 +1,7 @@
 import { ensureKatex } from '@deepseek-chat/lib-markdown'
 import { createIndexedDbSessionStore, type StreamTrace } from '@deepseek-chat/slice-conversations'
 import '@deepseek-chat/spine/tokens.css'
-import '@fontsource-variable/google-sans-flex'
+import '@fontsource-variable/google-sans-flex/opsz.css'
 import { createRoot } from 'react-dom/client'
 import { App } from './App.js'
 import { AppErrorBoundary } from './AppErrorBoundary.js'

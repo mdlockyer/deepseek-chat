@@ -6,209 +6,177 @@
 
     /* ==========================================================================
      * Layer 1 — Private Primitives (internal to tokens.css; banned in slices)
-     * Neutral-bluish ramp & brand/status hues in sRGB-safe values.
+     *
+     * Every ramp is OKLCH at fixed lightness steps, so a step's lightness predicts its contrast.
+     * Neutrals carry a trace of the accent hue (163) so greys sit with the emerald accent.
+     * Lightning CSS lowers oklch() to hex/lab() fallbacks for the build targets.
+     * `pnpm check:design` fails any primitive outside the sRGB gamut.
      * ========================================================================== */
-    --_p-neutral-00: #ffffff;
-    --_p-neutral-50: #f9fafb;
-    --_p-neutral-60: #f5f6f7;
-    --_p-neutral-75: #f1f3f5;
-    --_p-neutral-100: #ebeef2;
-    --_p-neutral-150: #e9ecf2;
-    --_p-neutral-200: #e1e5ee;
-    --_p-neutral-300: #cfd3d6;
-    --_p-neutral-400: #adb2b8;
-    --_p-neutral-550: #65676b;
-    --_p-neutral-600: #81858c;
-    --_p-neutral-700: #61666b;
-    --_p-neutral-750: #43454a;
-    --_p-neutral-800: #353638;
-    --_p-neutral-850: #2c2c2e;
-    --_p-neutral-900: #1b1b1c;
-    --_p-neutral-950: #151517;
-    --_p-neutral-1000: #0f1115;
+    --_p-neutral-0: oklch(1 0 0);
+    --_p-neutral-25: oklch(0.985 0.003 163);
+    --_p-neutral-50: oklch(0.97 0.004 163);
+    --_p-neutral-100: oklch(0.948 0.005 163);
+    --_p-neutral-300: oklch(0.84 0.008 163);
+    --_p-neutral-400: oklch(0.72 0.009 163);
+    --_p-neutral-500: oklch(0.635 0.01 163);
+    --_p-neutral-600: oklch(0.535 0.01 163);
+    --_p-neutral-700: oklch(0.45 0.01 163);
+    --_p-neutral-750: oklch(0.38 0.009 163);
+    --_p-neutral-850: oklch(0.29 0.007 163);
+    --_p-neutral-900: oklch(0.255 0.006 163);
+    --_p-neutral-950: oklch(0.205 0.005 163);
+    --_p-neutral-975: oklch(0.185 0.005 163);
+    --_p-neutral-1000: oklch(0.15 0.006 163);
 
-    --_p-blue-50: #edf3fe;
-    --_p-blue-100: #e4edfd;
-    --_p-blue-200: #d3e2ff;
-    --_p-blue-300: #b7c8fe;
-    --_p-blue-400: #679efe;
-    --_p-blue-450: #5686fe;
-    --_p-blue-500: #3964fe;
-    --_p-blue-550: #2d55e4;
-    --_p-blue-600: #4868b2;
-    --_p-blue-800: #34415b;
-    --_p-blue-900: #283142;
+    --_p-emerald-50: oklch(0.975 0.025 163);
+    --_p-emerald-100: oklch(0.95 0.045 163);
+    --_p-emerald-300: oklch(0.85 0.105 163);
+    --_p-emerald-400: oklch(0.78 0.13 163);
+    --_p-emerald-600: oklch(0.6 0.129 163);
+    --_p-emerald-700: oklch(0.5 0.108 163);
+    --_p-emerald-800: oklch(0.44 0.095 163);
+    --_p-emerald-900: oklch(0.3 0.06 163);
+    --_p-emerald-950: oklch(0.25 0.045 163);
 
-    --_p-red-50: #fef2f2;
-    --_p-red-300: #ff8a8a;
-    --_p-red-400: #f25a5a;
-    --_p-red-600: #dc2626;
-    --_p-red-700: #b91c1c;
-    --_p-red-900: #3f1d20;
+    --_p-red-50: oklch(0.97 0.013 25);
+    --_p-red-100: oklch(0.94 0.028 25);
+    --_p-red-300: oklch(0.8 0.11 25);
+    --_p-red-400: oklch(0.7 0.17 25);
+    --_p-red-600: oklch(0.56 0.2 25);
+    --_p-red-700: oklch(0.49 0.18 25);
+    --_p-red-900: oklch(0.29 0.075 25);
+    --_p-red-950: oklch(0.25 0.06 25);
 
-    --_p-green-100: #e6faed;
-    --_p-green-300: #6ee79b;
-    --_p-green-400: #4ed17e;
-    --_p-green-500: #22c55e;
-    --_p-green-600: #16803d;
-    --_p-green-900: #233c2c;
+    --_p-amber-50: oklch(0.975 0.019 75);
+    --_p-amber-400: oklch(0.84 0.137 75);
+    --_p-amber-500: oklch(0.78 0.16 75);
+    --_p-amber-700: oklch(0.53 0.112 75);
+    --_p-amber-900: oklch(0.3 0.06 75);
 
-    --_p-amber-100: #fef5e7;
-    --_p-amber-400: #f7ad31;
-    --_p-amber-500: #f59e0b;
-    --_p-amber-700: #a15c07;
-    --_p-amber-900: #362a18;
+    /* Success sits at hue 140, away from the emerald accent (163), and always carries an icon. */
+    --_p-green-50: oklch(0.975 0.03 140);
+    --_p-green-300: oklch(0.82 0.16 140);
+    --_p-green-500: oklch(0.68 0.18 140);
+    --_p-green-700: oklch(0.5 0.14 140);
+    --_p-green-900: oklch(0.3 0.07 140);
 
-    --_p-purple-500: #8b76f6;
-    --_p-orange-500: #fb8e34;
-    --_p-teal-500: #3fb67f;
-    --_p-coral-500: #ee5138;
-    --_p-azure-500: #418cff;
+    --_p-azure-500: oklch(0.62 0.16 252);
+    --_p-coral-500: oklch(0.63 0.19 32);
+    --_p-teal-500: oklch(0.66 0.123 175);
+    --_p-orange-500: oklch(0.72 0.16 58);
+    --_p-purple-500: oklch(0.6 0.19 295);
 
     /* ==========================================================================
-     * Layer 2 — Semantic Color Aliases (Light Theme)
-     * Every foreground/background pair meets WCAG 2.2 AA (>= 4.5:1 text, >= 3:1 UI).
+     * Layer 2 — Semantic Tokens, defined once for both themes with light-dark(<light>, <dark>).
+     * `:root[data-theme='dark']` only switches `color-scheme`. Every text pair meets
+     * WCAG 2.2 AA (>= 4.5:1), every UI pair >= 3:1; `pnpm check:design` verifies both themes.
      * ========================================================================== */
 
-    /* Surfaces */
-    --ui-surface-canvas: var(--_p-neutral-00);
-    --ui-surface-sunken: var(--_p-neutral-50);
-    --ui-surface-elevated: var(--_p-neutral-00);
-    --ui-surface-popover: var(--_p-neutral-00);
-    --ui-surface-control: var(--_p-neutral-75);
-    --ui-surface-input: var(--_p-neutral-00);
-    --ui-surface-input-subtle: var(--_p-neutral-50);
-    --ui-surface-rail: var(--_p-neutral-50);
-    --ui-surface-rail-hover: var(--_p-neutral-75);
-    --ui-surface-rail-active: var(--_p-blue-100);
-    --ui-surface-tint: var(--_p-blue-50);
-    --ui-surface-code: var(--_p-neutral-50);
-    --ui-surface-code-header: var(--_p-neutral-60);
-    --ui-surface-code-inline: var(--_p-neutral-100);
-    --ui-surface-tag: var(--_p-neutral-75);
-    --ui-surface-tag-hover: var(--_p-neutral-100);
-    --ui-surface-skeleton: rgba(15, 17, 21, 0.04);
-    --ui-surface-scrim: rgba(15, 17, 21, 0.36);
-    --ui-surface-scrim-soft: rgba(15, 17, 21, 0.24);
-    --ui-surface-scrim-strong: rgba(15, 17, 21, 0.48);
-    --ui-surface-scrim-deep: rgba(15, 17, 21, 0.65);
-    --ui-surface-glass: rgba(255, 255, 255, 0.72);
-    --ui-surface-button-elevated: var(--_p-neutral-00);
-    --ui-surface-tooltip: var(--_p-neutral-850);
-    --ui-surface-toast: var(--_p-neutral-800);
-    --ui-surface-paper: var(--_p-neutral-00);
-    --ui-surface-contrast: var(--_p-neutral-700);
-    --ui-surface-switch-off: rgba(15, 17, 21, 0.44);
+    /* Surfaces — steps away from the canvas, not physical height. */
+    --ui-surface-canvas: light-dark(var(--_p-neutral-0), var(--_p-neutral-950));
+    --ui-surface-sunken: light-dark(var(--_p-neutral-25), var(--_p-neutral-975));
+    --ui-surface-raised-1: light-dark(var(--_p-neutral-50), var(--_p-neutral-900));
+    --ui-surface-raised-2: light-dark(var(--_p-neutral-100), var(--_p-neutral-850));
+    --ui-surface-overlay: light-dark(var(--_p-neutral-0), var(--_p-neutral-900));
+    --ui-surface-input: light-dark(var(--_p-neutral-0), var(--_p-neutral-900));
+    --ui-surface-inverse: light-dark(var(--_p-neutral-850), var(--_p-neutral-750));
+    --ui-surface-paper: var(--_p-neutral-0);
+    --ui-surface-skeleton: light-dark(oklch(0.15 0.006 163 / 0.05), oklch(1 0 0 / 0.08));
+    --ui-surface-scrim: light-dark(oklch(0.15 0.006 163 / 0.36), oklch(0 0 0 / 0.6));
+    --ui-surface-scrim-strong: light-dark(oklch(0.15 0.006 163 / 0.6), oklch(0 0 0 / 0.72));
+    --ui-surface-glass: light-dark(oklch(1 0 0 / 0.76), oklch(0.205 0.005 163 / 0.76));
+    --ui-surface-switch-off: light-dark(var(--_p-neutral-500), var(--_p-neutral-600));
 
-    /* Interactive fills */
-    --ui-interactive-hover: rgba(38, 49, 72, 0.06);
-    --ui-interactive-active: rgba(38, 49, 72, 0.1);
-    --ui-interactive-hover-strong: rgba(38, 49, 72, 0.14);
-    --ui-interactive-danger-hover: rgba(220, 38, 38, 0.07);
+    /* Translucent state layers over any surface */
+    --ui-interactive-hover: light-dark(oklch(0.15 0.006 163 / 0.05), oklch(1 0 0 / 0.07));
+    --ui-interactive-active: light-dark(oklch(0.15 0.006 163 / 0.09), oklch(1 0 0 / 0.12));
 
-    /* Text & foreground */
-    --ui-text-primary: var(--_p-neutral-1000);
-    --ui-text-secondary: var(--_p-neutral-750);
-    --ui-text-muted: var(--_p-neutral-550);
-    --ui-text-placeholder: var(--_p-neutral-550);
-    --ui-text-disabled: var(--_p-neutral-400);
-    --ui-text-subtle-decoration: var(--_p-neutral-200);
-    --ui-text-on-accent: var(--_p-neutral-00);
-    --ui-text-on-danger: var(--_p-neutral-00);
-    --ui-text-on-inverse: var(--_p-neutral-00);
-    --ui-text-on-scrim: var(--_p-neutral-00);
-    --ui-text-on-toast: var(--_p-neutral-50);
-    --ui-text-on-toast-link: var(--_p-blue-300);
-    --ui-text-accent: var(--_p-blue-550);
-    --ui-text-danger: var(--_p-red-700);
-    --ui-text-success: var(--_p-green-600);
-    --ui-text-warning: var(--_p-amber-700);
+    /* Text */
+    --ui-text-primary: light-dark(var(--_p-neutral-1000), var(--_p-neutral-50));
+    --ui-text-secondary: light-dark(var(--_p-neutral-700), var(--_p-neutral-300));
+    --ui-text-muted: light-dark(var(--_p-neutral-600), var(--_p-neutral-500));
+    --ui-text-disabled: light-dark(var(--_p-neutral-400), var(--_p-neutral-600));
+    --ui-text-on-scrim: var(--_p-neutral-0);
+    --ui-text-on-inverse: var(--_p-neutral-50);
+    --ui-text-on-inverse-link: var(--_p-emerald-300);
 
     /* Borders */
-    --ui-border-subtle: rgba(15, 17, 21, 0.06);
-    --ui-border-default: rgba(15, 17, 21, 0.12);
-    --ui-border-strong: rgba(15, 17, 21, 0.22);
-    --ui-border-hairline: rgba(15, 17, 21, 0.1);
-    --ui-border-inverse: rgba(15, 17, 21, 0);
-    --ui-border-hover-neutral: var(--_p-neutral-300);
-    --ui-border-focus-neutral: var(--_p-neutral-600);
-    --ui-border-accent: var(--_p-blue-450);
-    --ui-border-danger: var(--_p-red-600);
-    --ui-border-on-scrim: rgba(255, 255, 255, 0.4);
+    --ui-border-subtle: light-dark(oklch(0.15 0.006 163 / 0.06), oklch(1 0 0 / 0.06));
+    --ui-border-default: light-dark(oklch(0.15 0.006 163 / 0.11), oklch(1 0 0 / 0.11));
+    --ui-border-strong: light-dark(oklch(0.15 0.006 163 / 0.2), oklch(1 0 0 / 0.18));
+    --ui-border-on-scrim: oklch(1 0 0 / 0.4);
 
-    /* Brand & Accent */
-    --ui-accent-fill: var(--_p-blue-500);
-    --ui-accent-hover: var(--_p-blue-550);
-    --ui-accent-soft: var(--_p-blue-50);
-    --ui-accent-soft-hover: var(--_p-blue-100);
-    --ui-accent-invert: var(--_p-blue-500);
+    /* Accent — the only colour that means "you can act on this". */
+    --ui-accent-solid: var(--_p-emerald-700);
+    --ui-accent-solid-hover: var(--_p-emerald-800);
+    --ui-accent-subtle: light-dark(var(--_p-emerald-50), var(--_p-emerald-950));
+    --ui-accent-subtle-hover: light-dark(var(--_p-emerald-100), var(--_p-emerald-900));
+    --ui-accent-text: light-dark(var(--_p-emerald-700), var(--_p-emerald-400));
+    --ui-accent-border: var(--_p-emerald-600);
+    --ui-accent-on-solid: var(--_p-neutral-0);
 
-    /* Status */
-    --ui-danger-fill: var(--_p-red-600);
-    --ui-danger-hover: var(--_p-red-700);
-    --ui-danger-soft: var(--_p-red-50);
-    --ui-success-fill: var(--_p-green-500);
-    --ui-success-soft: var(--_p-green-100);
-    --ui-success-on-soft: var(--_p-green-900);
-    --ui-warning-fill: var(--_p-amber-500);
-    --ui-warning-soft: var(--_p-amber-100);
-    --ui-warning-on-soft: var(--_p-amber-700);
+    /* Status — same slots as the accent */
+    --ui-danger-solid: var(--_p-red-600);
+    --ui-danger-solid-hover: var(--_p-red-700);
+    --ui-danger-subtle: light-dark(var(--_p-red-50), var(--_p-red-950));
+    --ui-danger-subtle-hover: light-dark(var(--_p-red-100), var(--_p-red-900));
+    --ui-danger-text: light-dark(var(--_p-red-700), var(--_p-red-300));
+    --ui-danger-border: light-dark(var(--_p-red-600), var(--_p-red-400));
+    --ui-danger-on-solid: var(--_p-neutral-0);
 
-    /* Focus rings */
-    --ui-focus-ring: var(--_p-blue-500);
-    --ui-focus-ring-danger: var(--_p-red-600);
-    --ui-focus-halo-neutral: rgba(129, 133, 140, 0.18);
+    --ui-success-solid: var(--_p-green-500);
+    --ui-success-subtle: light-dark(var(--_p-green-50), var(--_p-green-900));
+    --ui-success-text: light-dark(var(--_p-green-700), var(--_p-green-300));
 
-    /* Non-text indicators & handles */
-    --ui-handle-fill: var(--_p-neutral-600);
-    --ui-bar-muted: var(--_p-neutral-300);
-    --ui-switch-thumb: var(--_p-neutral-00);
+    --ui-warning-solid: light-dark(var(--_p-amber-500), var(--_p-amber-400));
+    --ui-warning-subtle: light-dark(var(--_p-amber-50), var(--_p-amber-900));
+    --ui-warning-text: light-dark(var(--_p-amber-700), var(--_p-amber-400));
 
-    /* File-category glyphs (semantic visual accents) */
+    /* Focus */
+    --ui-focus-ring: light-dark(var(--_p-emerald-700), var(--_p-emerald-400));
+    --ui-focus-ring-danger: light-dark(var(--_p-red-600), var(--_p-red-400));
+
+    /* Non-text indicators */
+    --ui-handle-fill: light-dark(var(--_p-neutral-500), var(--_p-neutral-600));
+    --ui-bar-muted: light-dark(var(--_p-neutral-300), var(--_p-neutral-700));
+    --ui-switch-thumb: var(--_p-neutral-0);
+    --ui-scrollbar-thumb: light-dark(oklch(0.15 0.006 163 / 0.16), oklch(1 0 0 / 0.18));
+
+    /* File-category glyphs */
     --ui-glyph-doc: var(--_p-azure-500);
     --ui-glyph-pdf: var(--_p-coral-500);
     --ui-glyph-sheet: var(--_p-teal-500);
     --ui-glyph-slide: var(--_p-orange-500);
     --ui-glyph-media: var(--_p-purple-500);
 
-    /* Scrollbars */
-    --ui-scrollbar-thumb: rgba(15, 17, 21, 0.14);
-    --ui-scrollbar-thumb-hover: rgba(15, 17, 21, 0.26);
-
-    /* Elevation & Shadows */
-    --ui-shadow-sm: 0 1px 2px rgba(15, 17, 21, 0.06);
-    --ui-shadow-md: 0 4px 10px rgba(15, 17, 21, 0.03), 0 2px 4px rgba(15, 17, 21, 0.05);
-    --ui-shadow-composer:
-      0 4px 12px 0 rgba(15, 17, 21, 0.02), 0 2px 2px 0 rgba(72, 104, 178, 0.02),
-      0 30px 60px 0 rgba(72, 104, 178, 0.04);
-    --ui-shadow-composer-focus:
-      0 0 0 4px var(--ui-focus-halo-neutral), 0 6px 16px rgba(15, 17, 21, 0.06),
-      0 2px 4px rgba(15, 17, 21, 0.04);
-    --ui-shadow-popover: 0 0 1px rgba(15, 17, 21, 0.14), 0 12px 32px rgba(15, 17, 21, 0.12);
-    --ui-shadow-dialog:
-      inset 0 0 0 1px var(--ui-border-inverse), 0 0 1px 0 rgba(15, 17, 21, 0.2),
-      0 0 4px 0 rgba(15, 17, 21, 0.02), 0 12px 32px 0 rgba(15, 17, 21, 0.08);
-    --ui-shadow-toast: 0 0 4px 2px rgba(15, 17, 21, 0.04), 0 4px 16px 0 rgba(15, 17, 21, 0.12);
-    --ui-shadow-tooltip: 0 4px 14px rgba(15, 17, 21, 0.16);
-    --ui-shadow-stage: 0 0 0 1px var(--ui-border-strong), 0 4px 16px rgba(15, 17, 21, 0.1);
-    --ui-shadow-floating:
-      0 -2px 2px rgba(72, 104, 178, 0.04), 0 2px 2px rgba(106, 111, 117, 0.09),
-      0 1px 2px rgba(72, 104, 178, 0.08);
-    --ui-shadow-floating-hover:
-      0 4px 4px 0 rgba(72, 104, 178, 0.04), 0 -3px 4px 0 rgba(72, 104, 178, 0.04),
-      0 6px 6px 0 rgba(106, 111, 117, 0.1);
-    --ui-shadow-drop-subtle: 0 0 0.5px rgba(15, 17, 21, 0.2);
+    /* ==========================================================================
+     * Elevation — three levels. Each carries a 1px hairline ring, so elevated
+     * elements need no separate border. Dark mode leans on the lighter surfaces.
+     * ========================================================================== */
+    --ui-elevation-1:
+      0 0 0 1px light-dark(oklch(0.15 0.006 163 / 0.07), oklch(1 0 0 / 0.07)),
+      0 1px 2px light-dark(oklch(0.15 0.006 163 / 0.06), oklch(0 0 0 / 0.3)),
+      0 2px 6px light-dark(oklch(0.15 0.006 163 / 0.04), oklch(0 0 0 / 0.2));
+    --ui-elevation-2:
+      0 0 0 1px light-dark(oklch(0.15 0.006 163 / 0.06), oklch(1 0 0 / 0.08)),
+      0 2px 6px light-dark(oklch(0.15 0.006 163 / 0.06), oklch(0 0 0 / 0.3)),
+      0 8px 24px light-dark(oklch(0.15 0.006 163 / 0.08), oklch(0 0 0 / 0.4));
+    --ui-elevation-3:
+      0 0 0 1px light-dark(oklch(0.15 0.006 163 / 0.06), oklch(1 0 0 / 0.08)),
+      0 4px 12px light-dark(oklch(0.15 0.006 163 / 0.06), oklch(0 0 0 / 0.3)),
+      0 16px 40px light-dark(oklch(0.15 0.006 163 / 0.14), oklch(0 0 0 / 0.5));
 
     /* ==========================================================================
-     * Typography (Semantic / Functional styles on a 4px leading rhythm)
+     * Typography — six sizes, two UI weights (400/500) plus 600 for headings.
+     * Prose is 16/26; every other line height sits on the 4px grid.
      * ========================================================================== */
     --ui-font-sans:
       'Google Sans Flex Variable', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
       Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
     --ui-font-mono:
-      Menlo, Monaco, Consolas, 'Cascadia Mono', 'Ubuntu Mono', 'DejaVu Sans Mono',
-      'Liberation Mono', 'JetBrains Mono', 'Fira Code', Cousine, 'Roboto Mono', 'Courier New',
-      Courier, monospace;
+      ui-monospace, 'SF Mono', Menlo, Monaco, Consolas, 'Cascadia Mono', 'Ubuntu Mono',
+      'DejaVu Sans Mono', 'Liberation Mono', 'JetBrains Mono', 'Roboto Mono', 'Courier New',
+      monospace;
 
     --ui-font-size-xs: 12px;
     --ui-font-size-sm: 13px;
@@ -217,26 +185,33 @@
     --ui-font-size-xl: 20px;
     --ui-font-size-2xl: 24px;
 
-    --ui-type-h1: 700 24px/34px var(--ui-font-sans);
-    --ui-type-h2: 700 22px/32px var(--ui-font-sans);
-    --ui-type-h3: 700 20px/30px var(--ui-font-sans);
-    --ui-type-h4: 600 16px/28px var(--ui-font-sans);
-    --ui-type-body: 400 16px/28px var(--ui-font-sans);
-    --ui-type-body-strong: 600 16px/28px var(--ui-font-sans);
-    --ui-type-table: 400 15px/25px var(--ui-font-sans);
-    --ui-type-table-head: 500 15px/25px var(--ui-font-sans);
-    --ui-type-label: 400 14px/22px var(--ui-font-sans);
-    --ui-type-label-strong: 500 14px/22px var(--ui-font-sans);
-    --ui-type-small: 400 14px/24px var(--ui-font-sans);
-    --ui-type-small-strong: 600 14px/24px var(--ui-font-sans);
+    --ui-leading-xs: 16px;
+    --ui-leading-sm: 20px;
+    --ui-leading-md: 24px;
+    --ui-leading-prose: 26px;
+    --ui-leading-lg: 28px;
+    --ui-leading-xl: 32px;
+
+    --ui-tracking-tight: -0.01em;
+
+    --ui-type-display: 600 24px/32px var(--ui-font-sans);
+    --ui-type-h1: 600 24px/32px var(--ui-font-sans);
+    --ui-type-h2: 600 20px/28px var(--ui-font-sans);
+    --ui-type-h3: 600 16px/26px var(--ui-font-sans);
+    --ui-type-body: 400 16px/26px var(--ui-font-sans);
+    --ui-type-body-strong: 600 16px/26px var(--ui-font-sans);
+    --ui-type-table: 400 14px/20px var(--ui-font-sans);
+    --ui-type-table-head: 500 14px/20px var(--ui-font-sans);
+    --ui-type-label: 400 14px/20px var(--ui-font-sans);
+    --ui-type-label-strong: 500 14px/20px var(--ui-font-sans);
     --ui-type-caption: 400 13px/20px var(--ui-font-sans);
     --ui-type-caption-strong: 500 13px/20px var(--ui-font-sans);
     --ui-type-micro: 500 12px/16px var(--ui-font-sans);
-    --ui-type-code-inline: 400 14px/22px var(--ui-font-mono);
-    --ui-type-code-block: 400 13px/22px var(--ui-font-mono);
+    --ui-type-code-inline: 400 14px/20px var(--ui-font-mono);
+    --ui-type-code-block: 400 13px/20px var(--ui-font-mono);
 
     /* ==========================================================================
-     * Spacing Scale (4px base grid)
+     * Spacing Scale (4px base grid; 2, 6, 10 and 14 for optical fine-tuning)
      * ========================================================================== */
     --ui-space-0: 0px;
     --ui-space-0-5: 2px;
@@ -245,6 +220,7 @@
     --ui-space-2: 8px;
     --ui-space-2-5: 10px;
     --ui-space-3: 12px;
+    --ui-space-3-5: 14px;
     --ui-space-4: 16px;
     --ui-space-5: 20px;
     --ui-space-6: 24px;
@@ -253,7 +229,7 @@
     --ui-space-12: 48px;
 
     /* ==========================================================================
-     * Radii Scale (6 disciplined steps)
+     * Radii — nest by subtraction: inner radius = outer radius - padding between them.
      * ========================================================================== */
     --ui-radius-xs: 4px;
     --ui-radius-sm: 8px;
@@ -301,127 +277,81 @@
     --ui-ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
     --ui-ease-panel: cubic-bezier(0.32, 0.72, 0, 1);
 
-    accent-color: var(--ui-accent-fill);
+    /* ==========================================================================
+     * Migration aliases — old names pointing at the new tokens. Removed once every
+     * consumer uses the new names.
+     * ========================================================================== */
+    --ui-surface-elevated: var(--ui-surface-overlay);
+    --ui-surface-popover: var(--ui-surface-overlay);
+    --ui-surface-control: var(--ui-surface-raised-1);
+    --ui-surface-input-subtle: var(--ui-surface-sunken);
+    --ui-surface-rail: var(--ui-surface-sunken);
+    --ui-surface-rail-hover: var(--ui-surface-raised-1);
+    --ui-surface-rail-active: var(--ui-surface-raised-2);
+    --ui-surface-tint: var(--ui-surface-raised-1);
+    --ui-surface-code: var(--ui-surface-sunken);
+    --ui-surface-code-header: var(--ui-surface-raised-1);
+    --ui-surface-code-inline: var(--ui-surface-raised-1);
+    --ui-surface-tag: var(--ui-surface-raised-1);
+    --ui-surface-tag-hover: var(--ui-surface-raised-2);
+    --ui-surface-scrim-soft: var(--ui-surface-scrim);
+    --ui-surface-scrim-deep: var(--ui-surface-scrim-strong);
+    --ui-surface-button-elevated: var(--ui-surface-overlay);
+    --ui-surface-tooltip: var(--ui-surface-inverse);
+    --ui-surface-toast: var(--ui-surface-inverse);
+    --ui-surface-contrast: var(--ui-surface-inverse);
+    --ui-interactive-hover-strong: var(--ui-interactive-active);
+    --ui-interactive-danger-hover: var(--ui-danger-subtle-hover);
+    --ui-text-placeholder: var(--ui-text-muted);
+    --ui-text-on-accent: var(--ui-accent-on-solid);
+    --ui-text-on-danger: var(--ui-danger-on-solid);
+    --ui-text-on-toast: var(--ui-text-on-inverse);
+    --ui-text-on-toast-link: var(--ui-text-on-inverse-link);
+    --ui-text-accent: var(--ui-accent-text);
+    --ui-text-danger: var(--ui-danger-text);
+    --ui-border-hairline: var(--ui-border-subtle);
+    --ui-border-inverse: var(--ui-border-subtle);
+    --ui-border-hover-neutral: var(--ui-border-strong);
+    --ui-border-focus-neutral: var(--ui-accent-border);
+    --ui-border-accent: var(--ui-accent-border);
+    --ui-border-danger: var(--ui-danger-border);
+    --ui-accent-fill: var(--ui-accent-solid);
+    --ui-accent-hover: var(--ui-accent-solid-hover);
+    --ui-accent-soft: var(--ui-accent-subtle);
+    --ui-accent-soft-hover: var(--ui-accent-subtle-hover);
+    --ui-accent-invert: var(--ui-accent-text);
+    --ui-danger-fill: var(--ui-danger-solid);
+    --ui-danger-hover: var(--ui-danger-solid-hover);
+    --ui-danger-soft: var(--ui-danger-subtle);
+    --ui-success-fill: var(--ui-success-solid);
+    --ui-success-soft: var(--ui-success-subtle);
+    --ui-success-on-soft: var(--ui-success-text);
+    --ui-warning-fill: var(--ui-warning-solid);
+    --ui-warning-soft: var(--ui-warning-subtle);
+    --ui-warning-on-soft: var(--ui-warning-text);
+    --ui-shadow-sm: var(--ui-elevation-1);
+    --ui-shadow-md: var(--ui-elevation-2);
+    --ui-shadow-composer: var(--ui-elevation-1);
+    --ui-shadow-composer-focus: var(--ui-elevation-2);
+    --ui-shadow-popover: var(--ui-elevation-2);
+    --ui-shadow-dialog: var(--ui-elevation-3);
+    --ui-shadow-toast: var(--ui-elevation-2);
+    --ui-shadow-tooltip: var(--ui-elevation-2);
+    --ui-shadow-stage: var(--ui-elevation-2);
+    --ui-shadow-floating: var(--ui-elevation-1);
+    --ui-shadow-floating-hover: var(--ui-elevation-2);
+    --ui-shadow-drop-subtle: var(--ui-elevation-1);
+    --ui-type-h4: var(--ui-type-h3);
+    --ui-type-small: var(--ui-type-label);
+    --ui-type-small-strong: var(--ui-type-label-strong);
+
+    accent-color: var(--ui-accent-solid);
     font-variant-ligatures: no-contextual;
   }
 
-  /* ============================================================================
-   * Dark Theme — Semantic Value Swap Under Identical Token Names
-   * ============================================================================ */
+  /* Dark theme: tokens above resolve their light-dark() dark side. */
   :root[data-theme='dark'] {
     color-scheme: dark;
-
-    /* Surfaces */
-    --ui-surface-canvas: var(--_p-neutral-950);
-    --ui-surface-sunken: var(--_p-neutral-900);
-    --ui-surface-elevated: var(--_p-neutral-850);
-    --ui-surface-popover: var(--_p-neutral-800);
-    --ui-surface-control: var(--_p-neutral-750);
-    --ui-surface-input: var(--_p-neutral-850);
-    --ui-surface-input-subtle: var(--_p-neutral-900);
-    --ui-surface-rail: var(--_p-neutral-900);
-    --ui-surface-rail-hover: var(--_p-neutral-850);
-    --ui-surface-rail-active: var(--_p-neutral-800);
-    --ui-surface-tint: var(--_p-neutral-850);
-    --ui-surface-code: var(--_p-neutral-900);
-    --ui-surface-code-header: var(--_p-neutral-850);
-    --ui-surface-code-inline: var(--_p-neutral-850);
-    --ui-surface-tag: var(--_p-neutral-850);
-    --ui-surface-tag-hover: var(--_p-neutral-800);
-    --ui-surface-skeleton: rgba(255, 255, 255, 0.08);
-    --ui-surface-scrim: rgba(0, 0, 0, 0.6);
-    --ui-surface-scrim-soft: rgba(0, 0, 0, 0.42);
-    --ui-surface-scrim-strong: rgba(0, 0, 0, 0.64);
-    --ui-surface-scrim-deep: rgba(0, 0, 0, 0.72);
-    --ui-surface-glass: rgba(21, 21, 23, 0.72);
-    --ui-surface-button-elevated: var(--_p-neutral-750);
-    --ui-surface-tooltip: var(--_p-neutral-750);
-    --ui-surface-toast: var(--_p-neutral-750);
-    --ui-surface-paper: var(--_p-neutral-00);
-    --ui-surface-contrast: var(--_p-neutral-50);
-    --ui-surface-switch-off: rgba(255, 255, 255, 0.36);
-
-    /* Interactive fills */
-    --ui-interactive-hover: rgba(255, 255, 255, 0.08);
-    --ui-interactive-active: rgba(255, 255, 255, 0.14);
-    --ui-interactive-hover-strong: rgba(255, 255, 255, 0.22);
-    --ui-interactive-danger-hover: rgba(242, 90, 90, 0.15);
-
-    /* Text & foreground */
-    --ui-text-primary: var(--_p-neutral-50);
-    --ui-text-secondary: var(--_p-neutral-300);
-    --ui-text-muted: var(--_p-neutral-400);
-    --ui-text-placeholder: var(--_p-neutral-400);
-    --ui-text-disabled: var(--_p-neutral-600);
-    --ui-text-subtle-decoration: var(--_p-neutral-750);
-    --ui-text-on-accent: var(--_p-neutral-00);
-    --ui-text-on-danger: var(--_p-neutral-00);
-    --ui-text-on-inverse: var(--_p-neutral-800);
-    --ui-text-on-toast: var(--_p-neutral-50);
-    --ui-text-on-toast-link: var(--_p-blue-300);
-    --ui-text-accent: var(--_p-blue-400);
-    --ui-text-danger: var(--_p-red-300);
-    --ui-text-success: var(--_p-green-300);
-    --ui-text-warning: var(--_p-amber-400);
-
-    /* Borders */
-    --ui-border-subtle: rgba(255, 255, 255, 0.06);
-    --ui-border-default: rgba(255, 255, 255, 0.12);
-    --ui-border-strong: rgba(255, 255, 255, 0.18);
-    --ui-border-hairline: rgba(255, 255, 255, 0.08);
-    --ui-border-inverse: rgba(255, 255, 255, 0.06);
-    --ui-border-hover-neutral: var(--_p-neutral-700);
-    --ui-border-focus-neutral: var(--_p-neutral-600);
-    --ui-border-accent: var(--_p-blue-600);
-    --ui-border-danger: var(--_p-red-400);
-
-    /* Brand & Accent */
-    --ui-accent-fill: var(--_p-blue-500);
-    --ui-accent-hover: var(--_p-blue-550);
-    --ui-accent-soft: var(--_p-blue-900);
-    --ui-accent-soft-hover: var(--_p-blue-800);
-    --ui-accent-invert: var(--_p-neutral-00);
-
-    /* Status */
-    --ui-danger-fill: var(--_p-red-600);
-    --ui-danger-hover: var(--_p-red-700);
-    --ui-danger-soft: var(--_p-red-900);
-    --ui-success-fill: var(--_p-green-400);
-    --ui-success-soft: var(--_p-green-900);
-    --ui-success-on-soft: var(--_p-green-100);
-    --ui-warning-fill: var(--_p-amber-400);
-    --ui-warning-soft: var(--_p-amber-900);
-    --ui-warning-on-soft: var(--_p-amber-100);
-
-    /* Focus rings */
-    --ui-focus-ring: var(--_p-blue-400);
-    --ui-focus-ring-danger: var(--_p-red-400);
-    --ui-focus-halo-neutral: rgba(129, 133, 140, 0.26);
-
-    /* Non-text indicators & handles */
-    --ui-handle-fill: var(--_p-neutral-600);
-    --ui-bar-muted: var(--_p-neutral-550);
-    --ui-switch-thumb: var(--_p-neutral-00);
-
-    /* Scrollbars */
-    --ui-scrollbar-thumb: rgba(255, 255, 255, 0.16);
-    --ui-scrollbar-thumb-hover: rgba(255, 255, 255, 0.28);
-
-    /* Elevation & Shadows */
-    --ui-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.24);
-    --ui-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.28);
-    --ui-shadow-composer: none;
-    --ui-shadow-composer-focus:
-      0 0 0 4px var(--ui-focus-halo-neutral), 0 6px 16px rgba(0, 0, 0, 0.32);
-    --ui-shadow-popover: inset 0 0 0 1px var(--ui-border-inverse), 0 12px 32px rgba(0, 0, 0, 0.36);
-    --ui-shadow-dialog: inset 0 0 0 1px var(--ui-border-inverse), 0 12px 32px rgba(0, 0, 0, 0.44);
-    --ui-shadow-toast: inset 0 0 0 1px var(--ui-border-inverse), 0 6px 20px rgba(0, 0, 0, 0.36);
-    --ui-shadow-tooltip: 0 6px 16px rgba(0, 0, 0, 0.28), 0 3px 6px -4px rgba(0, 0, 0, 0.36);
-    --ui-shadow-stage: 0 0 0 1px var(--ui-border-strong), 0 4px 16px rgba(0, 0, 0, 0.36);
-    --ui-shadow-floating: inset 0 1px 1px rgba(255, 255, 255, 0.1), 0 2px 4px rgba(0, 0, 0, 0.24);
-    --ui-shadow-floating-hover:
-      inset 0 1px 1px rgba(255, 255, 255, 0.14), 0 4px 8px rgba(0, 0, 0, 0.3);
-    --ui-shadow-drop-subtle: 0 0 0.5px rgba(0, 0, 0, 0.4);
   }
 }
 
