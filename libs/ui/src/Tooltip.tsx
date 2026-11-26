@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { useEffect, type ReactNode } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { useAnchoredPosition, useDelayedOpen } from './anchored.js'
 import { useIsMobile } from './runtime.js'
@@ -18,9 +18,10 @@ export type TooltipProps = {
 }
 
 /**
- * Accessible tooltip (WCAG 1.4.13): opens on hover (100ms delay) and focus, stays visible
- * while the pointer hovers the tooltip itself, dismisses on Escape without moving the pointer,
- * and stays suppressed on mobile viewports.
+ * Accessible tooltip (WCAG 1.4.13): opens on hover (100ms delay) and keyboard focus, stays
+ * visible while the pointer hovers the tooltip itself, dismisses on Escape without moving the
+ * pointer, and stays suppressed on mobile viewports. Pressing the trigger closes it and keeps it
+ * closed until the pointer leaves, so a hint never lingers over the result of the click.
  */
 export const Tooltip = ({
   content,
@@ -30,6 +31,7 @@ export const Tooltip = ({
 }: TooltipProps) => {
   const isMobile = useIsMobile()
   const { open, setOpen, schedule, cancel } = useDelayedOpen()
+  const pressedRef = useRef(false)
   const { anchorRef, floatingRef, position } = useAnchoredPosition<HTMLSpanElement, HTMLDivElement>(
     open && !disabled,
     { side: placement, align: 'center', measureFirstChild: true, measureKey: content }
@@ -77,13 +79,25 @@ export const Tooltip = ({
         ref={anchorRef}
         className={styles.trigger}
         onMouseEnter={() => {
-          if (!disabled) {
+          if (!disabled && !pressedRef.current) {
             schedule(true, ENTER_DELAY_MS)
           }
         }}
-        onMouseLeave={() => schedule(false, LEAVE_DELAY_MS)}
-        onFocusCapture={() => {
-          if (!disabled) {
+        onMouseLeave={() => {
+          pressedRef.current = false
+          schedule(false, LEAVE_DELAY_MS)
+        }}
+        onPointerDownCapture={() => {
+          pressedRef.current = true
+          cancel()
+          setOpen(false)
+        }}
+        onFocusCapture={(event) => {
+          // A click also focuses the trigger; only keyboard focus (:focus-visible) shows the hint.
+          const target = event.target as Element
+          const keyboardFocus =
+            typeof target.matches !== 'function' || target.matches(':focus-visible')
+          if (!disabled && !pressedRef.current && keyboardFocus) {
             schedule(true, 0)
           }
         }}
