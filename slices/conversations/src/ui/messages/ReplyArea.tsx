@@ -350,27 +350,37 @@ const InlineTraceInlay = ({
                 <button
                   type="button"
                   className={styles.traceRowButton}
+                  title={item.label}
                   {...hoverGlideItem()}
                   onClick={() => onInspect(item.callId)}
                 >
                   <span className={styles.traceRow}>
                     {hasIcons ? (
-                      <span className={styles.traceIcon} aria-hidden="true">
+                      <span
+                        className={clsx(
+                          styles.traceIcon,
+                          item.status === 'failed' && styles.traceIconError
+                        )}
+                        aria-hidden="true"
+                      >
                         {item.icon}
                       </span>
                     ) : null}
-                    <span className={styles.traceLabel}>{item.label}</span>
+                    <span
+                      className={clsx(
+                        styles.traceLabel,
+                        item.status === 'running' && styles.traceLabelActive
+                      )}
+                    >
+                      {item.label}
+                    </span>
+                    {item.status === 'failed' ? (
+                      <span className={styles.srOnly}> ({t('activityTrackFailed')})</span>
+                    ) : null}
                     {item.status === 'running' ? (
                       <span className={styles.traceRunningTag}>{t('activityTrackRunning')}</span>
                     ) : null}
                   </span>
-                  {item.errorText ? (
-                    <span
-                      className={clsx(styles.traceError, hasIcons && styles.traceErrorIndented)}
-                    >
-                      {item.errorText}
-                    </span>
-                  ) : null}
                 </button>
               </li>
             )
