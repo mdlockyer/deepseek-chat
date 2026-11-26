@@ -636,58 +636,6 @@
     padding: var(--ui-space-2);
   }
 
-  .queryList {
-    display: flex;
-    flex-direction: column;
-    gap: var(--ui-space-1);
-  }
-
-  .queryChip {
-    padding: var(--ui-space-1-5) var(--ui-space-2-5);
-    border-radius: var(--ui-radius-sm);
-    background: var(--ui-surface-sunken);
-    font: var(--ui-type-caption);
-    color: var(--ui-text-secondary);
-    overflow-wrap: anywhere;
-  }
-
-  .serverPageList {
-    display: flex;
-    flex-direction: column;
-    gap: var(--ui-space-1);
-  }
-
-  .serverPageLink {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--ui-space-1);
-    max-width: 100%;
-    width: fit-content;
-    min-height: var(--ui-control-xs);
-    padding: var(--ui-space-0-5) 0;
-    border-radius: var(--ui-radius-xs);
-    font: var(--ui-type-caption);
-    color: var(--ui-text-accent);
-    text-decoration: none;
-
-    @media (hover: hover) {
-      &:hover {
-        text-decoration: underline;
-      }
-    }
-
-    &:focus-visible {
-      outline: 2px solid var(--ui-focus-ring);
-      outline-offset: 2px;
-    }
-  }
-
-  .serverPageText {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
   /* ---------- Visual Lightbox ---------- */
 
   .lightboxDialog {
@@ -863,7 +811,6 @@
     .turnMenuButton,
     .errorSummaryLink,
     .roundAnchorButton,
-    .serverPageLink,
     .lightboxLink {
       min-height: var(--ui-control-xl);
     }

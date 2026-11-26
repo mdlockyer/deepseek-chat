@@ -1,13 +1,12 @@
-import type { ChatModel, CreateMessageRequest } from '@deepseek-chat/lib-agent'
-import type { ApiClient } from './apiClient.js'
+import type { ChatModel, CreateMessageRequest, ModelProvider } from '@deepseek-chat/lib-agent'
 import { buildAutoTitleRequest, parseAutoTitleResponse } from './autoTitle.js'
 import { getVisibleMessages } from './branches.js'
+import type { InlineAttachmentData } from './reply.js'
 import type { AssistantMessage, Message, Session, UserMessage } from './types.js'
 
 export type AutoTitleRunnerHost = {
   readonly enabled: boolean
-  readonly apiClient: Pick<ApiClient, 'streamMessage'>
-  readonly getApiKey: () => string | null
+  readonly provider: Pick<ModelProvider, 'id' | 'isConfigured' | 'streamMessage'>
   readonly getHistoryEpoch: () => number
   readonly isImportingHistory: () => boolean
   readonly isDeletingSession: (sessionId: string) => boolean
@@ -22,11 +21,11 @@ export type AutoTitleParams = {
   readonly model: ChatModel
   readonly system: string
   readonly tools: CreateMessageRequest['tools']
-  readonly safetyCheck?: CreateMessageRequest['safety_check']
   readonly history: Message[]
   readonly question: UserMessage
   readonly reply: AssistantMessage
   readonly declaredClientNames: ReadonlySet<string>
+  readonly inlineBlobs?: ReadonlyMap<string, InlineAttachmentData>
 }
 
 export const createAutoTitleRunner = (host: AutoTitleRunnerHost) => {
@@ -60,11 +59,7 @@ export const createAutoTitleRunner = (host: AutoTitleRunnerHost) => {
     ) {
       return
     }
-    if (params.history.length === 0 && currentSession.title.trim()) {
-      return
-    }
-    const apiKey = host.getApiKey() ?? ''
-    if (!apiKey) {
+    if (!host.provider.isConfigured()) {
       return
     }
     cancel(sessionId)
@@ -74,22 +69,19 @@ export const createAutoTitleRunner = (host: AutoTitleRunnerHost) => {
       model: params.model,
       system: params.system,
       tools: params.tools,
-      safetyCheck: params.safetyCheck,
       history: params.history,
       question: params.question,
       reply,
       declaredClientNames: params.declaredClientNames,
       currentTitle: currentSession.title,
+      providerId: host.provider.id,
+      inlineBlobs: params.inlineBlobs,
     })
     void (async () => {
       let rawText = ''
       try {
-        for await (const event of host.apiClient.streamMessage(apiKey, req, ac.signal)) {
-          if (
-            event.type === 'content_block_start' &&
-            (event.content_block.type === 'tool_use' ||
-              event.content_block.type === 'server_tool_use')
-          ) {
+        for await (const event of host.provider.streamMessage(req, ac.signal)) {
+          if (event.type === 'content_block_start' && event.content_block.type === 'tool_use') {
             ac.abort()
             return
           }

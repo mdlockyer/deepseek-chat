@@ -1,5 +1,5 @@
 /**
- * Conversations: chats, their branches and replies, the DeepSeek API client, attachments and
+ * Conversations: chats, their branches and replies, provider-neutral messaging, attachments and
  * drafts, the composer, the session list, factory-scoped persistence, and the chat's views.
  *
  * Domain-blind to every sibling capability slice: all tool execution, toggles, work-strip
@@ -81,7 +81,7 @@ export const createConversationsSlice = (deps: ConversationsDeps) => {
        * `send` sends nothing and returns `false`.
        */
       attach: (sessionId: string | null, files: File[]) =>
-        runtime.drafts.addDraftFiles(sessionId, files, deps.getApiKey() ?? ''),
+        runtime.drafts.addDraftFiles(sessionId, files),
       /** Sends the chat's draft; `false` when nothing was sent. */
       send: runtime.sendMessage,
       regenerate: runtime.regenerateReply,
@@ -123,9 +123,6 @@ export const createConversationsSlice = (deps: ConversationsDeps) => {
     describeReplyNotice: (message: Parameters<typeof describeReply>[0]): string | null =>
       describeReply(message)?.text ?? null,
 
-    /** Instance-scoped DeepSeek HTTP client helper. */
-    request: runtime.apiClient.request,
-
     // Views and their lifecycle.
     /** Call once from the app shell, outside any error boundary. */
     useChatLifecycle,
@@ -156,12 +153,20 @@ export {
 export { ServerSentEventDecoder, readServerSentEvents } from '@deepseek-chat/lib-agent'
 export { appendBranch, getVisibleMessages, normalizeSession, selectVersion } from './branches.js'
 export {
+  CONTINUE_PROMPT,
   applyEvent,
   canContinueReply,
   pickImageResults,
   settleReply,
   toRequestMessages,
+  type InlineAttachmentData,
+  type ToRequestMessagesOptions,
 } from './reply.js'
+export {
+  createEnvironmentContext,
+  formatLegacyLatestReminder,
+  resolveEnvironmentContext,
+} from './environmentContext.js'
 export { collectCitedUrls } from './citations.js'
 export {
   buildReplyView,

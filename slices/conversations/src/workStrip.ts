@@ -1,11 +1,9 @@
 import type { FrontStageNote, LiveTrack } from '@deepseek-chat/lib-tools'
-import { IconGlobeLanguageOutline14, IconSearchOutline16 } from '@deepseek-chat/lib-ui'
-import { createElement, type ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import { translate } from './messages.js'
 import type { AssistantMessage } from './types.js'
 import {
   getTotalThinkingSeconds,
-  isImageSearchKind,
   needsWorkingIndicator,
   showsRunning,
   type ReplyView,
@@ -90,37 +88,6 @@ const collectMetrics = (view: ReplyView) => {
   }
 
   for (const step of view.steps) {
-    if (step.type === 'search') {
-      hasToolWork = true
-      addTally('server-search', Math.max(1, step.queries.length), (count) =>
-        translate(count === 1 ? 'activityCountSearchOne' : 'activityCountSearchMany', { count })
-      )
-      if (step.status === 'failed') {
-        errorCount += 1
-      }
-      continue
-    }
-    if (step.type === 'open') {
-      hasToolWork = true
-      addTally('server-page', step.pages.length, (count) =>
-        translate(count === 1 ? 'activityCountPageOne' : 'activityCountPageMany', { count })
-      )
-      for (const page of step.pages) {
-        if (page.status === 'failed') {
-          errorCount += 1
-        }
-      }
-      continue
-    }
-    if (step.type === 'find') {
-      hasToolWork = true
-      for (const item of step.patterns) {
-        if (item.status === 'failed') {
-          errorCount += 1
-        }
-      }
-      continue
-    }
     if (step.type === 'tool') {
       const { summary, result } = step
       if (summary?.tally) {
@@ -197,44 +164,11 @@ const liveHeadlineAndDetail = (
   const active = [...view.steps]
     .reverse()
     .find((s) => !(s.type === 'tool' && s.summary?.hiddenInTimeline) && showsRunning(s))
-  if (active) {
-    if (active.type === 'search') {
-      return {
-        headline: translate(
-          isImageSearchKind(active.kind) ? 'imageSearching' : 'deepSearchSearching'
-        ),
-        detail: active.queries.at(-1) ?? null,
-        waitingForUser: false,
-      }
-    }
-    if (active.type === 'open') {
-      const wipPage = [...active.pages].reverse().find((p) => p.status === 'wip')
-      return {
-        headline: translate('groupTitleToolOpen'),
-        detail: wipPage?.title ?? null,
-        waitingForUser: false,
-      }
-    }
-    if (active.type === 'find') {
-      return {
-        headline: translate('groupTitleToolOpen'),
-        detail: active.patterns.at(-1)?.pattern ?? null,
-        waitingForUser: false,
-      }
-    }
-    if (active.type === 'read_link') {
-      return {
-        headline: translate('readingLink'),
-        detail: active.links.at(-1)?.title ?? null,
-        waitingForUser: false,
-      }
-    }
-    if (active.type === 'tool') {
-      return {
-        headline: active.summary?.liveVerb ?? active.call.name,
-        detail: active.rawSummary ?? active.summary?.detail ?? null,
-        waitingForUser: Boolean(active.summary?.waitingForUser),
-      }
+  if (active?.type === 'tool') {
+    return {
+      headline: active.summary?.liveVerb ?? active.call.name,
+      detail: active.rawSummary ?? active.summary?.detail ?? null,
+      waitingForUser: Boolean(active.summary?.waitingForUser),
     }
   }
 
@@ -379,9 +313,6 @@ const firstErrorLine = (content: string | undefined): string | undefined => {
   return line.length > 160 ? `${line.slice(0, 159)}…` : line
 }
 
-const mapServerStatus = (status: 'wip' | 'done' | 'failed'): 'running' | 'done' | 'failed' =>
-  status === 'wip' ? 'running' : status
-
 /**
  * Pure Tier-1 inline trace projection for the expandable transcript inlay.
  * Domain-blind: derives plain-prose rows strictly from `ReplyView.steps`.
@@ -398,66 +329,6 @@ export const buildInlineTrace = (view: ReplyView): InlineTrace => {
         .join('\n\n')
       if (joined) {
         thinkingParts.push(joined)
-      }
-      continue
-    }
-    if (step.type === 'search') {
-      const status = mapServerStatus(step.status)
-      step.queries.forEach((query, index) => {
-        const trimmed = query.trim()
-        if (trimmed) {
-          items.push({
-            key: `${step.key}-q-${index}`,
-            lane: 'search',
-            icon: createElement(IconSearchOutline16),
-            label: trimmed,
-            status,
-          })
-        }
-      })
-      continue
-    }
-    if (step.type === 'open') {
-      for (const page of step.pages) {
-        const label = page.title || page.url
-        if (label) {
-          items.push({
-            key: page.id,
-            lane: 'browse',
-            icon: createElement(IconGlobeLanguageOutline14),
-            label,
-            status: mapServerStatus(page.status),
-          })
-        }
-      }
-      continue
-    }
-    if (step.type === 'read_link') {
-      for (const link of step.links) {
-        const label = link.title || link.url
-        if (label) {
-          items.push({
-            key: link.id,
-            lane: 'browse',
-            icon: createElement(IconGlobeLanguageOutline14),
-            label,
-            status: mapServerStatus(link.status),
-          })
-        }
-      }
-      continue
-    }
-    if (step.type === 'find') {
-      for (const pattern of step.patterns) {
-        if (pattern.pattern) {
-          items.push({
-            key: pattern.id,
-            lane: 'search',
-            icon: createElement(IconSearchOutline16),
-            label: pattern.pattern,
-            status: mapServerStatus(pattern.status),
-          })
-        }
       }
       continue
     }

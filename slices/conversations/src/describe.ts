@@ -1,5 +1,5 @@
+import { ApiError as LibApiError, classifyApiError } from '@deepseek-chat/lib-agent'
 import { isTranslationKey, translate } from './messages.js'
-import { classifyStatus } from '@deepseek-chat/lib-agent'
 import type { AssistantMessage } from './types.js'
 
 export type Notice = {
@@ -31,11 +31,15 @@ export const describeReply = (reply: AssistantMessage): Notice | null => {
     if (kind === 'network') {
       return { text: translate('commonNetworkErrorToast') }
     }
-    switch (classifyStatus(status)) {
+    switch (classifyApiError(new LibApiError(kind, reply.error.message, status))) {
       case 'unauthorized':
         return { text: translate('replyInvalidApiKey'), action: 'apiKey' }
       case 'insufficientBalance':
         return { text: translate('replyInsufficientBalance'), action: 'topUp' }
+      case 'contextOverflow':
+        return { text: translate('replyContextOverflow') }
+      case 'payloadTooLarge':
+        return { text: translate('replyPayloadTooLarge') }
       case 'rateLimited':
         return { text: translate('replyRateLimited') }
       case 'serverBusy':

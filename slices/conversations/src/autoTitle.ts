@@ -1,5 +1,5 @@
-import type { ChatModel, CreateMessageRequest } from '@deepseek-chat/lib-agent'
-import { toRequestMessages } from './reply.js'
+import type { ChatModel, CreateMessageRequest, ProviderId } from '@deepseek-chat/lib-agent'
+import { toRequestMessages, type InlineAttachmentData } from './reply.js'
 import type { AssistantMessage, Message, UserMessage } from './types.js'
 
 export const AUTO_TITLE_KEEP = 'KEEP'
@@ -78,29 +78,31 @@ export type AutoTitleRequestParams = {
   readonly model: ChatModel
   readonly system: string
   readonly tools: CreateMessageRequest['tools']
-  readonly safetyCheck?: CreateMessageRequest['safety_check']
   readonly history: Message[]
   readonly question: UserMessage
   readonly reply: AssistantMessage
   readonly declaredClientNames: ReadonlySet<string>
   readonly currentTitle: string
+  readonly providerId?: ProviderId
+  readonly inlineBlobs?: ReadonlyMap<string, InlineAttachmentData>
 }
 
 /**
  * Builds a detached fork request that reuses the exact prefix (`model`, `system`, `tools`,
- * `safety_check`, and `messages` up through `reply`) so the server hits its KV prefix cache
- * without mutating the stored conversation or invalidating the next user turn.
+ * and `messages` up through `reply`) so the server hits its KV prefix cache without mutating the
+ * stored conversation or invalidating the next user turn.
  */
 export const buildAutoTitleRequest = ({
   model,
   system,
   tools,
-  safetyCheck,
   history,
   question,
   reply,
   declaredClientNames,
   currentTitle,
+  providerId,
+  inlineBlobs,
 }: AutoTitleRequestParams): CreateMessageRequest => {
   const syntheticQuestion: UserMessage = {
     id: '__auto_title__',
@@ -109,21 +111,16 @@ export const buildAutoTitleRequest = ({
     files: [],
     createdAt: 0,
   }
-  const messages = toRequestMessages(
-    [...history, question, reply],
-    syntheticQuestion,
-    undefined,
-    false,
-    undefined,
-    undefined,
-    declaredClientNames
-  )
+  const messages = toRequestMessages([...history, question, reply], syntheticQuestion, {
+    clientTools: declaredClientNames,
+    providerId,
+    inlineBlobs,
+  })
   return {
     model,
     system,
     messages,
     thinking: { type: 'disabled' },
-    ...(safetyCheck ? { safety_check: safetyCheck } : {}),
     tools,
   }
 }

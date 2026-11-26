@@ -1,5 +1,6 @@
+import { createDeepSeekProvider } from '@deepseek-chat/lib-agent'
 import { createToolRegistry } from '@deepseek-chat/lib-tools'
-import { memoryBlobStore, memoryStore } from '@deepseek-chat/spine/ports'
+import { memoryBlobStore, memoryStore, type HttpFetch } from '@deepseek-chat/spine/ports'
 import { EventLog } from '@deepseek-chat/spine/runtime'
 import {
   createConversationsSlice,
@@ -7,18 +8,29 @@ import {
   type ConversationsDeps,
 } from '@deepseek-chat/slice-conversations'
 
+export type TestSliceOverrides = Partial<ConversationsDeps> & {
+  readonly apiOrigin?: string
+  readonly fetch?: HttpFetch
+  readonly getApiKey?: () => string | null
+}
+
 /** Creates an isolated conversations slice instance with in-memory offline ports. */
-export const createTestSlice = (overrides: Partial<ConversationsDeps> = {}) =>
-  createConversationsSlice({
+export const createTestSlice = (overrides: TestSliceOverrides = {}) => {
+  const { apiOrigin, fetch, getApiKey, provider, ...rest } = overrides
+  return createConversationsSlice({
     log: new EventLog(),
-    apiOrigin: 'https://api.test',
-    fetch: (url, init) => globalThis.fetch(url, init),
+    provider:
+      provider ??
+      createDeepSeekProvider({
+        apiOrigin: apiOrigin ?? 'https://api.test',
+        fetch: fetch ?? ((url, init) => globalThis.fetch(url, init)),
+        getApiKey: getApiKey ?? (() => 'sk-test'),
+      }),
     store: memoryStore(),
     blobs: memoryBlobStore(),
     sessions: memorySessionStore(),
     tools: createToolRegistry([]),
     platform: 'web',
-    getApiKey: () => 'sk-test',
     getLocationLabel: () => '',
     ui: {
       voice: null,
@@ -27,5 +39,6 @@ export const createTestSlice = (overrides: Partial<ConversationsDeps> = {}) =>
       saveFile: async () => {},
       setSiderCollapsed: () => {},
     },
-    ...overrides,
+    ...rest,
   })
+}

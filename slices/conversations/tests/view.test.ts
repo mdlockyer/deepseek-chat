@@ -477,30 +477,6 @@ describe('buildTurnWorkStrip & getFrontStageNotes', () => {
     assert.equal(trace.items[1]?.errorText, 'Connection timed out')
     assert.equal(trace.hasRichDetails, true)
 
-    const serverSearchReply = replyWith([
-      {
-        type: 'server_tool_use',
-        id: 'srv1',
-        name: 'deepseek_web_search',
-        caller: { type: 'direct' },
-        kind: 'search',
-        input: { action: 'search', queries: ['sealed slice architecture'] },
-      },
-      {
-        type: 'web_search_tool_result',
-        tool_use_id: 'srv1',
-        kind: 'search',
-        content: [],
-      },
-      { type: 'text', text: 'Found it.' },
-    ])
-    const serverTrace = buildInlineTrace(buildReplyView(serverSearchReply, false, testRegistry))
-    assert.equal(serverTrace.items.length, 1)
-    assert.equal(serverTrace.items[0]?.callId, undefined)
-    assert.equal(serverTrace.items[0]?.lane, 'search')
-    assert.ok(serverTrace.items[0]?.icon, 'built-in server search step supplies an icon')
-    assert.equal(serverTrace.items[0]?.label, 'sealed slice architecture')
-
     const thinkingOnlyReply = replyWith(
       [
         { type: 'thinking', thinking: 'Weighing the tradeoffs carefully.' },

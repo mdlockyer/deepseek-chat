@@ -43,7 +43,7 @@ export type ApiRequest = {
 export type ApiReply =
   | {
       readonly text: string
-      readonly title?: string
+      readonly stopReason?: 'end_turn' | 'max_tokens'
       readonly dropMessageStop?: boolean
       readonly cutAfterContent?: boolean
     }
@@ -94,8 +94,7 @@ const toEvents = (
     {
       type: 'message_delta',
       delta: {
-        stop_reason: 'text' in reply ? 'end_turn' : 'tool_use',
-        ...('text' in reply && reply.title ? { title: reply.title } : {}),
+        stop_reason: 'text' in reply ? (reply.stopReason ?? 'end_turn') : 'tool_use',
       },
       usage,
     },

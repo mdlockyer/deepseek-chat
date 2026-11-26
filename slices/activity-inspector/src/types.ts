@@ -1,4 +1,3 @@
-import type { ServerToolBlock, TextCitation } from '@deepseek-chat/lib-agent'
 import type {
   CitedSourceMeta,
   DeliveredFileRef,
@@ -51,7 +50,6 @@ export type TurnThinkingBlock = {
 export type TurnTextBlock = {
   readonly type: 'text'
   readonly text: string
-  readonly citations?: readonly TextCitation[]
   readonly isTemplate?: boolean
 }
 
@@ -62,12 +60,7 @@ export type TurnToolResultBlock = ToolResultRecord & {
   readonly scrapedPage?: { readonly url: string; readonly title: string | null }
 }
 
-export type TurnBlock =
-  | TurnThinkingBlock
-  | TurnTextBlock
-  | ServerToolBlock
-  | TurnToolUseBlock
-  | TurnToolResultBlock
+export type TurnBlock = TurnThinkingBlock | TurnTextBlock | TurnToolUseBlock | TurnToolResultBlock
 
 export type TurnSnapshot = {
   readonly sessionId: string

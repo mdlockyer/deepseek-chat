@@ -1,10 +1,9 @@
 import type {
-  ChatModel,
+  ModelId,
   MessageUsage,
-  ServerToolBlock,
+  ProviderId,
   StopDetails,
   StopReason,
-  TextCitation,
 } from '@deepseek-chat/lib-agent'
 import type {
   ArchiveFragment,
@@ -18,6 +17,7 @@ import type { BlobEntry, BlobStore, NoticePort } from '@deepseek-chat/spine/port
 export type BackupFileAttachment = {
   id: string
   serverId: string | null
+  serverProvider?: ProviderId
   name: string
   size: number
   isImage: boolean
@@ -49,7 +49,6 @@ export type BackupThinkingPart = {
 export type BackupTextPart = {
   type: 'text'
   text: string
-  citations?: TextCitation[]
   isTemplate?: boolean
 }
 
@@ -77,7 +76,6 @@ export type BackupToolResultPart = {
 export type BackupReplyBlock =
   | BackupThinkingPart
   | BackupTextPart
-  | ServerToolBlock
   | BackupToolCallPart
   | BackupToolResultPart
 
@@ -87,11 +85,12 @@ export type BackupAssistantMessage = BranchLinks & {
   id: string
   role: 'assistant'
   createdAt: number
-  model: ChatModel | null
+  model: ModelId | null
+  provider?: ProviderId
   thinking?: boolean
   search?: boolean
   enabledCapabilities?: Readonly<Record<string, boolean>>
-  prefix: boolean
+  prefix?: boolean
   status: BackupReplyStatus
   blocks: BackupReplyBlock[]
   stopReason?: StopReason

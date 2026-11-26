@@ -6,6 +6,12 @@
  */
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
+import {
+  classifyApiError,
+  type CreateMessageRequest,
+  type MessageStreamEvent,
+  type ModelProvider,
+} from '@deepseek-chat/lib-agent'
 import type { ToolRunContext } from '@deepseek-chat/lib-tools'
 import { ASK_USER_TOOL_NAME } from '@deepseek-chat/slice-ask-user'
 import { POST_TOOL_NAME, WAIT_TOOL_NAME } from '@deepseek-chat/slice-subagents'
@@ -385,6 +391,154 @@ describe('app wiring: composed ToolRegistry', () => {
       assert.equal(subState?.agents?.length, 1)
       assert.equal(subState?.agents?.[0]?.state.status, 'finished')
     }
+    runtime.dispose()
+  })
+
+  it('routes both conversations and spawned subagents through an injected custom ModelProvider', async () => {
+    Object.assign(globalThis, {
+      document: { visibilityState: 'hidden' },
+      requestAnimationFrame: (cb: () => void) => setTimeout(cb, 0),
+      cancelAnimationFrame: (id: ReturnType<typeof setTimeout>) => clearTimeout(id),
+    })
+
+    const requests: CreateMessageRequest[] = []
+    let leadRound = 0
+    const customSpec = {
+      id: 'portable-1',
+      provider: 'portable' as const,
+      label: 'Portable 1',
+      contextWindow: 200_000,
+      maxOutputTokens: 16_384,
+      capabilities: {
+        thinking: true,
+        vision: true,
+        documents: true,
+        tools: true,
+        promptCaching: true,
+      },
+    }
+
+    const emit = (
+      blocks: Array<
+        { kind: 'text'; text: string } | { kind: 'call'; id: string; name: string; input: unknown }
+      >,
+      stopReason: 'end_turn' | 'tool_use'
+    ): MessageStreamEvent[] => [
+      {
+        type: 'message_start',
+        message: {
+          id: 'p-msg',
+          model: 'portable-1',
+          usage: {
+            input_tokens: 10,
+            cache_creation_input_tokens: 0,
+            cache_read_input_tokens: 0,
+            output_tokens: 0,
+          },
+        },
+      },
+      ...blocks.flatMap((b, index): MessageStreamEvent[] => [
+        {
+          type: 'content_block_start',
+          index,
+          content_block:
+            b.kind === 'text'
+              ? { type: 'text', text: '' }
+              : { type: 'tool_use', id: b.id, name: b.name, input: {} },
+        },
+        {
+          type: 'content_block_delta',
+          index,
+          delta:
+            b.kind === 'text'
+              ? { type: 'text_delta', text: b.text }
+              : { type: 'input_json_delta', partial_json: JSON.stringify(b.input) },
+        },
+        { type: 'content_block_stop', index },
+      ]),
+      {
+        type: 'message_delta',
+        delta: { stop_reason: stopReason, stop_sequence: null },
+        usage: { output_tokens: 5 },
+      },
+      { type: 'message_stop' },
+    ]
+
+    const customProvider: ModelProvider = {
+      id: 'portable',
+      label: 'Portable',
+      defaultModel: 'portable-1',
+      models: [customSpec],
+      isConfigured: () => true,
+      modelSpec: () => customSpec,
+      classifyError: classifyApiError,
+      streamMessage: async function* (body) {
+        requests.push(structuredClone(body))
+        const isChild = body.tools?.some((t) => t.name === 'finish_research') ?? false
+        const events = isChild
+          ? emit(
+              [
+                {
+                  kind: 'call',
+                  id: 'child-done',
+                  name: 'finish_research',
+                  input: {
+                    summary: 'Completing child research',
+                    answer: 'Verified on custom provider.',
+                    sources: [],
+                  },
+                },
+              ],
+              'tool_use'
+            )
+          : ++leadRound === 1
+            ? emit(
+                [
+                  {
+                    kind: 'call',
+                    id: 'lead-research',
+                    name: 'research',
+                    input: {
+                      summary: 'Delegating research to child',
+                      objective: 'Check provider portability',
+                      boundaries: 'Brief check',
+                    },
+                  },
+                ],
+                'tool_use'
+              )
+            : emit([{ kind: 'text', text: 'Synthesized with Portable 1.' }], 'end_turn')
+        for (const event of events) {
+          yield event
+        }
+      },
+    }
+
+    const runtime = createAppRuntime({
+      store: memoryStore({ 'chat-demo:search': 'true' }),
+      provider: customProvider,
+      autoTitle: false,
+    })
+
+    await runtime.slices.conversations.commands.init()
+    runtime.slices.conversations.commands.setDraft(null, 'Verify provider boundary')
+    assert.equal(runtime.slices.conversations.commands.send(null), true)
+    await runtime.slices.conversations.commands.whenIdle()
+
+    assert.ok(requests.length >= 3, 'lead and child both executed via customProvider')
+    for (const req of requests) {
+      assert.equal(req.model, 'portable-1', 'both lead and child default to provider.defaultModel')
+      for (const msg of req.messages) {
+        assert.ok(msg.role === 'user' || msg.role === 'assistant')
+      }
+    }
+    const childReq = requests.find((r) => r.tools?.some((t) => t.name === 'finish_research'))
+    assert.ok(childReq, 'child subagent ran')
+    assert.match(
+      String(childReq.messages[0]?.content ?? ''),
+      /<environment_context>/,
+      'child received standard <environment_context> in its first user message'
+    )
     runtime.dispose()
   })
 })

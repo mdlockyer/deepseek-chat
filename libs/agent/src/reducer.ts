@@ -1,17 +1,15 @@
 import type {
   MessageStreamEvent,
   MessageUsage,
+  MessageUsageDelta,
   OutputBlockStart,
-  ServerToolBlock,
   StopDetails,
   StopReason,
-  TextCitation,
 } from './types.js'
 
 export type TranscriptTextBlock = {
   type: 'text'
   text: string
-  citations?: TextCitation[]
 }
 
 export type TranscriptThinkingBlock = {
@@ -31,11 +29,7 @@ export type TranscriptToolUseBlock = {
   inputJson?: string
 }
 
-export type Block =
-  | TranscriptTextBlock
-  | TranscriptThinkingBlock
-  | ServerToolBlock
-  | TranscriptToolUseBlock
+export type Block = TranscriptTextBlock | TranscriptThinkingBlock | TranscriptToolUseBlock
 
 export type Transcript<B extends { type: string } = Block> = {
   blocks: B[]
@@ -51,22 +45,35 @@ export const emptyTranscript = (): Transcript => ({ blocks: [] })
 const toBlock = (block: OutputBlockStart, now: number): Block | null => {
   switch (block.type) {
     case 'text':
-      return { type: 'text', text: block.text, citations: block.citations ?? [] }
+      return { type: 'text', text: block.text }
     case 'thinking':
       return {
         type: 'thinking',
         thinking: block.thinking,
-        signature: block.signature,
+        ...(block.signature !== undefined ? { signature: block.signature } : {}),
         startedAt: now,
       }
-    case 'server_tool_use':
-    case 'web_search_tool_result':
-    case 'web_fetch_tool_result':
-      return block
     case 'tool_use':
       return { type: 'tool_use', id: block.id, name: block.name, input: {}, inputJson: '' }
     default:
       return null
+  }
+}
+
+const mergeUsage = (
+  previous: MessageUsage | undefined,
+  delta: MessageUsageDelta | undefined
+): MessageUsage | undefined => {
+  if (!delta) {
+    return previous
+  }
+  return {
+    input_tokens: delta.input_tokens ?? previous?.input_tokens ?? 0,
+    cache_creation_input_tokens:
+      delta.cache_creation_input_tokens ?? previous?.cache_creation_input_tokens ?? 0,
+    cache_read_input_tokens:
+      delta.cache_read_input_tokens ?? previous?.cache_read_input_tokens ?? 0,
+    output_tokens: delta.output_tokens ?? previous?.output_tokens ?? 0,
   }
 }
 
@@ -150,9 +157,6 @@ export const applyEvent = <B extends { type: string } = Block>(
         if (block.type === 'thinking' && delta.type === 'signature_delta') {
           return { ...block, signature: (block.signature ?? '') + delta.signature }
         }
-        if (block.type === 'text' && delta.type === 'citations_delta') {
-          return { ...block, citations: [...(block.citations ?? []), delta.citation] }
-        }
         if (block.type === 'tool_use' && delta.type === 'input_json_delta') {
           return { ...block, inputJson: (block.inputJson ?? '') + delta.partial_json }
         }
@@ -189,7 +193,7 @@ export const applyEvent = <B extends { type: string } = Block>(
         ...transcript,
         stopReason: event.delta.stop_reason,
         stopDetails: event.delta.stop_details,
-        usage: event.usage ?? transcript.usage,
+        usage: mergeUsage(transcript.usage, event.usage),
       }
     default:
       return transcript

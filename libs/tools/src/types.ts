@@ -100,8 +100,8 @@ export type ToolRunContext = {
   readonly readReplyState: <T = unknown>() => T | undefined
   /** Updates this capability's state on the current reply (`persist` defaults to true). */
   readonly writeReplyState: (next: unknown, options?: { readonly persist?: boolean }) => void
-  /** Current turn's dynamic environment snapshot, when available. */
-  readonly latestReminder?: string
+  /** Current turn's dynamic environment context block, when available. */
+  readonly environmentContext?: string
   /** Optional lazy accessor for lead messages up to this call (used by `'fork'` subagents). */
   readonly forkMessages?: () => readonly unknown[]
 }
@@ -144,7 +144,8 @@ export type AgentSourceSpec = {
 
 /** Declarative subagent profile owned by a capability slice and executed by the subagents slice. */
 export type AgentProfileSpec = {
-  readonly model: 'deepseek-flash' | 'deepseek-v4-pro'
+  /** Optional model override; when omitted, subagents use the active provider's default model. */
+  readonly model?: string
   readonly thinking: boolean
   readonly label?: string
   /** Static system prompt for prompt-cache reuse. */

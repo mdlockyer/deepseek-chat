@@ -117,11 +117,7 @@ export const createSubagentsSlice = (deps: SubagentsSliceDeps) => {
       : { agents: [], board: [] }
     const runtime = createReplySubagentRuntime({
       initialState,
-      io: {
-        fetch: deps.fetch,
-        apiOrigin: deps.apiOrigin,
-        apiKey: deps.getApiKey,
-      },
+      provider: deps.provider,
       tools: deps.getToolHost(),
       params,
       newId,

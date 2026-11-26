@@ -1,23 +1,22 @@
 import {
   ApiError,
   applyEvent,
-  streamMessage,
-  type AgentIO,
   type AssistantBlockParam,
-  type ChatModel,
   type ClientTool,
   type CreateMessageRequest,
   type MessageParam,
+  type ModelId,
+  type ModelProvider,
   type ToolResultBlockParam,
   type Transcript,
 } from '@deepseek-chat/lib-agent'
 import type { ChildBlock, ChildToolResultBlock, ChildToolUseBlock } from './types.js'
 
 export type RunAgentInput = {
-  readonly io: AgentIO
+  readonly provider: ModelProvider
   readonly signal: AbortSignal
   readonly request: {
-    readonly model: ChatModel
+    readonly model: ModelId
     readonly system: string
     readonly thinking: boolean
     readonly tools: ClientTool[]
@@ -69,7 +68,11 @@ const toAssistantParam = (blocks: readonly ChildBlock[]): AssistantBlockParam[] 
   for (const block of blocks) {
     if (block.type === 'thinking') {
       if (block.thinking.trim() || block.signature) {
-        out.push({ type: 'thinking', thinking: block.thinking, signature: block.signature ?? '' })
+        out.push({
+          type: 'thinking',
+          thinking: block.thinking,
+          ...(block.signature !== undefined ? { signature: block.signature } : {}),
+        })
       }
     } else if (block.type === 'text') {
       if (block.text) {
@@ -140,7 +143,7 @@ export const runAgent = async (input: RunAgentInput): Promise<AgentOutcome> => {
       let receivedContent = false
       let receivedStopReason = false
       try {
-        for await (const event of streamMessage(input.io, body, input.signal)) {
+        for await (const event of input.provider.streamMessage(body, input.signal)) {
           receivedContent ||= event.type === 'content_block_start'
           receivedStopReason ||= event.type === 'message_delta' && Boolean(event.delta.stop_reason)
           transcript = applyEvent(transcript, event, Date.now())

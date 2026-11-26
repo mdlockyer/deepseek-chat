@@ -51,17 +51,19 @@ describe('autoTitle: pure prompt and response parser', () => {
 })
 
 describe('conversations store: cache-riding turn-end auto-title hook (SPEC invariant 10)', () => {
-  it('skips the fork on turn 1 when inline delta.title already named the chat, then forks on turn 2 with an identical prefix', async () => {
+  it('names the chat via the cache-riding fork on turn 1 and refreshes on turn 2 with an identical prefix', async () => {
     await env.slice.commands.init()
     env.slice.commands.newChat()
     const before = env.requests.length
+    let forkNumber = 0
 
     env.respondWith((req): ApiReply => {
       if (isAutoTitleRequest(req)) {
-        return { text: 'Q4 Cohort Analysis' }
+        forkNumber += 1
+        return { text: forkNumber === 1 ? 'Quick Intro' : 'Q4 Cohort Analysis' }
       }
       if (req.messages.filter((m) => m.role === 'user').length === 1) {
-        return { text: 'Here is a quick intro.', title: 'Quick Intro' }
+        return { text: 'Here is a quick intro.' }
       }
       return { text: 'Here is the full Q4 cohort breakdown.' }
     })
@@ -70,7 +72,18 @@ describe('conversations store: cache-riding turn-end auto-title hook (SPEC invar
     await flushAsync()
     const sessionId = env.slice.getState().activeId
     assert.ok(sessionId)
-    assert.equal(env.requests.length, before + 1)
+
+    // Turn 1 uses the standard cache-riding fork (never a proprietary `title` request param).
+    assert.equal(env.requests.length, before + 2)
+    const turn1Main = env.requests[before]
+    const turn1Fork = env.requests[before + 1]
+    assert.ok(turn1Main && turn1Fork)
+    assert.equal('title' in turn1Main, false)
+    assert.equal('safety_check' in turn1Main, false)
+    assert.ok(isAutoTitleRequest(turn1Fork))
+    assert.equal(turn1Fork.system, turn1Main.system)
+    assert.deepEqual(turn1Fork.tools, turn1Main.tools)
+    assert.deepEqual(turn1Fork.messages.slice(0, turn1Main.messages.length), turn1Main.messages)
     assert.equal(
       env.slice.getState().sessions.find((s) => s.id === sessionId)?.title,
       'Quick Intro'
@@ -85,8 +98,8 @@ describe('conversations store: cache-riding turn-end auto-title hook (SPEC invar
       .sessions.find((s) => s.id === sessionId)?.updatedAt
     await flushAsync()
 
-    const turn2Main = env.requests[before + 1]
-    const turn2Fork = env.requests[before + 2]
+    const turn2Main = env.requests[before + 2]
+    const turn2Fork = env.requests[before + 3]
     assert.ok(turn2Main && turn2Fork)
     assert.ok(isAutoTitleRequest(turn2Fork))
 
@@ -105,16 +118,24 @@ describe('conversations store: cache-riding turn-end auto-title hook (SPEC invar
 
   it('keeps the current title when the model answers KEEP', async () => {
     env.slice.commands.newChat()
+    let forkNumber = 0
     env.respondWith((req): ApiReply => {
       if (isAutoTitleRequest(req)) {
-        return { text: 'KEEP' }
+        forkNumber += 1
+        return { text: forkNumber === 1 ? 'Stable Topic' : 'KEEP' }
       }
-      return { text: 'ok', title: 'Stable Topic' }
+      return { text: 'ok' }
     })
 
     await say(env, null, 'Start stable topic')
+    await flushAsync()
     const sessionId = env.slice.getState().activeId
     assert.ok(sessionId)
+    assert.equal(
+      env.slice.getState().sessions.find((s) => s.id === sessionId)?.title,
+      'Stable Topic'
+    )
+
     await say(env, sessionId, 'Tiny formatting tweak')
     await flushAsync()
 
@@ -132,17 +153,19 @@ describe('conversations store: cache-riding turn-end auto-title hook (SPEC invar
         forkCount += 1
         return { text: `Auto Title ${forkCount}` }
       }
-      return { text: 'answer', title: 'Initial Title' }
+      return { text: 'answer' }
     })
 
     await say(env, null, 'Turn 1')
+    await flushAsync()
     const sessionId = env.slice.getState().activeId
     assert.ok(sessionId)
+    assert.equal(forkCount, 1)
 
     env.slice.commands.renameSession(sessionId, 'My Custom Name')
     await say(env, sessionId, 'Turn 2')
     await flushAsync()
-    assert.equal(forkCount, 0)
+    assert.equal(forkCount, 1, 'locked session does not fork for auto-title')
     assert.equal(
       env.slice.getState().sessions.find((s) => s.id === sessionId)?.title,
       'My Custom Name'
@@ -151,24 +174,29 @@ describe('conversations store: cache-riding turn-end auto-title hook (SPEC invar
     env.slice.commands.renameSession(sessionId, '')
     await say(env, sessionId, 'Turn 3')
     await flushAsync()
-    assert.equal(forkCount, 1)
+    assert.equal(forkCount, 2)
     assert.equal(
       env.slice.getState().sessions.find((s) => s.id === sessionId)?.title,
-      'Auto Title 1'
+      'Auto Title 2'
     )
   })
 
   it('ignores tool_use emitted during the rename fork without executing any tool', async () => {
     env.slice.commands.newChat()
     const runsBefore = env.runs.length
+    let forkNumber = 0
     env.respondWith((req): ApiReply => {
       if (isAutoTitleRequest(req)) {
-        return { calls: [{ name: 'run_code', input: { code: '1+1' } }] }
+        forkNumber += 1
+        return forkNumber === 1
+          ? { text: 'Safe Title' }
+          : { calls: [{ name: 'run_code', input: { code: '1+1' } }] }
       }
-      return { text: 'done', title: 'Safe Title' }
+      return { text: 'done' }
     })
 
     await say(env, null, 'Turn 1')
+    await flushAsync()
     const sessionId = env.slice.getState().activeId
     assert.ok(sessionId)
     await say(env, sessionId, 'Turn 2')
@@ -188,6 +216,9 @@ describe('conversations store: cache-riding turn-end auto-title hook (SPEC invar
       if (isAutoTitleRequest(req)) {
         forkCalls += 1
         if (forkCalls === 1) {
+          return { text: 'Turn 1 Title' }
+        }
+        if (forkCalls === 2) {
           forkSignal = signal
           return new Promise<ApiReply>((resolve) => {
             releaseFork = resolve
@@ -195,16 +226,17 @@ describe('conversations store: cache-riding turn-end auto-title hook (SPEC invar
         }
         return { text: 'Fresh Turn 3 Title' }
       }
-      return { text: 'ok', title: 'Turn 1 Title' }
+      return { text: 'ok' }
     })
 
     await say(env, null, 'Turn 1')
+    await flushAsync()
     const sessionId = env.slice.getState().activeId
     assert.ok(sessionId)
 
     await say(env, sessionId, 'Turn 2')
     await flushAsync()
-    assert.equal(forkCalls, 1)
+    assert.equal(forkCalls, 2)
     assert.equal(forkSignal?.aborted, false)
 
     await say(env, sessionId, 'Turn 3')

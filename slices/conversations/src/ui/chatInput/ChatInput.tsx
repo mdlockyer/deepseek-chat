@@ -94,7 +94,7 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
     if (files.length === 0 || useChatStore.getState().importingHistory || !ensureApiKey()) {
       return
     }
-    const error = drafts.addDraftFiles(sessionId, files, deps.getApiKey() ?? '')
+    const error = drafts.addDraftFiles(sessionId, files)
     if (error) {
       showNotice(error)
     }
@@ -102,10 +102,10 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
   const retryFile = useCallback(
     (id: string) => {
       if (!useChatStore.getState().importingHistory && ensureApiKey()) {
-        drafts.retryDraftAttachment(sessionId, id, deps.getApiKey() ?? '')
+        drafts.retryDraftAttachment(sessionId, id)
       }
     },
-    [deps, drafts, ensureApiKey, sessionId, useChatStore]
+    [drafts, ensureApiKey, sessionId, useChatStore]
   )
   const removeFile = useCallback(
     (id: string) => {

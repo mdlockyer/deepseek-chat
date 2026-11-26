@@ -10,7 +10,6 @@ import {
   IconCloseOutline16,
   IconCodeOutline14,
   IconPhotoOutline14,
-  IconSearchOutline16,
   IconThinkOutline16,
   IconButton,
   Tab,
@@ -186,99 +185,6 @@ const ReasoningSection = ({
               cacheKey={`${messageId}-think`}
               disableLink={false}
             />
-          ) : null}
-        </div>
-      ) : null}
-    </div>
-  )
-}
-
-const ServerSearchRow = ({
-  queries,
-  pages,
-  precedingNote,
-  cacheKey,
-  openLink,
-}: {
-  queries: readonly string[]
-  pages: readonly { readonly url: string; readonly title: string }[]
-  precedingNote?: string
-  cacheKey: string
-  openLink: (event: MouseEvent, url: string) => void
-}) => {
-  const t = activityInspectorMessages.useTranslate()
-  const [open, setOpen] = useState(false)
-  const count = queries.length + pages.length
-  const hasDetails = count > 0 || Boolean(precedingNote)
-
-  const rowContent = (
-    <>
-      <span className={styles.rowIcon} aria-hidden="true">
-        <IconSearchOutline16 />
-      </span>
-      <span className={styles.rowLabel}>{t('serverSearchTitle')}</span>
-      <span className={styles.rowTrailing}>
-        {count > 0 ? <span className={styles.rowMeta}>{count}</span> : null}
-        {hasDetails ? (
-          <span className={styles.rowChevron} aria-hidden="true">
-            {open ? <IconChevronDownOutline14 /> : <IconChevronRightOutline14 />}
-          </span>
-        ) : null}
-      </span>
-    </>
-  )
-
-  return (
-    <div className={styles.stepBlock}>
-      {hasDetails ? (
-        <button
-          type="button"
-          className={styles.rowButton}
-          aria-expanded={open}
-          {...hoverGlideItem()}
-          onClick={() => setOpen((v) => !v)}
-        >
-          {rowContent}
-        </button>
-      ) : (
-        <div className={styles.rowStatic}>{rowContent}</div>
-      )}
-      {open && hasDetails ? (
-        <div className={styles.stepDetail}>
-          {precedingNote ? (
-            <div className={clsx(styles.precedingNote, 'ds-activity-note')}>
-              <Markdown
-                content={precedingNote}
-                loading={false}
-                cacheKey={`${cacheKey}-note`}
-                disableLink={false}
-              />
-            </div>
-          ) : null}
-          {queries.length > 0 ? (
-            <div className={styles.queryList}>
-              {queries.map((q) => (
-                <div key={q} className={styles.queryChip}>
-                  “{q}”
-                </div>
-              ))}
-            </div>
-          ) : null}
-          {pages.length > 0 ? (
-            <div className={styles.serverPageList}>
-              {pages.map((page) => (
-                <a
-                  key={page.url}
-                  className={styles.serverPageLink}
-                  href={page.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  onClick={(event) => openLink(event, page.url)}
-                >
-                  <span className={styles.serverPageText}>{page.title || page.url}</span>
-                </a>
-              ))}
-            </div>
           ) : null}
         </div>
       ) : null}
@@ -807,18 +713,6 @@ export const createActivityPanel = (state: ActivityPanelState, deps: ActivityIns
             ) : null}
 
             {timeline.phases.map((phase, index) => {
-              if (phase.type === 'server_search') {
-                return (
-                  <ServerSearchRow
-                    key={phase.key}
-                    queries={phase.queries}
-                    pages={phase.pages}
-                    precedingNote={phase.precedingNote}
-                    cacheKey={`${turn.messageId}-${phase.key}`}
-                    openLink={openLink}
-                  />
-                )
-              }
               const capState = phase.capabilityId
                 ? turn.capabilityState?.[phase.capabilityId]
                 : undefined

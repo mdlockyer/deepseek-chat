@@ -34,9 +34,11 @@ Pure codec exports: `BackupError`, `ArchiveError`, `readArchive`, `readEntry`, `
    before calling `sessions.replaceHistory`, so an invalid file never aborts active replies.
 3. **Round-trip fidelity.** Exporting and re-importing restores every chat's title, message tree,
    visible branch, and image attachments (with byte-sniffed MIME types).
-4. **Open tool serialization.** Client `tool_use` / `tool_result` blocks delegate to
+4. **Open tool serialization & legacy import.** Client `tool_use` / `tool_result` blocks delegate to
    `serializeToolBlock` (from `ToolRegistry`); unrecognized tools gracefully serialize as fenced
-   Markdown without requiring knowledge of sibling slices.
+   Markdown without requiring knowledge of sibling slices. Imported `TOOL_SEARCH` and `TOOL_OPEN`
+   archive fragments reconstruct as client `web_search` / `web_scrape` tool blocks with `sources`
+   intact, while legacy DeepSeek-only `TOOL_FIND` and `READ_LINK` fragments are ignored gracefully.
 5. **Multi-instance isolation.** Zero module-level queues or stores; two instances operate
    independently.
 

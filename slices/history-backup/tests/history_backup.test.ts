@@ -219,4 +219,93 @@ describe('slice-history-backup: round-trip export, import, clear, and custom ser
       }
     }, ArchiveError)
   })
+
+  it('imports TOOL_SEARCH and TOOL_OPEN as client web-research blocks with sources and ignores legacy READ_LINK and TOOL_FIND', () => {
+    const local = toLocalSession(
+      readSessionFile({
+        id: 'legacy-search-session',
+        title: 'Research Archive',
+        pinned: false,
+        current_message_id: 2,
+        inserted_at: '2026-04-01T00:00:00.000Z',
+        updated_at: '2026-04-01T00:01:00.000Z',
+        messages: [
+          {
+            id: 1,
+            parent_id: null,
+            role: 'USER',
+            status: 'FINISHED',
+            thinking_enabled: false,
+            search_enabled: true,
+            accumulated_token_usage: 0,
+            inserted_at: '2026-04-01T00:00:00.000Z',
+            fragments: [{ type: 'REQUEST', content: 'Find specs' }],
+          },
+          {
+            id: 2,
+            parent_id: 1,
+            role: 'ASSISTANT',
+            status: 'FINISHED',
+            thinking_enabled: false,
+            search_enabled: true,
+            accumulated_token_usage: 120,
+            inserted_at: '2026-04-01T00:00:10.000Z',
+            fragments: [
+              {
+                type: 'TOOL_SEARCH',
+                status: 'FINISHED',
+                queries: ['standard messages api'],
+                results: [
+                  {
+                    url: 'https://docs.example/api',
+                    title: 'Messages API',
+                    snippet: 'Standard schema',
+                    published_at: null,
+                    site_name: 'docs.example',
+                    site_icon: null,
+                  },
+                ],
+              },
+              {
+                type: 'TOOL_OPEN',
+                status: 'FINISHED',
+                url: 'https://docs.example/guide',
+                title: 'Guide',
+                snippet: '',
+                site_name: 'docs.example',
+                published_at: null,
+              },
+              { type: 'TOOL_FIND', status: 'FINISHED', pattern: 'ignored' },
+              {
+                type: 'READ_LINK',
+                results: [{ url: 'https://legacy.example', title: 'Legacy', signature: 'sig' }],
+              },
+              { type: 'RESPONSE', content: 'Done.' },
+            ],
+          },
+        ],
+      })
+    )
+
+    const assistantMsg = local.session.messages[1]
+    assert.equal(assistantMsg?.role, 'assistant')
+    if (assistantMsg?.role === 'assistant') {
+      assert.deepEqual(
+        assistantMsg.blocks.map((b) => (b.type === 'tool_use' ? `${b.type}:${b.name}` : b.type)),
+        ['tool_use:web_search', 'tool_result', 'tool_use:web_scrape', 'tool_result', 'text']
+      )
+      const searchResult = assistantMsg.blocks[1]
+      assert.equal(searchResult?.type, 'tool_result')
+      if (searchResult?.type === 'tool_result') {
+        assert.equal(searchResult.capability, 'web-research')
+        assert.equal(searchResult.sources?.[0]?.url, 'https://docs.example/api')
+      }
+      const openResult = assistantMsg.blocks[3]
+      assert.equal(openResult?.type, 'tool_result')
+      if (openResult?.type === 'tool_result') {
+        assert.equal(openResult.capability, 'web-research')
+        assert.equal(openResult.sources?.[0]?.url, 'https://docs.example/guide')
+      }
+    }
+  })
 })

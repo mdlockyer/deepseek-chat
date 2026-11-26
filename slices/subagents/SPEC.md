@@ -29,9 +29,12 @@ Pure exports: `POST_TOOL_NAME`, `WAIT_TOOL_NAME`, `AUTO_WAIT_ID_PREFIX`, `DEFAUL
 3. **Shared board & `wait`.** Children post `finding` or `question` up to `maxPostsPerChild` and
    `maxPostChars`; the lead posts `direction` to `'all'` or one running `runId`. `wait` wakes on a
    finished child, a child `question`, or timeout (`until: 'all'` waits until none remain).
-4. **Forced finish & resilience.** Hitting round/tool-call limits or ending without calling `finish`
-   runs one forced-finish nudge (named `tool_choice` only when thinking is off). Network errors
-   before content retry with exponential backoff.
+4. **Provider-neutral transport, forced finish, & resilience.** Child loops run through the injected
+   `ModelProvider` (defaulting to `profile.model ?? provider.defaultModel`), prepend
+   `ctx.environmentContext` to the first standard `user` message (zero proprietary roles), and run
+   one forced-finish nudge on round/tool-call limits or ending without calling `finish` (named
+   `tool_choice` only when thinking is off). Network errors before content retry with exponential
+   backoff.
 5. **No orphans.** `turnHooks.onTurnEndWithoutToolCalls` injects an automatic `wait` (`until: 'all'`)
    whenever children remain running; `onTurnSettled` aborts children cleanly; `onReplyHydrated`
    settles any persisted `'running'` child to `'stopped' ('interrupted')`.

@@ -46,15 +46,7 @@ export type ActivityLanePhase = {
   readonly items: ActivityStepRecord[]
 }
 
-export type ActivityServerSearchPhase = {
-  readonly type: 'server_search'
-  readonly key: string
-  readonly queries: string[]
-  readonly pages: { readonly url: string; readonly title: string }[]
-  readonly precedingNote?: string
-}
-
-export type ActivityTimelinePhase = ActivityLanePhase | ActivityServerSearchPhase
+export type ActivityTimelinePhase = ActivityLanePhase
 
 export type ActivityVisualItem = {
   readonly key: string
@@ -299,63 +291,6 @@ export const buildActivityTimeline = (
         }
         thinkingRounds.push(round)
         pendingThinkingRounds.push(round)
-      }
-      return
-    }
-    if (block.type === 'server_tool_use') {
-      const note = consumePendingNote()
-      linkPendingThinking(null, activityInspectorMessages.translate('serverSearchTitle'))
-      const prev = phases.at(-1)
-      let phase: ActivityServerSearchPhase
-      if (prev?.type === 'server_search') {
-        phase = note
-          ? {
-              ...prev,
-              precedingNote: prev.precedingNote ? `${prev.precedingNote}\n\n${note}` : note,
-            }
-          : prev
-        if (phase !== prev) {
-          phases[phases.length - 1] = phase
-        }
-      } else {
-        phase = {
-          type: 'server_search',
-          key: block.id,
-          queries: [],
-          pages: [],
-          ...(note ? { precedingNote: note } : {}),
-        }
-        phases.push(phase)
-        stepCount += 1
-      }
-      if (block.input.action === 'search') {
-        let added = 0
-        for (const q of block.input.queries) {
-          const trimmed = q.trim()
-          if (trimmed && !phase.queries.includes(trimmed)) {
-            phase.queries.push(trimmed)
-            added += 1
-          }
-        }
-        if (added > 0) {
-          addTally('server-search', added, (count) =>
-            activityInspectorMessages.translate(
-              count === 1 ? 'serverSearchCountOne' : 'serverSearchCountMany',
-              { count }
-            )
-          )
-        }
-      } else if (block.input.action === 'open_page' || block.input.action === 'read_link') {
-        const url = block.input.url
-        if (url && !phase.pages.some((p) => p.url === url)) {
-          phase.pages.push({ url, title: url })
-          addTally('server-page', 1, (count) =>
-            activityInspectorMessages.translate(
-              count === 1 ? 'serverPageCountOne' : 'serverPageCountMany',
-              { count }
-            )
-          )
-        }
       }
       return
     }

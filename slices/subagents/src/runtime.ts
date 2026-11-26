@@ -1,4 +1,4 @@
-import type { AgentIO, ClientTool, MessageParam } from '@deepseek-chat/lib-agent'
+import type { ClientTool, MessageParam, ModelProvider } from '@deepseek-chat/lib-agent'
 import {
   withSummaryParam,
   type CitedSourceMeta,
@@ -114,7 +114,7 @@ export const settleHydratedSubagentsState = (state: SubagentsReplyState): Subage
 export const createReplySubagentRuntime = (options: {
   readonly initialState: SubagentsReplyState
   readonly deliveredRunIds?: ReadonlySet<string>
-  readonly io: AgentIO
+  readonly provider: ModelProvider
   readonly tools: SubagentsToolHost
   readonly params: SubagentsParams
   readonly onSync: (state: SubagentsReplyState, persist: boolean) => void
@@ -225,15 +225,13 @@ export const createReplySubagentRuntime = (options: {
       .join('\n\n')
 
     const forkPrefix = (ctx.forkMessages?.() ?? []) as readonly MessageParam[]
+    const cleanUserContent = ctx.environmentContext
+      ? `${ctx.environmentContext}\n\n${builtTask.message}`
+      : builtTask.message
     const initialMessages: MessageParam[] =
       profile.context === 'fork'
         ? appendTaskToFork(forkPrefix, builtTask.message)
-        : [
-            ...(ctx.latestReminder
-              ? [{ role: 'latest_reminder' as const, content: ctx.latestReminder }]
-              : []),
-            { role: 'user' as const, content: builtTask.message },
-          ]
+        : [{ role: 'user' as const, content: cleanUserContent }]
 
     const runId = `agent-${runs.size + 1}-${newId().slice(0, 6)}`
     const childController = new AbortController()
@@ -417,10 +415,10 @@ export const createReplySubagentRuntime = (options: {
 
     const promise = (async () => {
       const outcome = await runAgent({
-        io: options.io,
+        provider: options.provider,
         signal: childController.signal,
         request: {
-          model: profile.model,
+          model: profile.model ?? options.provider.defaultModel,
           system,
           thinking: profile.thinking,
           tools: childTools,

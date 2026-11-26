@@ -11,7 +11,6 @@ import type { TranslationMessage } from './messages.js'
 import type { FileAttachment } from './types.js'
 
 export type DraftAttachment = {
-  /** 本地标识，也是 BlobStore 原件与上传任务的 key */
   id: string
   file: File
   isImage: boolean
@@ -22,21 +21,22 @@ export type Draft = { text: string; attachments: DraftAttachment[] }
 
 export const EMPTY_DRAFT: Draft = { text: '', attachments: [] }
 
-/** 发送按钮和实际提交共用规则：有内容，且全部附件已上传成功。 */
+/** Ready to send when there is text or attachments and every attachment upload/prep has finished. */
 export const prepareDraftMessage = (draft: Draft, tasks: Record<string, UploadTask>) => {
   const text = draft.text.trim()
   if (!text && draft.attachments.length === 0) {
     return null
   }
-  const files: (FileAttachment & { serverId: string; blob: Blob })[] = []
+  const files: (FileAttachment & { blob: Blob })[] = []
   for (const attachment of draft.attachments) {
     const task = tasks[attachment.id]
-    if (task?.status !== 'done' || !task.serverId) {
+    if (task?.status !== 'done') {
       return null
     }
     files.push({
       id: attachment.id,
       serverId: task.serverId,
+      serverProvider: task.providerId,
       name: attachment.file.name,
       size: attachment.file.size,
       isImage: attachment.isImage,
@@ -48,7 +48,7 @@ export const prepareDraftMessage = (draft: Draft, tasks: Record<string, UploadTa
 }
 
 export const createDraftsController = (
-  uploads: Pick<UploadsController, 'uploadAttachment' | 'cancelUpload'>,
+  uploads: Pick<UploadsController, 'uploadAttachment' | 'cancelUpload' | 'validate'>,
   newId: () => string = createId
 ) => {
   const useDrafts = create<{ drafts: Map<string | null, Draft> }>(() => ({
@@ -73,27 +73,24 @@ export const createDraftsController = (
   const setDraftText = (sessionId: string | null, text: string) =>
     updateDraft(sessionId, (draft) => ({ ...draft, text }))
 
-  const upload = (attachment: DraftAttachment, apiKey: string) => {
+  const upload = (attachment: DraftAttachment) => {
     void uploads
       .uploadAttachment(
-        apiKey,
         attachment.id,
         attachment.file,
         attachment.file.name,
+        resolveMimeType(attachment.file),
         attachment.isImage
       )
       .catch(() => {})
   }
 
-  const addDraftFiles = (
-    sessionId: string | null,
-    files: File[],
-    apiKey: string
-  ): TranslationMessage | null => {
+  const addDraftFiles = (sessionId: string | null, files: File[]): TranslationMessage | null => {
     if (files.length === 0) {
       return null
     }
-    const error = validateFiles(files, getDraft(sessionId).attachments.length)
+    const validate = uploads.validate ?? validateFiles
+    const error = validate(files, getDraft(sessionId).attachments.length)
     if (error) {
       return error
     }
@@ -107,14 +104,14 @@ export const createDraftsController = (
       }
     })
     updateDraft(sessionId, (draft) => ({ ...draft, attachments: [...draft.attachments, ...added] }))
-    added.forEach((attachment) => upload(attachment, apiKey))
+    added.forEach(upload)
     return null
   }
 
-  const retryDraftAttachment = (sessionId: string | null, attachmentId: string, apiKey: string) => {
+  const retryDraftAttachment = (sessionId: string | null, attachmentId: string) => {
     const attachment = getDraft(sessionId).attachments.find((item) => item.id === attachmentId)
     if (attachment) {
-      upload(attachment, apiKey)
+      upload(attachment)
     }
   }
 

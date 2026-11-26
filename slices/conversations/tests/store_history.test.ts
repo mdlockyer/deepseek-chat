@@ -7,7 +7,7 @@ import { createStoreEnv, say, seeded } from './store_harness.js'
 const env = createStoreEnv()
 const { commands } = env.slice
 let replyCounter = 0
-env.respondWith(() => ({ text: `r${++replyCounter}`, title: `title ${replyCounter}` }))
+env.respondWith(() => ({ text: `r${++replyCounter}` }))
 
 const deleted = env.facts<SessionDeleted>('SessionDeleted')
 const replaced = env.facts<SessionHistoryReplaced>('SessionHistoryReplaced')

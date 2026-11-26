@@ -1,23 +1,18 @@
 import type {
   ContentBlockDelta,
   MessageStreamEvent,
+  MessageUsage,
+  MessageUsageDelta,
   OutputBlockStart,
-  TextCitation,
 } from './types.js'
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value)
 
 const isString = (value: unknown): value is string => typeof value === 'string'
-const isOptionalString = (value: unknown) => value === undefined || isString(value)
-const isNullableString = (value: unknown) => value == null || isString(value)
+const isFiniteNumber = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isFinite(value)
 const isIndex = (value: unknown) => Number.isSafeInteger(value) && (value as number) >= 0
-
-const isCitation = (value: unknown): value is TextCitation =>
-  isRecord(value) &&
-  value.type === 'web_search_result_location' &&
-  isString(value.url) &&
-  isNullableString(value.title)
 
 const readBlock = (value: unknown): OutputBlockStart | null => {
   if (!isRecord(value)) {
@@ -28,124 +23,29 @@ const readBlock = (value: unknown): OutputBlockStart | null => {
       if (!isString(value.text)) {
         return null
       }
-      return {
-        ...value,
-        type: 'text',
-        text: value.text,
-        ...(value.citations === undefined
-          ? {}
-          : {
-              citations: Array.isArray(value.citations) ? value.citations.filter(isCitation) : [],
-            }),
-      }
+      return { type: 'text', text: value.text }
     case 'thinking':
       if (!isString(value.thinking)) {
         return null
       }
       return {
-        ...value,
-        signature: isOptionalString(value.signature) ? value.signature : undefined,
-      } as OutputBlockStart
-    case 'server_tool_use': {
-      const input = value.input
-      if (
-        !isString(value.id) ||
-        !['search', 'deep_search', 'read_link', 'image_search', 'deep_image_search'].includes(
-          value.kind as string
-        ) ||
-        !['deepseek_web_search', 'deepseek_read_url'].includes(value.name as string) ||
-        !isRecord(input)
-      ) {
-        return null
+        type: 'thinking',
+        thinking: value.thinking,
+        ...(isString(value.signature) ? { signature: value.signature } : {}),
       }
-      switch (input.action) {
-        case 'search':
-          if (!Array.isArray(input.queries) || !input.queries.every(isString)) {
-            return null
-          }
-          break
-        case 'open_page':
-        case 'read_link':
-          if (!isString(input.url)) {
-            return null
-          }
-          break
-        case 'find_in_page':
-          if (!isString(input.url) || !isString(input.pattern)) {
-            return null
-          }
-          break
-        default:
-          return null
-      }
-      break
-    }
-    case 'web_search_tool_result':
-      if (
-        !isString(value.tool_use_id) ||
-        !['search', 'deep_search', 'image_search', 'deep_image_search'].includes(
-          value.kind as string
-        ) ||
-        !Array.isArray(value.content)
-      ) {
-        return null
-      }
-      return {
-        ...value,
-        content: value.content.filter((item) => {
-          if (!isRecord(item)) {
-            return false
-          }
-          if (item.type === 'web_search_tool_result_error') {
-            return isString(item.error_code)
-          }
-          return (
-            item.type === 'web_search_result' &&
-            isString(item.url) &&
-            isString(item.title) &&
-            isNullableString(item.snippet) &&
-            isNullableString(item.site_name) &&
-            isNullableString(item.site_icon) &&
-            isNullableString(item.page_age)
-          )
-        }),
-      } as OutputBlockStart
-    case 'web_fetch_tool_result': {
-      const content = value.content
-      if (
-        !isString(value.tool_use_id) ||
-        !['read_link', 'deep_search'].includes(value.kind as string) ||
-        !isRecord(content)
-      ) {
-        return null
-      }
-      if (content.type === 'web_fetch_tool_result_error') {
-        if (!isString(content.error_code)) {
-          return null
-        }
-      } else if (
-        content.type !== 'web_fetch_result' ||
-        !isString(content.url) ||
-        !isRecord(content.content) ||
-        !isNullableString(content.content.title) ||
-        !isNullableString(content.published_at)
-      ) {
-        return null
-      }
-      return {
-        ...value,
-        signature: isOptionalString(value.signature) ? value.signature : undefined,
-      } as OutputBlockStart
-    }
     case 'tool_use':
       if (!isString(value.id) || !isString(value.name)) {
         return null
       }
-      break
+      return {
+        type: 'tool_use',
+        id: value.id,
+        name: value.name,
+        input: value.input ?? {},
+      }
     default:
       return null
   }
-  return value as OutputBlockStart
 }
 
 const readDelta = (value: unknown): ContentBlockDelta | null => {
@@ -154,25 +54,66 @@ const readDelta = (value: unknown): ContentBlockDelta | null => {
   }
   switch (value.type) {
     case 'text_delta':
-      return isString(value.text) ? (value as ContentBlockDelta) : null
+      return isString(value.text) ? { type: 'text_delta', text: value.text } : null
     case 'thinking_delta':
-      return isString(value.thinking) ? (value as ContentBlockDelta) : null
+      return isString(value.thinking) ? { type: 'thinking_delta', thinking: value.thinking } : null
     case 'signature_delta':
-      return isString(value.signature) ? (value as ContentBlockDelta) : null
-    case 'citations_delta':
-      return isCitation(value.citation) ? (value as ContentBlockDelta) : null
+      return isString(value.signature)
+        ? { type: 'signature_delta', signature: value.signature }
+        : null
     case 'input_json_delta':
-      return isString(value.partial_json) ? (value as ContentBlockDelta) : null
+      return isString(value.partial_json)
+        ? { type: 'input_json_delta', partial_json: value.partial_json }
+        : null
     default:
       return null
   }
 }
 
-const isUsage = (value: unknown) =>
-  isRecord(value) &&
-  ['input_tokens', 'cache_creation_input_tokens', 'cache_read_input_tokens', 'output_tokens'].every(
-    (key) => typeof value[key] === 'number' && Number.isFinite(value[key])
-  )
+/**
+ * Parses `message_start.message.usage`. Requires at least a finite `input_tokens`; optional cache
+ * counters and `output_tokens` default to 0 so standard Anthropic and OpenAI-bridged streams work
+ * alongside DeepSeek.
+ */
+const readStartUsage = (value: unknown): MessageUsage | undefined => {
+  if (!isRecord(value) || !isFiniteNumber(value.input_tokens)) {
+    return undefined
+  }
+  return {
+    input_tokens: value.input_tokens,
+    cache_creation_input_tokens: isFiniteNumber(value.cache_creation_input_tokens)
+      ? value.cache_creation_input_tokens
+      : 0,
+    cache_read_input_tokens: isFiniteNumber(value.cache_read_input_tokens)
+      ? value.cache_read_input_tokens
+      : 0,
+    output_tokens: isFiniteNumber(value.output_tokens) ? value.output_tokens : 0,
+  }
+}
+
+/**
+ * Parses `message_delta.usage`, allowing partial updates (e.g. Anthropic emits only `output_tokens`
+ * on `message_delta` while DeepSeek sends all four counters).
+ */
+const readDeltaUsage = (value: unknown): MessageUsageDelta | undefined => {
+  if (!isRecord(value)) {
+    return undefined
+  }
+  const out: { -readonly [K in keyof MessageUsage]?: number } = {}
+  if (isFiniteNumber(value.input_tokens)) {
+    out.input_tokens = value.input_tokens
+  }
+  if (isFiniteNumber(value.cache_creation_input_tokens)) {
+    out.cache_creation_input_tokens = value.cache_creation_input_tokens
+  }
+  if (isFiniteNumber(value.cache_read_input_tokens)) {
+    out.cache_read_input_tokens = value.cache_read_input_tokens
+  }
+  if (isFiniteNumber(value.output_tokens)) {
+    out.output_tokens = value.output_tokens
+  }
+  return Object.keys(out).length > 0 ? out : undefined
+}
 
 /** Drops unrecognised or malformed events cleanly without interrupting the stream. */
 export const readMessageEvent = (value: unknown): MessageStreamEvent | null => {
@@ -185,12 +126,13 @@ export const readMessageEvent = (value: unknown): MessageStreamEvent | null => {
         return null
       }
       return {
-        ...value,
+        type: 'message_start',
         message: {
-          ...value.message,
-          usage: isUsage(value.message.usage) ? value.message.usage : undefined,
+          id: isString(value.message.id) ? value.message.id : '',
+          model: isString(value.message.model) ? value.message.model : '',
+          usage: readStartUsage(value.message.usage),
         },
-      } as MessageStreamEvent
+      }
     case 'content_block_start': {
       const block = readBlock(value.content_block)
       return isIndex(value.index) && block
@@ -207,7 +149,7 @@ export const readMessageEvent = (value: unknown): MessageStreamEvent | null => {
       if (!isIndex(value.index)) {
         return null
       }
-      break
+      return { type: 'content_block_stop', index: value.index as number }
     case 'message_delta':
       if (
         !isRecord(value.delta) ||
@@ -218,17 +160,25 @@ export const readMessageEvent = (value: unknown): MessageStreamEvent | null => {
         return null
       }
       return {
-        ...value,
+        type: 'message_delta',
         delta: {
-          ...value.delta,
-          title: isOptionalString(value.delta.title) ? value.delta.title : undefined,
+          stop_reason: value.delta.stop_reason as
+            | 'end_turn'
+            | 'max_tokens'
+            | 'tool_use'
+            | 'refusal',
+          stop_sequence: null,
+          ...(isRecord(value.delta.stop_details) && value.delta.stop_details.type === 'refusal'
+            ? { stop_details: { type: 'refusal' as const, category: null, explanation: null } }
+            : {}),
         },
-        usage: isUsage(value.usage) ? value.usage : undefined,
-      } as MessageStreamEvent
+        usage: readDeltaUsage(value.usage),
+      }
     case 'message_stop':
-      break
+      return { type: 'message_stop' }
+    case 'ping':
+      return { type: 'ping' }
     default:
       return null
   }
-  return value as MessageStreamEvent
 }

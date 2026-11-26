@@ -1,27 +1,20 @@
-import type {
-  ServerToolKind,
-  TextCitation,
-  WebFetchToolResultBlock,
-  WebSearchResult,
-  WebSearchToolResultBlock,
-} from '@deepseek-chat/lib-agent'
 import type { DeliveredFileRef, ToolRegistry, ToolStepSummary } from '@deepseek-chat/lib-tools'
 import { translate } from './messages.js'
 import type { AssistantMessage, ThinkingPart, ToolCallPart, ToolResultPart } from './types.js'
 
 /**
  * Pure projection of an `AssistantMessage` into Front Stage view data:
- * generic tool/server/thinking steps, answer markdown with `[citation:N]`, deduplicated numbered
- * sources, promoted delivered files, and promoted visual outputs.
+ * generic client-tool and thinking steps, answer markdown with `[citation:N]`, deduplicated
+ * numbered sources, promoted delivered files, and promoted visual outputs.
  * Zero knowledge of any sibling capability slice's internal tool types.
  */
 
 export type Source = {
   url: string
   title: string
-  /** 优先使用服务端站点名，没有时使用域名（去掉 www.） */
+  /** 优先使用站点名，没有时使用域名（去掉 www.） */
   siteName: string
-  /** 搜索结果为 RFC 3339，阅读链接为爬虫提取的原始日期 */
+  /** 发布时间（RFC 3339 或页面提取日期） */
   publishedAt: string | null
   /** 明文摘要与站点图标；缺少元数据时为 null */
   snippet: string | null
@@ -29,39 +22,6 @@ export type Source = {
   /** 引用角标与搜索结果列表上的编号，从 1 开始 */
   index: number
 }
-
-export type ToolStatus = 'wip' | 'done' | 'failed'
-
-export const isDeepSearchKind = (kind: ServerToolKind) =>
-  kind === 'deep_search' || kind === 'deep_image_search'
-
-export const isImageSearchKind = (kind: ServerToolKind) =>
-  kind === 'image_search' || kind === 'deep_image_search'
-
-export type ServerSearchStep = {
-  type: 'search'
-  key: string
-  kind: ServerToolKind
-  queries: string[]
-  results: Source[]
-  status: ToolStatus
-}
-
-export type PageItem = {
-  id: string
-  url: string
-  title: string
-  status: ToolStatus
-}
-
-export type ServerOpenStep = { type: 'open'; pages: PageItem[] }
-
-export type ServerFindStep = {
-  type: 'find'
-  patterns: { id: string; pattern: string; status: ToolStatus }[]
-}
-
-export type ServerReadLinkStep = { type: 'read_link'; links: PageItem[] }
 
 export type ThinkingStep = { type: 'thinking'; key: string; blocks: ThinkingPart[] }
 
@@ -78,18 +38,11 @@ export type ToolStep = {
   summary: ToolStepSummary | null
 }
 
-export type Step =
-  | ServerSearchStep
-  | ServerOpenStep
-  | ServerFindStep
-  | ServerReadLinkStep
-  | ThinkingStep
-  | PreambleStep
-  | ToolStep
+export type Step = ThinkingStep | PreambleStep | ToolStep
 
 export type ReplyView = {
   steps: Step[]
-  /** 最后一个思考或工具块之后的正文；markdown 里在引用处插入了 [citation:N] */
+  /** 最后一个思考或工具块之后的正文 */
   answer: { markdown: string; text: string } | null
   /** 正文引用可指向的全部来源，按编号排列 */
   sources: Source[]
@@ -107,21 +60,6 @@ export const getSiteName = (url: string) => {
   } catch {
     return ''
   }
-}
-
-const getServerStatus = (
-  result: WebSearchToolResultBlock | WebFetchToolResultBlock | undefined,
-  streaming: boolean
-): ToolStatus => {
-  if (!result) {
-    return streaming ? 'wip' : 'failed'
-  }
-  if (result.type === 'web_search_tool_result') {
-    return result.content.some((item) => item.type === 'web_search_tool_result_error')
-      ? 'failed'
-      : 'done'
-  }
-  return result.content.type === 'web_fetch_result' ? 'done' : 'failed'
 }
 
 const getStringField = (input: unknown, key: string): string => {
@@ -169,8 +107,11 @@ export const getToolSummary = (
   return raw || undefined
 }
 
-const mergeStatus = (statuses: ToolStatus[]): ToolStatus =>
-  statuses.includes('wip') ? 'wip' : statuses.every((s) => s === 'failed') ? 'failed' : 'done'
+type SourceMetadata = {
+  readonly snippet?: string | null
+  readonly siteIcon?: string | null
+  readonly siteName?: string | null
+}
 
 /** 来源登记：同一 URL 只编号一次，编号按首次出现的顺序 */
 class SourceRegistry {
@@ -181,12 +122,12 @@ class SourceRegistry {
     url: string,
     title: string | null,
     publishedAt: string | null,
-    metadata?: Pick<WebSearchResult, 'snippet' | 'site_icon' | 'site_name'>
+    metadata?: SourceMetadata
   ): Source {
     const trimmed = url.trim()
-    const siteName = metadata?.site_name?.trim() || getSiteName(trimmed)
+    const siteName = metadata?.siteName?.trim() || getSiteName(trimmed)
     const snippet = metadata?.snippet?.trim() || null
-    const siteIcon = metadata?.site_icon?.trim() || null
+    const siteIcon = metadata?.siteIcon?.trim() || null
     const existing = this.byUrl.get(trimmed)
     if (existing) {
       if (existing.title === trimmed && title) {
@@ -228,24 +169,12 @@ const stripPlainCitations = (value: string) =>
     }
   )
 
-const joinTextBlocks = (
-  blocks: { text: string; citations?: TextCitation[] }[],
-  registry: SourceRegistry
-) => {
+const joinTextBlocks = (blocks: { text: string }[]) => {
   let markdown = ''
   let text = ''
   for (const block of blocks) {
     text += stripPlainCitations(block.text)
-    const indexes = new Set<number>()
-    for (const citation of block.citations ?? []) {
-      indexes.add(registry.add(citation.url, citation.title, null).index)
-    }
-    const body = indexes.size > 0 ? block.text.trimEnd() : block.text
-    markdown += body
-    for (const index of indexes) {
-      markdown += `[citation:${index}]`
-    }
-    markdown += block.text.slice(body.length)
+    markdown += block.text
   }
   return { markdown, text }
 }
@@ -255,53 +184,32 @@ export const buildReplyView = (
   streaming: boolean,
   tools?: ToolRegistry
 ): ReplyView => {
-  const results = new Map<string, WebSearchToolResultBlock | WebFetchToolResultBlock>()
   const toolResults = new Map<string, ToolResultPart>()
   for (const block of reply.blocks) {
-    if (block.type === 'web_search_tool_result' || block.type === 'web_fetch_tool_result') {
-      results.set(block.tool_use_id, block)
-    } else if (block.type === 'tool_result') {
+    if (block.type === 'tool_result') {
       toolResults.set(block.tool_use_id, block)
     }
   }
 
   const registry = new SourceRegistry()
   const steps: Step[] = []
-  const mergedSearch = new Map<ServerToolKind, ServerSearchStep>()
   let mergedThinking: ThinkingStep | null = null
-  let pendingText: { index: number; text: string; citations?: TextCitation[] }[] = []
+  let pendingText: { index: number; text: string }[] = []
 
   // First pass: register all citable sources in call order (matches `collectCitedUrls`).
   for (const block of reply.blocks) {
-    if (block.type === 'tool_use') {
-      const result = toolResults.get(block.id)
-      for (const item of result?.sources ?? []) {
-        if (item.url.trim()) {
-          registry.add(item.url, item.title, item.publishedAt, {
-            snippet: item.snippet,
-            site_name: item.siteName,
-            site_icon: null,
-          })
-        }
-      }
+    if (block.type !== 'tool_use') {
       continue
     }
-    if (block.type !== 'server_tool_use') {
-      continue
-    }
-    const result = results.get(block.id)
-    if (result?.type === 'web_search_tool_result') {
-      for (const item of result.content) {
-        if (item.type === 'web_search_result') {
-          registry.add(item.url, item.title, item.page_age, item)
-        }
+    const result = toolResults.get(block.id)
+    for (const item of result?.sources ?? []) {
+      if (item.url.trim()) {
+        registry.add(item.url, item.title, item.publishedAt, {
+          snippet: item.snippet,
+          siteName: item.siteName,
+          siteIcon: null,
+        })
       }
-    } else if (
-      result?.type === 'web_fetch_tool_result' &&
-      result.content.type === 'web_fetch_result' &&
-      block.kind === 'deep_search'
-    ) {
-      registry.add(result.content.url, result.content.content.title, result.content.published_at)
     }
   }
 
@@ -309,7 +217,7 @@ export const buildReplyView = (
     if (pendingText.length === 0) {
       return
     }
-    const { markdown } = joinTextBlocks(pendingText, registry)
+    const { markdown } = joinTextBlocks(pendingText)
     if (markdown.trim()) {
       steps.push({ type: 'text', key: `text-${pendingText[0].index}`, markdown })
     }
@@ -324,7 +232,7 @@ export const buildReplyView = (
       mergedThinking = null
     }
     if (block.type === 'text') {
-      pendingText.push({ index, text: block.text, citations: block.citations })
+      pendingText.push({ index, text: block.text })
       return
     }
     if (block.type === 'thinking') {
@@ -358,97 +266,10 @@ export const buildReplyView = (
         ...(rawSummary ? { rawSummary } : {}),
         summary,
       })
-      return
-    }
-    if (block.type !== 'server_tool_use') {
-      return
-    }
-    const result = results.get(block.id)
-    if (
-      block.input.action === 'read_link' &&
-      !block.input.url &&
-      !(
-        result?.type === 'web_fetch_tool_result' &&
-        result.content.type === 'web_fetch_result' &&
-        result.content.url
-      )
-    ) {
-      return
-    }
-    flushPreamble()
-    const { kind, input } = block
-    const status = getServerStatus(result, streaming)
-    const last = steps.at(-1)
-
-    if (input.action === 'search') {
-      const { queries } = input
-      const found =
-        result?.type === 'web_search_tool_result'
-          ? result.content.flatMap((item) =>
-              item.type === 'web_search_result'
-                ? [registry.add(item.url, item.title, item.page_age, item)]
-                : []
-            )
-          : []
-      const target = isDeepSearchKind(kind)
-        ? last?.type === 'search' && last.kind === kind
-          ? last
-          : null
-        : mergedSearch.get(kind)
-      if (target) {
-        target.queries.push(...queries)
-        target.results.push(...found.filter((source) => !target.results.includes(source)))
-        target.status = mergeStatus([target.status, status])
-      } else {
-        const step: ServerSearchStep = {
-          type: 'search',
-          key: block.id,
-          kind,
-          queries: [...queries],
-          results: found,
-          status,
-        }
-        steps.push(step)
-        if (!isDeepSearchKind(kind)) {
-          mergedSearch.set(kind, step)
-        }
-      }
-      return
-    }
-
-    const fetched = result?.type === 'web_fetch_tool_result' ? result.content : null
-    const page: PageItem = {
-      id: block.id,
-      url: input.url || (fetched?.type === 'web_fetch_result' ? fetched.url : ''),
-      title: (fetched?.type === 'web_fetch_result' ? fetched.content.title : null) || input.url,
-      status,
-    }
-    if (input.action === 'read_link') {
-      if (status !== 'wip') {
-        return
-      }
-      if (last?.type === 'read_link') {
-        last.links.push(page)
-      } else {
-        steps.push({ type: 'read_link', links: [page] })
-      }
-    } else if (input.action === 'open_page') {
-      if (last?.type === 'open') {
-        last.pages.push(page)
-      } else {
-        steps.push({ type: 'open', pages: [page] })
-      }
-    } else {
-      const item = { id: block.id, pattern: input.pattern, status }
-      if (last?.type === 'find') {
-        last.patterns.push(item)
-      } else {
-        steps.push({ type: 'find', patterns: [item] })
-      }
     }
   })
 
-  const answer = pendingText.length > 0 ? joinTextBlocks(pendingText, registry) : null
+  const answer = pendingText.length > 0 ? joinTextBlocks(pendingText) : null
   const citedSourceIndexes: number[] = []
   if (answer?.markdown) {
     const seenCited = new Set<number>()
@@ -516,14 +337,6 @@ export const getTotalThinkingSeconds = (steps: readonly Step[], now: number) => 
 /** 该步骤自身已显示进行中，无需另行提示仍在处理。 */
 export const showsRunning = (step: Step): boolean => {
   switch (step.type) {
-    case 'search':
-      return step.status === 'wip'
-    case 'open':
-      return step.pages.some((page) => page.status === 'wip')
-    case 'read_link':
-      return step.links.some((link) => link.status === 'wip')
-    case 'find':
-      return step.patterns.some((item) => item.status === 'wip')
     case 'tool':
       return step.summary
         ? Boolean(step.summary.stillRunning)
@@ -534,7 +347,7 @@ export const showsRunning = (step: Step): boolean => {
   }
 }
 
-/** 折叠区标题（纯函数，完全基于通用 `ToolStepSummary` 与服务端步骤） */
+/** 折叠区标题（纯函数，完全基于通用 `ToolStepSummary`） */
 export const getAreaTitle = (
   view: ReplyView,
   streaming: boolean,
@@ -552,18 +365,6 @@ export const getAreaTitle = (
     return translate('messageThinkStopped')
   }
   const last = view.steps.at(-1)
-  if (last?.type === 'search' && last.status === 'wip') {
-    return translate(isImageSearchKind(last.kind) ? 'imageSearching' : 'deepSearchSearching')
-  }
-  if (last?.type === 'open' && last.pages.some((page) => page.status === 'wip')) {
-    return translate('groupTitleToolOpen')
-  }
-  if (last?.type === 'find' && last.patterns.some((item) => item.status === 'wip')) {
-    return translate('groupTitleToolOpen')
-  }
-  if (last?.type === 'read_link' && last.links.some((link) => link.status === 'wip')) {
-    return translate('readingLink')
-  }
   if (last?.type === 'tool' && showsRunning(last)) {
     return last.rawSummary || last.summary?.detail || last.summary?.liveVerb || last.call.name
   }

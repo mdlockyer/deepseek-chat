@@ -1,4 +1,3 @@
-import type { ServerToolUseBlock } from '@deepseek-chat/lib-agent'
 import type { ToolCallRecord, ToolResultRecord } from '@deepseek-chat/lib-tools'
 import { fail } from './errors.js'
 import type {
@@ -12,7 +11,6 @@ import type {
 import type {
   BackupAssistantMessage,
   BackupMessage,
-  BackupReplyBlock,
   BackupSession,
   BackupToolResultPart,
   BackupUserMessage,
@@ -87,80 +85,6 @@ const userFragments = (message: BackupUserMessage, exportImage: ExportImage): Fr
   ]
 }
 
-const serverToolFragment = (
-  tool: ServerToolUseBlock,
-  result: BackupReplyBlock | undefined
-): Fragment[] => {
-  const { input } = tool
-  if (input.action === 'search') {
-    const items = result?.type === 'web_search_tool_result' ? result.content : []
-    return [
-      {
-        type: 'TOOL_SEARCH',
-        queries: input.queries,
-        status:
-          result?.type !== 'web_search_tool_result'
-            ? 'WIP'
-            : items.some((item) => item.type === 'web_search_tool_result_error')
-              ? 'FAILED'
-              : 'FINISHED',
-        results: items.flatMap((item) =>
-          item.type === 'web_search_result'
-            ? [
-                {
-                  url: item.url,
-                  title: item.title,
-                  snippet: item.snippet,
-                  published_at: isoOrNull(item.page_age),
-                  site_name: item.site_name,
-                  site_icon: item.site_icon ?? null,
-                },
-              ]
-            : []
-        ),
-      },
-    ]
-  }
-  if (input.action === 'read_link') {
-    return result?.type === 'web_fetch_tool_result' &&
-      result.kind === 'read_link' &&
-      result.content.type === 'web_fetch_result' &&
-      result.signature?.trim()
-      ? [
-          {
-            type: 'READ_LINK',
-            results: [
-              {
-                ...(result.content.url || input.url
-                  ? { url: result.content.url || input.url }
-                  : {}),
-                title: result.content.content.title,
-                signature: result.signature,
-              },
-            ],
-          },
-        ]
-      : []
-  }
-  const content = result?.type === 'web_fetch_tool_result' ? result.content : undefined
-  const page = content?.type === 'web_fetch_result' ? content : undefined
-  const status = !content ? 'WIP' : page ? 'FINISHED' : 'FAILED'
-  if (input.action === 'find_in_page') {
-    return [{ type: 'TOOL_FIND', status, pattern: input.pattern }]
-  }
-  return [
-    {
-      type: 'TOOL_OPEN',
-      status,
-      url: input.url || page?.url || null,
-      title: page?.content.title ?? null,
-      snippet: page ? '' : null,
-      site_name: null,
-      published_at: page ? isoOrNull(page.published_at) : null,
-    },
-  ]
-}
-
 const fence = (lang: string, body: string) => {
   const longest = Math.max(2, ...(body.match(/`+/g) ?? []).map((run) => run.length))
   const marks = '`'.repeat(longest + 1)
@@ -208,21 +132,17 @@ const assistantFragments = (
   options: ToSessionFileOptions
 ): Fragment[] => {
   const { blocks } = message
-  const results = new Map<string, BackupReplyBlock>()
   const clientResults = new Map<string, BackupToolResultPart>()
   for (const block of blocks) {
-    if (block.type === 'web_search_tool_result' || block.type === 'web_fetch_tool_result') {
-      results.set(block.tool_use_id, block)
-    } else if (block.type === 'tool_result') {
+    if (block.type === 'tool_result') {
       clientResults.set(block.tool_use_id, block)
     }
   }
 
   const usedSources = blocks.some(
     (block) =>
-      block.type === 'server_tool_use' ||
-      (block.type === 'tool_result' &&
-        ((block.sources?.length ?? 0) > 0 || (block.searchResults?.length ?? 0) > 0))
+      block.type === 'tool_result' &&
+      ((block.sources?.length ?? 0) > 0 || (block.searchResults?.length ?? 0) > 0)
   )
 
   const handledToolResultIds = new Set<string>()
@@ -325,23 +245,19 @@ const assistantFragments = (
     }
 
     const converted: Fragment[] =
-      block.type === 'thinking'
-        ? block.thinking
-          ? [
-              {
-                type: 'THINK',
-                content: block.thinking,
-                elapsed_secs:
-                  block.elapsedSeconds ??
-                  (block.startedAt === undefined || block.endedAt === undefined
-                    ? null
-                    : (block.endedAt - block.startedAt) / 1000),
-              },
-            ]
-          : []
-        : block.type === 'server_tool_use'
-          ? serverToolFragment(block, results.get(block.id))
-          : []
+      block.type === 'thinking' && block.thinking
+        ? [
+            {
+              type: 'THINK',
+              content: block.thinking,
+              elapsed_secs:
+                block.elapsedSeconds ??
+                (block.startedAt === undefined || block.endedAt === undefined
+                  ? null
+                  : (block.endedAt - block.startedAt) / 1000),
+            },
+          ]
+        : []
     if (converted.length > 0) {
       fragments.push(...converted)
       response = undefined

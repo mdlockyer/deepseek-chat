@@ -1,3 +1,4 @@
+import type { ModelProvider } from '@deepseek-chat/lib-agent'
 import { createToolRegistry, type ToolRegistry } from '@deepseek-chat/lib-tools'
 import type { BrowserControlTakenOver } from '@deepseek-chat/spine/facts/browser'
 import type {
@@ -13,14 +14,13 @@ import {
   noopNoticePort,
   type BlobEntry,
   type BlobStore,
-  type HttpFetch,
   type KeyValueStore,
   type NoticePort,
 } from '@deepseek-chat/spine/ports'
 import type { EventLog } from '@deepseek-chat/spine/runtime'
 import { useMemo } from 'react'
 import { create } from 'zustand'
-import { createApiClient } from './apiClient.js'
+import { localizeProvider } from './apiClient.js'
 import { createUploadsController } from './attachments.js'
 import { createAutoTitleRunner } from './autoTitleRunner.js'
 import { appendBranch, getVisibleMessages, normalizeSession, selectVersion } from './branches.js'
@@ -33,7 +33,7 @@ import {
   settleReply,
   trimAfterLastToolResult,
 } from './reply.js'
-import { createReplyRunner, DEFAULT_MODEL, type ReplyRunnerParams } from './replyRunner.js'
+import { createReplyRunner, type ReplyRunnerParams } from './replyRunner.js'
 import {
   createIndexedDbSessionStore,
   reportStorageError,
@@ -62,8 +62,8 @@ export const DEFAULT_CONVERSATIONS_PARAMS: ConversationsParams = {
 
 export type ConversationsDeps = {
   readonly log: EventLog
-  readonly apiOrigin: string
-  readonly fetch: HttpFetch
+  /** Provider-neutral model transport (streaming messages + optional file upload port). */
+  readonly provider: ModelProvider
   /** Persists the `chat-demo:thinking` toggle owned by this slice. */
   readonly store: KeyValueStore
   /** Domain-blind blob store for user uploads and delivered files. */
@@ -73,7 +73,6 @@ export type ConversationsDeps = {
   /** Aggregated capability registry (defaults to an empty registry for bare chat). */
   readonly tools?: ToolRegistry
   readonly platform?: 'desktop' | 'web'
-  readonly getApiKey: () => string | null
   readonly getLocationLabel: (locale: Locale) => string
   readonly onStreamTrace?: (trace: StreamTrace) => void
   readonly autoTitle?: boolean
@@ -125,12 +124,7 @@ const excerptOfPrompt = (text: string): string => {
 const hasTurnActivity = (message: AssistantMessage): boolean =>
   message.blocks.some(
     (block) =>
-      block.type === 'thinking' ||
-      block.type === 'tool_use' ||
-      block.type === 'tool_result' ||
-      block.type === 'server_tool_use' ||
-      block.type === 'web_search_tool_result' ||
-      block.type === 'web_fetch_tool_result'
+      block.type === 'thinking' || block.type === 'tool_use' || block.type === 'tool_result'
   )
 
 const sortSessions = (sessions: SessionSummary[]) =>
@@ -196,12 +190,8 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
   const notify = deps.notify ?? noopNoticePort
   const params: ConversationsParams = { ...DEFAULT_CONVERSATIONS_PARAMS, ...deps.params }
 
-  const apiClient = createApiClient({
-    fetch: deps.fetch,
-    apiOrigin: deps.apiOrigin,
-    getApiKey: deps.getApiKey,
-  })
-  const uploads = createUploadsController(apiClient)
+  const provider = localizeProvider(deps.provider)
+  const uploads = createUploadsController(provider)
   const drafts = createDraftsController(uploads, newId)
 
   const useThinkingStore = create<{ thinking: boolean }>(() => ({
@@ -239,7 +229,7 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
   }
 
   const ensureApiKey = () => {
-    if (deps.getApiKey()) {
+    if (provider.isConfigured()) {
       return true
     }
     deps.ui.openSettings('apiKey')
@@ -252,7 +242,6 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
   const deletingSessions = new Set<string>()
   const deletionTasks = new Set<Promise<boolean>>()
   const streamFlushes = new Map<string, () => void>()
-  const titleRequests = new Set<AbortController>()
   const publishedFileSessions = new Set<string>()
   const turnListeners = new Set<() => void>()
   const sessionLoads = new Map<string, { promise: Promise<void> }>()
@@ -446,10 +435,19 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
     }
   }
 
+  const readBlob = async (id: string): Promise<Blob | undefined> => {
+    for (const entries of pendingBlobs.values()) {
+      const hit = entries.find((entry) => entry.id === id)
+      if (hit) {
+        return hit.blob
+      }
+    }
+    return deps.blobs.get(id)
+  }
+
   const autoTitleRunner = createAutoTitleRunner({
     enabled: deps.autoTitle !== false,
-    apiClient,
-    getApiKey: deps.getApiKey,
+    provider,
     getHistoryEpoch: () => historyEpoch,
     isImportingHistory: () => get().importingHistory,
     isDeletingSession: (id) => deletingSessions.has(id),
@@ -460,13 +458,12 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
 
   const replyRunner = createReplyRunner({
     log: deps.log,
-    blobs: deps.blobs,
+    readBlob,
     tools,
-    apiClient,
+    provider,
     uploads,
     platform,
     params,
-    getApiKey: deps.getApiKey,
     getLocationLabel: deps.getLocationLabel,
     onStreamTrace: deps.onStreamTrace,
     getHistoryEpoch: () => historyEpoch,
@@ -492,14 +489,6 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
         streamFlushes.delete(sessionId)
       }
     },
-    trackTitleRequest: (controller, active) => {
-      if (active) {
-        titleRequests.add(controller)
-      } else {
-        titleRequests.delete(controller)
-      }
-    },
-    hasTitleRequest: (controller) => titleRequests.has(controller),
     onAutoTitle: (autoParams) => autoTitleRunner.run(autoParams),
   })
 
@@ -507,10 +496,10 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
     id: newId(),
     role: 'assistant',
     createdAt: Date.now(),
-    model: DEFAULT_MODEL,
+    model: provider.defaultModel,
+    provider: provider.id,
     thinking: useThinkingStore.getState().thinking,
     enabledCapabilities: tools.snapshotEnabled(),
-    prefix: true,
     status: 'pending',
     blocks: [],
   })
@@ -737,10 +726,6 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
       return
     }
     autoTitleRunner.cancel(id)
-    const controller = getStreamController(id)
-    if (controller) {
-      titleRequests.delete(controller)
-    }
     const titleLocked = title.trim().length > 0
     if (getSession(id)) {
       updateSession(id, (session) => ({ ...session, title, titleLocked }))
@@ -879,9 +864,10 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
       id: newId(),
       role: 'user',
       content: text,
-      files: files.map(({ id, serverId, name, size, isImage, mimeType }) => ({
+      files: files.map(({ id, serverId, serverProvider, name, size, isImage, mimeType }) => ({
         id,
         serverId,
+        ...(serverProvider ? { serverProvider } : {}),
         name,
         size,
         isImage,
@@ -1006,7 +992,8 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
     const base = resume ? trimAfterLastToolResult(previous) : previous
     const reply: AssistantMessage = {
       ...base,
-      model: previous.model ?? DEFAULT_MODEL,
+      model: previous.model ?? provider.defaultModel,
+      provider: previous.provider ?? provider.id,
       thinking: previous.thinking ?? useThinkingStore.getState().thinking,
       enabledCapabilities: previous.enabledCapabilities ?? tools.snapshotEnabled(),
       status: 'pending',
@@ -1021,7 +1008,7 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
     void replyRunner.streamReply(sessionId, reply, {
       history: path.slice(0, -2),
       question,
-      prefix: resume ? undefined : previous,
+      continueReply: resume ? undefined : previous,
     })
   }
 
@@ -1193,7 +1180,7 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
     deps,
     tools,
     blobs: deps.blobs,
-    apiClient,
+    provider,
     uploads,
     drafts,
     useChatStore,

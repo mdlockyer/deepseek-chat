@@ -1,9 +1,9 @@
 import {
-  extractFileIds,
-  getFileErrorCode,
   isRetryableApiError,
   type ChatModel,
   type CreateMessageRequest,
+  type ModelProvider,
+  type ProviderId,
 } from '@deepseek-chat/lib-agent'
 import type { ToolRegistry, ToolRunResult } from '@deepseek-chat/lib-tools'
 import type {
@@ -12,19 +12,19 @@ import type {
   ToolFileDelivered,
 } from '@deepseek-chat/spine/facts/session'
 import { getLocale, type Locale } from '@deepseek-chat/spine/i18n'
-import type { BlobStore } from '@deepseek-chat/spine/ports'
 import type { EventLog } from '@deepseek-chat/spine/runtime'
-import { ApiError, type ApiClient } from './apiClient.js'
+import { ApiError } from './apiClient.js'
 import { describeUploadError, type UploadsController } from './attachments.js'
 import type { AutoTitleParams } from './autoTitleRunner.js'
 import { collectCitedUrls } from './citations.js'
-import { createLatestReminder } from './latestReminder.js'
+import { createEnvironmentContext, resolveEnvironmentContext } from './environmentContext.js'
 import {
   applyEvent,
   getContextRounds,
   pickImageResults,
   settleReply,
   toRequestMessages,
+  type InlineAttachmentData,
 } from './reply.js'
 import { createStreamTracer, type StreamTrace } from './streamTrace.js'
 import type {
@@ -37,16 +37,14 @@ import type {
   UserMessage,
 } from './types.js'
 
-export const DEFAULT_MODEL: ChatModel = 'deepseek-flash'
-
 /** Static core harness orientation shared by every turn (kept static so KV-cache prefix stays hot). */
 export const SYSTEM_PROMPT = [
-  'You are DeepSeek, created by DeepSeek, running inside a local split-pane chat app (desktop on macOS, or web in a browser).',
+  'You are an AI assistant running inside a local split-pane chat app (desktop on macOS, or web in a browser).',
   'Here is how the app around you works so you can operate it naturally:\n' +
     '- Left pane (the chat): Your conversation with the user. While you work, the transcript shows a compact live status line above your reply (never a long vertical wall of tool logs); once your answer arrives, thinking and tool work fold into a single quiet summary row above your reply that users can expand inline for a compact step trace, while produced files, generated charts, and a unified Sources button stay visible with your answer.\n' +
     '- Right pane (the workspace panel): A single shared side panel with peer toggles in the chat header (File Preview, Built-in Browser, and the Activity & Sources inspector, where users can inspect code, screenshots, reasoning, and cited sources side by side without disrupting the chat).\n' +
     "- Tool `summary` field: Every client tool accepts a `summary` parameter first. Always emit a plain, active 1-sentence summary (6–18 words, in the user's language) explaining what the call is doing and why, using ordinary words rather than compressed shorthand. The app displays it directly as the live status line while you work and inside the Activity inspector afterwards, so the user can follow your progress at a glance.\n" +
-    '- Time and environment: The current local date, weekday, platform (`App` on desktop or `Web`), user location (if set), and UI language are provided in `latest_reminder` rather than here so your prompt prefix stays cacheable across turns.',
+    '- Time and environment: The current local date, weekday, platform (`Desktop app` or `Web browser`), user location (if set), and UI language are provided in an `<environment_context>` block on user messages whenever they first appear or change, rather than here, so your prompt prefix stays cacheable across turns.',
   'How to communicate:\n' +
     "Write like a clear, thoughtful person talking to someone who only has your reply on screen. They didn't see your collapsed thinking, your tool logs, or the raw pages you read. Match the user's language, depth, and tone: conversational when chatting, direct when answering a concrete question, and structured only when headings, lists, or tables genuinely make a multi-part answer easier to scan. Don't turn a short reply into a mini-report with a closing summary.\n\n" +
     'A few habits tend to creep into long or tool-heavy turns; watch for them:\n' +
@@ -57,13 +55,12 @@ export const SYSTEM_PROMPT = [
     'Never trade away accuracy for smoothness: keep important numbers, units, and conditions intact. What the user asks for always wins.',
 ].join('\n\n')
 
-const SAFETY_CHECK = { level: 'high' } as const
 const DEFAULT_TOOL_ROUND_LIMIT = 50
 
 export type ReplyRequest = {
   readonly history: Message[]
   readonly question: UserMessage
-  readonly prefix?: AssistantMessage
+  readonly continueReply?: AssistantMessage
 }
 
 export type ReplyRunnerParams = {
@@ -76,13 +73,12 @@ export type ReplyRunnerParams = {
 
 export type ReplyRunnerHost = {
   readonly log: EventLog
-  readonly blobs: BlobStore
+  readonly readBlob: (id: string) => Promise<Blob | undefined>
   readonly tools: ToolRegistry
-  readonly apiClient: Pick<ApiClient, 'streamMessage' | 'uploadFile'>
+  readonly provider: ModelProvider
   readonly uploads: Pick<UploadsController, 'useUploads' | 'uploadAttachment' | 'cancelUpload'>
   readonly platform: 'desktop' | 'web'
   readonly params: ReplyRunnerParams
-  readonly getApiKey: () => string | null
   readonly getLocationLabel: (locale: Locale) => string
   readonly onStreamTrace?: (trace: StreamTrace) => void
   readonly getHistoryEpoch: () => number
@@ -95,8 +91,6 @@ export type ReplyRunnerHost = {
   readonly publishSessionFiles: (sessionId: string) => void
   readonly setStreaming: (sessionId: string, controller: AbortController | null) => void
   readonly registerFlush: (sessionId: string, flush: (() => void) | null) => void
-  readonly trackTitleRequest: (controller: AbortController, active: boolean) => void
-  readonly hasTitleRequest: (controller: AbortController) => boolean
   readonly onAutoTitle: (params: AutoTitleParams) => void
 }
 
@@ -111,6 +105,19 @@ const dataUrlToFile = (dataUrl: string, name: string): File => {
   return new File([bytes], name, { type })
 }
 
+const blobToBase64 = async (blob: Blob): Promise<string> => {
+  const bytes = new Uint8Array(await blob.arrayBuffer())
+  let binary = ''
+  const chunkSize = 0x8000
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize))
+  }
+  return btoa(binary)
+}
+
+const hasMatchingServerId = (file: FileAttachment, providerId: ProviderId): boolean =>
+  Boolean(file.serverId && (file.serverProvider ?? 'deepseek') === providerId)
+
 const pendingToolCalls = (reply: AssistantMessage): ToolCallPart[] => {
   const done = new Set(
     reply.blocks.flatMap((block) => (block.type === 'tool_result' ? [block.tool_use_id] : []))
@@ -120,11 +127,11 @@ const pendingToolCalls = (reply: AssistantMessage): ToolCallPart[] => {
   )
 }
 
-const collectServerFileIds = (request: ReplyRequest): Set<string> => {
+const collectServerFileIds = (request: ReplyRequest, providerId: ProviderId): Set<string> => {
   const ids = new Set<string>()
   const add = (files: FileAttachment[]) => {
     for (const file of files) {
-      if (file.serverId) {
+      if (file.serverId && (file.serverProvider ?? 'deepseek') === providerId) {
         ids.add(file.serverId)
       }
     }
@@ -157,6 +164,7 @@ export const createReplyRunner = (host: ReplyRunnerHost) => {
     if (serverIds.size === 0) {
       return
     }
+    const providerId = host.provider.id
     host.updateSession(sessionId, (session) => ({
       ...session,
       messages: session.messages.map((message) =>
@@ -165,7 +173,11 @@ export const createReplyRunner = (host: ReplyRunnerHost) => {
               ...message,
               files: message.files.map((file) =>
                 serverIds.has(file.id)
-                  ? { ...file, serverId: serverIds.get(file.id) ?? null }
+                  ? {
+                      ...file,
+                      serverId: serverIds.get(file.id) ?? null,
+                      serverProvider: providerId,
+                    }
                   : file
               ),
             }
@@ -175,19 +187,26 @@ export const createReplyRunner = (host: ReplyRunnerHost) => {
     host.persist(sessionId)
   }
 
-  const ensureServerId = async (apiKey: string, file: FileAttachment): Promise<string | null> => {
-    if (file.serverId) {
+  const ensureServerId = async (file: FileAttachment): Promise<string | null> => {
+    const providerId = host.provider.id
+    if (hasMatchingServerId(file, providerId)) {
       return file.serverId
     }
     const task = host.uploads.useUploads.getState().tasks[file.id]
-    if (task?.status === 'done') {
+    if (task?.status === 'done' && task.serverId && task.providerId === providerId) {
       return task.serverId
     }
-    const blob = await host.blobs.get(file.id)
+    const blob = await host.readBlob(file.id)
     if (!blob) {
       return null
     }
-    return host.uploads.uploadAttachment(apiKey, file.id, blob, file.name, file.isImage)
+    return host.uploads.uploadAttachment(
+      file.id,
+      blob,
+      file.name,
+      file.mimeType || blob.type || 'application/octet-stream',
+      file.isImage
+    )
   }
 
   const refreshRequest = (sessionId: string, request: ReplyRequest): ReplyRequest => {
@@ -201,21 +220,55 @@ export const createReplyRunner = (host: ReplyRunnerHost) => {
     return {
       history: request.history.map(pick),
       question: pick(request.question),
-      prefix: request.prefix,
+      continueReply: request.continueReply,
     }
   }
 
   const prepareFiles = async (sessionId: string, request: ReplyRequest, signal: AbortSignal) => {
     const epoch = host.getHistoryEpoch()
     request = refreshRequest(sessionId, request)
-    const apiKey = host.getApiKey() ?? ''
+    const providerId = host.provider.id
+
+    if (!host.provider.attachments) {
+      const inlineBlobs = new Map<string, InlineAttachmentData>()
+      const loadInline = async (file: FileAttachment) => {
+        if (inlineBlobs.has(file.id)) {
+          return
+        }
+        signal.throwIfAborted()
+        const blob = await host.readBlob(file.id)
+        if (!blob) {
+          return
+        }
+        const base64 = await blobToBase64(blob)
+        inlineBlobs.set(file.id, {
+          mediaType: file.mimeType || blob.type || 'application/octet-stream',
+          base64,
+        })
+      }
+      for (const file of request.question.files) {
+        await loadInline(file)
+      }
+      for (const [user] of getContextRounds(request.history)) {
+        for (const file of user.files) {
+          await loadInline(file)
+        }
+      }
+      return {
+        history: request.history,
+        question: request.question,
+        continueReply: request.continueReply,
+        inlineBlobs,
+      }
+    }
+
     const serverIds = new Map<string, string>()
     const aborted = new Promise<never>((_, reject) => {
       signal.addEventListener('abort', () => reject(signal.reason), { once: true })
     })
     const uploads = Promise.allSettled(
       request.question.files.map(async (file) => {
-        const serverId = await ensureServerId(apiKey, file)
+        const serverId = await ensureServerId(file)
         if (serverId) {
           serverIds.set(file.id, serverId)
         }
@@ -235,7 +288,11 @@ export const createReplyRunner = (host: ReplyRunnerHost) => {
     const pending = new Map<string, FileAttachment>()
     for (const [user] of getContextRounds(request.history).toReversed()) {
       for (const file of user.files) {
-        if (!file.serverId && !serverIds.has(file.id) && !pending.has(file.id)) {
+        if (
+          !hasMatchingServerId(file, providerId) &&
+          !serverIds.has(file.id) &&
+          !pending.has(file.id)
+        ) {
           pending.set(file.id, file)
         }
       }
@@ -243,7 +300,7 @@ export const createReplyRunner = (host: ReplyRunnerHost) => {
     for (const file of pending.values()) {
       signal.throwIfAborted()
       try {
-        const serverId = await Promise.race([ensureServerId(apiKey, file), aborted])
+        const serverId = await Promise.race([ensureServerId(file), aborted])
         if (serverId) {
           serverIds.set(file.id, serverId)
           saveServerIds(sessionId, new Map([[file.id, serverId]]))
@@ -259,7 +316,8 @@ export const createReplyRunner = (host: ReplyRunnerHost) => {
     return {
       history: request.history.map(resolve),
       question: resolve(request.question),
-      prefix: request.prefix,
+      continueReply: request.continueReply,
+      inlineBlobs: undefined as ReadonlyMap<string, InlineAttachmentData> | undefined,
     }
   }
 
@@ -268,14 +326,18 @@ export const createReplyRunner = (host: ReplyRunnerHost) => {
     request: ReplyRequest,
     error: unknown
   ): boolean => {
-    if (!(error instanceof ApiError) || !getFileErrorCode(error)) {
+    const attachmentPort = host.provider.attachments
+    if (!attachmentPort) {
       return false
     }
-    const mentioned = extractFileIds(error.message)
+    const invalidated = attachmentPort.invalidatedFileIds(error)
+    if (invalidated === null) {
+      return false
+    }
     const targets =
-      mentioned.length > 0
-        ? new Set(mentioned)
-        : collectServerFileIds(refreshRequest(sessionId, request))
+      invalidated.length > 0
+        ? new Set(invalidated)
+        : collectServerFileIds(refreshRequest(sessionId, request), host.provider.id)
     const session = host.getSession(sessionId)
     if (targets.size === 0 || !session) {
       return false
@@ -292,7 +354,7 @@ export const createReplyRunner = (host: ReplyRunnerHost) => {
         }
         localIds.push(file.id)
         changed = true
-        return { ...file, serverId: null }
+        return { ...file, serverId: null, serverProvider: undefined }
       })
       return changed ? { ...message, files } : message
     })
@@ -312,10 +374,6 @@ export const createReplyRunner = (host: ReplyRunnerHost) => {
   ) => {
     const epoch = host.getHistoryEpoch()
     const controller = new AbortController()
-    const initialSession = host.getSession(sessionId)
-    if (!initialSession?.title && !initialSession?.titleLocked) {
-      host.trackTitleRequest(controller, true)
-    }
     host.setStreaming(sessionId, controller)
     host.log.publish<ReplyLifecycleChanged>({
       type: 'ReplyLifecycleChanged',
@@ -330,10 +388,10 @@ export const createReplyRunner = (host: ReplyRunnerHost) => {
       model: ChatModel
       system: string
       tools: CreateMessageRequest['tools']
-      safetyCheck?: CreateMessageRequest['safety_check']
       history: Message[]
       question: UserMessage
       declaredClientNames: ReadonlySet<string>
+      inlineBlobs?: ReadonlyMap<string, InlineAttachmentData>
     } | null = null
     let frame = 0
     const flush = () => {
@@ -344,7 +402,8 @@ export const createReplyRunner = (host: ReplyRunnerHost) => {
     host.registerFlush(sessionId, flush)
 
     const toolRoundLimit = Math.max(1, host.params.toolRoundLimit || DEFAULT_TOOL_ROUND_LIMIT)
-    let toolRound = initial.blocks.some((block) => block.type === 'tool_use') ? 1 : 0
+    let toolRound =
+      !request.continueReply && initial.blocks.some((block) => block.type === 'tool_use') ? 1 : 0
 
     const readCapState = (capabilityId: string) => {
       const map = reply.capabilityState
@@ -386,7 +445,10 @@ export const createReplyRunner = (host: ReplyRunnerHost) => {
     }
 
     const uploadToolImages = async () => {
-      const apiKey = host.getApiKey() ?? ''
+      const attachmentPort = host.provider.attachments
+      if (!attachmentPort) {
+        return
+      }
       for (const block of pickImageResults(reply.blocks)) {
         const images = block.images ?? []
         const ids = [...(block.imageFileIds ?? [])]
@@ -398,8 +460,18 @@ export const createReplyRunner = (host: ReplyRunnerHost) => {
             continue
           }
           try {
-            const file = dataUrlToFile(image, `tool-output-${block.tool_use_id}-${index + 1}.jpg`)
-            ids[index] = (await host.apiClient.uploadFile(apiKey, file, null, controller.signal)).id
+            const name = `tool-output-${block.tool_use_id}-${index + 1}.jpg`
+            const file = dataUrlToFile(image, name)
+            ids[index] = await attachmentPort.upload(
+              {
+                id: `${block.tool_use_id}-${index + 1}`,
+                blob: file,
+                name,
+                mimeType: file.type || 'image/jpeg',
+                isImage: true,
+              },
+              controller.signal
+            )
           } catch (error) {
             if (controller.signal.aborted) {
               throw error
@@ -463,6 +535,7 @@ export const createReplyRunner = (host: ReplyRunnerHost) => {
           blocks: spawnIndex >= 0 ? reply.blocks.slice(0, spawnIndex) : reply.blocks,
         }
         const effectiveCapId = capabilityId ?? call.name
+        const currentEnv = resolveEnvironmentContext(reply)
         const outcome: ToolRunResult & { readonly capabilityId?: string } = await host.tools.run(
           call,
           {
@@ -476,16 +549,24 @@ export const createReplyRunner = (host: ReplyRunnerHost) => {
             onProgress: (progress) => updateResult(call.id, { progress }),
             readReplyState: <T = unknown>() => readCapState(effectiveCapId) as T | undefined,
             writeReplyState: (next, opts) => writeCapState(effectiveCapId, next, opts),
-            ...(reply.latestReminder ? { latestReminder: reply.latestReminder } : {}),
+            ...(currentEnv ? { environmentContext: currentEnv } : {}),
             forkMessages: () =>
               toRequestMessages(
                 lastTurnContext?.history ?? request.history,
                 lastTurnContext?.question ?? request.question,
-                undefined,
-                initial.thinking ?? false,
-                reply.latestReminder,
-                replyBeforeCall.blocks.length > 0 ? replyBeforeCall : undefined,
-                lastTurnContext?.declaredClientNames ?? true
+                {
+                  environmentContext: currentEnv,
+                  inProgress: replyBeforeCall.blocks.length > 0 ? replyBeforeCall : undefined,
+                  includeInProgressThinking:
+                    Boolean(initial.thinking) &&
+                    (reply.provider ?? host.provider.id) === host.provider.id &&
+                    (reply.model ?? host.provider.defaultModel) ===
+                      (lastTurnContext?.model ?? initial.model ?? host.provider.defaultModel),
+                  clientTools: lastTurnContext?.declaredClientNames ?? true,
+                  providerId: host.provider.id,
+                  inlineBlobs: lastTurnContext?.inlineBlobs,
+                  inlineToolImages: !host.provider.attachments,
+                }
               ),
           }
         )
@@ -646,14 +727,21 @@ export const createReplyRunner = (host: ReplyRunnerHost) => {
           reply = { ...reply, stopReason: undefined, stopDetails: undefined }
           const prepared = await prepareFiles(sessionId, request, controller.signal)
           preparing = false
-          const latestReminder = prepared.prefix
-            ? prepared.prefix.latestReminder
-            : createLatestReminder({
+          const environmentContext = prepared.continueReply
+            ? resolveEnvironmentContext(prepared.continueReply)
+            : (resolveEnvironmentContext(reply) ??
+              createEnvironmentContext({
                 locale: getLocale(),
                 locationLabel: host.getLocationLabel(getLocale()),
-                platform: host.platform === 'desktop' ? 'App' : 'Web',
-              })
-          reply = { ...reply, latestReminder }
+                platform: host.platform,
+              }))
+          const model = initial.model ?? host.provider.defaultModel
+          reply = {
+            ...reply,
+            model,
+            provider: reply.provider ?? host.provider.id,
+            ...(environmentContext ? { environmentContext } : {}),
+          }
           host.updateReply(sessionId, reply)
           host.persist(sessionId)
           if (toolRound > 0) {
@@ -669,41 +757,40 @@ export const createReplyRunner = (host: ReplyRunnerHost) => {
             SYSTEM_PROMPT,
             ...host.tools.instructions(declaredClientNames, 'reply'),
           ]
-          const messages = toRequestMessages(
-            prepared.history,
-            prepared.question,
-            toolRound > 0 ? undefined : prepared.prefix,
-            initial.thinking ?? false,
-            latestReminder,
-            toolRound > 0 ? reply : undefined,
-            declaredClientNames
-          )
+          const includeInProgressThinking =
+            Boolean(initial.thinking) &&
+            (reply.provider ?? host.provider.id) === host.provider.id &&
+            (reply.model ?? model) === model
+          const messages = toRequestMessages(prepared.history, prepared.question, {
+            continueReply: toolRound > 0 ? undefined : prepared.continueReply,
+            environmentContext,
+            inProgress: toolRound > 0 ? reply : undefined,
+            includeInProgressThinking,
+            clientTools: declaredClientNames,
+            providerId: host.provider.id,
+            inlineBlobs: prepared.inlineBlobs,
+            inlineToolImages: !host.provider.attachments,
+          })
           if (host.onStreamTrace) {
             tracer = createStreamTracer(toolRound, Date.now())
           }
           const system = systemParts.join('\n\n')
-          const model = initial.model ?? DEFAULT_MODEL
-          const safetyCheck =
-            initial.thinking || declaredTools.length === 0 ? SAFETY_CHECK : undefined
           lastTurnContext = {
             model,
             system,
             tools: declaredTools,
-            safetyCheck,
             history: prepared.history,
             question: prepared.question,
             declaredClientNames,
+            inlineBlobs: prepared.inlineBlobs,
           }
-          const events = host.apiClient.streamMessage(
-            host.getApiKey() ?? '',
+          const events = host.provider.streamMessage(
             {
               model,
               system,
               messages,
               thinking: { type: initial.thinking ? 'enabled' : 'disabled' },
-              ...(safetyCheck ? { safety_check: safetyCheck } : {}),
               tools: declaredTools,
-              ...(host.hasTitleRequest(controller) ? { title: { enabled: true } } : {}),
             },
             controller.signal
           )
@@ -712,21 +799,6 @@ export const createReplyRunner = (host: ReplyRunnerHost) => {
             for await (const event of events) {
               tracer?.record(event, Date.now())
               receivedContent ||= event.type === 'content_block_start'
-              if (
-                event.type === 'message_delta' &&
-                (event.delta.stop_reason === 'end_turn' ||
-                  event.delta.stop_reason === 'max_tokens') &&
-                event.delta.title?.trim() &&
-                host.hasTitleRequest(controller) &&
-                !controller.signal.aborted &&
-                !host.isImportingHistory()
-              ) {
-                const title = event.delta.title.trim()
-                host.updateSession(sessionId, (session) =>
-                  session.title ? session : { ...session, title }
-                )
-                host.trackTitleRequest(controller, false)
-              }
               reply = applyEvent(reply, event, Date.now(), blockIndexes)
               if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
                 flush()
@@ -780,7 +852,6 @@ export const createReplyRunner = (host: ReplyRunnerHost) => {
               }
               reply = {
                 ...reply,
-                prefix: false,
                 blocks: [...reply.blocks, syntheticCall],
               }
               flush()
@@ -801,7 +872,7 @@ export const createReplyRunner = (host: ReplyRunnerHost) => {
             reply = settleReply(reply, 'error', Date.now(), {
               kind: 'upload',
               message: '',
-              localMessage: describeUploadError(error),
+              localMessage: describeUploadError(error, host.provider),
               retryable: isRetryableApiError(error),
             })
             break
@@ -858,7 +929,6 @@ export const createReplyRunner = (host: ReplyRunnerHost) => {
             ? 'user'
             : 'interrupted'
       settleTurnHooks(reason)
-      host.trackTitleRequest(controller, false)
       host.registerFlush(sessionId, null)
       cancelAnimationFrame(frame)
       host.updateReply(sessionId, reply)

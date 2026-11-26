@@ -26,31 +26,29 @@ may coexist in the same process) and returns:
 | `getTurnSnapshot(sid, mid)`, `listSessionTurns(sid)`, `subscribeToTurns` | Referentially stable read-only live turn snapshot & session turn-list source consumed by `slices/activity-inspector` (safe for `useSyncExternalStore`).                                      |
 | `snapshotForExport()`, `replaceSessions(fn)`                             | Atomic storage ports consumed by `slices/history-backup`.                                                                                                                                    |
 | `useHistoryState()`, `describeReplyNotice(msg)`                          | History replacement/empty state and plain reply error/template text.                                                                                                                         |
-| `request`                                                                | Instance-scoped DeepSeek HTTP helper bound to `deps.fetch`.                                                                                                                                  |
 | `useChatLifecycle()`, `useActiveSessionId()`                             | Lifecycle hooks for upload notices, persistence flush, mobile drawer, and init.                                                                                                              |
 | `Sider`, `MobileSider`, `CollapsedSider`                                 | Bound session-list views (`CollapsedSider` supports `enterMode` / `exitMode`: `'morph' \| 'fade'`).                                                                                          |
 | `ChatMain({ siderMode })`, `ChatSaveBanner`                              | Bound chat/welcome main area (`siderMode`: `'absent' \| 'collapsed' \| 'expanded'`), top-right Settings trigger, and save-failure banner.                                                    |
 | `dispose()`                                                              | Aborts active streams, cancels timers, unsubscribes from `EventLog`, closes DB.                                                                                                              |
 
-The package also exports pure model functions (`branches`, `reply`, `view`, `workStrip`, `citations`,
-`autoTitle`, `requestWith`, `ServerSentEventDecoder`) and session store factories
-(`createIndexedDbSessionStore`, `memorySessionStore`).
+The package also exports pure model functions (`branches`, `reply`, `environmentContext`, `view`,
+`workStrip`, `citations`, `autoTitle`, `requestWith`, `ServerSentEventDecoder`) and session store
+factories (`createIndexedDbSessionStore`, `memorySessionStore`).
 
 ## Ports (`ConversationsDeps`)
 
 | Port                      | Meaning                                                                                                                                                                                  |
-| :------------------------ | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
+| :------------------------ | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `log`                     | Spine `EventLog` for session facts published and browser facts consumed.                                                                                                                 |
-| `apiOrigin`, `fetch`      | DeepSeek API origin and platform HTTP transport.                                                                                                                                         |
+| `provider: ModelProvider` | Provider-neutral streaming Messages transport + model metadata + optional remote attachment upload port (`attachments`).                                                                 |
 | `store`                   | Key-value store for `chat-demo:thinking`.                                                                                                                                                |
 | `blobs: BlobStore`        | Domain-blind blob store for user uploads and delivered files.                                                                                                                            |
 | `sessions?: SessionStore` | Optional session store (defaults to IndexedDB `deepseek-sessions`).                                                                                                                      |
 | `tools?: ToolRegistry`    | Aggregated `ToolCapability` registry (defaults to empty for bare chat).                                                                                                                  |
-| `platform`                | `'desktop'                                                                                                                                                                               | 'web'`for`latest_reminder`. |
-| `getApiKey()`             | DeepSeek API key, or `null`.                                                                                                                                                             |
-| `getLocationLabel(loc)`   | User location label for `latest_reminder` (`''` when unset).                                                                                                                             |
+| `platform`                | `'desktop' \| 'web'` for `<environment_context>`.                                                                                                                                        |
+| `getLocationLabel(loc)`   | User location label for `<environment_context>` (`''` when unset).                                                                                                                       |
 | `onStreamTrace`           | Optional diagnostics hook reporting request timings without content.                                                                                                                     |
-| `autoTitle`               | Enables detached cache-riding auto-title refresh (default `true`).                                                                                                                       |
+| `autoTitle`               | Enables detached cache-riding auto-title refresh on every completed turn (default `true`).                                                                                               |
 | `notify`                  | Optional `NoticePort` for upload/copy/delete toasts.                                                                                                                                     |
 | `ui`                      | Optional view slots (`voice`, `headerActions`, `composerDock`, `openFile`, `useActiveInspectionTarget`, `useNeedsApiKey`, `openInApp`, `saveFile`, `openSettings`, `setSiderCollapsed`). |
 
@@ -94,11 +92,18 @@ The package also exports pure model functions (`branches`, `reply`, `view`, `wor
 7. **Branches.** A chat is a tree. Sending appends below the visible leaf; editing adds a sibling
    user node and reply; regenerating adds a sibling assistant node; switching versions updates
    `selectedChildId` and re-publishes `SessionFilesChanged`.
-8. **Requests & retries.** REST requests time out after 15 s, uploads after 60 s. Pre-content
-   network failures retry up to `networkRetryLimit` per turn with exponential backoff. Post-content
-   failures do not retry and keep partial text. Streams ending after `message_delta` stop reason
-   without `message_stop` count as complete. Missing server file errors re-upload from `blobs` up
-   to `fileReuploadLimit` per request.
+8. **Requests, attachments, & retries.** REST requests time out after 15 s, uploads after 60 s.
+   All requests emit standard `user` / `assistant` Messages API roles with change-only
+   `<environment_context>` blocks (converting legacy persisted `latestReminder` CSVs on replay),
+   strip historical `thinking` across completed turns (replaying in-progress `thinking` only when
+   active provider and model match), and continue stopped / `max_tokens` prose replies via a
+   standard hidden `user` continuation prompt (`CONTINUE_PROMPT`) rather than assistant prefill.
+   When `provider.attachments` is present, attachments and tool screenshots upload remotely (with
+   provider-owned invalidation re-uploads up to `fileReuploadLimit`); when absent, they travel
+   inline as base64 blocks read from `blobs`. Pre-content network failures retry up to
+   `networkRetryLimit` per turn with exponential backoff. Post-content failures do not retry and
+   keep partial text. Streams ending after `message_delta` stop reason without `message_stop` count
+   as complete.
 9. **Deliverables & Front Stage.** Delivered files (`result.files`) deduplicate by `path ?? name`
    at latest version in first-seen order and appear once streaming ends. Tool `images` without
    `previewImages` promote to Front Stage (`view.images`); tools that supply clean `previewImages`
@@ -110,9 +115,10 @@ The package also exports pure model functions (`branches`, `reply`, `view`, `wor
    `lane`, and presenter-supplied `icon`, and without step numbers or per-step durations); bounded
    previews always retain currently running steps in chronological order, and clicking an inline
    trace row publishes `TurnInspectionRequested` with that step's `callId`.
-10. **Living session titles.** After a reply finishes normally, if the title is unlocked and inline
-    `delta.title` did not already name turn 1, a detached cache-riding fork updates the title
-    without altering `session.messages` or `updatedAt`. Any user mutation cancels an in-flight fork.
+10. **Living session titles.** After every completed reply (including Turn 1), if the title is
+    unlocked, a detached cache-riding fork reuses the exact turn prefix (`model`, `system`, `tools`,
+    `messages`) to name or refresh the session without altering `session.messages` or `updatedAt`.
+    Any user mutation cancels an in-flight fork.
 11. **Stream traces.** When `onStreamTrace` is provided, every request reports sizes and timings
     without message, tool input, or reply text.
 

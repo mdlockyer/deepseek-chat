@@ -2,16 +2,9 @@ import {
   ApiError as LibApiError,
   DEFAULT_REST_TIMEOUT_MS,
   UPLOAD_TIMEOUT_MS,
-  deleteFile as libDeleteFile,
   request as libRequest,
-  streamMessage as libStreamMessage,
-  uploadFile as libUploadFile,
-  type AgentIO,
   type ApiErrorKind,
-  type CreateMessageRequest,
-  type FileObject,
-  type FilePurpose,
-  type MessageStreamEvent,
+  type ModelProvider,
 } from '@deepseek-chat/lib-agent'
 import type { HttpFetch } from '@deepseek-chat/spine/ports'
 import { translate, type TranslationMessage } from './messages.js'
@@ -31,7 +24,7 @@ export class ApiError extends LibApiError {
   }
 }
 
-const wrapApiError = (error: unknown): never => {
+export const wrapApiError = (error: unknown): never => {
   if (error instanceof ApiError) {
     throw error
   }
@@ -42,22 +35,6 @@ const wrapApiError = (error: unknown): never => {
     throw new ApiError(error.kind, error.message, error.status)
   }
   throw error
-}
-
-export type ApiClient = {
-  request(url: string, init: RequestInit, timeoutMs?: number): Promise<Response>
-  uploadFile(
-    apiKey: string,
-    file: File,
-    purpose: FilePurpose | null,
-    signal?: AbortSignal
-  ): Promise<FileObject>
-  deleteFile(apiKey: string, fileId: string): Promise<void>
-  streamMessage(
-    apiKey: string,
-    body: CreateMessageRequest,
-    signal: AbortSignal
-  ): AsyncGenerator<MessageStreamEvent>
 }
 
 export const requestWith = async (
@@ -73,39 +50,40 @@ export const requestWith = async (
   }
 }
 
-export const createApiClient = (deps: {
-  readonly fetch: HttpFetch
-  readonly apiOrigin: string
-  readonly getApiKey: () => string | null
-}): ApiClient => {
-  const ioFor = (apiKeyOverride?: string): AgentIO => ({
-    fetch: deps.fetch,
-    apiOrigin: deps.apiOrigin,
-    apiKey: () => apiKeyOverride ?? deps.getApiKey(),
-  })
-
+/** Wraps a `ModelProvider` so low-level timeout errors surface localized `ApiError` messages. */
+export const localizeProvider = (provider: ModelProvider): ModelProvider => {
+  const attachments = provider.attachments
+  const deleteRemote = attachments?.delete
   return {
-    request: (url, init, timeoutMs) => requestWith(deps.fetch, url, init, timeoutMs),
-
-    uploadFile: async (apiKey, file, purpose, signal) => {
+    ...provider,
+    ...(attachments
+      ? {
+          attachments: {
+            ...attachments,
+            upload: async (file, signal) => {
+              try {
+                return await attachments.upload(file, signal)
+              } catch (error) {
+                return wrapApiError(error)
+              }
+            },
+            ...(deleteRemote
+              ? {
+                  delete: async (remoteId) => {
+                    try {
+                      await deleteRemote(remoteId)
+                    } catch (error) {
+                      wrapApiError(error)
+                    }
+                  },
+                }
+              : {}),
+          },
+        }
+      : {}),
+    streamMessage: async function* (body, signal) {
       try {
-        return await libUploadFile(ioFor(apiKey), file, purpose, signal)
-      } catch (error) {
-        return wrapApiError(error)
-      }
-    },
-
-    deleteFile: async (apiKey, fileId) => {
-      try {
-        await libDeleteFile(ioFor(apiKey), fileId)
-      } catch (error) {
-        wrapApiError(error)
-      }
-    },
-
-    streamMessage: async function* (apiKey, body, signal) {
-      try {
-        yield* libStreamMessage(ioFor(apiKey), body, signal)
+        yield* provider.streamMessage(body, signal)
       } catch (error) {
         wrapApiError(error)
       }

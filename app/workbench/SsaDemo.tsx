@@ -78,8 +78,7 @@ const sseFromBlocks = (
     | { kind: 'text'; text: string }
     | { kind: 'call'; id: string; name: string; input: unknown }
   >,
-  stopReason: 'end_turn' | 'tool_use',
-  title?: string
+  stopReason: 'end_turn' | 'tool_use'
 ): Response => {
   const events = [
     {
@@ -111,7 +110,7 @@ const sseFromBlocks = (
     ]),
     {
       type: 'message_delta',
-      delta: { stop_reason: stopReason, ...(title ? { title } : {}) },
+      delta: { stop_reason: stopReason },
       usage: DEMO_USAGE,
     },
     { type: 'message_stop' },
@@ -192,8 +191,7 @@ const createDemoScriptedFetch = (instanceLabel: string): HttpFetch => {
             },
           },
         ],
-        'tool_use',
-        'SSA Summary Report'
+        'tool_use'
       )
     }
 
@@ -217,8 +215,7 @@ const createDemoScriptedFetch = (instanceLabel: string): HttpFetch => {
             },
           },
         ],
-        'tool_use',
-        'Clarifying Question'
+        'tool_use'
       )
     }
 
@@ -232,8 +229,7 @@ const createDemoScriptedFetch = (instanceLabel: string): HttpFetch => {
             input: { summary: 'Multiplying 6 by 7 in the drop-in calculator', a: 6, b: 7 },
           },
         ],
-        'tool_use',
-        'Drop-in Calculator'
+        'tool_use'
       )
     }
 
@@ -249,8 +245,7 @@ const createDemoScriptedFetch = (instanceLabel: string): HttpFetch => {
           text: `Hello from **${instanceLabel}**!\n\n- **Prompt:** ${promptText || '(empty)'}\n- **Active capabilities declared this turn:** \`${activeList}\`\n\nTry toggling slices on the left or running a scripted scenario to watch the EventLog and UI update live.`,
         },
       ],
-      'end_turn',
-      `${instanceLabel}: ${promptText.slice(0, 24) || 'Chat'}`
+      'end_turn'
     )
   }
 }

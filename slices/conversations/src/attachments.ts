@@ -1,27 +1,15 @@
-import {
-  classifyApiError,
-  getUploadErrorInfo,
-  isRetryableApiError,
-  type FilePurpose,
-} from '@deepseek-chat/lib-agent'
+import type { ModelProvider, ProviderId } from '@deepseek-chat/lib-agent'
+import { isRetryableApiError } from '@deepseek-chat/lib-agent'
 import { create } from 'zustand'
-import type { ApiClient } from './apiClient.js'
 import type { LinkedMessage, TranslationMessage } from './messages.js'
 import { ACCEPT_FILE_EXTS } from './uploadExts.js'
 
-/** 允许上传的扩展名，按扩展名白名单过滤，清单见 uploadExts.ts */
 export const ACCEPTED_EXTS = ACCEPT_FILE_EXTS
-/** 选择文件对话框的过滤条件 */
 export const ACCEPT = ACCEPTED_EXTS.map((ext) => `.${ext}`).join(',')
-/** 单文件大小上限与 Files API 一致 */
 export const MAX_SIZE_MB = 64
-/** 按 user_data 上传的文件（纯文本、代码、表格、电子书）原文件上限更小 */
-export const MAX_USER_DATA_SIZE_MB = 32
 export const MAX_COUNT = 50
-/** 同时上传的文件数 */
 const MAX_CONCURRENT = 3
 
-/** 文件扩展名（小写，不含点）；没有扩展名时为空 */
 export const getFileExt = (name: string) => {
   const dot = name.lastIndexOf('.')
   return dot > 0 ? name.slice(dot + 1).toLowerCase() : ''
@@ -29,31 +17,19 @@ export const getFileExt = (name: string) => {
 
 export const isAcceptedExt = (name: string) => ACCEPTED_EXTS.includes(getFileExt(name))
 
-/** 需要服务端做版面解析的文档；其余非图片文件（纯文本、代码、表格、电子书）无需解析 */
-const LAYOUT_RECOGNITION_EXTS = new Set(['pdf', 'doc', 'docx', 'ppt', 'pptx'])
-
-/** 上传时的 purpose：图片不传，PDF 与 Word、PPT 做版面解析，其余按 user_data 上传 */
-export const getUploadPurpose = (name: string, isImage: boolean): FilePurpose | null => {
-  if (isImage) {
-    return null
-  }
-  return LAYOUT_RECOGNITION_EXTS.has(getFileExt(name)) ? 'rich_layout_recognition' : 'user_data'
-}
-
-/** 文件允许的最大体积（MB），按上传时的 purpose 区分 */
-const getMaxSizeMB = (file: File) =>
-  getUploadPurpose(file.name, isImage(resolveMimeType(file))) === 'user_data'
-    ? MAX_USER_DATA_SIZE_MB
-    : MAX_SIZE_MB
-
-/** 添加前校验：格式 → 大小 → 数量，任一不满足即整批不添加 */
-export const validateFiles = (files: File[], currentCount: number): TranslationMessage | null => {
+export const validateFiles = (
+  files: File[],
+  currentCount: number,
+  maxSizeMBFor?: (name: string, isImageFile: boolean) => number
+): TranslationMessage | null => {
   if (files.some((file) => !isAcceptedExt(file.name))) {
     return { key: 'uploadUnsupportedFormat' }
   }
-  const oversized = files.find((file) => file.size > getMaxSizeMB(file) * 1024 * 1024)
+  const limitFor = (file: File) =>
+    maxSizeMBFor?.(file.name, isImage(resolveMimeType(file))) ?? MAX_SIZE_MB
+  const oversized = files.find((file) => file.size > limitFor(file) * 1024 * 1024)
   if (oversized) {
-    return { key: 'uploadMaxMBSize', params: { size: getMaxSizeMB(oversized) } }
+    return { key: 'uploadMaxMBSize', params: { size: limitFor(oversized) } }
   }
   if (currentCount + files.length > MAX_COUNT) {
     return { key: 'uploadMaxFiles', params: { count: MAX_COUNT } }
@@ -61,47 +37,62 @@ export const validateFiles = (files: File[], currentCount: number): TranslationM
   return null
 }
 
-/** 上传失败在附件上显示的文案 */
-export const describeUploadError = (error: unknown): TranslationMessage => {
-  if (classifyApiError(error) === 'serverBusy') {
+export const describeUploadError = (
+  error: unknown,
+  provider?: Pick<ModelProvider, 'classifyError' | 'attachments'>
+): TranslationMessage => {
+  if (provider?.classifyError(error) === 'serverBusy') {
     return { key: 'uploadServerBusy' }
   }
-  if (getUploadErrorInfo(error)?.code === 'parseFailed') {
+  if (provider?.attachments?.classifyUploadError(error)?.code === 'parseFailed') {
     return { key: 'uploadParseFailed' }
   }
   return { key: 'uploadFileStatusFailed' }
 }
 
-/** 删除已上传文件的接口文档 */
-const DELETE_FILE_DOCS_URL = 'https://api-docs.deepseek.com/api/delete-file'
-
-/** 文件数或存储空间达到上限：附件上只放得下「上传失败」，原因另用 toast 说明并引导删除旧文件 */
-export const describeUploadQuota = (error: unknown): LinkedMessage | undefined => {
-  const info = getUploadErrorInfo(error)
-  const link = { key: 'uploadDeleteFiles', href: DELETE_FILE_DOCS_URL } as const
+export const describeUploadQuota = (
+  error: unknown,
+  provider?: Pick<ModelProvider, 'attachments'>
+): LinkedMessage | undefined => {
+  const info = provider?.attachments?.classifyUploadError(error)
+  const href = provider?.attachments?.manageFilesDocsUrl
+  const link = href ? ({ key: 'uploadDeleteFiles', href } as const) : undefined
   if (info?.code === 'fileCountLimit') {
-    return { type: 'error', key: 'uploadFileCountLimit', params: { limit: info.limit ?? '' }, link }
+    return {
+      type: 'error',
+      key: 'uploadFileCountLimit',
+      params: { limit: info.limit ?? '' },
+      ...(link ? { link } : {}),
+    }
   }
   if (info?.code === 'storageLimit') {
-    return { type: 'error', key: 'uploadStorageLimit', params: { limit: info.limit ?? '' }, link }
+    return {
+      type: 'error',
+      key: 'uploadStorageLimit',
+      params: { limit: info.limit ?? '' },
+      ...(link ? { link } : {}),
+    }
   }
   return undefined
 }
 
 export type UploadTask =
   | { status: 'uploading' }
-  | { status: 'done'; serverId: string }
+  | { status: 'done'; serverId: string | null; providerId: ProviderId }
   | { status: 'error'; error: TranslationMessage; retryable: boolean }
 
 type UploadState = { tasks: Record<string, UploadTask> }
 type NoticeListener = (notice: LinkedMessage) => void
 
-export const createUploadsController = (apiClient: Pick<ApiClient, 'uploadFile'>) => {
+export const createUploadsController = (provider: ModelProvider) => {
   const useUploads = create<UploadState>(() => ({ tasks: {} }))
   const noticeListeners = new Set<NoticeListener>()
   const queue: (() => Promise<void>)[] = []
   let running = 0
-  const pending = new Map<string, { promise: Promise<string>; controller: AbortController }>()
+  const pending = new Map<
+    string,
+    { promise: Promise<string | null>; controller: AbortController }
+  >()
 
   const next = () => {
     while (running < MAX_CONCURRENT) {
@@ -118,22 +109,27 @@ export const createUploadsController = (apiClient: Pick<ApiClient, 'uploadFile'>
   }
 
   const enqueueUpload = (
-    apiKey: string,
+    id: string,
     file: Blob,
     name: string,
+    mimeType: string,
     isImg: boolean,
     signal: AbortSignal
   ) =>
     new Promise<string>((resolve, reject) => {
+      const attachmentPort = provider.attachments
+      if (!attachmentPort) {
+        reject(new Error('Active provider does not support remote uploads.'))
+        return
+      }
       queue.push(async () => {
         if (signal.aborted) {
           reject(signal.reason)
           return
         }
         try {
-          const body = file instanceof File ? file : new File([file], name, { type: file.type })
           resolve(
-            (await apiClient.uploadFile(apiKey, body, getUploadPurpose(name, isImg), signal)).id
+            await attachmentPort.upload({ id, blob: file, name, mimeType, isImage: isImg }, signal)
           )
         } catch (error) {
           reject(error)
@@ -150,21 +146,26 @@ export const createUploadsController = (apiClient: Pick<ApiClient, 'uploadFile'>
     }))
 
   const uploadAttachment = (
-    apiKey: string,
     id: string,
     blob: Blob,
     name: string,
+    mimeType: string,
     isImg: boolean
-  ): Promise<string> => {
+  ): Promise<string | null> => {
+    // Providers without a remote Files API inline blobs from BlobStore at send time.
+    if (!provider.attachments) {
+      setTask(id, { status: 'done', serverId: null, providerId: provider.id })
+      return Promise.resolve(null)
+    }
     const current = pending.get(id)
     if (current) {
       return current.promise
     }
     const controller = new AbortController()
     setTask(id, { status: 'uploading' })
-    const promise = enqueueUpload(apiKey, blob, name, isImg, controller.signal)
+    const promise = enqueueUpload(id, blob, name, mimeType, isImg, controller.signal)
       .then((serverId) => {
-        setTask(id, { status: 'done', serverId })
+        setTask(id, { status: 'done', serverId, providerId: provider.id })
         return serverId
       })
       .catch((error: unknown) => {
@@ -173,10 +174,10 @@ export const createUploadsController = (apiClient: Pick<ApiClient, 'uploadFile'>
         } else {
           setTask(id, {
             status: 'error',
-            error: describeUploadError(error),
+            error: describeUploadError(error, provider),
             retryable: isRetryableApiError(error),
           })
-          const notice = describeUploadQuota(error)
+          const notice = describeUploadQuota(error, provider)
           if (notice) {
             for (const listener of [...noticeListeners]) {
               listener(notice)
@@ -217,13 +218,14 @@ export const createUploadsController = (apiClient: Pick<ApiClient, 'uploadFile'>
     uploadAttachment,
     cancelUpload,
     onUploadNotice,
+    validate: (files: File[], currentCount: number) =>
+      validateFiles(files, currentCount, provider.attachments?.maxFileSizeMB),
     dispose,
   }
 }
 
 export type UploadsController = ReturnType<typeof createUploadsController>
 
-/** 各扩展名对应的 MIME：部分系统（如 Windows）给不出 file.type，按扩展名补齐 */
 const MIME_BY_EXT: Record<string, string> = {
   png: 'image/png',
   jpg: 'image/jpeg',
@@ -232,12 +234,10 @@ const MIME_BY_EXT: Record<string, string> = {
   webp: 'image/webp',
 }
 
-/** 取文件的 MIME：优先用浏览器给出的类型，缺失时按扩展名推断 */
 export const resolveMimeType = (file: File) => file.type || MIME_BY_EXT[getFileExt(file.name)] || ''
 
 export const isImage = (mimeType: string) => mimeType.startsWith('image/')
 
-/** 文件扩展名（大写），用于卡片元信息 */
 export const getExtension = (name: string) => {
   const dot = name.lastIndexOf('.')
   return dot > 0 ? name.slice(dot + 1).toUpperCase() : ''

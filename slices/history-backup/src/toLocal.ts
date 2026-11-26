@@ -1,8 +1,4 @@
-import type {
-  ServerToolUseBlock,
-  WebFetchResult,
-  WebFetchToolResultBlock,
-} from '@deepseek-chat/lib-agent'
+import type { CitedSourceMeta } from '@deepseek-chat/lib-tools'
 import { fail } from './errors.js'
 import type { ChatMessage, FileEntry, Fragment, SessionFile } from './format.js'
 import { sessionFilesDir } from './paths.js'
@@ -33,6 +29,14 @@ const isWebUrl = (value: string) => {
   }
 }
 
+const siteNameOf = (url: string) => {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '')
+  } catch {
+    return ''
+  }
+}
+
 const toFile = (file: FileEntry): BackupFileAttachment => ({
   id: file.id,
   serverId: null,
@@ -50,60 +54,8 @@ const toUser = (message: ChatMessage): BackupUserMessage => ({
   files: message.fragments.flatMap((item) => (item.type === 'FILE' ? item.files.map(toFile) : [])),
 })
 
-const toolBlocks = (
-  id: string,
-  input: ServerToolUseBlock['input'],
-  kind: ServerToolUseBlock['kind'],
-  result?: BackupReplyBlock
-): BackupReplyBlock[] => [
-  {
-    type: 'server_tool_use',
-    id,
-    name: kind === 'read_link' ? 'deepseek_read_url' : 'deepseek_web_search',
-    input,
-    kind,
-    caller: { type: 'direct' },
-  },
-  ...(result ? [result] : []),
-]
-
-const fetchResult = (
-  toolUseId: string,
-  content: WebFetchToolResultBlock['content']
-): WebFetchToolResultBlock => ({
-  type: 'web_fetch_tool_result',
-  tool_use_id: toolUseId,
-  kind: 'deep_search',
-  content,
-})
-
-const fetched = (
-  url: string,
-  title: string | null,
-  publishedAt: string | null
-): WebFetchResult => ({
-  type: 'web_fetch_result',
-  url,
-  content: {
-    type: 'document',
-    source: { type: 'text', media_type: 'text/plain', data: '' },
-    title,
-  },
-  published_at: publishedAt,
-})
-
-const unavailable: WebFetchToolResultBlock['content'] = {
-  type: 'web_fetch_tool_result_error',
-  error_code: 'unavailable',
-}
-
-const toBlocks = (fragments: Fragment[], messageId: string): BackupReplyBlock[] => {
-  const searchKind = fragments.some(
-    (item) => item.type === 'TOOL_OPEN' || item.type === 'TOOL_FIND'
-  )
-    ? 'deep_search'
-    : 'search'
-  return fragments.flatMap((item, index): BackupReplyBlock[] => {
+const toBlocks = (fragments: Fragment[], messageId: string): BackupReplyBlock[] =>
+  fragments.flatMap((item, index): BackupReplyBlock[] => {
     const id = `history-${messageId}-${index}`
     switch (item.type) {
       case 'RESPONSE':
@@ -118,83 +70,76 @@ const toBlocks = (fragments: Fragment[], messageId: string): BackupReplyBlock[] 
             ...(item.elapsed_secs === null ? {} : { elapsedSeconds: item.elapsed_secs }),
           },
         ]
-      case 'TOOL_SEARCH':
-        return toolBlocks(
-          id,
-          { action: 'search', query: item.queries[0] ?? '', queries: item.queries },
-          searchKind,
-          item.status === 'WIP'
-            ? undefined
-            : {
-                type: 'web_search_tool_result',
-                tool_use_id: id,
-                kind: searchKind,
-                content:
-                  item.status === 'FAILED'
-                    ? [{ type: 'web_search_tool_result_error', error_code: 'unavailable' }]
-                    : item.results
-                        .filter((result) => isWebUrl(result.url))
-                        .map((result) => ({
-                          type: 'web_search_result',
-                          url: result.url,
-                          title: result.title,
-                          snippet: result.snippet,
-                          site_icon:
-                            result.site_icon && isWebUrl(result.site_icon)
-                              ? result.site_icon
-                              : null,
-                          site_name: result.site_name,
-                          page_age: result.published_at,
-                          encrypted_content: '',
-                        })),
-              }
-        )
-      case 'TOOL_OPEN':
+      case 'TOOL_SEARCH': {
+        const query = item.queries.filter((q) => q.trim()).join(' ')
+        const sources: CitedSourceMeta[] =
+          item.status === 'FAILED'
+            ? []
+            : item.results
+                .filter((result) => isWebUrl(result.url))
+                .map((result) => ({
+                  url: result.url,
+                  title: result.title ?? result.url,
+                  snippet: result.snippet ?? '',
+                  siteName: result.site_name ?? siteNameOf(result.url),
+                  publishedAt: result.published_at,
+                }))
+        return [
+          { type: 'tool_use', id, name: 'web_search', input: { query } },
+          ...(item.status === 'WIP'
+            ? []
+            : [
+                {
+                  type: 'tool_result' as const,
+                  tool_use_id: id,
+                  capability: 'web-research',
+                  content: '',
+                  status: item.status === 'FAILED' ? ('error' as const) : ('ok' as const),
+                  sources,
+                  payload: { kind: 'search', query },
+                },
+              ]),
+        ]
+      }
+      case 'TOOL_OPEN': {
         if (!item.url || !isWebUrl(item.url)) {
           return []
         }
-        return toolBlocks(
-          id,
-          { action: 'open_page', url: item.url },
-          'deep_search',
-          item.status === 'WIP'
-            ? undefined
-            : fetchResult(
-                id,
-                item.status === 'FINISHED'
-                  ? fetched(item.url, item.title, item.published_at)
-                  : unavailable
-              )
-        )
+        const sources: CitedSourceMeta[] =
+          item.status === 'FINISHED'
+            ? [
+                {
+                  url: item.url,
+                  title: item.title ?? item.url,
+                  snippet: item.snippet ?? '',
+                  siteName: item.site_name ?? siteNameOf(item.url),
+                  publishedAt: item.published_at,
+                },
+              ]
+            : []
+        return [
+          { type: 'tool_use', id, name: 'web_scrape', input: { url: item.url } },
+          ...(item.status === 'WIP'
+            ? []
+            : [
+                {
+                  type: 'tool_result' as const,
+                  tool_use_id: id,
+                  capability: 'web-research',
+                  content: '',
+                  status: item.status === 'FAILED' ? ('error' as const) : ('ok' as const),
+                  sources,
+                  payload: { kind: 'scrape', url: item.url, title: item.title },
+                },
+              ]),
+        ]
+      }
       case 'TOOL_FIND':
-        return toolBlocks(
-          id,
-          { action: 'find_in_page', url: '', pattern: item.pattern ?? '' },
-          'deep_search',
-          item.status === 'WIP'
-            ? undefined
-            : fetchResult(id, item.status === 'FINISHED' ? fetched('', null, null) : unavailable)
-        )
       case 'READ_LINK':
-        return item.results.flatMap((result, resultIndex) => {
-          const url = result.url && isWebUrl(result.url) ? result.url : ''
-          if (!url && !result.signature.trim()) {
-            return []
-          }
-          const toolId = `${id}-${resultIndex}`
-          return toolBlocks(toolId, { action: 'read_link', url }, 'read_link', {
-            type: 'web_fetch_tool_result',
-            tool_use_id: toolId,
-            kind: 'read_link',
-            content: fetched(url, result.title ?? null, null),
-            signature: result.signature,
-          })
-        })
       default:
         return []
     }
   })
-}
 
 const replyStatus: Record<ChatMessage['status'], BackupReplyStatus> = {
   FINISHED: 'done',
@@ -218,7 +163,6 @@ const toAssistant = (message: ChatMessage): BackupAssistantMessage => {
     thinking: message.thinking_enabled,
     search: message.search_enabled,
     enabledCapabilities: message.search_enabled ? { 'web-research': true } : {},
-    prefix: false,
     status: replyStatus[message.status],
     ...(refused ? { stopReason: 'refusal' as const } : {}),
     blocks: refused

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
+import { createDeepSeekProvider } from '@deepseek-chat/lib-agent'
 import {
   createToolRegistry,
   type AgentProfileSpec,
@@ -58,7 +59,6 @@ describe('slice-subagents: spawn, read-only guard, board, wait, citations, and t
     const forbiddenCalls: string[] = []
 
     const profile: AgentProfileSpec = {
-      model: 'deepseek-flash',
       thinking: false,
       label: 'Test Researcher',
       system: 'Research carefully.',
@@ -139,34 +139,36 @@ describe('slice-subagents: spawn, read-only guard, board, wait, citations, and t
     const log = new EventLog()
     const subagents = createSubagentsSlice({
       log,
-      apiOrigin: 'https://api.test',
-      getApiKey: () => 'sk-test',
-      getToolHost: () => registryRef,
-      fetch: async (_url, init) => {
-        childRequests.push(JSON.parse(String(init.body)))
-        childTurn += 1
-        if (childTurn === 1) {
+      provider: createDeepSeekProvider({
+        apiOrigin: 'https://api.test',
+        getApiKey: () => 'sk-test',
+        fetch: async (_url, init) => {
+          childRequests.push(JSON.parse(String(init.body)))
+          childTurn += 1
+          if (childTurn === 1) {
+            return toolCallStream([
+              { id: 'c1', name: 'read_item', input: { id: 'alpha' } },
+              { id: 'c2', name: 'write_item', input: {} },
+              {
+                id: 'c3',
+                name: POST_TOOL_NAME,
+                input: { kind: 'finding', text: 'Found key metric', url: 'https://example.com/a' },
+              },
+            ])
+          }
           return toolCallStream([
-            { id: 'c1', name: 'read_item', input: { id: 'alpha' } },
-            { id: 'c2', name: 'write_item', input: {} },
             {
-              id: 'c3',
-              name: POST_TOOL_NAME,
-              input: { kind: 'finding', text: 'Found key metric', url: 'https://example.com/a' },
+              id: 'c4',
+              name: 'finish_task',
+              input: {
+                answer: 'Alpha result [1].',
+                sources: [{ n: 1, url: 'https://example.com/a', title: 'Alpha Doc' }],
+              },
             },
           ])
-        }
-        return toolCallStream([
-          {
-            id: 'c4',
-            name: 'finish_task',
-            input: {
-              answer: 'Alpha result [1].',
-              sources: [{ n: 1, url: 'https://example.com/a', title: 'Alpha Doc' }],
-            },
-          },
-        ])
-      },
+        },
+      }),
+      getToolHost: () => registryRef,
     })
 
     registryRef = createToolRegistry([providerCap, subagents.capability])
@@ -185,6 +187,7 @@ describe('slice-subagents: spawn, read-only guard, board, wait, citations, and t
       signal: new AbortController().signal,
       caller: { kind: 'reply' },
       citedUrls,
+      environmentContext: '<environment_context>\nDate: 2026-11-25\n</environment_context>',
       isActive: () => true,
       onProgress: () => undefined,
       readReplyState: () => persistedState as never,
@@ -223,6 +226,17 @@ describe('slice-subagents: spawn, read-only guard, board, wait, citations, and t
     assert.equal(forbiddenCalls.length, 0, 'non-read tool was never invoked')
     assert.ok(isSubagentsReplyState(persistedState))
     assert.equal(persistedState.agents[0]?.state.status, 'finished')
+
+    // Child inherited provider.defaultModel and sent environmentContext inside a standard user message.
+    const firstChildReq = childRequests[0] as {
+      model: string
+      messages: { role: string; content: string }[]
+    }
+    assert.equal(firstChildReq.model, 'deepseek-flash')
+    assert.equal(firstChildReq.messages.length, 1)
+    assert.equal(firstChildReq.messages[0]?.role, 'user')
+    assert.match(firstChildReq.messages[0]?.content ?? '', /^<environment_context>/)
+    assert.match(firstChildReq.messages[0]?.content ?? '', /Investigate SSA/)
 
     // Hydration settles any persisted running child to stopped (interrupted)
     const settled = settleHydratedSubagentsState({

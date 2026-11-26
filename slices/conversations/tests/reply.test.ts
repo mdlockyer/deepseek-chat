@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
+  CONTINUE_PROMPT,
   applyEvent,
   canContinueReply,
+  formatLegacyLatestReminder,
   pickImageResults,
   settleReply,
   toRequestMessages,
@@ -27,17 +29,17 @@ const assistant = (
   role: 'assistant',
   createdAt: 2_000,
   model: 'deepseek-flash',
+  provider: 'deepseek',
   thinking: true,
-  prefix: true,
   status: 'done',
   blocks,
   ...overrides,
 })
 
 describe('applyEvent & settleReply', () => {
-  it('assembles thinking, tool_use JSON, and text deltas and clears prefix on tool_use', () => {
+  it('assembles thinking, tool_use JSON, and text deltas', () => {
     const indexes = new Map<number, number>()
-    let reply = assistant('a1', [], { status: 'pending', prefix: true })
+    let reply = assistant('a1', [], { status: 'pending' })
 
     reply = applyEvent(
       reply,
@@ -92,7 +94,6 @@ describe('applyEvent & settleReply', () => {
     )
     reply = applyEvent(reply, { type: 'content_block_stop', index: 1 }, 180, indexes)
 
-    assert.equal(reply.prefix, false)
     assert.deepEqual(reply.blocks, [
       {
         type: 'thinking',
@@ -116,14 +117,7 @@ describe('applyEvent & settleReply', () => {
       [
         { type: 'thinking', thinking: 'secret', startedAt: 10 },
         { type: 'text', text: 'partial answer' },
-        {
-          type: 'server_tool_use',
-          id: 's1',
-          name: 'deepseek_web_search',
-          input: { action: 'search', query: 'q', queries: ['q'] },
-          kind: 'search',
-          caller: { type: 'direct' },
-        },
+        { type: 'tool_use', id: 't1', name: 'web_search', input: { query: 'q' } },
       ],
       { status: 'streaming', stopReason: 'refusal' }
     )
@@ -131,12 +125,16 @@ describe('applyEvent & settleReply', () => {
     const settled = settleReply(reply, 'done', 50)
     assert.equal(settled.status, 'done')
     assert.equal(settled.blocks.length, 1)
-    assert.equal(settled.blocks[0].type, 'server_tool_use')
+    assert.equal(settled.blocks[0].type, 'tool_use')
   })
 })
 
 describe('toRequestMessages', () => {
-  it('excludes unusable rounds, historical thinking, and unsigned read_link results', () => {
+  it('excludes unusable rounds and historical thinking, and prepends <environment_context> only when changed', () => {
+    const env1 =
+      '<environment_context>\nDate: 2026-05-01 (Friday)\nPlatform: Web browser\nLanguage: English\n</environment_context>'
+    const env2 =
+      '<environment_context>\nDate: 2026-05-02 (Saturday)\nPlatform: Web browser\nLanguage: English\n</environment_context>'
     const history = [
       user('u1', 'q1'),
       assistant('a1', [{ type: 'text', text: 'bad', isTemplate: true }], { status: 'error' }),
@@ -145,95 +143,110 @@ describe('toRequestMessages', () => {
         'a2',
         [
           { type: 'thinking', thinking: 'hidden thought', signature: 'sig' },
-          {
-            type: 'server_tool_use',
-            id: 'r1',
-            name: 'deepseek_read_url',
-            input: { action: 'read_link', url: 'https://example.com' },
-            kind: 'read_link',
-            caller: { type: 'direct' },
-          },
-          {
-            type: 'web_fetch_tool_result',
-            tool_use_id: 'r1',
-            kind: 'read_link',
-            content: {
-              type: 'web_fetch_result',
-              url: 'https://example.com',
-              content: {
-                type: 'document',
-                source: { type: 'text', media_type: 'text/plain', data: '' },
-                title: 'Example',
-              },
-              published_at: null,
-            },
-            signature: 'signed-payload',
-          },
           { type: 'text', text: 'answer 2' },
         ],
-        { latestReminder: 'rem-1' }
+        { environmentContext: env1 }
       ),
+      user('u3', 'q3'),
+      assistant('a3', [{ type: 'text', text: 'answer 3' }], { environmentContext: env1 }),
     ]
 
-    const messages = toRequestMessages(history, user('u3', 'q3'), undefined, true, 'rem-1')
-
-    assert.deepEqual(messages, [
-      { role: 'latest_reminder', content: 'rem-1' },
-      { role: 'user', content: 'q2' },
-      {
-        role: 'assistant',
-        content: [
-          {
-            type: 'server_tool_use',
-            id: 'r1',
-            name: 'deepseek_read_url',
-            input: { action: 'read_link', url: 'https://example.com' },
-            kind: 'read_link',
-          },
-          {
-            type: 'web_fetch_tool_result',
-            tool_use_id: 'r1',
-            kind: 'read_link',
-            content: {
-              type: 'web_fetch_result',
-              url: 'https://example.com',
-              content: {
-                type: 'document',
-                source: { type: 'text', media_type: 'text/plain', data: '' },
-                title: 'Example',
-              },
-              published_at: null,
-            },
-            signature: 'signed-payload',
-          },
-          { type: 'text', text: 'answer 2' },
-        ],
-      },
+    const sameEnv = toRequestMessages(history, user('u4', 'q4'), { environmentContext: env1 })
+    assert.deepEqual(sameEnv, [
+      { role: 'user', content: `${env1}\n\nq2` },
+      { role: 'assistant', content: [{ type: 'text', text: 'answer 2' }] },
       { role: 'user', content: 'q3' },
+      { role: 'assistant', content: [{ type: 'text', text: 'answer 3' }] },
+      { role: 'user', content: 'q4' },
     ])
+    assert.equal(
+      sameEnv.every((m) => m.role === 'user' || m.role === 'assistant'),
+      true,
+      'emits only standard user/assistant roles'
+    )
+
+    const changedEnv = toRequestMessages(history, user('u4', 'q4'), { environmentContext: env2 })
+    assert.equal(changedEnv.at(-1)?.content, `${env2}\n\nq4`)
   })
 
-  it('merges aborted tool_result user turn with the next user question to preserve role alternation', () => {
+  it('converts legacy persisted latestReminder CSV into <environment_context>', () => {
+    const legacyCsv = '2026-04-12,Sunday,San Francisco,App,English'
+    const formatted = formatLegacyLatestReminder(legacyCsv)
+    assert.match(formatted, /^<environment_context>/)
+    assert.match(formatted, /Date: 2026-04-12 \(Sunday\)/)
+    assert.match(formatted, /Platform: Desktop app/)
+    assert.match(formatted, /Location: San Francisco/)
+
+    const history = [
+      user('u1', 'hello'),
+      assistant('a1', [{ type: 'text', text: 'hi' }], { latestReminder: legacyCsv }),
+    ]
+    const messages = toRequestMessages(history, user('u2', 'next'), {
+      environmentContext: formatted,
+    })
+    assert.equal(messages[0]?.role, 'user')
+    assert.equal(messages[0]?.content, `${formatted}\n\nhello`)
+    assert.equal(messages[2]?.content, 'next')
+  })
+
+  it('strips historical thinking even on tool turns, and replays in-progress thinking only when gated on', () => {
     const history = [
       user('u1', 'run python'),
       assistant('a1', [
-        { type: 'thinking', thinking: 'need python', signature: 'sig-py' },
+        { type: 'thinking', thinking: 'old thought', signature: 'sig-old' },
         { type: 'tool_use', id: 'py1', name: 'python', input: { code: 'print(1)' } },
         { type: 'tool_result', tool_use_id: 'py1', content: '1', status: 'ok' },
-        { type: 'text', text: 'before stop' },
+        { type: 'text', text: 'Output is 1.' },
       ]),
-      user('u2', 'only tool'),
-      assistant(
-        'a2',
-        [
-          { type: 'tool_use', id: 'py2', name: 'python', input: { code: 'print(2)' } },
-          { type: 'tool_result', tool_use_id: 'py2', content: '2', status: 'ok' },
-          { type: 'text', text: 'done' },
-        ],
-        { status: 'stopped' }
-      ),
     ]
+    const inProgress = assistant(
+      'a2',
+      [
+        { type: 'thinking', thinking: 'active thought', signature: 'sig-live' },
+        { type: 'tool_use', id: 'py2', name: 'python', input: { code: 'print(2)' } },
+        { type: 'tool_result', tool_use_id: 'py2', content: '2', status: 'ok' },
+      ],
+      { status: 'streaming' }
+    )
 
+    const withLiveThinking = toRequestMessages(history, user('u2', 'again'), {
+      inProgress,
+      includeInProgressThinking: true,
+    })
+    // Historical assistant turn (index 1) has NO thinking block.
+    const historicalAssistant = withLiveThinking[1]
+    assert.equal(historicalAssistant?.role, 'assistant')
+    assert.equal(
+      Array.isArray(historicalAssistant.content) &&
+        historicalAssistant.content.some((b) => b.type === 'thinking'),
+      false
+    )
+    // Active in-progress assistant turn (index 5) DOES carry its thinking block.
+    const activeAssistant = withLiveThinking[5]
+    assert.equal(activeAssistant?.role, 'assistant')
+    assert.equal(
+      Array.isArray(activeAssistant.content) &&
+        activeAssistant.content.some(
+          (b) => b.type === 'thinking' && b.thinking === 'active thought'
+        ),
+      true
+    )
+
+    // When model/provider changed mid-turn, includeInProgressThinking=false strips active thinking too.
+    const withoutLiveThinking = toRequestMessages(history, user('u2', 'again'), {
+      inProgress,
+      includeInProgressThinking: false,
+    })
+    const activeStripped = withoutLiveThinking[5]
+    assert.equal(activeStripped?.role, 'assistant')
+    assert.equal(
+      Array.isArray(activeStripped.content) &&
+        activeStripped.content.some((b) => b.type === 'thinking'),
+      false
+    )
+  })
+
+  it('merges aborted tool_result user turn with the next user question to preserve role alternation', () => {
     const interruptedHistory = [
       user('u1', 'first'),
       assistant('a1', [
@@ -253,17 +266,50 @@ describe('toRequestMessages', () => {
       { type: 'text', text: 'follow up' },
     ])
     assert.equal(messages.length, 3)
-    assert.equal(history.length, 4)
   })
 
-  it('checks canContinueReply rules for max_tokens, stopped, and tool/template restrictions', () => {
+  it('emits partial assistant reply plus standard user CONTINUE_PROMPT when continuing prose', () => {
+    const partial = assistant(
+      'a1',
+      [
+        { type: 'thinking', thinking: 'internal thought', signature: 'sig' },
+        { type: 'text', text: 'First half of the answer' },
+      ],
+      { status: 'done', stopReason: 'max_tokens' }
+    )
+    const messages = toRequestMessages([], user('u1', 'write an essay'), {
+      continueReply: partial,
+    })
+
+    assert.deepEqual(messages, [
+      { role: 'user', content: 'write an essay' },
+      { role: 'assistant', content: [{ type: 'text', text: 'First half of the answer' }] },
+      { role: 'user', content: CONTINUE_PROMPT },
+    ])
+    assert.equal(messages.at(-1)?.role, 'user', 'continuation never ends on an assistant prefill')
+  })
+
+  it('checks canContinueReply rules for max_tokens (including after tools), stopped, and template restrictions', () => {
     assert.equal(
       canContinueReply(
         assistant('a1', [{ type: 'text', text: 'cut off' }], {
           status: 'done',
           stopReason: 'max_tokens',
-          prefix: true,
         })
+      ),
+      true
+    )
+    assert.equal(
+      canContinueReply(
+        assistant(
+          'a1-tools',
+          [
+            { type: 'tool_use', id: 't1', name: 'python', input: {} },
+            { type: 'tool_result', tool_use_id: 't1', content: '42', status: 'ok' },
+            { type: 'text', text: 'cut off after tool' },
+          ],
+          { status: 'done', stopReason: 'max_tokens' }
+        )
       ),
       true
     )
@@ -271,7 +317,6 @@ describe('toRequestMessages', () => {
       canContinueReply(
         assistant('a2', [{ type: 'text', text: 'template', isTemplate: true }], {
           status: 'stopped',
-          prefix: true,
         })
       ),
       false
@@ -289,15 +334,9 @@ describe('toRequestMessages', () => {
       ]),
     ]
 
-    const messages = toRequestMessages(
-      history,
-      user('u2', 'run python'),
-      undefined,
-      true,
-      undefined,
-      undefined,
-      new Set(['python'])
-    )
+    const messages = toRequestMessages(history, user('u2', 'run python'), {
+      clientTools: new Set(['python']),
+    })
 
     assert.deepEqual(messages, [
       { role: 'user', content: 'search this' },

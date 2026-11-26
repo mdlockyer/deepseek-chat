@@ -4,6 +4,7 @@
  * Zero module-level slice instances, zero `lateBindings`, zero domain logic: every runtime
  * owns its own Spine `EventLog`, stores, capability registry, slices, and clean `dispose()`.
  */
+import { createDeepSeekProvider, type ModelProvider } from '@deepseek-chat/lib-agent'
 import {
   createToolRegistry,
   type CompositionPromptNote,
@@ -102,6 +103,8 @@ export type AppRuntimeConfig = {
   readonly sessions?: SessionStore
   readonly fetch?: HttpFetch
   readonly apiOrigin?: string
+  /** Optional model provider override (defaults to DeepSeek Messages API over `fetch`/`apiOrigin`). */
+  readonly provider?: ModelProvider
   readonly platform?: 'desktop' | 'web'
   readonly browserLanguage?: string
   readonly pyodideIndexURL?: string
@@ -238,6 +241,14 @@ export const createAppRuntime = (config: AppRuntimeConfig = {}) => {
     apiOrigin,
   })
 
+  const provider: ModelProvider =
+    config.provider ??
+    createDeepSeekProvider({
+      fetch: httpFetch,
+      apiOrigin,
+      getApiKey: () => account.getApiKey(),
+    })
+
   const voice: VoiceSlice | null = enabled.voice
     ? createVoiceSlice({
         log,
@@ -302,9 +313,7 @@ export const createAppRuntime = (config: AppRuntimeConfig = {}) => {
   const subagents: SubagentsSlice | null = enabled.subagents
     ? createSubagentsSlice({
         log,
-        fetch: httpFetch,
-        apiOrigin,
-        getApiKey: () => account.getApiKey(),
+        provider,
         getToolHost: () => toolRegistry,
         newId: createId,
       })
@@ -333,14 +342,12 @@ export const createAppRuntime = (config: AppRuntimeConfig = {}) => {
 
   const conversations: ConversationsSlice = createConversationsSlice({
     log,
-    apiOrigin,
-    fetch: httpFetch,
+    provider,
     store,
     blobs,
     sessions,
     tools: toolRegistry,
     platform,
-    getApiKey: () => account.getApiKey(),
     getLocationLabel: (locale) => preferences?.getLocationLabel(locale) ?? '',
     onStreamTrace: config.onStreamTrace,
     autoTitle: config.autoTitle,
@@ -377,6 +384,9 @@ export const createAppRuntime = (config: AppRuntimeConfig = {}) => {
         ? () => activityInspector?.useActiveTarget() ?? null
         : undefined,
       useNeedsApiKey: () => {
+        if (config.provider) {
+          return !config.provider.isConfigured()
+        }
         const state = account.useState()
         return state.status === 'ready' && !state.apiKey
       },
@@ -484,6 +494,7 @@ export const createAppRuntime = (config: AppRuntimeConfig = {}) => {
     notices,
     overlays,
     blobs,
+    provider,
     tools: toolRegistry,
     rightPanel,
     layout: {
@@ -497,7 +508,7 @@ export const createAppRuntime = (config: AppRuntimeConfig = {}) => {
       close: closeSettings,
       openFromShortcut: openSettingsFromShortcut,
       ensureApiKey: () => {
-        if (account.getApiKey()) {
+        if (provider.isConfigured()) {
           return true
         }
         openSettings('apiKey')

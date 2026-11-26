@@ -17,7 +17,7 @@ one shared rate limiter and per-reply credit budget.
 | `toolNames`                                                                | `{ search: 'web_search', scrape: 'web_scrape', research: 'research' }`. Persisted in history; never rename.                                               |
 | `declareTools({ searchEnabled, questionText })`                            | Tools to declare for a turn (see invariant 1).                                                                                                            |
 | `instructions` / `instructionsFor(audience, declaredNames?)`               | System-prompt section worded for `reply` or `agent` callers, interpolating configured parameters.                                                         |
-| `researchProfile`                                                          | Clean-context subagent profile (`deepseek-flash`, thinking on, `web_search` + `web_scrape`, `finish_research`).                                           |
+| `researchProfile`                                                          | Clean-context subagent profile (uses active provider's default model unless overridden, thinking on, `web_search` + `web_scrape`, `finish_research`).     |
 | `capability`                                                               | Open `ToolCapability` (`id: 'web-research'`, owns `chat-demo:search` toggle, race-free `formatContentWithCitations`, `presenter`, `serializeForArchive`). |
 | `handles(name)`                                                            | Whether a direct tool call belongs to this slice (`web_search`, `web_scrape`).                                                                            |
 | `run(name, input, { signal, inputJson?, citedUrls?, caller?, replyKey? })` | Run one call through the shared rate limiter and credit budget. Always resolves to a `WebToolResult`.                                                     |
@@ -74,9 +74,10 @@ The key is read on every call, so a key change applies to the next call.
     the slot: no legacy key is copied over it, and the legacy copy stays until the next launch reads
     the saved key (the save may have failed). Saving writes storage first, then updates the state.
 12. **Settings view** verifies before saving and never saves an unverified key.
-13. **Research profile (`research`, `finish_research`).** Uses `deepseek-flash` with thinking on,
-    `context: 'clean'`, and read-only tools `web_search` and `web_scrape`. `task(input)` rejects
-    inputs without a non-blank `objective` and interpolates the configured tool-call budget.
+13. **Research profile (`research`, `finish_research`).** Uses the active provider's default model
+    (unless `model` is explicitly set), thinking on, `context: 'clean'`, and read-only tools
+    `web_search` and `web_scrape`. `task(input)` rejects inputs without a non-blank `objective` and
+    interpolates the configured tool-call budget.
 14. **Deterministic quote verification and page cache.** When `web_scrape` succeeds for an `agent`
     caller (including hits served from the per-reply scrape cache), the page's title and markdown
     are cached under that caller's `runId`. `complete` marks each source `verified` if and only if

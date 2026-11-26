@@ -17,7 +17,7 @@ export type ResearchSource = {
 }
 
 export type ResearchProfile = {
-  readonly model: 'deepseek-flash' | 'deepseek-v4-pro'
+  readonly model?: string
   readonly thinking: boolean
   readonly label: string
   readonly system: string
@@ -133,7 +133,7 @@ export const buildAgentWebInstructions = (
 
 export const buildLeadResearchInstructions = (hasLocalScrape = false): string =>
   [
-    '**Research subagents (`research`).** When a question needs many sources across separate threads, you can start researchers with `research`. Each one is another DeepSeek model with a fresh context and only the web tools. `research` returns as soon as the researcher has started. Start all the researchers you want in one response so they run at the same time, then call `wait`.',
+    '**Research subagents (`research`).** When a question needs many sources across separate threads, you can start researchers with `research`. Each one is a separate agent with a fresh context and only the web tools. `research` returns as soon as the researcher has started. Start all the researchers you want in one response so they run at the same time, then call `wait`.',
     hasLocalScrape
       ? 'Use one researcher for a narrow question, two to four for a comparison, and more only for a broad survey, because each one spends the person’s Firecrawl search credits (a typical researcher uses about 8–12 search credits; page reads run locally for free). For a single fact, search yourself. Once researchers are running, let them handle the searching and scraping rather than duplicating queries yourself in parallel. You and your researchers share one Firecrawl search rate limit and credit budget, so redundant searches compete for the same slots.'
       : 'Use one researcher for a narrow question, two to four for a comparison, and more only for a broad survey, because each one spends the person’s search credits (a typical researcher uses about 20). For a single fact, search yourself. Once researchers are running, let them handle the searching and scraping rather than fetching the same URLs yourself in parallel. You and your researchers share one Firecrawl rate limit and credit budget, so redundant calls compete for the same slots.',
@@ -255,7 +255,6 @@ export const createResearchProfile = (
   pageCache: PageCache,
   toolNames: { readonly search: string; readonly scrape: string }
 ): ResearchProfile => ({
-  model: 'deepseek-flash',
   thinking: true,
   label: 'Research',
   system: RESEARCH_ROLE_PROMPT,

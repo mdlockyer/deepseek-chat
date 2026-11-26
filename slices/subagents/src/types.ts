@@ -1,9 +1,4 @@
-import type {
-  ApiErrorKind,
-  MessageUsage,
-  ServerToolBlock,
-  TextCitation,
-} from '@deepseek-chat/lib-agent'
+import type { ApiErrorKind, MessageUsage, ModelProvider } from '@deepseek-chat/lib-agent'
 import type {
   AgentProfileSpec,
   AgentSourceSpec,
@@ -16,7 +11,6 @@ import type {
   ToolRunContext,
   ToolRunResult,
 } from '@deepseek-chat/lib-tools'
-import type { HttpFetch } from '@deepseek-chat/spine/ports'
 import type { EventLog } from '@deepseek-chat/spine/runtime'
 
 export type SubagentsParams = {
@@ -57,8 +51,6 @@ export type ChildThinkingBlock = {
 export type ChildTextBlock = {
   type: 'text'
   text: string
-  citations?: TextCitation[]
-  isTemplate?: boolean
 }
 
 export type ChildToolUseBlock = {
@@ -81,7 +73,6 @@ export type ChildToolResultBlock = {
 export type ChildBlock =
   | ChildThinkingBlock
   | ChildTextBlock
-  | ServerToolBlock
   | ChildToolUseBlock
   | ChildToolResultBlock
 
@@ -162,9 +153,7 @@ export type SubagentsToolHost = {
 
 export type SubagentsSliceDeps = {
   readonly log: EventLog
-  readonly apiOrigin: string
-  readonly fetch: HttpFetch
-  readonly getApiKey: () => string | null
+  readonly provider: ModelProvider
   /** Lazy getter returning the composed ToolRegistry / host (avoids construction-order coupling). */
   readonly getToolHost: () => SubagentsToolHost
   readonly params?: Partial<SubagentsParams>
