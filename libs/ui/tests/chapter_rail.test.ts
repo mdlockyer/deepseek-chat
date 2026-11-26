@@ -138,7 +138,7 @@ describe('ChapterRail markup', () => {
     )
   })
 
-  it('offers a way back to the chapter the reader jumped from', () => {
+  it('offers a compact, named way back to the chapter the reader jumped from', () => {
     const html = renderToStaticMarkup(
       createElement(ChapterRail, {
         items,
@@ -148,9 +148,15 @@ describe('ChapterRail markup', () => {
         returnTo: { index: 2, label: 'Back to chapter 3', onReturn: () => undefined },
       })
     )
+    const button =
+      /<button[^>]*data-chapter-rail-action[^>]*>[\s\S]*?<\/button>/.exec(html)?.[0] ?? ''
+    assert.match(button, /tabindex="0"/, 'reachable by keyboard while offered')
+    assert.match(button, /aria-label="Back to chapter 3"/, 'named by its label')
+    assert.match(button, />3<\/span><\/button>$/, 'shows only the origin chapter number')
     assert.match(
       html,
-      /<button[^>]*tabindex="0"[^>]*data-chapter-rail-action[^>]*>[\s\S]*Back to chapter 3/
+      /class="item origin"[^>]*><button[^>]*aria-label="Chapter 3: Third"/,
+      'rings the origin'
     )
   })
 })

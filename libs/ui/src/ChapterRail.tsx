@@ -177,7 +177,8 @@ export const ChapterRail = forwardRef<ChapterRailHandle, ChapterRailProps>(funct
     if (bracket) {
       const top = chapterPositionY(ticks, start)
       const bottom = chapterPositionY(ticks, end)
-      bracket.style.transform = `translateY(${top}px) scaleY(${Math.max(2, bottom - top) / 100})`
+      bracket.style.transform = `translateY(${top}px)`
+      bracket.style.height = `${Math.max(2, bottom - top)}px`
     }
     tickRefs.current.forEach((tick, index) => {
       tick?.toggleAttribute('data-in-view', index + 1 > start && index < end)
@@ -323,9 +324,9 @@ export const ChapterRail = forwardRef<ChapterRailHandle, ChapterRailProps>(funct
     tickRefs.current[target]?.focus()
   }
 
-  const lastReturnLabel = useRef('')
+  const lastReturn = useRef({ index: 0, label: '' })
   if (returnTo) {
-    lastReturnLabel.current = returnTo.label
+    lastReturn.current = { index: returnTo.index, label: returnTo.label }
   }
 
   const firstTick = layout.ticks[0] ?? 0
@@ -334,12 +335,19 @@ export const ChapterRail = forwardRef<ChapterRailHandle, ChapterRailProps>(funct
   const restBottom = lastTick + REST_PADDING
   const centres = open ? layout.rows : layout.ticks
   const rovingIndex = focusIndex ?? current
+  const hasActions = items.some((item) => item.action !== undefined && item.action !== null)
 
   return (
     <nav
       ref={rootRef}
       aria-label={ariaLabel}
-      className={clsx(styles.rail, open && styles.open, scrubbing && styles.scrubbing, className)}
+      className={clsx(
+        styles.rail,
+        open && styles.open,
+        scrubbing && styles.scrubbing,
+        hasActions && styles.hasActions,
+        className
+      )}
       onPointerEnter={() => hover.schedule(true, OPEN_DELAY_MS)}
       onPointerLeave={() => {
         if (!scrubRef.current) {
@@ -408,7 +416,6 @@ export const ChapterRail = forwardRef<ChapterRailHandle, ChapterRailProps>(funct
                     styles.item,
                     isCurrent && styles.current,
                     item.live && styles.live,
-                    item.action !== undefined && item.action !== null && styles.withAction,
                     returnTo?.index === index && styles.origin
                   )}
                   style={style}
@@ -454,11 +461,13 @@ export const ChapterRail = forwardRef<ChapterRailHandle, ChapterRailProps>(funct
         style={{ top: (open ? layout.card.top + layout.card.height : restBottom) + RETURN_GAP }}
         tabIndex={returnTo ? 0 : -1}
         aria-hidden={returnTo ? undefined : true}
+        aria-label={lastReturn.current.label}
+        title={lastReturn.current.label}
         data-chapter-rail-action=""
         onClick={() => returnTo?.onReturn()}
       >
         <IconReturnOutline14 />
-        <span>{returnTo?.label ?? lastReturnLabel.current}</span>
+        <span aria-hidden="true">{lastReturn.current.index + 1}</span>
       </button>
     </nav>
   )

@@ -28,10 +28,14 @@
     transition: none;
   }
 
+  /* The 1px left inset keeps the border clear of the panel's content, including native views
+     (the built-in browser) that would otherwise draw over it. */
   .panelViewport {
     position: relative;
+    box-sizing: border-box;
     width: 100%;
     height: 100%;
+    padding-left: 1px;
     overflow: hidden;
 
     &::before {
@@ -57,7 +61,7 @@
   }
 
   .panelInnerRigid {
-    width: min(var(--side-panel-target-width, 540px), 72vw);
+    width: calc(min(var(--side-panel-target-width, 540px), 72vw) - 1px);
   }
 
   .panelClosed .panelInner {
@@ -146,6 +150,10 @@
       transition:
         transform var(--ui-duration-panel) var(--ui-ease-panel),
         visibility 0s linear var(--ui-duration-panel);
+    }
+
+    .panelViewport {
+      padding-left: 0;
     }
 
     .panelViewport::before {

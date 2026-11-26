@@ -21,17 +21,32 @@
     );
   }
 
+  .gutter {
+    container: chapter-gutter / inline-size;
+  }
+
+  /* The resting rail needs 48px between the scroll area's edge and the messages; any narrower and
+     it would sit on top of them, so it hides (the transcript works the same without it). */
+  @container chapter-gutter (width < 48px) {
+    .rail {
+      display: none;
+    }
+  }
+
   @media not all and (min-width: 768px) {
     .gutter {
       display: none;
     }
   }
 
+  /* One width for every row, icon at a fixed spot and the count after it, so the column lines up
+     whether a turn made 9 tool calls, 32, or only reasoned. */
   .activityChip {
     display: inline-flex;
     align-items: center;
     gap: var(--ui-space-1);
     box-sizing: border-box;
+    width: var(--ui-space-12);
     height: var(--ui-space-6);
     padding: 0 var(--ui-space-2);
     border: 0;

@@ -442,6 +442,7 @@ export const TranscriptChapters = ({
     <div className={styles.gutter}>
       <ChapterRail
         ref={railRef}
+        className={styles.rail}
         items={items}
         current={Math.min(current, Math.max(0, turns.length - 1))}
         ariaLabel={t('chapterRailLabel')}

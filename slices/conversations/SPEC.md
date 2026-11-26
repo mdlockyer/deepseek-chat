@@ -145,9 +145,7 @@ factories (`createIndexedDbSessionStore`, `memorySessionStore`).
     turn on `contextOverflow` or `payloadTooLarge` errors.
 
 13. **Chapter rail & reading position.** Chats with two or more turns show a `ChapterRail` in the
-    transcript's left gutter (desktop widths only), one chapter per reply labelled by the prompt
-    before it, with a divider after each compaction checkpoint and a live marker on a streaming
-    reply. The reading turn is the one whose start (its prompt, or the reply when it has none) is
+    transcript's left gutter (desktop widths, and only while the gutter is at least 48 px wide so it never covers the messages), one chapter per reply labelled by the prompt before it, with a divider after each compaction checkpoint; a streaming reply's number takes the accent colour in the open card. The reading turn is the one whose start (its prompt, or the reply when it has none) is
     last above a line 30% down the viewport, or the latest turn within 40 px of the bottom; it is
     published through `getReadingPosition` after scrolling rests on it, and at once for navigation.
     Clicking a chapter, `⌥↑` / `⌥↓` (outside text fields), or a reveal glides the transcript so the

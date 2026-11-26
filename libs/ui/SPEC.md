@@ -104,7 +104,7 @@ every slice's UI and pass the full gate with zero slice edits.
     and it follows keyboard focus and the current chapter) with rows outside it clipped. A click navigates once (`'jump'`); dragging
     past a few px scrubs (`'scrub'` for each new chapter under the pointer, then `onScrubEnd`). A
     trailing `action` per chapter is reachable while the card is open and never starts a scrub.
-    `returnTo` shows a labelled return button under the rail and a hollow ring on the origin chapter.
+    `returnTo` shows a compact return button under the rail (an icon and the origin chapter's number, named by `label`) and a hollow ring on the origin chapter. Every line the rail draws has rounded ends.
     Every duration and easing comes from motion tokens, so reduced motion makes it change in place.
 12. **Scroll glide (`createScrollGlide`).** Drives `scrollTop` with a critically damped spring that
     never overshoots, clamps targets to the scroll range, retargets in flight without resetting

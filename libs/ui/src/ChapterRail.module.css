@@ -58,11 +58,9 @@
     top: 0;
     left: calc(var(--chapter-x) + var(--ui-space-0-5));
     width: 2px;
-    height: 100px;
-    border-radius: 1px;
+    height: 0;
+    border-radius: var(--ui-radius-pill);
     background: var(--ui-border-strong);
-    transform: scaleY(0);
-    transform-origin: 0 0;
     transition: opacity var(--ui-duration-normal) var(--ui-ease-fade);
   }
 
@@ -136,8 +134,9 @@
     }
   }
 
-  .withAction .tick {
-    padding-right: var(--ui-space-12);
+  /* When any chapter has an action, every row reserves its slot, so labels end at one edge. */
+  .hasActions .tick {
+    padding-right: 56px;
   }
 
   @media (hover: hover) {
@@ -156,14 +155,13 @@
     position: absolute;
     top: 50%;
     left: var(--ui-space-2);
-    width: var(--chapter-tick-width);
+    width: var(--ui-space-3);
     height: 2px;
-    border-radius: 1px;
+    border-radius: var(--ui-radius-pill);
     background: var(--ui-text-disabled);
-    transform: translateY(-50%) scaleX(0.6);
-    transform-origin: 0 50%;
+    transform: translateY(-50%);
     transition:
-      transform var(--ui-duration-spring) var(--ui-ease-spring),
+      width var(--ui-duration-spring) var(--ui-ease-spring),
       background-color var(--ui-duration-normal) var(--ui-ease-standard),
       opacity var(--ui-duration-slow) var(--ui-ease-fade);
   }
@@ -173,8 +171,8 @@
   }
 
   .current .mark {
+    width: var(--chapter-tick-width);
     background: var(--ui-text-primary);
-    transform: translateY(-50%) scaleX(1);
   }
 
   /* Quiet between scrolls; the current chapter's tick stays at full strength. */
@@ -204,7 +202,7 @@
 
   .number {
     flex-shrink: 0;
-    min-width: var(--ui-space-4);
+    width: var(--ui-space-4);
     font: var(--ui-type-micro);
     font-variant-numeric: tabular-nums;
     color: var(--ui-text-muted);
@@ -245,21 +243,7 @@
       visibility 0s;
   }
 
-  /* A chapter still being written: a breathing dot beside its tick; its number in the open card. */
-  .live .tick::after {
-    content: '';
-    position: absolute;
-    top: 50%;
-    left: var(--ui-space-8);
-    width: 6px;
-    height: 6px;
-    border-radius: var(--ui-radius-pill);
-    background: var(--ui-accent-solid);
-    transform: translateY(-50%);
-    animation: chapter-live 1.4s var(--ui-ease-standard) infinite;
-    transition: visibility 0s linear var(--ui-duration-normal);
-  }
-
+  /* A chapter still being written: its number takes the accent in the open card. */
   .open .live .number {
     color: var(--ui-accent-text);
   }
@@ -278,26 +262,11 @@
     transition: visibility 0s linear var(--ui-duration-normal);
   }
 
-  /* Both markers sit where the open card shows the chapter number: hidden while it is open, and
+  /* The ring sits where the open card shows the chapter number: hidden while it is open, and
      back only once the number has faded on close. */
-  .open .live .tick::after,
   .open .origin .tick::before {
     visibility: hidden;
     transition: visibility 0s;
-  }
-
-  .live.origin .tick::before {
-    display: none;
-  }
-
-  @keyframes chapter-live {
-    0%,
-    100% {
-      opacity: 1;
-    }
-    50% {
-      opacity: 0.35;
-    }
   }
 
   .divider {
@@ -318,6 +287,7 @@
       content: '';
       flex: 1;
       height: 1px;
+      border-radius: var(--ui-radius-pill);
       background: var(--ui-border-default);
     }
   }
@@ -340,13 +310,14 @@
     gap: var(--ui-space-1-5);
     box-sizing: border-box;
     height: var(--ui-control-xs);
-    padding: 0 var(--ui-space-2-5) 0 var(--ui-space-2);
+    padding: 0 var(--ui-space-2);
     border: 0;
     border-radius: var(--ui-radius-pill);
     background: var(--ui-surface-overlay);
     box-shadow: var(--ui-elevation-1);
     color: var(--ui-text-secondary);
     font: var(--ui-type-micro);
+    font-variant-numeric: tabular-nums;
     white-space: nowrap;
     cursor: pointer;
     opacity: 0;
@@ -391,11 +362,5 @@
       top var(--ui-duration-panel) var(--ui-ease-panel),
       color var(--ui-duration-fast) var(--ui-ease-standard),
       visibility 0s;
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .live .tick::after {
-      animation: none;
-    }
   }
 }
