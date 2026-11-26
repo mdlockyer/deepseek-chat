@@ -190,13 +190,14 @@ export const useAnchoredPosition = <T extends HTMLElement, F extends HTMLElement
       return
     }
     const anchorRect = anchor.getBoundingClientRect()
-    const floatingRect = floating.getBoundingClientRect()
     applyPosition(
       computeAnchoredPosition({
         anchor: anchorRect,
+        // Layout size, not getBoundingClientRect(): an entrance animation's scale would otherwise
+        // shrink the measured box on the first frame and place the surface off by the difference.
         floating: {
-          width: floatingRect.width,
-          height: floatingRect.height,
+          width: floating.offsetWidth,
+          height: floating.offsetHeight,
           scrollHeight: floating.scrollHeight,
         },
         viewport: { width: window.innerWidth, height: window.innerHeight },
