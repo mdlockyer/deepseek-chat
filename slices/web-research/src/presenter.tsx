@@ -5,12 +5,7 @@ import type {
   ToolResultRecord,
   ToolStepPresenter,
 } from '@deepseek-chat/lib-tools'
-import {
-  Banner,
-  IconGlobeLanguageOutline14,
-  IconOpenExternalOutline14,
-  IconSearchOutline16,
-} from '@deepseek-chat/lib-ui'
+import { Banner, IconGlobeLanguageOutline14, IconSearchOutline16 } from '@deepseek-chat/lib-ui'
 import { webResearchMessages } from './messages.js'
 import styles from './WebResearchActivity.module.css'
 
@@ -125,9 +120,6 @@ const WebResearchStepDetail = ({ entry, openLink }: ActivityStepDetailProps) => 
               onClick={(event) => openLink(event, page.url)}
             >
               <span className={styles.pageLinkText}>{page.title || page.url}</span>
-              <span className={styles.linkIcon} aria-hidden="true">
-                <IconOpenExternalOutline14 />
-              </span>
             </a>
             {domain ? <div className={styles.pageSub}>{domain}</div> : null}
           </div>
@@ -160,9 +152,6 @@ const WebResearchStepDetail = ({ entry, openLink }: ActivityStepDetailProps) => 
                   onClick={(event) => openLink(event, source.url)}
                 >
                   <span className={styles.pageLinkText}>{source.title || source.url}</span>
-                  <span className={styles.linkIcon} aria-hidden="true">
-                    <IconOpenExternalOutline14 />
-                  </span>
                 </a>
                 {domain ? <div className={styles.pageSub}>{domain}</div> : null}
               </div>

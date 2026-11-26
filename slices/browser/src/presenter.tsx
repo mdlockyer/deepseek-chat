@@ -12,7 +12,6 @@ import {
   IconCodeOutline14,
   IconEyeOutline16,
   IconGlobeLanguageOutline14,
-  IconOpenExternalOutline14,
   IconViewportOutline14,
 } from '@deepseek-chat/lib-ui'
 import styles from './BrowserActivity.module.css'
@@ -195,9 +194,6 @@ const BrowserStepDetail = ({
           onClick={(event) => openLink(event, actionUrl)}
         >
           <span className={styles.linkText}>{meta.title || actionUrl}</span>
-          <span className={styles.linkIcon} aria-hidden="true">
-            <IconOpenExternalOutline14 />
-          </span>
         </a>
       ) : null}
 

@@ -36,12 +36,6 @@
     white-space: nowrap;
   }
 
-  .linkIcon {
-    display: inline-flex;
-    align-items: center;
-    flex-shrink: 0;
-  }
-
   .techNote {
     font: var(--ui-type-micro);
     color: var(--ui-text-muted);

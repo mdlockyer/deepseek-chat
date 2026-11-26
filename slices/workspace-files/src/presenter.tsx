@@ -1,9 +1,4 @@
-import {
-  Banner,
-  Button,
-  IconBrowseOutline16,
-  IconOpenExternalOutline14,
-} from '@deepseek-chat/lib-ui'
+import { Banner, Button, IconBrowseOutline16 } from '@deepseek-chat/lib-ui'
 import type {
   ActivityStepDetailProps,
   ArchiveFragment,
@@ -128,12 +123,7 @@ const FileStepDetail = ({ entry, sessionId, openFile }: ActivityStepDetailProps)
       ) : null}
       {fileRef && sessionId && openFile ? (
         <div className={styles.actions}>
-          <Button
-            variant="ghost"
-            size="s"
-            icon={<IconOpenExternalOutline14 />}
-            onClick={() => openFile(sessionId, fileRef)}
-          >
+          <Button variant="ghost" size="s" onClick={() => openFile(sessionId, fileRef)}>
             {t('activityFileOpenPreview')}
           </Button>
         </div>

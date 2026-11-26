@@ -4,7 +4,6 @@ import {
   IconButton,
   IconChevronLeftOutline14,
   IconChevronRightOutline14,
-  IconOpenExternalOutline14,
 } from '@deepseek-chat/lib-ui'
 import { useEffect, type MouseEvent } from 'react'
 import { activityInspectorMessages } from './messages.js'
@@ -105,7 +104,6 @@ export const VisualLightbox = ({
                   onClick={(event) => onOpenLink(event, href)}
                 >
                   <span>{host ? t('lightboxOpenHost', { host }) : t('lightboxOpenPage')}</span>
-                  <IconOpenExternalOutline14 />
                 </a>
               ) : null}
               {current.callId ? (

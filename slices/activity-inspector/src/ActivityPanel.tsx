@@ -9,7 +9,6 @@ import {
   IconChevronRightOutline14,
   IconCloseOutline16,
   IconCodeOutline14,
-  IconOpenExternalOutline14,
   IconPhotoOutline14,
   IconSearchOutline16,
   IconThinkOutline16,
@@ -277,7 +276,6 @@ const ServerSearchRow = ({
                   onClick={(event) => openLink(event, page.url)}
                 >
                   <span className={styles.serverPageText}>{page.title || page.url}</span>
-                  <IconOpenExternalOutline14 />
                 </a>
               ))}
             </div>

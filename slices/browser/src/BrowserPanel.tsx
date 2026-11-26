@@ -10,7 +10,6 @@ import {
   IconEllipsisOutline16,
   IconGlobeLanguageOutline14,
   IconLockOutline12,
-  IconOpenExternalOutline14,
   IconPlusOutline14,
   IconRefreshOutline16,
   IconTrashOutline16,
@@ -365,16 +364,18 @@ export const createBrowserPanel = (state: BrowserState, deps: BrowserPanelDeps) 
                 }
               }}
             />
-            {activeUrl ? (
-              <IconButton
-                size="xs"
-                icon={<IconOpenExternalOutline14 />}
-                tooltip={t('browserOpenExternal')}
-                onClick={() => void deps.openExternal(activeUrl)}
-              />
-            ) : null}
             <Menu
               options={[
+                ...(activeUrl
+                  ? [
+                      {
+                        key: 'open-external',
+                        label: t('browserOpenExternal'),
+                        icon: <IconGlobeLanguageOutline14 />,
+                        onSelect: () => void deps.openExternal(activeUrl),
+                      },
+                    ]
+                  : []),
                 {
                   key: 'clear-data',
                   label: t('browserClearSiteData'),

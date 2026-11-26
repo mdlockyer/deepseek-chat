@@ -3,7 +3,6 @@ import {
   Button,
   IconCheckOutline16,
   IconKeyOutline16,
-  IconRightUpOutline14,
   IconToastError16,
   LinkButton,
   PasswordField,
@@ -304,7 +303,6 @@ export const KeySettings = ({
             data-external-browser="true"
           >
             <span>{tr('consoleAction')}</span>
-            <IconRightUpOutline14 />
           </LinkButton>
         }
       />

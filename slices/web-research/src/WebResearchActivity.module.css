@@ -58,13 +58,6 @@
     white-space: nowrap;
   }
 
-  .linkIcon {
-    display: inline-flex;
-    align-items: center;
-    flex-shrink: 0;
-    color: var(--ui-text-muted);
-  }
-
   .pageSub {
     font: var(--ui-type-micro);
     color: var(--ui-text-muted);

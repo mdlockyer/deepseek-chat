@@ -3,7 +3,6 @@ import {
   Button,
   IconCheckOutline16,
   IconKeyOutline16,
-  IconRightUpOutline14,
   IconToastError16,
   LinkButton,
   PasswordField,
@@ -280,7 +279,6 @@ export const createKeySettings = (account: Account) => {
               data-external-browser="true"
             >
               <span>{tr('apiKeyConsoleAction')}</span>
-              <IconRightUpOutline14 />
             </LinkButton>
           }
         />
