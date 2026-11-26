@@ -412,6 +412,12 @@ export const createAppRuntime = (config: AppRuntimeConfig = {}) => {
           listTurns: conversations.listSessionTurns,
           subscribe: conversations.subscribeToTurns,
         },
+        transcript: {
+          getReadingPosition: conversations.getReadingPosition,
+          subscribeToReading: conversations.subscribeToReading,
+          revealTurn: conversations.revealTurn,
+          revealLatest: conversations.revealLatest,
+        },
         getPresenter: toolRegistry.presenterFor,
         openInApp: browser?.available
           ? (url: string) => {

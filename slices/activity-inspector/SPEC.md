@@ -3,10 +3,14 @@
 ## Purpose
 
 Hosts the right-hand Activity & Sources evidence drawer inside the app's shared `PanelSlot`, with
-a first-class `HeaderToggle` in the session header alongside peer workspace toggles. Operates in
-either `follow_latest` mode (tracking the latest or currently streaming turn) or `pinned` mode
-(inspecting a specific turn via `TurnInspectionRequested` or the header turn menu, with a compact
-`Latest` return button when pinned behind a newer turn).
+a first-class `HeaderToggle` in the session header alongside peer workspace toggles. The drawer
+scrolls through every turn of the chat as chapters, each under a sticky header naming the turn by
+its prompt, and stays in step with the transcript: in `follow_reading` mode it shows the turn the
+reader is on (from the optional `transcript` port; the latest turn without one), and in `pinned`
+mode it holds one turn (from `TurnInspectionRequested`, the header's previous / next buttons, a
+chapter header, or the reader scrolling the drawer itself) until the reader moves on to another
+turn in the transcript. A header readout names the turn on show, and `Latest` returns to the
+newest one.
 
 Rather than duplicating the left chat pane's step list under stacked filter bars, the drawer keeps
 **one single 52px header** (with underline `Activity` | `Sources` tabs when sources exist), pins an
@@ -26,31 +30,45 @@ banners).
 | :------------------------------- | :------------------------------------------------------------------------------------------------------------------ |
 | `ActivityPanel({ topActions? })` | Single-header right-hand Activity & Sources drawer with Evidence Shelf, Visual Lightbox, and unified step timeline. |
 | `HeaderToggle`                   | Session header toggle button (always visible peer alongside Browser and File Preview, with >= 3:1 active ring).     |
-| `togglePanel(sessionId)`         | Opens Activity in `follow_latest` mode (or restores the pinned turn on that session); toggles closed when open.     |
-| `selectTurn(sessionId, msgId)`   | Pins a specific turn inside the open Activity panel.                                                                |
-| `followLatest(sessionId)`        | Switches an open pinned Activity panel back to `follow_latest` mode on the active session.                          |
-| `useActiveTarget()`              | React hook returning the currently displayed `ActivityTarget \| null` in both `follow_latest` and `pinned` modes.   |
+| `togglePanel(sessionId)`         | Opens Activity in `follow_reading` mode (or restores the pinned turn on that session); toggles closed when open.    |
+| `selectTurn(sessionId, msgId)`   | Pins a turn in the open panel and asks the transcript (`revealTurn`) to show it too.                                |
+| `followLatest(sessionId)`        | Returns to `follow_reading` and asks the transcript (`revealLatest`) for its latest output.                         |
+| `useActiveTarget()`              | React hook returning the currently displayed `ActivityTarget \| null` in both `follow_reading` and `pinned` modes.  |
 | `getTarget()`                    | Imperative getter matching `useActiveTarget()` (`null` while hidden, displaced, or showing no active turn).         |
-| `getSelection()`                 | Current `ActivitySelection \| null` (`'follow_latest' \| 'pinned'`).                                                |
+| `getSelection()`                 | Current `ActivitySelection \| null` (`'follow_reading' \| 'pinned'`).                                               |
 | `close()`                        | Closes the panel slot and clears selection.                                                                         |
 | `dispose()`                      | Unsubscribes all `EventLog` and `PanelSlot` listeners.                                                              |
 
 Pure exports: `buildActivityTimeline`, `extractTurnSources`, `SiteLogo`, `SourceCard`.
 
+Optional port `transcript: TranscriptPort` (`getReadingPosition`, `subscribeToReading`, `revealTurn`,
+`revealLatest`), wired by the app to `slices/conversations`. Without it the drawer follows the latest
+turn and scrolling it moves nothing else.
+
 ## Behavioural invariants
 
-1. **First-class header toggle & active target honesty.** Clicking `HeaderToggle` opens Activity in
-   `follow_latest` mode (showing the currently streaming turn or latest turn with activity, or a
-   calm `EmptyState` on a brand-new chat) and closes it when already open. `useActiveTarget()` /
-   `getTarget()` reports the resolved displayed `{ sessionId, messageId, tab }` in both
-   `follow_latest` and `pinned` modes while open, and `null` while closed or displaced. Whenever
-   pinned behind a newer turn, a header `Latest` control returns to `follow_latest` mode.
-2. **Turn pinning & persistent step targeting.** `TurnInspectionRequested` pins
-   `(sessionId, messageId, tab)` and opens the panel slot. When `callId` is omitted, repeating the
-   exact same pinned request while open toggles closed. When `callId` is provided, the panel always
-   opens (or stays open), records `focusedCallId` with a monotonically bumped `focusNonce`, expands
-   the targeted step, scrolls it into view, and keeps a persistent selected indicator on that step
-   until another step is chosen or focus is cleared.
+1. **First-class header toggle, following the reader & active target honesty.** Clicking
+   `HeaderToggle` opens Activity in `follow_reading` mode and closes it when already open. In
+   `follow_reading` the displayed turn is the transcript's reading position when that turn is in
+   the chat, else the streaming turn, else the latest turn; a brand-new chat shows a calm
+   `EmptyState`. `useActiveTarget()` / `getTarget()` report the resolved `{ sessionId, messageId,
+tab }` in both modes while open, and `null` while closed or displaced. Whenever the displayed
+   turn is not the latest, a header `Latest` control calls `followLatest`.
+2. **Turn pinning, chapters & persistent step targeting.** `TurnInspectionRequested` pins
+   `(sessionId, messageId, tab)` and opens the panel slot. When `callId` is omitted, a request for
+   the turn and tab the open panel already displays (pinned or followed) toggles it closed. When
+   `callId` is provided, the panel always opens (or stays open), records `focusedCallId` with a
+   monotonically bumped `focusNonce`, expands the targeted step, glides it into view below its
+   chapter header, and keeps a persistent selected indicator on that step until another step is
+   chosen or focus is cleared. A pin holds until the transcript reports a different reading turn
+   with cause `'reader'`; positions with cause `'reveal'` never release it. Both tabs render every
+   turn (Sources: every turn with sources) as a chapter under a sticky header with its number, prompt
+   and a step count, source count or live marker, each keeping its own expanded steps. When the
+   displayed turn changes for any reason other than the reader scrolling the drawer, the visible
+   tab glides to that chapter (instantly when the tab is first shown, to the bottom while a live
+   latest turn streams); when the reader scrolls the drawer and rests on another chapter, that turn
+   is pinned and revealed in the transcript. Previous / next header buttons and chapter headers pin
+   and reveal the same way.
 3. **Displacement isolation.** When another right-hand panel displaces Activity on the same
    session, `useActiveTarget()` / `getTarget()` reports `null` while hidden, and clicking
    `HeaderToggle` again resumes that session's selection (clearing any stale `focusedCallId`).
@@ -89,3 +107,11 @@ Pure exports: `buildActivityTimeline`, `extractTurnSources`, `SiteLogo`, `Source
 
 Consumes `ActiveSessionChanged`, `SessionDeleted`, `SessionHistoryReplaced`,
 `TurnInspectionRequested`. Publishes none.
+
+## Parameters
+
+| Name                                 | Value  |
+| :----------------------------------- | :----- |
+| Drawer scrolling rest before pinning | 130 ms |
+| Reader-scroll window after input     | 250 ms |
+| Live turn keeps the drawer at bottom | 48 px  |

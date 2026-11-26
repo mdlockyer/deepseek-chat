@@ -69,59 +69,26 @@
     color: var(--ui-text-muted);
   }
 
-  .turnMenuButton {
+  /* "Turn 3 of 9": which turn the panel shows; the number rolls as it changes. */
+  .readout {
     display: inline-flex;
-    align-items: center;
-    gap: var(--ui-space-1);
-    min-width: 0;
-    height: var(--ui-control-xs);
-    padding: 0 var(--ui-space-2);
-    border: 1px solid var(--ui-border-default);
-    border-radius: var(--ui-radius-sm);
-    background: transparent;
-    color: var(--ui-text-secondary);
-    font: var(--ui-type-micro);
-    font-variant-numeric: tabular-nums;
-    cursor: pointer;
     flex-shrink: 0;
-    transition:
-      background-color var(--ui-duration-fast) var(--ui-ease-standard),
-      color var(--ui-duration-fast) var(--ui-ease-standard);
-
-    @media (hover: hover) {
-      &:hover {
-        background: var(--ui-interactive-hover);
-        color: var(--ui-text-primary);
-      }
-    }
-
-    &:focus-visible {
-      outline: 2px solid var(--ui-focus-ring);
-      outline-offset: 2px;
-    }
+    align-items: center;
+    min-width: 0;
   }
 
-  .turnMenuButtonOpen {
-    background: var(--ui-interactive-active);
-    color: var(--ui-text-primary);
-  }
-
-  .turnMenuLabel {
-    overflow: hidden;
-    text-overflow: ellipsis;
+  .readoutText {
+    display: inline-flex;
+    align-items: baseline;
+    gap: var(--ui-space-1);
+    font: var(--ui-type-caption);
+    color: var(--ui-text-muted);
     white-space: nowrap;
   }
 
-  .turnMenuChevron {
-    display: inline-flex;
-    align-items: center;
-    flex-shrink: 0;
-    color: var(--ui-text-muted);
-  }
-
-  .turnMenu {
-    min-width: 210px;
-    max-width: min(320px, calc(100vw - var(--ui-space-4)));
+  .readoutNumber {
+    color: var(--ui-text-primary);
+    font-weight: 500;
   }
 
   .latestButton {
@@ -129,15 +96,6 @@
     min-width: 0;
     padding: 0 var(--ui-space-2);
     color: var(--ui-accent-text);
-  }
-
-  .liveBadge {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--ui-space-1-5);
-    flex-shrink: 0;
-    font: var(--ui-type-micro);
-    color: var(--ui-text-muted);
   }
 
   .liveDot {
@@ -172,20 +130,135 @@
   }
 
   .content {
+    position: relative;
     flex: 1;
     min-height: 0;
     overflow-x: hidden;
     overflow-y: auto;
     overscroll-behavior: contain;
-    padding: var(--ui-space-3) var(--ui-space-4) var(--ui-space-5);
     scrollbar-color: var(--ui-scrollbar-thumb) transparent;
+  }
+
+  .chapters {
+    display: flex;
+    flex-direction: column;
+    min-height: 100%;
+    padding-bottom: var(--ui-space-5);
+    box-sizing: border-box;
+  }
+
+  /* ---------- Chapters: one per turn, each under a sticky header ---------- */
+
+  .chapter {
+    position: relative;
+  }
+
+  .chapterHeading {
+    position: sticky;
+    top: 0;
+    z-index: var(--ui-z-base);
+    margin: 0;
+  }
+
+  .chapterHeader {
+    display: flex;
+    align-items: center;
+    gap: var(--ui-space-2-5);
+    box-sizing: border-box;
+    width: 100%;
+    height: var(--ui-control-xl);
+    padding: 0 var(--ui-space-4);
+    border: 0;
+    background: var(--ui-surface-glass);
+    -webkit-backdrop-filter: blur(12px) saturate(1.4);
+    backdrop-filter: blur(12px) saturate(1.4);
+    box-shadow: 0 1px 0 var(--ui-border-subtle);
+    color: var(--ui-text-secondary);
+    font: var(--ui-type-label);
+    text-align: left;
+    cursor: pointer;
+
+    @media (hover: hover) {
+      &:hover .chapterTitle {
+        color: var(--ui-text-primary);
+      }
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--ui-focus-ring);
+      outline-offset: -2px;
+    }
+  }
+
+  .chapterNumber {
+    display: inline-grid;
+    place-items: center;
+    flex-shrink: 0;
+    box-sizing: border-box;
+    min-width: 22px;
+    height: 22px;
+    padding: 0 var(--ui-space-1-5);
+    border-radius: var(--ui-radius-sm);
+    background: var(--ui-surface-raised-2);
+    color: var(--ui-text-secondary);
+    font: var(--ui-type-micro);
+    font-variant-numeric: tabular-nums;
+    transition:
+      background-color var(--ui-duration-normal) var(--ui-ease-standard),
+      color var(--ui-duration-normal) var(--ui-ease-standard);
+  }
+
+  .chapterCurrent .chapterNumber {
+    background: var(--ui-text-primary);
+    color: var(--ui-surface-canvas);
+  }
+
+  .chapterTitle {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font: var(--ui-type-label-strong);
+    color: var(--ui-text-secondary);
+    transition: color var(--ui-duration-normal) var(--ui-ease-standard);
+  }
+
+  .chapterCurrent .chapterTitle {
+    color: var(--ui-text-primary);
+  }
+
+  .chapterMeta {
+    flex-shrink: 0;
+    font: var(--ui-type-micro);
+    font-variant-numeric: tabular-nums;
+    color: var(--ui-text-muted);
+  }
+
+  .chapterLive {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: var(--ui-space-1-5);
+    font: var(--ui-type-micro);
+    color: var(--ui-accent-text);
+  }
+
+  .chapterBody {
+    padding: var(--ui-space-3) var(--ui-space-4) var(--ui-space-6);
+  }
+
+  .chapterEmpty {
+    margin: 0;
+    font: var(--ui-type-caption);
+    color: var(--ui-text-muted);
   }
 
   .emptyWrap {
     display: flex;
+    flex: 1;
     align-items: center;
     justify-content: center;
-    min-height: 100%;
     padding: var(--ui-space-6) var(--ui-space-2);
   }
 

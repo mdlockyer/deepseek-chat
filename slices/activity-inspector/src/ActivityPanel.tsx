@@ -7,27 +7,35 @@ import {
   IconActivityOutline16,
   IconChevronDownOutline14,
   IconChevronRightOutline14,
+  IconChevronUpOutline14,
   IconCloseOutline16,
   IconCodeOutline14,
   IconPhotoOutline14,
   IconThinkOutline16,
   IconButton,
+  RollingNumber,
   Tab,
   TabList,
   TabPanel,
   Tabs,
+  createScrollGlide,
   hoverGlideItem,
+  onScrollIntent,
+  type ScrollGlide,
 } from '@deepseek-chat/lib-ui'
 import clsx from 'clsx'
 import {
+  memo,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
   useSyncExternalStore,
   type MouseEvent,
   type ReactNode,
+  type RefObject,
 } from 'react'
 import { EvidenceShelf } from './EvidenceShelf.js'
 import { GenericStepDetail } from './GenericStepView.js'
@@ -40,9 +48,9 @@ import {
   type ActivityLanePhase,
   type ActivityStepRecord,
   type ActivityThinkingRound,
+  type ActivityTimeline,
   type ActivityVisualItem,
 } from './timeline.js'
-import { TurnSwitcherMenu } from './TurnSwitcherMenu.js'
 import type {
   ActivityInspectorDeps,
   ActivitySelection,
@@ -53,9 +61,7 @@ import type {
 import { VisualLightbox } from './VisualLightbox.js'
 import styles from './ActivityPanel.module.css'
 
-const EMPTY_TURNS: readonly SessionTurnSummary[] = []
 const EMPTY_VISUALS: readonly ActivityVisualItem[] = []
-const AUTO_SCROLL_THRESHOLD_PX = 48
 
 const useLiveElapsedSeconds = (active: boolean, startedAt: number | null): number | null => {
   const [now, setNow] = useState(() => Date.now())
@@ -397,7 +403,221 @@ const SourcesView = ({
   )
 }
 
-export const createActivityPanel = (state: ActivityPanelState, deps: ActivityInspectorDeps) => {
+/** How long the reader's scrolling must rest on a turn before the panel pins it. */
+const CHAPTER_SETTLE_MS = 130
+/** Scroll events this soon after the reader's own input (or another such event) are theirs. */
+const READER_SCROLL_WINDOW_MS = 250
+/** Within this distance of the bottom, a live turn's new steps keep the panel at the bottom. */
+const LIVE_STICK_PX = 48
+/** Height of a sticky chapter header; a step brought into view clears it. */
+const CHAPTER_HEADER_PX = 44
+
+/** One turn of the chat in the panel: its summary and its live snapshot. */
+type Chapter = { readonly summary: SessionTurnSummary; readonly turn: TurnSnapshot | null }
+
+type LightboxState = {
+  readonly messageId: string
+  readonly index: number
+  readonly fallback?: ActivityVisualItem
+}
+
+const NO_CHAPTERS: readonly Chapter[] = []
+
+const sameSummary = (a: SessionTurnSummary, b: SessionTurnSummary) =>
+  a.messageId === b.messageId &&
+  a.turnNumber === b.turnNumber &&
+  a.promptExcerpt === b.promptExcerpt &&
+  a.streaming === b.streaming &&
+  a.hasActivity === b.hasActivity
+
+const sameTurn = (a: TurnSnapshot | null, b: TurnSnapshot | null) =>
+  a === b ||
+  (a !== null &&
+    b !== null &&
+    a.sessionId === b.sessionId &&
+    a.messageId === b.messageId &&
+    a.status === b.status &&
+    a.streaming === b.streaming &&
+    a.blocks === b.blocks &&
+    a.capabilityState === b.capabilityState)
+
+const escapeAttr = (value: string) =>
+  typeof CSS !== 'undefined' && typeof CSS.escape === 'function'
+    ? CSS.escape(value)
+    : value.replace(/["\\]/g, '\\$&')
+
+/**
+ * Keeps one tab's scroll container in step with the turn the panel shows. When that turn changes
+ * for any reason other than the reader scrolling this container, it glides there (instantly the
+ * first time the tab is shown). When the reader scrolls to another turn and rests, it reports
+ * that turn so the panel can pin it and the transcript can follow. A live last turn keeps the
+ * container at the bottom while its steps arrive, as long as the reader is there.
+ */
+const useChapterScroller = ({
+  containerRef,
+  targetId,
+  lastId,
+  live,
+  visible,
+  onReaderChapter,
+}: {
+  containerRef: RefObject<HTMLDivElement | null>
+  targetId: string | null
+  lastId: string | null
+  live: boolean
+  visible: boolean
+  onReaderChapter: (messageId: string) => void
+}) => {
+  const glideRef = useRef<ScrollGlide | null>(null)
+  const reportedRef = useRef<string | null>(null)
+  const readerUntilRef = useRef(0)
+  const draggingRef = useRef(false)
+  const atBottomRef = useRef(true)
+  const positionedRef = useRef(false)
+  const settleTimer = useRef(0)
+  const targetRef = useRef(targetId)
+  targetRef.current = targetId
+  const onReaderRef = useRef(onReaderChapter)
+  onReaderRef.current = onReaderChapter
+  const followBottomRef = useRef(false)
+  followBottomRef.current = live && targetId !== null && targetId === lastId
+
+  const glideFor = (el: HTMLDivElement) => (glideRef.current ??= createScrollGlide(el))
+
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) {
+      return
+    }
+    const glide = glideFor(el)
+    const chapterAtTop = () => {
+      const chapters = el.querySelectorAll<HTMLElement>('[data-chapter-id]')
+      const last = chapters[chapters.length - 1]
+      if (!last) {
+        return null
+      }
+      if (el.scrollHeight - el.scrollTop - el.clientHeight < 2) {
+        return last.dataset.chapterId ?? null
+      }
+      let found: string | null = null
+      for (const chapter of chapters) {
+        if (found === null || chapter.offsetTop <= el.scrollTop + 8) {
+          found = chapter.dataset.chapterId ?? null
+        }
+      }
+      return found
+    }
+    const stopIntent = onScrollIntent(el, () => {
+      readerUntilRef.current = performance.now() + READER_SCROLL_WINDOW_MS
+      glide.cancel()
+    })
+    const onPointerDown = () => {
+      draggingRef.current = true
+    }
+    const onPointerUp = () => {
+      draggingRef.current = false
+    }
+    const onScroll = () => {
+      atBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight <= LIVE_STICK_PX
+      const now = performance.now()
+      if (glide.isActive() || (!draggingRef.current && now > readerUntilRef.current)) {
+        return
+      }
+      readerUntilRef.current = now + READER_SCROLL_WINDOW_MS
+      window.clearTimeout(settleTimer.current)
+      const id = chapterAtTop()
+      if (!id || id === targetRef.current) {
+        return
+      }
+      settleTimer.current = window.setTimeout(() => {
+        reportedRef.current = id
+        onReaderRef.current(id)
+      }, CHAPTER_SETTLE_MS)
+    }
+    const observer = new ResizeObserver(() => {
+      if (followBottomRef.current && atBottomRef.current && !glide.isActive()) {
+        el.scrollTop = el.scrollHeight
+      }
+    })
+    if (el.firstElementChild) {
+      observer.observe(el.firstElementChild)
+    }
+    el.addEventListener('pointerdown', onPointerDown)
+    window.addEventListener('pointerup', onPointerUp)
+    window.addEventListener('pointercancel', onPointerUp)
+    el.addEventListener('scroll', onScroll, { passive: true })
+    return () => {
+      stopIntent()
+      observer.disconnect()
+      el.removeEventListener('pointerdown', onPointerDown)
+      window.removeEventListener('pointerup', onPointerUp)
+      window.removeEventListener('pointercancel', onPointerUp)
+      el.removeEventListener('scroll', onScroll)
+      window.clearTimeout(settleTimer.current)
+      glide.cancel()
+    }
+  }, [containerRef])
+
+  useLayoutEffect(() => {
+    const el = containerRef.current
+    if (!visible) {
+      positionedRef.current = false
+      return
+    }
+    if (!el || !targetId) {
+      return
+    }
+    if (positionedRef.current && targetId === reportedRef.current) {
+      return
+    }
+    reportedRef.current = null
+    const chapter = el.querySelector<HTMLElement>(`[data-chapter-id="${escapeAttr(targetId)}"]`)
+    if (!chapter) {
+      return
+    }
+    const goal = followBottomRef.current ? el.scrollHeight : chapter.offsetTop
+    glideFor(el).to(
+      goal,
+      positionedRef.current
+        ? { fade: el.firstElementChild as HTMLElement | null }
+        : { instant: true }
+    )
+    positionedRef.current = true
+  }, [visible, targetId, containerRef])
+
+  /** Glides just far enough to show `node` below the sticky chapter header. */
+  return useCallback(
+    (node: HTMLElement) => {
+      const el = containerRef.current
+      if (!el) {
+        return
+      }
+      const top = node.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop
+      const bottom = top + node.offsetHeight
+      if (top >= el.scrollTop + CHAPTER_HEADER_PX && bottom <= el.scrollTop + el.clientHeight) {
+        return
+      }
+      glideFor(el).to(top - CHAPTER_HEADER_PX - 8)
+    },
+    [containerRef]
+  )
+}
+
+export const createActivityPanel = (
+  state: ActivityPanelState,
+  deps: ActivityInspectorDeps,
+  resolveMessageId: (selection: ActivitySelection) => string | null
+) => {
+  const timelines = new WeakMap<TurnSnapshot, ActivityTimeline>()
+  const timelineFor = (turn: TurnSnapshot): ActivityTimeline => {
+    let timeline = timelines.get(turn)
+    if (!timeline) {
+      timeline = buildActivityTimeline(turn, deps.getPresenter)
+      timelines.set(turn, timeline)
+    }
+    return timeline
+  }
+
   const renderMarkdown = ({
     content,
     cacheKey,
@@ -406,297 +626,197 @@ export const createActivityPanel = (state: ActivityPanelState, deps: ActivityIns
     readonly cacheKey: string
   }) => <Markdown content={content} loading={false} cacheKey={cacheKey} disableLink={false} />
 
-  const ActivityPanel = ({ topActions }: { topActions?: ReactNode } = {}) => {
-    const t = activityInspectorMessages.useTranslate()
-    const selection = state.useStore((s) => s.selection)
-    const layoutSessionId = deps.panel.useLayout((layout) => layout.activeSessionId)
-    const lastSelectionRef = useRef<ActivitySelection | null>(selection)
-    if (selection) {
-      lastSelectionRef.current = selection
+  const openLink = (event: MouseEvent, url: string) => {
+    if (deps.openInApp && /^https?:\/\//i.test(url)) {
+      event.preventDefault()
+      deps.openInApp(url)
     }
-    const activeSelection = selection ?? lastSelectionRef.current
-    const sessionId = activeSelection?.sessionId ?? layoutSessionId
+  }
 
-    const getTurns = useCallback((): readonly SessionTurnSummary[] => {
-      if (!sessionId || !deps.turnSource.listTurns) {
-        return EMPTY_TURNS
-      }
-      return deps.turnSource.listTurns(sessionId)
-    }, [sessionId])
+  const subscribeAll = (listener: () => void) => {
+    const unsubTurns = deps.turnSource.subscribe(listener)
+    const unsubReading = deps.transcript?.subscribeToReading(listener)
+    return () => {
+      unsubTurns()
+      unsubReading?.()
+    }
+  }
 
-    const allTurns = useSyncExternalStore(deps.turnSource.subscribe, getTurns, getTurns)
-    const activityTurns = useMemo(
-      () => allTurns.filter((item) => item.hasActivity || item.streaming),
-      [allTurns]
+  /** A turn's sticky header: its number, its prompt, and a live marker or a quiet summary. */
+  const ChapterHeading = ({
+    chapter,
+    number,
+    current,
+    meta,
+    onSelect,
+  }: {
+    chapter: Chapter
+    number: number
+    current: boolean
+    meta: string | null
+    onSelect: () => void
+  }) => {
+    const t = activityInspectorMessages.useTranslate()
+    const live = chapter.summary.streaming
+    const title = chapter.summary.promptExcerpt || t('turnShortLabel', { number })
+    return (
+      <h3 className={styles.chapterHeading}>
+        <button
+          type="button"
+          className={styles.chapterHeader}
+          aria-label={t('chapterLabel', { number, prompt: title })}
+          aria-current={current ? 'true' : undefined}
+          onClick={onSelect}
+        >
+          <span className={styles.chapterNumber} aria-hidden="true">
+            {number}
+          </span>
+          <span className={styles.chapterTitle} aria-hidden="true">
+            {title}
+          </span>
+          {live ? (
+            <span className={styles.chapterLive} aria-hidden="true">
+              <span className={styles.liveDot} />
+              {t('liveStatus')}
+            </span>
+          ) : meta ? (
+            <span className={styles.chapterMeta} aria-hidden="true">
+              {meta}
+            </span>
+          ) : null}
+        </button>
+      </h3>
     )
+  }
 
-    const latestTurnId = useMemo(() => {
-      const streamingTurn = [...activityTurns].reverse().find((item) => item.streaming)
-      return streamingTurn?.messageId ?? activityTurns.at(-1)?.messageId ?? null
-    }, [activityTurns])
+  const chapterMeta = (
+    t: ReturnType<typeof activityInspectorMessages.useTranslate>,
+    timeline: ActivityTimeline | null
+  ): string | null => {
+    if (!timeline) {
+      return null
+    }
+    if (timeline.stepCount > 0) {
+      return timeline.stepCount === 1
+        ? t('chapterStepsOne')
+        : t('chapterStepsMany', { count: timeline.stepCount })
+    }
+    return timeline.thinkingSeconds !== null
+      ? t('reasoningSeconds', { seconds: timeline.thinkingSeconds })
+      : null
+  }
 
-    const resolvedMessageId = useMemo(() => {
-      if (activeSelection?.kind === 'pinned') {
-        return activeSelection.messageId
-      }
-      return latestTurnId
-    }, [activeSelection, latestTurnId])
-
-    const cachedTurnRef = useRef<TurnSnapshot | null>(null)
-    const getSnapshot = useCallback((): TurnSnapshot | null => {
-      if (!sessionId || !resolvedMessageId) {
-        cachedTurnRef.current = null
-        return null
-      }
-      const next = deps.turnSource.getTurn(sessionId, resolvedMessageId)
-      const prev = cachedTurnRef.current
-      if (prev === next) {
-        return prev
-      }
-      if (
-        prev &&
-        next &&
-        prev.sessionId === next.sessionId &&
-        prev.messageId === next.messageId &&
-        prev.status === next.status &&
-        prev.streaming === next.streaming &&
-        prev.blocks === next.blocks &&
-        prev.capabilityState === next.capabilityState
-      ) {
-        return prev
-      }
-      cachedTurnRef.current = next
-      return next
-    }, [sessionId, resolvedMessageId])
-
-    const turn = useSyncExternalStore(deps.turnSource.subscribe, getSnapshot, getSnapshot)
+  /** One turn's activity: reasoning, outputs and steps, with its own expanded and selected steps. */
+  const TurnChapter = memo(function TurnChapter({
+    chapter,
+    number,
+    current,
+    focusedCallId,
+    focusNonce,
+    onSelect,
+    onOpenVisual,
+    revealElement,
+  }: {
+    chapter: Chapter
+    number: number
+    current: boolean
+    focusedCallId: string | null
+    focusNonce: number
+    onSelect: (messageId: string) => void
+    onOpenVisual: (messageId: string, index: number, fallback?: ActivityVisualItem) => void
+    revealElement: (node: HTMLElement) => void
+  }) {
+    const t = activityInspectorMessages.useTranslate()
+    const { summary, turn } = chapter
+    const timeline = turn ? timelineFor(turn) : null
     const live = Boolean(turn && turn.streaming && turn.status === 'streaming')
-
-    const timeline = useMemo(
-      () => (turn ? buildActivityTimeline(turn, deps.getPresenter) : null),
-      [turn]
-    )
-
-    const openLink = useCallback((event: MouseEvent, url: string) => {
-      if (deps.openInApp && /^https?:\/\//i.test(url)) {
-        event.preventDefault()
-        deps.openInApp(url)
-      }
-    }, [])
-
-    const hasSources = (timeline?.sources.all.length ?? 0) > 0
-    const effectiveTab = hasSources ? (activeSelection?.tab ?? 'activity') : 'activity'
-    const focusedCallId =
-      activeSelection?.kind === 'pinned' ? (activeSelection.focusedCallId ?? null) : null
-    const focusNonce = activeSelection?.kind === 'pinned' ? (activeSelection.focusNonce ?? 0) : 0
-    const contentRef = useRef<HTMLDivElement | null>(null)
-    const pinnedToBottomRef = useRef(true)
-
+    const bodyRef = useRef<HTMLDivElement>(null)
     const [openStepIds, setOpenStepIds] = useState<ReadonlySet<string>>(() =>
       focusedCallId ? new Set([focusedCallId]) : new Set()
     )
     const [selectedCallId, setSelectedCallId] = useState<string | null>(focusedCallId)
-    const [scrollTarget, setScrollTarget] = useState<{ callId: string; nonce: number } | null>(() =>
-      focusedCallId ? { callId: focusedCallId, nonce: focusNonce } : null
-    )
-    const [lightboxState, setLightboxState] = useState<{
-      index: number
-      fallback?: ActivityVisualItem
-    } | null>(null)
-    const localScrollNonceRef = useRef(0)
-
-    const prevTurnIdRef = useRef<string | null>(turn?.messageId ?? null)
-    useEffect(() => {
-      const nextTurnId = turn?.messageId ?? null
-      if (prevTurnIdRef.current !== nextTurnId) {
-        prevTurnIdRef.current = nextTurnId
-        setOpenStepIds(focusedCallId ? new Set([focusedCallId]) : new Set())
-        setSelectedCallId(focusedCallId)
-        setScrollTarget(focusedCallId ? { callId: focusedCallId, nonce: focusNonce } : null)
-        setLightboxState(null)
-        pinnedToBottomRef.current = true
-      }
-    }, [turn?.messageId, focusedCallId, focusNonce])
 
     useEffect(() => {
       if (!focusedCallId) {
         return
       }
       setSelectedCallId(focusedCallId)
-      setOpenStepIds((prev) => {
-        if (prev.has(focusedCallId)) {
-          return prev
-        }
-        const next = new Set(prev)
-        next.add(focusedCallId)
-        return next
-      })
-      setScrollTarget({ callId: focusedCallId, nonce: focusNonce })
-    }, [focusedCallId, focusNonce])
-
-    useEffect(() => {
-      if (!scrollTarget || effectiveTab !== 'activity') {
-        return
-      }
-      const container = contentRef.current
-      if (!container) {
-        return
-      }
-      const escapeAttr = (value: string) =>
-        typeof CSS !== 'undefined' && typeof CSS.escape === 'function'
-          ? CSS.escape(value)
-          : value.replace(/["\\]/g, '\\$&')
-      const frameId = requestAnimationFrame(() => {
-        const found = container.querySelector<HTMLElement>(
-          `[data-activity-call-id="${escapeAttr(scrollTarget.callId)}"]`
+      setOpenStepIds((prev) => (prev.has(focusedCallId) ? prev : new Set(prev).add(focusedCallId)))
+      const frame = requestAnimationFrame(() => {
+        const node = bodyRef.current?.querySelector<HTMLElement>(
+          `[data-activity-call-id="${escapeAttr(focusedCallId)}"]`
         )
-        if (!found) {
-          return
+        if (node) {
+          revealElement(node)
         }
-        const reducedMotion =
-          typeof window !== 'undefined' &&
-          typeof window.matchMedia === 'function' &&
-          window.matchMedia('(prefers-reduced-motion: reduce)').matches
-        found.scrollIntoView({ block: 'nearest', behavior: reducedMotion ? 'auto' : 'smooth' })
       })
-      return () => cancelAnimationFrame(frameId)
-    }, [scrollTarget, effectiveTab, turn?.messageId])
+      return () => cancelAnimationFrame(frame)
+    }, [focusedCallId, focusNonce, revealElement])
 
-    const handleContentScroll = useCallback(() => {
-      const el = contentRef.current
-      if (!el) {
-        return
-      }
-      pinnedToBottomRef.current =
-        el.scrollHeight - el.scrollTop - el.clientHeight <= AUTO_SCROLL_THRESHOLD_PX
-    }, [])
-
-    const stepCount = timeline?.stepCount ?? 0
-    const prevStepCountRef = useRef(stepCount)
-    useEffect(() => {
-      const grew = stepCount > prevStepCountRef.current
-      prevStepCountRef.current = stepCount
-      if (!live || !grew || scrollTarget || !pinnedToBottomRef.current) {
-        return
-      }
-      const el = contentRef.current
-      if (!el) {
-        return
-      }
-      el.scrollTop = el.scrollHeight
-    }, [live, scrollTarget, stepCount])
-
-    const toggleStep = useCallback(
-      (callId: string) => {
-        const closing = openStepIds.has(callId)
-        setOpenStepIds((prev) => {
-          const next = new Set(prev)
-          if (next.has(callId)) {
-            next.delete(callId)
-          } else {
-            next.add(callId)
-          }
-          return next
-        })
-        setSelectedCallId((current) => (closing ? (current === callId ? null : current) : callId))
-      },
-      [openStepIds]
-    )
-
-    const inspectStep = useCallback((callId: string) => {
-      setSelectedCallId(callId)
+    const toggleStep = (callId: string) => {
+      const closing = openStepIds.has(callId)
       setOpenStepIds((prev) => {
         const next = new Set(prev)
-        next.add(callId)
+        if (next.has(callId)) {
+          next.delete(callId)
+        } else {
+          next.add(callId)
+        }
         return next
       })
-      localScrollNonceRef.current += 1
-      setScrollTarget({ callId, nonce: -localScrollNonceRef.current })
-    }, [])
+      setSelectedCallId((value) => (closing ? (value === callId ? null : value) : callId))
+    }
 
-    const timelineVisuals = timeline?.visuals ?? EMPTY_VISUALS
-    const openVisualAt = useCallback((index: number) => {
-      setLightboxState({ index })
-    }, [])
-
-    const openVisualForStep = useCallback(
-      (callId: string, stepLabel: string, visual: ToolStepVisualArtifact) => {
-        const exact = timelineVisuals.findIndex(
-          (item) => item.callId === callId && item.src === visual.src
-        )
-        if (exact >= 0) {
-          setLightboxState({ index: exact })
-          return
-        }
-        const bySrc = timelineVisuals.findIndex((item) => item.src === visual.src)
-        if (bySrc >= 0) {
-          setLightboxState({ index: bySrc })
-          return
-        }
-        setLightboxState({
-          index: 0,
-          fallback: {
-            key: `${callId}-fallback`,
-            callId,
-            stepLabel,
-            src: visual.src,
-            alt: visual.alt,
-            ...(visual.caption ? { caption: visual.caption } : {}),
-            ...(visual.href ? { href: visual.href } : {}),
-          },
-        })
-      },
-      [timelineVisuals]
-    )
-
-    const isPinnedBehindLatest = Boolean(
-      sessionId &&
-      activeSelection?.kind === 'pinned' &&
-      latestTurnId &&
-      latestTurnId !== resolvedMessageId
-    )
-
-    const renderActivityBody = () => {
-      if (!turn || !timeline) {
-        return (
-          <div className={styles.emptyWrap}>
-            <EmptyState
-              compact
-              icon={<IconActivityOutline16 />}
-              title={t('emptyTitle')}
-              description={activityTurns.length === 0 ? t('emptySession') : t('empty')}
-            />
-          </div>
-        )
+    const inspectStep = (callId: string) => {
+      if (turn) {
+        state.toggleTurn(turn.sessionId, summary.messageId, 'activity', callId)
       }
-      if (timeline.phases.length === 0 && timeline.thinkingRounds.length === 0) {
-        return (
-          <div className={styles.emptyWrap}>
-            <EmptyState
-              compact
-              icon={<IconActivityOutline16 />}
-              title={t('emptyTitle')}
-              description={t('empty')}
-            />
-          </div>
-        )
-      }
+    }
 
+    const visuals = timeline?.visuals ?? EMPTY_VISUALS
+    const openVisualForStep = (
+      callId: string,
+      stepLabel: string,
+      visual: ToolStepVisualArtifact
+    ) => {
+      const exact = visuals.findIndex((item) => item.callId === callId && item.src === visual.src)
+      const bySrc = exact >= 0 ? exact : visuals.findIndex((item) => item.src === visual.src)
+      if (bySrc >= 0) {
+        onOpenVisual(summary.messageId, bySrc)
+        return
+      }
+      onOpenVisual(summary.messageId, 0, {
+        key: `${callId}-fallback`,
+        callId,
+        stepLabel,
+        src: visual.src,
+        alt: visual.alt,
+        ...(visual.caption ? { caption: visual.caption } : {}),
+        ...(visual.href ? { href: visual.href } : {}),
+      })
+    }
+
+    const renderBody = () => {
+      if (
+        !turn ||
+        !timeline ||
+        (timeline.phases.length === 0 && timeline.thinkingRounds.length === 0)
+      ) {
+        return <p className={styles.chapterEmpty}>{t('chapterNoActivity')}</p>
+      }
       const hasReasoning = timeline.thinkingRounds.length > 0
       const activeReasoning =
         live &&
         timeline.activeThinkingStartedAt !== null &&
         timeline.thinkingBlocks.at(-1)?.endedAt === undefined
-
       return (
         <div className={styles.bodyStack}>
           <EvidenceShelf
             files={timeline.files}
             visuals={timeline.visuals}
             onOpenFile={deps.openFile ? (file) => deps.openFile?.(turn.sessionId, file) : undefined}
-            onOpenVisual={openVisualAt}
+            onOpenVisual={(index) => onOpenVisual(summary.messageId, index)}
           />
-
           <HoverGlide className={styles.stream}>
             {hasReasoning ? (
               <ReasoningSection
@@ -711,7 +831,6 @@ export const createActivityPanel = (state: ActivityPanelState, deps: ActivityIns
                 onInspectStep={inspectStep}
               />
             ) : null}
-
             {timeline.phases.map((phase, index) => {
               const capState = phase.capabilityId
                 ? turn.capabilityState?.[phase.capabilityId]
@@ -772,20 +891,211 @@ export const createActivityPanel = (state: ActivityPanelState, deps: ActivityIns
       )
     }
 
-    const liveBadge = live ? (
-      <span className={styles.liveBadge} role="status" aria-live="polite">
-        <span className={styles.liveDot} aria-hidden="true" />
-        <span>{t('liveStatus')}</span>
-      </span>
-    ) : null
+    return (
+      <section
+        className={clsx(styles.chapter, current && styles.chapterCurrent)}
+        data-chapter-id={summary.messageId}
+      >
+        <ChapterHeading
+          chapter={chapter}
+          number={number}
+          current={current}
+          meta={chapterMeta(t, timeline)}
+          onSelect={() => onSelect(summary.messageId)}
+        />
+        <div ref={bodyRef} className={styles.chapterBody}>
+          {renderBody()}
+        </div>
+      </section>
+    )
+  })
 
-    const lightboxVisuals = lightboxState?.fallback ? [lightboxState.fallback] : timelineVisuals
+  /** One turn's sources: cited first, then the rest. */
+  const SourcesChapter = memo(function SourcesChapter({
+    chapter,
+    number,
+    current,
+    onSelect,
+  }: {
+    chapter: Chapter
+    number: number
+    current: boolean
+    onSelect: (messageId: string) => void
+  }) {
+    const t = activityInspectorMessages.useTranslate()
+    const timeline = chapter.turn ? timelineFor(chapter.turn) : null
+    if (!timeline) {
+      return null
+    }
+    const count = timeline.sources.all.length
+    return (
+      <section
+        className={clsx(styles.chapter, current && styles.chapterCurrent)}
+        data-chapter-id={chapter.summary.messageId}
+      >
+        <ChapterHeading
+          chapter={chapter}
+          number={number}
+          current={current}
+          meta={count === 1 ? t('chapterSourcesOne') : t('chapterSourcesMany', { count })}
+          onSelect={() => onSelect(chapter.summary.messageId)}
+        />
+        <div className={styles.chapterBody}>
+          <SourcesView
+            cited={timeline.sources.cited}
+            other={timeline.sources.other}
+            all={timeline.sources.all}
+            onOpenLink={openLink}
+          />
+        </div>
+      </section>
+    )
+  })
+
+  const ActivityPanel = ({ topActions }: { topActions?: ReactNode } = {}) => {
+    const t = activityInspectorMessages.useTranslate()
+    const selection = state.useStore((s) => s.selection)
+    const panelOpen = state.useStore((s) => s.panelOpen)
+    const layoutSessionId = deps.panel.useLayout((layout) => layout.activeSessionId)
+    const lastSelectionRef = useRef<ActivitySelection | null>(selection)
+    if (selection) {
+      lastSelectionRef.current = selection
+    }
+    const activeSelection = selection ?? lastSelectionRef.current
+    const sessionId = activeSelection?.sessionId ?? layoutSessionId
+    const pinned = activeSelection?.kind === 'pinned' ? activeSelection : null
+    const pinnedId = pinned?.messageId ?? null
+
+    const chaptersRef = useRef<readonly Chapter[]>(NO_CHAPTERS)
+    const getChapters = useCallback((): readonly Chapter[] => {
+      if (!sessionId) {
+        return NO_CHAPTERS
+      }
+      const summaries: readonly SessionTurnSummary[] = deps.turnSource.listTurns
+        ? deps.turnSource.listTurns(sessionId)
+        : pinnedId
+          ? [
+              {
+                messageId: pinnedId,
+                turnNumber: 1,
+                promptExcerpt: '',
+                streaming: false,
+                hasActivity: true,
+              },
+            ]
+          : []
+      const prev = chaptersRef.current
+      let changed = prev.length !== summaries.length
+      const next = summaries.map((summary, index): Chapter => {
+        const old = prev[index]
+        const turn = deps.turnSource.getTurn(sessionId, summary.messageId)
+        const keptSummary = old && sameSummary(old.summary, summary) ? old.summary : summary
+        const keptTurn = old && sameTurn(old.turn, turn) ? old.turn : turn
+        if (old && keptSummary === old.summary && keptTurn === old.turn) {
+          return old
+        }
+        changed = true
+        return { summary: keptSummary, turn: keptTurn }
+      })
+      if (!changed) {
+        return prev
+      }
+      chaptersRef.current = next
+      return next
+    }, [sessionId, pinnedId])
+    const chapters = useSyncExternalStore(subscribeAll, getChapters, getChapters)
+
+    const getDisplayedId = () => (activeSelection ? resolveMessageId(activeSelection) : null)
+    const displayedId = useSyncExternalStore(subscribeAll, getDisplayedId, getDisplayedId)
+    const displayedIndex = chapters.findIndex(
+      (chapter) => chapter.summary.messageId === displayedId
+    )
+    const lastChapter = chapters.at(-1) ?? null
+
+    const sourceChapters = useMemo(
+      () =>
+        chapters.filter(
+          (chapter) => chapter.turn !== null && timelineFor(chapter.turn).sources.all.length > 0
+        ),
+      [chapters]
+    )
+    const hasSources = sourceChapters.length > 0
+    const effectiveTab = hasSources ? (activeSelection?.tab ?? 'activity') : 'activity'
+    const sourcesTargetId = useMemo(() => {
+      if (sourceChapters.length === 0) {
+        return null
+      }
+      const before = sourceChapters.filter(
+        (chapter) => chapters.indexOf(chapter) <= Math.max(0, displayedIndex)
+      )
+      return (before.at(-1) ?? sourceChapters[0])?.summary.messageId ?? null
+    }, [sourceChapters, chapters, displayedIndex])
+
+    const pin = useCallback(
+      (messageId: string) => {
+        if (sessionId) {
+          state.selectTurn(sessionId, messageId)
+        }
+      },
+      [sessionId]
+    )
+
+    const activityRef = useRef<HTMLDivElement | null>(null)
+    const sourcesRef = useRef<HTMLDivElement | null>(null)
+    const revealInActivity = useChapterScroller({
+      containerRef: activityRef,
+      targetId: displayedId,
+      lastId: lastChapter?.summary.messageId ?? null,
+      live: lastChapter?.summary.streaming ?? false,
+      visible: panelOpen && effectiveTab === 'activity',
+      onReaderChapter: pin,
+    })
+    useChapterScroller({
+      containerRef: sourcesRef,
+      targetId: sourcesTargetId,
+      lastId: sourceChapters.at(-1)?.summary.messageId ?? null,
+      live: false,
+      visible: panelOpen && effectiveTab === 'sources',
+      onReaderChapter: pin,
+    })
+
+    const [lightbox, setLightbox] = useState<LightboxState | null>(null)
+    const openVisual = useCallback(
+      (messageId: string, index: number, fallback?: ActivityVisualItem) =>
+        setLightbox({ messageId, index, ...(fallback ? { fallback } : {}) }),
+      []
+    )
+    const lightboxTurn =
+      lightbox && chapters.find((chapter) => chapter.summary.messageId === lightbox.messageId)?.turn
+    const lightboxVisuals = lightbox?.fallback
+      ? [lightbox.fallback]
+      : lightboxTurn
+        ? timelineFor(lightboxTurn).visuals
+        : EMPTY_VISUALS
+    const inspectStep = useCallback(
+      (callId: string) => {
+        if (sessionId && lightbox) {
+          state.toggleTurn(sessionId, lightbox.messageId, 'activity', callId)
+        }
+      },
+      [sessionId, lightbox]
+    )
+
+    const focusedCallId = pinned?.focusedCallId ?? null
+    const focusNonce = pinned?.focusNonce ?? 0
+    const total = chapters.length
+    const stepTo = (index: number) => {
+      const target = chapters[index]
+      if (target) {
+        pin(target.summary.messageId)
+      }
+    }
 
     return (
       <Tabs value={effectiveTab} onChange={state.setTab} className={styles.root}>
         <header className={styles.header} data-tauri-drag-region="">
           <div className={styles.headerLeading} data-tauri-drag-region="">
-            {hasSources && timeline ? (
+            {hasSources ? (
               <>
                 <h2 className={styles.srOnly}>{t('panelTitle')}</h2>
                 <TabList
@@ -796,7 +1106,15 @@ export const createActivityPanel = (state: ActivityPanelState, deps: ActivityIns
                   <Tab value="activity">{t('tabSteps')}</Tab>
                   <Tab
                     value="sources"
-                    badge={<span className={styles.tabCount}>{timeline.sources.all.length}</span>}
+                    badge={
+                      <span className={styles.tabCount}>
+                        {sourceChapters.reduce(
+                          (sum, chapter) =>
+                            sum + (chapter.turn ? timelineFor(chapter.turn).sources.all.length : 0),
+                          0
+                        )}
+                      </span>
+                    }
                   >
                     {t('tabSources')}
                   </Tab>
@@ -807,16 +1125,22 @@ export const createActivityPanel = (state: ActivityPanelState, deps: ActivityIns
                 {t('panelTitle')}
               </h2>
             )}
-
-            {sessionId && resolvedMessageId && activityTurns.length >= 2 ? (
-              <TurnSwitcherMenu
-                turns={activityTurns}
-                activeMessageId={resolvedMessageId}
-                onSelect={(nextMessageId) => state.selectTurn(sessionId, nextMessageId)}
-              />
+            {total >= 2 && displayedIndex >= 0 ? (
+              <span className={styles.readout}>
+                <span className={styles.srOnly}>
+                  {t('turnReadoutLabel', { number: displayedIndex + 1, total })}
+                </span>
+                <span className={styles.readoutText} aria-hidden="true">
+                  {t('turnReadoutPrefix')}
+                  <RollingNumber value={displayedIndex + 1} className={styles.readoutNumber} />
+                  {t('turnReadoutSuffix', { total })}
+                </span>
+              </span>
             ) : null}
+          </div>
 
-            {isPinnedBehindLatest && sessionId ? (
+          <div className={styles.topActions}>
+            {sessionId && displayedIndex >= 0 && displayedIndex < total - 1 ? (
               <Button
                 variant="ghost"
                 size="s"
@@ -827,11 +1151,28 @@ export const createActivityPanel = (state: ActivityPanelState, deps: ActivityIns
                 {t('followLatest')}
               </Button>
             ) : null}
-
-            {liveBadge}
-          </div>
-
-          <div className={styles.topActions}>
+            {total >= 2 ? (
+              <>
+                <IconButton
+                  size="xs"
+                  icon={<IconChevronUpOutline14 />}
+                  tooltip={t('previousTurn')}
+                  tooltipPlacement="bottom"
+                  aria-label={t('previousTurn')}
+                  disabled={displayedIndex <= 0}
+                  onClick={() => stepTo(displayedIndex - 1)}
+                />
+                <IconButton
+                  size="xs"
+                  icon={<IconChevronDownOutline14 />}
+                  tooltip={t('nextTurn')}
+                  tooltipPlacement="bottom"
+                  aria-label={t('nextTurn')}
+                  disabled={displayedIndex < 0 || displayedIndex >= total - 1}
+                  onClick={() => stepTo(displayedIndex + 1)}
+                />
+              </>
+            ) : null}
             {topActions}
             <IconButton
               size="xs"
@@ -845,31 +1186,64 @@ export const createActivityPanel = (state: ActivityPanelState, deps: ActivityIns
         </header>
 
         <TabPanel value="activity" keepMounted plain={!hasSources} className={styles.tabPanel}>
-          <div ref={contentRef} className={styles.content} onScroll={handleContentScroll}>
-            {renderActivityBody()}
+          <div ref={activityRef} className={styles.content}>
+            <div className={styles.chapters}>
+              {chapters.length === 0 ? (
+                <div className={styles.emptyWrap}>
+                  <EmptyState
+                    compact
+                    icon={<IconActivityOutline16 />}
+                    title={t('emptyTitle')}
+                    description={t('emptySession')}
+                  />
+                </div>
+              ) : (
+                chapters.map((chapter, index) => {
+                  const isFocused = chapter.summary.messageId === pinnedId
+                  return (
+                    <TurnChapter
+                      key={chapter.summary.messageId}
+                      chapter={chapter}
+                      number={deps.turnSource.listTurns ? index + 1 : chapter.summary.turnNumber}
+                      current={chapter.summary.messageId === displayedId}
+                      focusedCallId={isFocused ? focusedCallId : null}
+                      focusNonce={isFocused ? focusNonce : 0}
+                      onSelect={pin}
+                      onOpenVisual={openVisual}
+                      revealElement={revealInActivity}
+                    />
+                  )
+                })
+              )}
+            </div>
           </div>
         </TabPanel>
 
-        {hasSources && timeline ? (
+        {hasSources ? (
           <TabPanel value="sources" keepMounted className={styles.tabPanel}>
-            <div className={styles.content}>
-              <SourcesView
-                cited={timeline.sources.cited}
-                other={timeline.sources.other}
-                all={timeline.sources.all}
-                onOpenLink={openLink}
-              />
+            <div ref={sourcesRef} className={styles.content}>
+              <div className={styles.chapters}>
+                {sourceChapters.map((chapter) => (
+                  <SourcesChapter
+                    key={chapter.summary.messageId}
+                    chapter={chapter}
+                    number={chapters.indexOf(chapter) + 1}
+                    current={chapter.summary.messageId === sourcesTargetId}
+                    onSelect={pin}
+                  />
+                ))}
+              </div>
             </div>
           </TabPanel>
         ) : null}
 
         <VisualLightbox
           visuals={lightboxVisuals}
-          activeIndex={lightboxState?.index ?? null}
+          activeIndex={lightbox?.index ?? null}
           onChangeIndex={(nextIndex) =>
-            setLightboxState((prev) => (prev ? { ...prev, index: nextIndex } : null))
+            setLightbox((prev) => (prev ? { ...prev, index: nextIndex } : null))
           }
-          onClose={() => setLightboxState(null)}
+          onClose={() => setLightbox(null)}
           onInspectStep={inspectStep}
           onOpenLink={openLink}
         />

@@ -7,16 +7,31 @@ import type {
 import type { PanelSlot } from '@deepseek-chat/spine/ports'
 import type { EventLog } from '@deepseek-chat/spine/runtime'
 import { create } from 'zustand'
-import type { ActivitySelection, ActivityTab, ActivityTarget } from './types.js'
+import type { ActivitySelection, ActivityTab, ActivityTarget, TranscriptPort } from './types.js'
 
 type ActivityPanelStoreState = {
   selection: ActivitySelection | null
   panelOpen: boolean
 }
 
-export const createActivityPanelState = (panel: PanelSlot, log: EventLog) => {
+export const createActivityPanelState = (
+  panel: PanelSlot,
+  log: EventLog,
+  options: {
+    readonly transcript?: TranscriptPort
+    /** The turn a selection shows, resolved against the chat's turns and reading position. */
+    readonly resolveMessageId: (selection: ActivitySelection) => string | null
+  }
+) => {
+  const { transcript, resolveMessageId } = options
   const activeSessionId = () => panel.getLayout().activeSessionId
   let nextFocusNonce = 0
+
+  const following = (sessionId: string, tab: ActivityTab): ActivitySelection => ({
+    kind: 'follow_reading',
+    sessionId,
+    tab,
+  })
 
   const stripFocus = (selection: ActivitySelection): ActivitySelection =>
     selection.kind === 'pinned'
@@ -33,6 +48,8 @@ export const createActivityPanelState = (panel: PanelSlot, log: EventLog) => {
     panelOpen: panel.isOpen(activeSessionId()),
   }))
 
+  const currentTab = () => useStore.getState().selection?.tab ?? 'activity'
+
   const openForSession = (sessionId: string, tab?: ActivityTab) => {
     const prev = useStore.getState().selection
     const cleanPrev = prev && prev.sessionId === sessionId ? stripFocus(prev) : null
@@ -40,7 +57,7 @@ export const createActivityPanelState = (panel: PanelSlot, log: EventLog) => {
       ? tab
         ? { ...cleanPrev, tab }
         : cleanPrev
-      : { kind: 'follow_latest', sessionId, tab: tab ?? 'activity' }
+      : following(sessionId, tab ?? 'activity')
     panel.open(sessionId)
     useStore.setState({ selection: next, panelOpen: panel.isOpen(sessionId) })
   }
@@ -54,14 +71,18 @@ export const createActivityPanelState = (panel: PanelSlot, log: EventLog) => {
     openForSession(sessionId)
   }
 
+  /**
+   * Shows a turn (and optionally one of its steps). Without `callId`, asking again for the turn and
+   * tab the open panel already shows closes the panel, whether it got there by following or pinning.
+   */
   const toggleTurn = (sessionId: string, messageId: string, tab: ActivityTab, callId?: string) => {
     const { selection } = useStore.getState()
     if (
       !callId &&
-      selection?.kind === 'pinned' &&
+      selection &&
       selection.sessionId === sessionId &&
-      selection.messageId === messageId &&
       selection.tab === tab &&
+      resolveMessageId(selection) === messageId &&
       panel.isOpen(sessionId)
     ) {
       panel.close(sessionId)
@@ -82,18 +103,18 @@ export const createActivityPanelState = (panel: PanelSlot, log: EventLog) => {
     useStore.setState({ selection: next, panelOpen: panel.isOpen(sessionId) })
   }
 
+  /** Pins a turn in the open panel and brings it into view in the transcript too. */
   const selectTurn = (sessionId: string, messageId: string) => {
-    const prevTab = useStore.getState().selection?.tab ?? 'activity'
     useStore.setState({
-      selection: { kind: 'pinned', sessionId, messageId, tab: prevTab },
+      selection: { kind: 'pinned', sessionId, messageId, tab: currentTab() },
     })
+    transcript?.revealTurn(sessionId, messageId)
   }
 
+  /** Follows the reader again and takes the transcript to its latest output. */
   const followLatest = (sessionId: string) => {
-    const prevTab = useStore.getState().selection?.tab ?? 'activity'
-    useStore.setState({
-      selection: { kind: 'follow_latest', sessionId, tab: prevTab },
-    })
+    useStore.setState({ selection: following(sessionId, currentTab()) })
+    transcript?.revealLatest(sessionId)
   }
 
   const setTab = (tab: ActivityTab) => {
@@ -118,10 +139,7 @@ export const createActivityPanelState = (panel: PanelSlot, log: EventLog) => {
     const open = panel.isOpen(sessionId)
     useStore.setState((curr) => {
       if (open && sessionId && curr.selection?.sessionId !== sessionId) {
-        return {
-          selection: { kind: 'follow_latest', sessionId, tab: 'activity' },
-          panelOpen: true,
-        }
+        return { selection: following(sessionId, 'activity'), panelOpen: true }
       }
       if (curr.panelOpen !== open) {
         return { panelOpen: open }
@@ -129,6 +147,19 @@ export const createActivityPanelState = (panel: PanelSlot, log: EventLog) => {
       return curr
     })
   })
+
+  // The reader moving to another turn releases a pin; reveals this panel asked for do not.
+  const unsubReading =
+    transcript?.subscribeToReading(() => {
+      const { selection } = useStore.getState()
+      if (selection?.kind !== 'pinned') {
+        return
+      }
+      const position = transcript.getReadingPosition(selection.sessionId)
+      if (position && position.cause === 'reader' && position.messageId !== selection.messageId) {
+        useStore.setState({ selection: following(selection.sessionId, selection.tab) })
+      }
+    }) ?? (() => undefined)
 
   const unsubFacts = [
     log.subscribe<ActiveSessionChanged>('ActiveSessionChanged', ({ fact }) => {
@@ -139,7 +170,7 @@ export const createActivityPanelState = (panel: PanelSlot, log: EventLog) => {
             selection:
               curr.selection?.sessionId === fact.sessionId
                 ? curr.selection
-                : { kind: 'follow_latest', sessionId: fact.sessionId, tab: 'activity' },
+                : following(fact.sessionId, 'activity'),
             panelOpen: true,
           }
         }
@@ -186,6 +217,7 @@ export const createActivityPanelState = (panel: PanelSlot, log: EventLog) => {
     getActiveTarget,
     dispose: () => {
       unsubPanel()
+      unsubReading()
       for (const unsub of unsubFacts) {
         unsub()
       }

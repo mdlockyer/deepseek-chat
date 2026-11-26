@@ -16,9 +16,14 @@ export type ActivityTarget = {
   readonly tab: ActivityTab
 }
 
+/**
+ * What the panel shows. `follow_reading` tracks the turn the reader is on in the transcript (the
+ * latest turn when no transcript port is wired or it has not reported yet); `pinned` holds one turn
+ * until the reader moves on to another.
+ */
 export type ActivitySelection =
   | {
-      readonly kind: 'follow_latest'
+      readonly kind: 'follow_reading'
       readonly sessionId: string
       readonly tab: ActivityTab
     }
@@ -88,6 +93,25 @@ export type ActivitySource = {
   readonly index: number
 }
 
+/** The turn a chat's transcript is on, and who moved it there (see `TranscriptPort`). */
+export type TranscriptReadingPosition = {
+  readonly messageId: string
+  /** `'reader'` for the reader's own navigation; `'reveal'` when a view (this panel) asked for it. */
+  readonly cause: 'reader' | 'reveal'
+}
+
+/**
+ * The chat transcript, as this panel sees it: where the reader is, and a way to bring a turn into
+ * view there. The panel follows the reader, and the transcript follows the panel when the reader
+ * scrolls the panel instead.
+ */
+export type TranscriptPort = {
+  getReadingPosition(sessionId: string): TranscriptReadingPosition | null
+  subscribeToReading(listener: () => void): () => void
+  revealTurn(sessionId: string, messageId: string): void
+  revealLatest(sessionId: string): void
+}
+
 export type ActivityInspectorDeps = {
   readonly log: EventLog
   readonly panel: PanelSlot
@@ -98,4 +122,6 @@ export type ActivityInspectorDeps = {
   ) => ToolStepPresenter | null
   readonly openInApp: ((url: string) => void) | null
   readonly openFile?: (sessionId: string, file: DeliveredFileRef) => void
+  /** Optional: without it the panel follows the latest turn and scrolling it moves nothing else. */
+  readonly transcript?: TranscriptPort
 }

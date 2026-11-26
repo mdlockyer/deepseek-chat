@@ -73,8 +73,40 @@ const fakePanel = () => {
   }
 }
 
+const fakeTranscript = () => {
+  const positions = new Map<string, { messageId: string; cause: 'reader' | 'reveal' }>()
+  const listeners = new Set<() => void>()
+  const revealed: { sessionId: string; messageId: string }[] = []
+  const latest: string[] = []
+  return {
+    revealed,
+    latest,
+    read: (sessionId: string, messageId: string, cause: 'reader' | 'reveal') => {
+      positions.set(sessionId, { messageId, cause })
+      for (const listener of [...listeners]) {
+        listener()
+      }
+    },
+    port: {
+      getReadingPosition: (sessionId: string) => positions.get(sessionId) ?? null,
+      subscribeToReading: (listener: () => void) => {
+        listeners.add(listener)
+        return () => {
+          listeners.delete(listener)
+        }
+      },
+      revealTurn: (sessionId: string, messageId: string) => {
+        revealed.push({ sessionId, messageId })
+      },
+      revealLatest: (sessionId: string) => {
+        latest.push(sessionId)
+      },
+    },
+  }
+}
+
 describe('slice-activity-inspector: panel lifecycle, active target resolution, & EventLog reactivity', () => {
-  it('resolves active target in both follow_latest and pinned modes, isolates displacement, and cleans up on facts', () => {
+  it('resolves active target in both follow_reading and pinned modes, isolates displacement, and cleans up on facts', () => {
     const log = new EventLog()
     const panel = fakePanel()
     const turnsBySession: Record<string, readonly SessionTurnSummary[]> = {
@@ -100,11 +132,11 @@ describe('slice-activity-inspector: panel lifecycle, active target resolution, &
       openInApp: null,
     })
 
-    // First-class header toggle opens in follow_latest mode and reports the displayed turn target.
+    // First-class header toggle opens following the reader (here: no transcript, so the latest turn).
     slice.togglePanel('s1')
     assert.equal(panel.slot.isOpen('s1'), true)
     assert.deepEqual(slice.getSelection(), {
-      kind: 'follow_latest',
+      kind: 'follow_reading',
       sessionId: 's1',
       tab: 'activity',
     })
@@ -662,7 +694,7 @@ describe('slice-activity-inspector: redesigned ActivityPanel rendering', () => {
     slice.dispose()
   })
 
-  it('follows the latest turn via HeaderToggle, renders compact header turn switcher on multi-turn chats, and exposes Latest when pinned behind', () => {
+  it('follows the reader, pins a turn until the reader moves on, and shows every turn as a chapter', () => {
     const log = new EventLog()
     const panel = fakePanel()
     const turns = [
@@ -697,6 +729,7 @@ describe('slice-activity-inspector: redesigned ActivityPanel rendering', () => {
         blocks: [{ type: 'thinking', thinking: 'Beta thought', startedAt: 0, endedAt: 5000 }],
       },
     }
+    const transcript = fakeTranscript()
     const slice = createActivityInspectorSlice({
       log,
       panel: panel.slot,
@@ -707,41 +740,82 @@ describe('slice-activity-inspector: redesigned ActivityPanel rendering', () => {
       },
       getPresenter: () => null,
       openInApp: null,
+      transcript: transcript.port,
     })
+    const render = () => renderToStaticMarkup(createElement(slice.ActivityPanel))
 
+    // Before the transcript reports a position, following the reader shows the latest turn.
     slice.togglePanel('s1')
-    const latestHtml = renderToStaticMarkup(createElement(slice.ActivityPanel))
-    assert.match(latestHtml, /Thought for 5s/, 'follow_latest displays the newest active turn')
-    assert.match(latestHtml, /Turn 2/, 'compact turn switcher shows active turn in header')
-    assert.doesNotMatch(latestHtml, /·/, 'never renders middot separators')
+    assert.deepEqual(slice.getSelection(), {
+      kind: 'follow_reading',
+      sessionId: 's1',
+      tab: 'activity',
+    })
+    assert.equal(slice.getTarget()?.messageId, 'm2')
+    const latestHtml = render()
+    const first = latestHtml.indexOf('First question')
+    const second = latestHtml.indexOf('Second question')
+    assert.ok(first >= 0 && second > first, 'every turn is a chapter, in order')
+    assert.match(
+      latestHtml,
+      /Thought for 2s[\s\S]*Thought for 5s/,
+      'each chapter shows its own turn'
+    )
+    assert.match(latestHtml, /Showing turn 2 of 2/, 'the header names the turn on show')
+    assert.match(latestHtml, /aria-label="Previous turn"/)
     assert.doesNotMatch(
       latestHtml,
       /aria-label="Follow latest turn"/,
-      'hides Latest button when live'
+      'no Latest on the latest turn'
     )
+    assert.doesNotMatch(latestHtml, /·/, 'never renders middot separators')
 
-    slice.selectTurn('s1', 'm1')
-    const pinnedHtml = renderToStaticMarkup(createElement(slice.ActivityPanel))
-    assert.match(pinnedHtml, /Thought for 2s/, 'selectTurn switches to the chosen earlier turn')
+    // The reader scrolls the transcript back to the first turn: the panel follows.
+    transcript.read('s1', 'm1', 'reader')
+    assert.equal(slice.getTarget()?.messageId, 'm1')
+    const earlierHtml = render()
+    assert.match(earlierHtml, /Showing turn 1 of 2/)
     assert.match(
-      pinnedHtml,
+      earlierHtml,
       /aria-label="Follow latest turn"/,
-      'pinned older turn surfaces compact Latest return button'
+      'Latest returns to the newest turn'
     )
 
-    slice.followLatest('s1')
+    // Picking a turn in the panel pins it and asks the transcript to show it too.
+    slice.selectTurn('s1', 'm2')
+    assert.deepEqual(transcript.revealed, [{ sessionId: 's1', messageId: 'm2' }])
+    assert.equal(slice.getSelection()?.kind, 'pinned')
+    // The transcript arriving there because the panel asked keeps the pin...
+    transcript.read('s1', 'm2', 'reveal')
+    assert.equal(slice.getSelection()?.kind, 'pinned')
+    assert.equal(slice.getTarget()?.messageId, 'm2')
+    // (as does any reveal: only the reader's own navigation releases a pin)
+    transcript.read('s1', 'm1', 'reveal')
+    assert.equal(slice.getTarget()?.messageId, 'm2')
+    // ...and the reader moving on to another turn releases it.
+    transcript.read('s1', 'm1', 'reader')
     assert.deepEqual(slice.getSelection(), {
-      kind: 'follow_latest',
+      kind: 'follow_reading',
       sessionId: 's1',
       tab: 'activity',
     })
-    assert.deepEqual(slice.getTarget(), {
+    assert.equal(slice.getTarget()?.messageId, 'm1')
+
+    // Asking to inspect the turn already on show closes the panel, even while following.
+    log.publish<TurnInspectionRequested>({
+      type: 'TurnInspectionRequested',
       sessionId: 's1',
-      messageId: 'm2',
+      messageId: 'm1',
       tab: 'activity',
     })
-    const resumedHtml = renderToStaticMarkup(createElement(slice.ActivityPanel))
-    assert.match(resumedHtml, /Thought for 5s/, 'followLatest resumes tracking newest turn')
+    assert.equal(panel.slot.isOpen('s1'), false)
+
+    // Latest follows the reader again and sends the transcript to its latest output.
+    slice.togglePanel('s1')
+    slice.selectTurn('s1', 'm1')
+    slice.followLatest('s1')
+    assert.deepEqual(transcript.latest, ['s1'])
+    assert.equal(slice.getSelection()?.kind, 'follow_reading')
     slice.dispose()
   })
 

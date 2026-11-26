@@ -27,6 +27,8 @@ import type {
   SessionTurnSummary,
   TurnBlock,
   TurnSnapshot,
+  TranscriptPort,
+  TranscriptReadingPosition,
   TurnSnapshotSource,
   TurnTextBlock,
   TurnThinkingBlock,
@@ -53,6 +55,8 @@ export type {
   SessionTurnSummary,
   TurnBlock,
   TurnSnapshot,
+  TranscriptPort,
+  TranscriptReadingPosition,
   TurnSnapshotSource,
   TurnTextBlock,
   TurnThinkingBlock,
@@ -60,48 +64,52 @@ export type {
   TurnToolUseBlock,
 }
 
-const resolveLatestMessageId = (
+/** The turn a selection shows: the pinned turn, or the reader's turn (falling back to the latest). */
+const resolveSelectionMessageId = (
+  selection: ActivitySelection,
   turnSource: TurnSnapshotSource,
-  sessionId: string
+  transcript: TranscriptPort | undefined
 ): string | null => {
-  const turns = turnSource.listTurns?.(sessionId)
+  if (selection.kind === 'pinned') {
+    return selection.messageId
+  }
+  const turns = turnSource.listTurns?.(selection.sessionId) ?? null
+  const reading = transcript?.getReadingPosition(selection.sessionId) ?? null
+  if (reading && (!turns || turns.some((turn) => turn.messageId === reading.messageId))) {
+    return reading.messageId
+  }
   if (!turns || turns.length === 0) {
     return null
   }
-  const activeTurns = turns.filter((item) => item.hasActivity || item.streaming)
-  const streamingTurn = [...activeTurns].reverse().find((item) => item.streaming)
-  return streamingTurn?.messageId ?? activeTurns.at(-1)?.messageId ?? null
-}
-
-const resolveDisplayedTarget = (
-  selection: ActivitySelection | null,
-  panelOpen: boolean,
-  turnSource: TurnSnapshotSource
-): ActivityTarget | null => {
-  if (!panelOpen || !selection) {
-    return null
-  }
-  if (selection.kind === 'pinned') {
-    return {
-      sessionId: selection.sessionId,
-      messageId: selection.messageId,
-      tab: selection.tab,
-    }
-  }
-  const messageId = resolveLatestMessageId(turnSource, selection.sessionId)
-  if (!messageId) {
-    return null
-  }
-  return {
-    sessionId: selection.sessionId,
-    messageId,
-    tab: selection.tab,
-  }
+  return ([...turns].reverse().find((turn) => turn.streaming) ?? turns.at(-1))?.messageId ?? null
 }
 
 export const createActivityInspectorSlice = (deps: ActivityInspectorDeps) => {
-  const state = createActivityPanelState(deps.panel, deps.log)
-  const ActivityPanel = createActivityPanel(state, deps)
+  const resolveMessageId = (selection: ActivitySelection) =>
+    resolveSelectionMessageId(selection, deps.turnSource, deps.transcript)
+  const resolveDisplayedTarget = (
+    selection: ActivitySelection | null,
+    panelOpen: boolean
+  ): ActivityTarget | null => {
+    if (!panelOpen || !selection) {
+      return null
+    }
+    const messageId = resolveMessageId(selection)
+    return messageId ? { sessionId: selection.sessionId, messageId, tab: selection.tab } : null
+  }
+  const subscribeSources = (listener: () => void) => {
+    const unsubTurns = deps.turnSource.subscribe(listener)
+    const unsubReading = deps.transcript?.subscribeToReading(listener)
+    return () => {
+      unsubTurns()
+      unsubReading?.()
+    }
+  }
+  const state = createActivityPanelState(deps.panel, deps.log, {
+    ...(deps.transcript ? { transcript: deps.transcript } : {}),
+    resolveMessageId,
+  })
+  const ActivityPanel = createActivityPanel(state, deps, resolveMessageId)
 
   const HeaderToggle: ComponentType<{ readonly sessionId: string }> = ({ sessionId }) => {
     const t = activityInspectorMessages.useTranslate()
@@ -120,7 +128,7 @@ export const createActivityInspectorSlice = (deps: ActivityInspectorDeps) => {
 
   const getTarget = (): ActivityTarget | null => {
     const { selection, panelOpen } = state.useStore.getState()
-    return resolveDisplayedTarget(selection, panelOpen, deps.turnSource)
+    return resolveDisplayedTarget(selection, panelOpen)
   }
 
   const useActiveTarget = (): ActivityTarget | null => {
@@ -129,7 +137,7 @@ export const createActivityInspectorSlice = (deps: ActivityInspectorDeps) => {
     const cachedRef = useRef<ActivityTarget | null>(null)
 
     const getSnapshot = useCallback((): ActivityTarget | null => {
-      const next = resolveDisplayedTarget(selection, panelOpen, deps.turnSource)
+      const next = resolveDisplayedTarget(selection, panelOpen)
       const prev = cachedRef.current
       if (
         prev &&
@@ -144,7 +152,7 @@ export const createActivityInspectorSlice = (deps: ActivityInspectorDeps) => {
       return next
     }, [panelOpen, selection])
 
-    return useSyncExternalStore(deps.turnSource.subscribe, getSnapshot, getSnapshot)
+    return useSyncExternalStore(subscribeSources, getSnapshot, getSnapshot)
   }
 
   return {
