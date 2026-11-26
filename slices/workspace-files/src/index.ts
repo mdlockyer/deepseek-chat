@@ -1,4 +1,9 @@
-import type { DeliveredFileRef, ToolCapability } from '@deepseek-chat/lib-tools'
+import type {
+  ActivityStepEntry,
+  CompactionLedgerSection,
+  DeliveredFileRef,
+  ToolCapability,
+} from '@deepseek-chat/lib-tools'
 import { IconBrowseOutline16, IconButton } from '@deepseek-chat/lib-ui'
 import type {
   SessionDeleted,
@@ -303,6 +308,46 @@ export const createWorkspaceFilesSlice = (deps: WorkspaceFilesDeps) => {
     },
     presenter: workspaceFilesPresenter,
     serializeForArchive: serializeWorkspaceFileForArchive,
+    buildCompactionLedger: (
+      entries: readonly ActivityStepEntry[]
+    ): CompactionLedgerSection | null => {
+      const saved = new Map<string, { path: string; title?: string; version?: number }>()
+      const failed = new Map<string, { path: string; tool: string; reason: string }>()
+      for (const { call, result } of entries) {
+        if (!result || result.status === 'running' || call.name === READ_FILE_TOOL_NAME) {
+          continue
+        }
+        const inputPath =
+          call.input && typeof (call.input as { path?: unknown }).path === 'string'
+            ? (call.input as { path: string }).path.trim()
+            : ''
+        if (result.status === 'ok' && result.files && result.files.length > 0) {
+          for (const file of result.files) {
+            const path = file.path ?? file.name
+            const key = makeArtifactKey(path)
+            saved.set(key, { path, title: file.title, version: file.version })
+            failed.delete(key)
+          }
+        } else if (result.status === 'error' && inputPath) {
+          const key = makeArtifactKey(inputPath)
+          const firstLine = result.content.split('\n')[0]?.trim().slice(0, 160) || 'error'
+          failed.set(key, { path: inputPath, tool: call.name, reason: firstLine })
+        }
+      }
+      const lines: string[] = []
+      for (const file of saved.values()) {
+        const version = file.version !== undefined ? `v${file.version}` : 'saved'
+        const meta = file.title ? `${version}, ${file.title}` : version
+        lines.push(`- \`${file.path}\` (${meta})`)
+      }
+      for (const err of failed.values()) {
+        lines.push(`- \`${err.path}\` (${err.tool} failed: ${err.reason})`)
+      }
+      if (saved.size > 0) {
+        lines.push('Use `read_file` to inspect the full current content of any saved file.')
+      }
+      return lines.length > 0 ? { title: 'Workspace files', lines } : null
+    },
   }
 
   return {

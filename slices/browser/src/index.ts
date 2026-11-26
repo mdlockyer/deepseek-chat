@@ -1,4 +1,8 @@
-import type { ToolCapability } from '@deepseek-chat/lib-tools'
+import type {
+  ActivityStepEntry,
+  CompactionLedgerSection,
+  ToolCapability,
+} from '@deepseek-chat/lib-tools'
 import { IconBrowserOutline14, IconButton, IconGlobeLanguageOutline16 } from '@deepseek-chat/lib-ui'
 import type { BrowserControlTakenOver } from '@deepseek-chat/spine/facts/browser'
 import type {
@@ -185,6 +189,52 @@ export const createBrowserSlice = (deps: BrowserSliceDeps) => {
     },
     presenter: browserPresenter,
     serializeForArchive: serializeBrowserForArchive,
+    buildCompactionLedger: (
+      entries: readonly ActivityStepEntry[]
+    ): CompactionLedgerSection | null => {
+      let lastUrl: string | undefined
+      let lastTitle: string | null | undefined
+      let lastError: { tool: string; reason: string } | null = null
+      let hadBrowserCall = false
+      for (const { call, result } of entries) {
+        if (!result || result.status === 'running') {
+          continue
+        }
+        hadBrowserCall = true
+        const meta =
+          result.payload && typeof result.payload === 'object'
+            ? (result.payload as { url?: unknown; title?: unknown })
+            : null
+        if (result.status === 'ok') {
+          if (typeof meta?.url === 'string' && meta.url.trim()) {
+            lastUrl = meta.url.trim()
+            lastTitle = typeof meta.title === 'string' ? meta.title.trim() || null : null
+          }
+          lastError = null
+        } else if (result.status === 'error') {
+          const reason = result.content.split('\n')[0]?.trim().slice(0, 160) || 'error'
+          lastError = { tool: call.name, reason }
+        }
+      }
+      if (!hadBrowserCall) {
+        return null
+      }
+      const lines: string[] = []
+      if (lastUrl) {
+        lines.push(
+          lastTitle
+            ? `- Last browser page: ${lastTitle} (${lastUrl})`
+            : `- Last browser page: ${lastUrl}`
+        )
+      }
+      if (lastError) {
+        lines.push(`- Last browser action (${lastError.tool}) failed: ${lastError.reason}`)
+      }
+      lines.push(
+        'Older page snapshots and screenshots were omitted; call `browser_observe` to inspect the current tab.'
+      )
+      return { title: 'Built-in browser', lines }
+    },
   }
 
   return {

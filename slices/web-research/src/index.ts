@@ -1,4 +1,8 @@
-import type { ToolCapability } from '@deepseek-chat/lib-tools'
+import type {
+  ActivityStepEntry,
+  CompactionLedgerSection,
+  ToolCapability,
+} from '@deepseek-chat/lib-tools'
 import { IconGlobeLanguageOutline14 } from '@deepseek-chat/lib-ui'
 import type { HttpFetch, KeyValueStore, SecretSlot } from '@deepseek-chat/spine/ports'
 import { createElement, useSyncExternalStore, type ComponentType } from 'react'
@@ -676,6 +680,54 @@ export const createWebResearchSlice = (deps: WebResearchDeps): WebResearchSlice 
     },
     presenter: webResearchPresenter,
     serializeForArchive: serializeWebResearchForArchive,
+    buildCompactionLedger: (
+      entries: readonly ActivityStepEntry[]
+    ): CompactionLedgerSection | null => {
+      const MAX_LEDGER_SOURCES = 25
+      const sources = new Map<string, { url: string; title: string }>()
+      const failedScrapes = new Map<string, string>()
+      for (const { call, result } of entries) {
+        if (!result || result.status === 'running') {
+          continue
+        }
+        if (result.status === 'ok' && result.sources) {
+          for (const source of result.sources) {
+            const url = source.url.trim()
+            if (!url) {
+              continue
+            }
+            sources.delete(url)
+            sources.set(url, { url, title: source.title.trim() || url })
+            failedScrapes.delete(url)
+          }
+        } else if (result.status === 'error' && call.name === WEB_SCRAPE_TOOL_NAME) {
+          const url =
+            call.input && typeof (call.input as { url?: unknown }).url === 'string'
+              ? (call.input as { url: string }).url.trim()
+              : ''
+          if (url && !sources.has(url)) {
+            const reason = result.content.split('\n')[0]?.trim().slice(0, 160) || 'scrape failed'
+            failedScrapes.set(url, reason)
+          }
+        }
+      }
+      const allSources = [...sources.values()]
+      const omitted = Math.max(0, allSources.length - MAX_LEDGER_SOURCES)
+      const shownSources = omitted > 0 ? allSources.slice(omitted) : allSources
+      const lines: string[] = []
+      if (omitted > 0) {
+        lines.push(`(${omitted} earlier web ${omitted === 1 ? 'source' : 'sources'} omitted.)`)
+      }
+      for (const source of shownSources) {
+        lines.push(
+          source.title !== source.url ? `- ${source.title} (${source.url})` : `- ${source.url}`
+        )
+      }
+      for (const [url, reason] of failedScrapes) {
+        lines.push(`- Failed to read ${url}: ${reason}`)
+      }
+      return lines.length > 0 ? { title: 'Web sources gathered', lines } : null
+    },
   }
 
   return {

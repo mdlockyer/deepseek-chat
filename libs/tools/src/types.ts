@@ -224,6 +224,12 @@ export type ActivityStepEntry = {
   readonly result?: ToolResultRecord
 }
 
+/** Factual tool-outcome section contributed by a capability during conversation compaction. */
+export type CompactionLedgerSection = {
+  readonly title: string
+  readonly lines: readonly string[]
+}
+
 export type ActivityStepDetailProps = {
   readonly sessionId: string | null
   readonly entry: ActivityStepEntry
@@ -355,6 +361,10 @@ export type ToolCapability = {
     call: ToolCallRecord,
     result: ToolResultRecord | undefined
   ): readonly ArchiveFragment[]
+  buildCompactionLedger?(
+    entries: readonly ActivityStepEntry[],
+    capabilityStates: readonly unknown[]
+  ): CompactionLedgerSection | null
   readonly turnHooks?: TurnLifecycleHooks
 }
 
@@ -390,6 +400,10 @@ export type ToolRegistry = {
     call: ToolCallRecord,
     result: ToolResultRecord | undefined
   ): readonly ArchiveFragment[] | null
+  buildCompactionLedger(
+    entriesByCapability: ReadonlyMap<string, readonly ActivityStepEntry[]>,
+    statesByCapability: ReadonlyMap<string, readonly unknown[]>
+  ): CompactionLedgerSection[]
   readonly turnHooks: readonly {
     readonly capabilityId: string
     readonly hooks: TurnLifecycleHooks

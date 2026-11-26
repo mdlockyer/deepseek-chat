@@ -1,7 +1,9 @@
 import { withSummaryParam } from './summary.js'
 import type {
+  ActivityStepEntry,
   AgentProfileSpec,
   ArchiveFragment,
+  CompactionLedgerSection,
   ComposerToggleDescriptor,
   CompositionPromptNote,
   ToolCallRecord,
@@ -188,6 +190,28 @@ export const createToolRegistry = (
     return owner.serializeForArchive(call, result)
   }
 
+  const buildCompactionLedger = (
+    entriesByCapability: ReadonlyMap<string, readonly ActivityStepEntry[]>,
+    statesByCapability: ReadonlyMap<string, readonly unknown[]>
+  ): CompactionLedgerSection[] => {
+    const sections: CompactionLedgerSection[] = []
+    for (const cap of capabilities) {
+      if (!cap.buildCompactionLedger) {
+        continue
+      }
+      const entries = entriesByCapability.get(cap.id) ?? []
+      const states = statesByCapability.get(cap.id) ?? []
+      if (entries.length === 0 && states.length === 0) {
+        continue
+      }
+      const section = cap.buildCompactionLedger(entries, states)
+      if (section && section.lines.length > 0) {
+        sections.push(section)
+      }
+    }
+    return sections
+  }
+
   return {
     capabilities,
     toggles,
@@ -208,6 +232,7 @@ export const createToolRegistry = (
     run,
     presenterFor,
     serializeForArchive,
+    buildCompactionLedger,
     turnHooks,
   }
 }

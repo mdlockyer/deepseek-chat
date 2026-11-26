@@ -8,6 +8,7 @@ export type {
   AgentSourceSpec,
   ArchiveFragment,
   CitedSourceMeta,
+  CompactionLedgerSection,
   ComposerToggleDescriptor,
   CompositionPromptNote,
   DeclareToolsContext,

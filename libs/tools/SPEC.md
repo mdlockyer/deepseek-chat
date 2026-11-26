@@ -16,9 +16,9 @@ hooks to the application without coupling slices to one another or requiring a s
    and preserves an existing `summary` field unchanged.
 3. **Composable `createToolRegistry`.** Aggregates any list of `ToolCapability` objects in
    registration order, routes calls by `handles(name)` (with `agentProfile` fallback for spawned
-   profiles), resolves `effectOf`, `presenterFor`, `serializeForArchive`, `turnHooks`, and appends
-   static `CompositionPromptNote` entries only when all required capability IDs are active in the
-   current turn.
+   profiles), resolves `effectOf`, `presenterFor`, `serializeForArchive`, `buildCompactionLedger`,
+   `turnHooks`, and appends static `CompositionPromptNote` entries only when all required
+   capability IDs are active in the current turn.
 4. **Graceful unknown handling.** Calling `run` for an unknown tool always resolves with
    `status: 'error'` and never throws; `effectOf` defaults to `'session'`.
 5. **Domain-blind presentation & deep-linking.** `ToolStepSummary` may attach optional `icon`,
