@@ -154,4 +154,48 @@ describe('right-rail coordination (factory-scoped)', () => {
     assert.equal(panel.getActivePanel('s2'), null)
     panel.dispose()
   })
+
+  it('signals panelAnimating consistently on open, close, cross-width kind switches, programmatic resizes, and session switches', () => {
+    const { controller: panel } = makeController('s1')
+    const isAnimating = () => panel.useStore.getState().panelAnimating
+
+    // Closed -> Open animates.
+    panel.openPanel('s1', 'browser')
+    assert.equal(isAnimating(), true)
+    panel.setAnimating(false)
+
+    // Open -> Open with identical width (browser 540 -> preview 540) does NOT wait on width transition.
+    panel.openPanel('s1', 'preview')
+    assert.equal(isAnimating(), false)
+
+    // Open -> Open across different widths (preview 540 -> activity 400) animates smoothly.
+    panel.openPanel('s1', 'activity')
+    assert.equal(isAnimating(), true)
+    panel.setAnimating(false)
+
+    // Programmatic width toggle (400 -> 560) animates; live pointer drag resize does not.
+    panel.setWidthForKind('activity', 560)
+    assert.equal(isAnimating(), true)
+    panel.setAnimating(false)
+
+    panel.setResizing(true)
+    panel.setWidthForKind('activity', 480)
+    assert.equal(isAnimating(), false)
+    panel.setResizing(false)
+
+    // Switching sessions across different open widths animates; same open width stays steady.
+    panel.openPanel('s2', 'browser')
+    panel.setActiveSession('s2')
+    assert.equal(isAnimating(), true)
+    panel.setAnimating(false)
+
+    panel.openPanel('s3', 'preview')
+    panel.setActiveSession('s3')
+    assert.equal(isAnimating(), false)
+
+    // Open -> Closed animates.
+    panel.closePanel('s3', 'preview')
+    assert.equal(isAnimating(), true)
+    panel.dispose()
+  })
 })

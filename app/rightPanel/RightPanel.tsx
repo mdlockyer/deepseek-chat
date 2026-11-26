@@ -107,6 +107,7 @@ export const RightPanel = () => {
   return (
     <SidePanel
       open={effectiveKind !== null}
+      contentKey={shownKind}
       width={panelWidth}
       minWidth={getPanelMinWidth(shownKind)}
       defaultWidth={getPanelDefaultWidth(shownKind)}

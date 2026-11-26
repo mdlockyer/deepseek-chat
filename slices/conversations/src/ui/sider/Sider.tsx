@@ -209,23 +209,24 @@ export const Sider = ({
   )
 }
 
-/** 移动端抽屉：浮在页面上方，点空白区域关闭；滑入滑出与遮罩淡入淡出 */
+/** 移动端抽屉：常驻壳层以支持任意时刻平滑反向打断，与桌面左右面板共用统一曲线 */
 export const MobileSider = () => {
   const { useMobileSider, closeMobileSider } = useConversations()
   const open = useMobileSider((state) => state.open)
-  const { mounted, exiting } = usePresence(open, PANEL_DURATION_MS)
+  const { mounted } = usePresence(open, PANEL_DURATION_MS)
   useOverlayLock(mounted)
-  if (!mounted) {
-    return null
-  }
   return (
     <>
       <div
-        className={clsx(styles.drawerMask, exiting && styles.exiting)}
+        aria-hidden={!open || undefined}
+        className={clsx(styles.drawerMask, !open && styles.drawerMaskClosed)}
         onClick={closeMobileSider}
       />
-      <div className={clsx(styles.drawer, exiting && styles.exiting)}>
-        <Sider mobile />
+      <div
+        aria-hidden={!open || undefined}
+        className={clsx(styles.drawer, !open && styles.drawerClosed)}
+      >
+        {mounted ? <Sider mobile /> : null}
       </div>
     </>
   )

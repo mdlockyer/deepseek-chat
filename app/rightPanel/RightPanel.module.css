@@ -6,11 +6,45 @@
     box-sizing: border-box;
     width: var(--side-panel-width, 540px);
     max-width: 72vw;
-    min-width: var(--side-panel-min-width, 360px);
+    min-width: 0;
     height: 100%;
-    border-left: 1px solid var(--ui-border-default);
     color: var(--ui-text-primary);
     background: var(--ui-surface-canvas);
+    transition:
+      width var(--ui-duration-panel) var(--ui-ease-panel),
+      visibility 0s;
+  }
+
+  .panelClosed {
+    width: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition:
+      width var(--ui-duration-panel) var(--ui-ease-panel),
+      visibility 0s linear var(--ui-duration-panel);
+  }
+
+  .panelResizing {
+    transition: none;
+  }
+
+  .panelViewport {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+
+    &::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 0;
+      z-index: var(--ui-z-base);
+      width: 1px;
+      background-color: var(--ui-border-default);
+      pointer-events: none;
+    }
   }
 
   .panelInner {
@@ -18,20 +52,31 @@
     flex-direction: column;
     width: 100%;
     height: 100%;
-    overflow: hidden;
+    opacity: 1;
+    transition: opacity var(--ui-duration-normal) var(--ui-ease-panel) 50ms;
   }
 
-  .panelOpening {
-    animation: side-panel-open var(--ui-duration-panel) var(--ui-ease-panel) both;
+  .panelInnerRigid {
+    width: min(var(--side-panel-target-width, 540px), 72vw);
   }
 
-  .panelExiting {
-    animation: side-panel-close var(--ui-duration-panel) var(--ui-ease-panel) both;
+  .panelClosed .panelInner {
+    opacity: 0;
     pointer-events: none;
+    transition: opacity 80ms var(--ui-ease-standard) 0ms;
   }
 
-  .panelResizing {
-    transition: none;
+  .panelContent {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    min-height: 0;
+  }
+
+  .panelContentSwap {
+    animation: panel-content-in var(--ui-duration-fast) var(--ui-ease-panel) both;
   }
 
   .resizer {
@@ -69,41 +114,13 @@
   }
 
   .panelOpening .resizer,
-  .panelExiting .resizer {
+  .panelClosed .resizer {
     pointer-events: none;
   }
 
-  .panelExiting .resizer {
-    opacity: 0;
-  }
-
-  @keyframes side-panel-open {
+  @keyframes panel-content-in {
     from {
-      width: 0;
-      min-width: 0;
-      border-left-width: 0;
-    }
-  }
-
-  @keyframes side-panel-close {
-    to {
-      width: 0;
-      min-width: 0;
-      border-left-width: 0;
-      visibility: hidden;
-    }
-  }
-
-  @keyframes side-panel-slide-in {
-    from {
-      transform: translateX(100%);
-    }
-  }
-
-  @keyframes side-panel-slide-out {
-    to {
-      transform: translateX(100%);
-      visibility: hidden;
+      opacity: 0;
     }
   }
 
@@ -115,15 +132,29 @@
       width: auto !important;
       max-width: none;
       min-width: 0;
-      border-left: none;
+      transform: translateX(0);
+      transition:
+        transform var(--ui-duration-panel) var(--ui-ease-panel),
+        visibility 0s;
     }
 
-    .panelOpening {
-      animation: side-panel-slide-in var(--ui-duration-panel) var(--ui-ease-panel) both;
+    .panelClosed {
+      width: auto !important;
+      transform: translateX(100%);
+      visibility: hidden;
+      pointer-events: none;
+      transition:
+        transform var(--ui-duration-panel) var(--ui-ease-panel),
+        visibility 0s linear var(--ui-duration-panel);
     }
 
-    .panelExiting {
-      animation: side-panel-slide-out var(--ui-duration-panel) var(--ui-ease-panel) both;
+    .panelViewport::before {
+      display: none;
+    }
+
+    .panelInner,
+    .panelInnerRigid {
+      width: 100%;
     }
 
     .resizer {

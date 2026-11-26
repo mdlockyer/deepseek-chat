@@ -141,16 +141,25 @@ export const createRightPanelController = (store: KeyValueStore, log: EventLog) 
   const getActivePanel = (sessionId: string | null | undefined) =>
     getActiveRightPanel(sessionId, get())
 
+  const widthOfKind = (
+    kind: RightPanelKind | null,
+    state: Pick<SidePanelState, 'width' | 'activityWidth'>
+  ) => (kind === 'activity' ? state.activityWidth : state.width)
+
   const setActiveSession = (sessionId: string | null) => {
     const state = get()
     if (state.activeSessionId === sessionId) {
       return
     }
-    const prevOpen = getActiveRightPanel(state.activeSessionId, state) !== null
-    const nextOpen = getActiveRightPanel(sessionId, state) !== null
+    const prevKind = getActiveRightPanel(state.activeSessionId, state)
+    const nextKind = getActiveRightPanel(sessionId, state)
+    const prevOpen = prevKind !== null
+    const nextOpen = nextKind !== null
+    const widthChanged =
+      prevOpen && nextOpen && widthOfKind(prevKind, state) !== widthOfKind(nextKind, state)
     set({
       activeSessionId: sessionId,
-      panelAnimating: prevOpen !== nextOpen,
+      panelAnimating: prevOpen !== nextOpen || widthChanged,
     })
   }
 
@@ -162,10 +171,13 @@ export const createRightPanelController = (store: KeyValueStore, log: EventLog) 
       return
     }
     const isViewing = state.activeSessionId === sessionId
+    const widthChanged =
+      prev !== null && prev !== kind && widthOfKind(prev, state) !== widthOfKind(kind, state)
+    const shouldAnimate = isViewing && (prev === null || widthChanged)
     set({
       activePanels: { ...state.activePanels, [sessionId]: kind },
       revealPolicies: { ...state.revealPolicies, [sessionId]: 'user_overridden' },
-      ...(isViewing && prev === null ? { panelAnimating: true } : {}),
+      ...(shouldAnimate ? { panelAnimating: true } : {}),
     })
   }
 
@@ -196,7 +208,7 @@ export const createRightPanelController = (store: KeyValueStore, log: EventLog) 
     set({
       activePanels: { ...state.activePanels, [sessionId]: null },
       revealPolicies: { ...state.revealPolicies, [sessionId]: 'user_overridden' },
-      ...(isViewing ? { panelAnimating: false } : {}),
+      ...(isViewing ? { panelAnimating: true } : {}),
     })
   }
 
@@ -256,15 +268,25 @@ export const createRightPanelController = (store: KeyValueStore, log: EventLog) 
   }
 
   const setWidth = (width: number) => {
+    const state = get()
     const clamped = clampStoredWidth(width, MIN_SIDE_PANEL_WIDTH)
+    const activeKind = getActiveRightPanel(state.activeSessionId, state)
+    const animate =
+      !state.panelResizing &&
+      (activeKind === 'browser' || activeKind === 'preview') &&
+      clamped !== state.width
     store.set(WIDTH_KEY, String(clamped))
-    set({ width: clamped })
+    set({ width: clamped, ...(animate ? { panelAnimating: true } : {}) })
   }
 
   const setWidthForKind = (kind: RightPanelKind, width: number) => {
     if (kind === 'activity') {
+      const state = get()
       const clamped = clampStoredWidth(width, MIN_ACTIVITY_PANEL_WIDTH)
-      set({ activityWidth: clamped })
+      const activeKind = getActiveRightPanel(state.activeSessionId, state)
+      const animate =
+        !state.panelResizing && activeKind === 'activity' && clamped !== state.activityWidth
+      set({ activityWidth: clamped, ...(animate ? { panelAnimating: true } : {}) })
       return
     }
     setWidth(width)

@@ -392,11 +392,19 @@
     bottom: 0;
     left: 0;
     z-index: var(--ui-z-drawer);
-    animation: drawer-in var(--ui-duration-panel) var(--ui-ease-panel) both;
+    transform: translateX(0);
+    transition:
+      transform var(--ui-duration-panel) var(--ui-ease-panel),
+      visibility 0s;
   }
 
-  .drawer.exiting {
-    animation: drawer-out var(--ui-duration-panel) var(--ui-ease-panel) both;
+  .drawerClosed {
+    transform: translateX(-100%);
+    visibility: hidden;
+    pointer-events: none;
+    transition:
+      transform var(--ui-duration-panel) var(--ui-ease-panel),
+      visibility 0s linear var(--ui-duration-panel);
   }
 
   .drawerMask {
@@ -404,51 +412,19 @@
     inset: 0;
     z-index: var(--ui-z-drawer-backdrop);
     background-color: var(--ui-surface-scrim-soft);
-    animation: mask-in var(--ui-duration-normal) var(--ui-ease-standard) both;
+    opacity: 1;
+    transition:
+      opacity var(--ui-duration-normal) var(--ui-ease-standard),
+      visibility 0s;
   }
 
-  .drawerMask.exiting {
-    animation: mask-out var(--ui-duration-panel) var(--ui-ease-standard) both;
-  }
-
-  @keyframes drawer-in {
-    from {
-      transform: translateX(-100%);
-    }
-
-    to {
-      transform: none;
-    }
-  }
-
-  @keyframes drawer-out {
-    from {
-      transform: none;
-    }
-
-    to {
-      transform: translateX(-100%);
-    }
-  }
-
-  @keyframes mask-in {
-    from {
-      opacity: 0;
-    }
-
-    to {
-      opacity: 1;
-    }
-  }
-
-  @keyframes mask-out {
-    from {
-      opacity: 1;
-    }
-
-    to {
-      opacity: 0;
-    }
+  .drawerMaskClosed {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition:
+      opacity var(--ui-duration-panel) var(--ui-ease-standard),
+      visibility 0s linear var(--ui-duration-panel);
   }
 
   .mobile {

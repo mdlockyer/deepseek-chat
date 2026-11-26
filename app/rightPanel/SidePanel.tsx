@@ -8,6 +8,7 @@ import {
   type CSSProperties,
   type KeyboardEvent,
   type ReactNode,
+  type TransitionEvent,
 } from 'react'
 import { useAppRuntime } from '../RuntimeContext.js'
 import { useTranslate } from '../i18n/index.js'
@@ -18,9 +19,14 @@ import {
   clampSidePanelResizeWidth,
 } from './state.js'
 
-/** 共享右侧面板壳层：开合动画、左侧拖拽调宽、窄屏自动收起侧边栏、移动端全屏抽屉 */
+/**
+ * 共享右侧面板壳层：常驻 DOM，与左侧边栏共用同一套 CSS transition 物理模型
+ * （280ms cubic-bezier(0.32, 0.72, 0, 1)），支持任意状态下无缝打断反向、
+ * 面板间宽幅平滑过渡、开合刚性防挤压裁切、拖拽零延迟与移动端全屏抽屉。
+ */
 export const SidePanel = ({
   open,
+  contentKey,
   width,
   minWidth = MIN_SIDE_PANEL_WIDTH,
   defaultWidth = DEFAULT_SIDE_PANEL_WIDTH,
@@ -29,6 +35,7 @@ export const SidePanel = ({
   children,
 }: {
   open: boolean
+  contentKey?: string | null
   width?: number
   minWidth?: number
   defaultWidth?: number
@@ -39,14 +46,18 @@ export const SidePanel = ({
   const t = useTranslate()
   const { rightPanel, layout } = useAppRuntime()
   const storedWidth = rightPanel.useStore((state) => state.width)
+  const panelAnimating = rightPanel.useStore((state) => state.panelAnimating)
   const resolvedWidth = width ?? storedWidth
   const commitWidth = onWidthChange ?? rightPanel.setWidth
-  const { mounted, exiting } = usePresence(open, PANEL_DURATION_MS)
+  const { mounted: contentMounted, exiting } = usePresence(open, PANEL_DURATION_MS)
   const panelRef = useRef<HTMLElement>(null)
   const dragCleanupRef = useRef<(() => void) | null>(null)
   const releaseFramesRef = useRef<number[]>([])
   const prevOpenRef = useRef(open)
-  const [entering, setEntering] = useState(open)
+  const prevContentKeyRef = useRef(contentKey ?? null)
+  const lastTargetWidthRef = useRef(resolvedWidth)
+  const [opening, setOpening] = useState(false)
+  const [swappingKind, setSwappingKind] = useState(false)
   const [resizingWidth, setResizingWidth] = useState<number | null>(null)
 
   const cancelReleaseFrames = () => {
@@ -56,12 +67,32 @@ export const SidePanel = ({
     releaseFramesRef.current = []
   }
 
-  if (open !== prevOpenRef.current) {
-    prevOpenRef.current = open
-    setEntering(open)
+  if (open) {
+    lastTargetWidthRef.current = resolvedWidth
   }
 
-  const panelWidth = resizingWidth ?? resolvedWidth
+  if (open !== prevOpenRef.current) {
+    const wasOpen = prevOpenRef.current
+    prevOpenRef.current = open
+    setOpening(!wasOpen && open)
+    if (!open || !wasOpen) {
+      setSwappingKind(false)
+    }
+  }
+
+  const nextContentKey = contentKey ?? null
+  if (nextContentKey !== prevContentKeyRef.current) {
+    const hadKind = prevContentKeyRef.current !== null
+    prevContentKeyRef.current = nextContentKey
+    if (open && !opening && hadKind && nextContentKey !== null) {
+      setSwappingKind(true)
+    } else if (!open) {
+      setSwappingKind(false)
+    }
+  }
+
+  const targetWidth = open ? resolvedWidth : lastTargetWidthRef.current
+  const panelWidth = resizingWidth ?? targetWidth
 
   useEffect(() => {
     if (!open) {
@@ -72,20 +103,29 @@ export const SidePanel = ({
     }
   }, [layout, open, resolvedWidth])
 
+  // Unified settlement fallback so `panelAnimating` & `opening` can never stall if transitionend is skipped.
   useEffect(() => {
-    if (!entering) {
+    if (!panelAnimating && !opening) {
       return
     }
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
     const timer = window.setTimeout(
       () => {
-        setEntering(false)
+        setOpening(false)
         rightPanel.setAnimating(false)
       },
       reduced ? 30 : PANEL_DURATION_MS + 60
     )
     return () => window.clearTimeout(timer)
-  }, [entering, rightPanel])
+  }, [panelAnimating, opening, open, resolvedWidth, rightPanel])
+
+  useEffect(() => {
+    if (!swappingKind) {
+      return
+    }
+    const timer = window.setTimeout(() => setSwappingKind(false), 180)
+    return () => window.clearTimeout(timer)
+  }, [swappingKind, nextContentKey])
 
   useEffect(
     () => () => {
@@ -96,32 +136,24 @@ export const SidePanel = ({
   )
 
   useEffect(() => {
-    if (exiting) {
-      rightPanel.setAnimating(true)
-    }
-  }, [exiting, rightPanel])
-
-  useEffect(() => {
-    if (!mounted) {
+    if (!contentMounted) {
+      setOpening(false)
+      setSwappingKind(false)
       rightPanel.setAnimating(false)
       rightPanel.setResizing(false)
     }
-  }, [mounted, rightPanel])
-
-  if (!mounted) {
-    return null
-  }
+  }, [contentMounted, rightPanel])
 
   const startResize = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (event.button !== 0 || exiting) {
+    if (event.button !== 0 || !open || exiting) {
       return
     }
     event.preventDefault()
     event.stopPropagation()
     cancelReleaseFrames()
     dragCleanupRef.current?.()
-    if (entering) {
-      setEntering(false)
+    if (opening) {
+      setOpening(false)
     }
     rightPanel.setAnimating(false)
     rightPanel.setResizing(true)
@@ -210,7 +242,7 @@ export const SidePanel = ({
   }
 
   const handleResizerKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (exiting) {
+    if (!open || exiting) {
       return
     }
     const step = event.shiftKey ? 96 : 32
@@ -233,53 +265,74 @@ export const SidePanel = ({
     }
   }
 
+  const handleTransitionEnd = (event: TransitionEvent<HTMLElement>) => {
+    if (event.target !== event.currentTarget) {
+      return
+    }
+    if (event.propertyName === 'width' || event.propertyName === 'transform') {
+      setOpening(false)
+      rightPanel.setAnimating(false)
+    }
+  }
+
   const maxResizerWidth =
     typeof window !== 'undefined'
       ? clampSidePanelResizeWidth(window.innerWidth, window.innerWidth, minWidth)
       : 920
 
+  const rigidInner = opening || !open
+
   return (
     <aside
       ref={panelRef}
+      aria-hidden={!open || undefined}
       className={clsx(
         styles.panel,
-        !exiting && entering && styles.panelOpening,
-        exiting && styles.panelExiting,
+        !open && styles.panelClosed,
+        opening && styles.panelOpening,
         resizingWidth !== null && styles.panelResizing
       )}
       style={
         {
           '--side-panel-width': `${panelWidth}px`,
-          '--side-panel-min-width': `${minWidth}px`,
+          '--side-panel-target-width': `${targetWidth}px`,
         } as CSSProperties
       }
-      onAnimationEnd={(event) => {
-        if (event.target === event.currentTarget && !exiting && entering) {
-          setEntering(false)
-          rightPanel.setAnimating(false)
-        }
-      }}
+      onTransitionEnd={handleTransitionEnd}
     >
-      <div
-        role="separator"
-        tabIndex={0}
-        aria-label={t('resizeSidePanel')}
-        aria-orientation="vertical"
-        aria-valuemin={minWidth}
-        aria-valuemax={maxResizerWidth}
-        aria-valuenow={panelWidth}
-        className={clsx(styles.resizer, resizingWidth !== null && styles.resizing)}
-        onPointerEnter={() => {
-          if (resizingWidth === null) {
-            onResizeHoverStart?.()
-          }
-        }}
-        onMouseDown={(event) => event.preventDefault()}
-        onPointerDown={startResize}
-        onKeyDown={handleResizerKeyDown}
-        onDoubleClick={() => commitWidth(defaultWidth)}
-      />
-      <div className={styles.panelInner}>{children}</div>
+      {open ? (
+        <div
+          role="separator"
+          tabIndex={0}
+          aria-label={t('resizeSidePanel')}
+          aria-orientation="vertical"
+          aria-valuemin={minWidth}
+          aria-valuemax={maxResizerWidth}
+          aria-valuenow={panelWidth}
+          className={clsx(styles.resizer, resizingWidth !== null && styles.resizing)}
+          onPointerEnter={() => {
+            if (resizingWidth === null) {
+              onResizeHoverStart?.()
+            }
+          }}
+          onMouseDown={(event) => event.preventDefault()}
+          onPointerDown={startResize}
+          onKeyDown={handleResizerKeyDown}
+          onDoubleClick={() => commitWidth(defaultWidth)}
+        />
+      ) : null}
+      <div className={styles.panelViewport}>
+        <div className={clsx(styles.panelInner, rigidInner && styles.panelInnerRigid)}>
+          {contentMounted ? (
+            <div
+              key={nextContentKey ?? 'panel'}
+              className={clsx(styles.panelContent, swappingKind && styles.panelContentSwap)}
+            >
+              {children}
+            </div>
+          ) : null}
+        </div>
+      </div>
     </aside>
   )
 }
