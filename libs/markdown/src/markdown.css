@@ -4,6 +4,20 @@
     color: var(--ui-text-primary);
   }
 
+  /*
+   * While a reply streams, the newest block fades in as it appears. Only the last child
+   * animates, so resuming an existing reply does not make every earlier block blink.
+   */
+  .ds-markdown-streaming > :last-child {
+    animation: ds-markdown-block-in var(--ui-duration-normal) var(--ui-ease-standard) both;
+  }
+
+  @keyframes ds-markdown-block-in {
+    from {
+      opacity: 0;
+    }
+  }
+
   .ds-markdown strong {
     font-weight: 600;
   }
@@ -83,7 +97,7 @@
   }
 
   .ds-markdown a:not(.ds-a) {
-    color: var(--ui-text-accent);
+    color: var(--ui-accent-text);
     transition: box-shadow var(--ui-duration-normal) var(--ui-ease-standard);
     position: relative;
     text-decoration: none;
@@ -97,7 +111,7 @@
     &:hover,
     &:focus {
       outline: none;
-      text-decoration: underline var(--ui-text-accent);
+      text-decoration: underline var(--ui-accent-text);
     }
   }
 
@@ -215,7 +229,7 @@
     box-sizing: border-box;
     font: var(--ui-type-code-inline);
     font-size: 0.875em !important;
-    background-color: var(--ui-surface-code-inline);
+    background-color: var(--ui-surface-raised-1);
     border-radius: 6px;
     padding: 0 var(--ui-space-1-5);
   }
@@ -303,7 +317,7 @@
     box-sizing: border-box;
     user-select: none;
     white-space: nowrap;
-    background-color: var(--ui-surface-tag);
+    background-color: var(--ui-surface-raised-1);
     font: 500 0.625em/1.4 var(--ui-font-mono);
     color: var(--ui-text-muted);
     display: inline-flex;
@@ -319,7 +333,7 @@
   }
 
   .ds-markdown-cite:hover {
-    background-color: var(--ui-surface-tag-hover);
+    background-color: var(--ui-surface-raised-2);
   }
 
   .ds-markdown .md-code-block {
@@ -327,13 +341,13 @@
   }
 
   .md-code-block {
-    --dsl-code-block-banner-background-color: var(--ui-surface-code-header);
+    --dsl-code-block-banner-background-color: var(--ui-surface-raised-1);
     --dsl-code-block-border-radius: var(--ui-radius-md);
     --dsl-code-block-banner-font: var(--ui-type-caption);
     --dsl-code-block-content-font: var(--ui-type-code-block);
 
     color: var(--ui-text-primary);
-    background-color: var(--ui-surface-code);
+    background-color: var(--ui-surface-sunken);
     border-radius: var(--dsl-code-block-border-radius);
   }
 

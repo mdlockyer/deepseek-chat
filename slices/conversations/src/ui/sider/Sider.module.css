@@ -10,7 +10,7 @@
     flex-shrink: 0;
     width: 261px;
     height: 100%;
-    background-color: var(--ui-surface-rail);
+    background-color: var(--ui-surface-sunken);
     overflow: hidden;
     /* 开合：仅宽度沿面板曲线滑动，避免内边距/边框动画触发内容横移；
        visibility 在收起结束时才隐藏（期间保持可聚焦），展开时立即恢复 */
@@ -91,12 +91,12 @@
     padding: 0 var(--ui-space-4);
     border-radius: var(--ui-radius-pill);
     border: 1px solid transparent;
-    background: var(--ui-surface-button-elevated);
+    background: var(--ui-surface-overlay);
     color: var(--ui-text-primary);
     font: var(--ui-type-label-strong);
     cursor: pointer;
     user-select: none;
-    box-shadow: var(--ui-shadow-floating);
+    box-shadow: var(--ui-elevation-1);
     transition:
       opacity var(--ui-duration-normal) var(--ui-ease-panel) 80ms,
       box-shadow var(--ui-duration-slow) ease,
@@ -107,7 +107,7 @@
     }
 
     &:hover {
-      box-shadow: var(--ui-shadow-floating-hover);
+      box-shadow: var(--ui-elevation-2);
     }
 
     &:focus-visible {
@@ -156,7 +156,7 @@
     overflow-y: auto;
     overscroll-behavior: contain;
     scrollbar-color: var(--ui-scrollbar-thumb) transparent;
-    --hover-glide-bg: var(--ui-surface-rail-hover);
+    --hover-glide-bg: var(--ui-surface-raised-1);
     --fade-size: var(--ui-space-6);
     scroll-padding-block-end: var(--fade-size);
     mask:
@@ -227,7 +227,7 @@
     line-height: var(--ui-leading-sm);
     font-weight: 500;
     color: var(--ui-text-muted);
-    background-color: var(--ui-surface-rail);
+    background-color: var(--ui-surface-sunken);
     user-select: none;
   }
 
@@ -268,9 +268,9 @@
     inset: 0;
     box-sizing: border-box;
     border-radius: inherit;
-    border: 1px solid var(--ui-border-default);
-    background: var(--ui-surface-popover);
-    box-shadow: var(--ui-shadow-md);
+    border: 1px solid transparent;
+    background: var(--ui-surface-overlay);
+    box-shadow: var(--ui-elevation-2);
     pointer-events: none;
     animation: pill-surface-in var(--ui-duration-fast) var(--ui-ease-panel) both;
   }
@@ -411,7 +411,7 @@
     position: absolute;
     inset: 0;
     z-index: var(--ui-z-drawer-backdrop);
-    background-color: var(--ui-surface-scrim-soft);
+    background-color: var(--ui-surface-scrim);
     opacity: 1;
     transition:
       opacity var(--ui-duration-normal) var(--ui-ease-standard),

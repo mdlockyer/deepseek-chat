@@ -17,8 +17,8 @@
     animation: item-in var(--ui-duration-normal) var(--ui-ease-panel) both;
 
     &.active {
-      background-color: var(--ui-surface-rail-active);
-      color: var(--ui-accent-invert);
+      background-color: var(--ui-surface-raised-2);
+      color: var(--ui-accent-text);
     }
 
     @media (hover: hover) {
@@ -119,7 +119,7 @@
     height: var(--ui-control-lg);
     padding: 0 var(--ui-space-2-5);
     border-radius: var(--ui-radius-md);
-    border: 1px solid var(--ui-accent-fill);
+    border: 1px solid var(--ui-accent-solid);
     background-color: var(--ui-surface-input);
     color: var(--ui-text-primary);
     font: inherit;

@@ -43,10 +43,10 @@
   }
 
   .boxError {
-    border-color: var(--ui-border-danger);
+    border-color: var(--ui-danger-border);
 
     &:focus-within {
-      border-color: var(--ui-border-danger);
+      border-color: var(--ui-danger-border);
     }
   }
 
@@ -60,10 +60,10 @@
     background: transparent;
     color: var(--ui-text-primary);
     font: var(--ui-type-label);
-    caret-color: var(--ui-text-accent);
+    caret-color: var(--ui-accent-text);
 
     &::placeholder {
-      color: var(--ui-text-placeholder);
+      color: var(--ui-text-muted);
     }
 
     &:disabled {
@@ -91,7 +91,7 @@
     font: var(--ui-type-micro);
     font-weight: 400;
     line-height: var(--ui-leading-sm);
-    color: var(--ui-text-danger);
+    color: var(--ui-danger-text);
   }
 
   @media not all and (min-width: 768px) {

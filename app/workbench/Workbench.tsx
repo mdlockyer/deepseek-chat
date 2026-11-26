@@ -57,75 +57,62 @@ import { SsaDemo } from './SsaDemo.js'
 import styles from './Workbench.module.css'
 
 type WorkbenchTab = 'ssa' | 'kit'
-type BrandPreset = 'default' | 'emerald' | 'terracotta'
+type BrandPreset = 'default' | 'blue' | 'terracotta'
 
+/** Presets override only the accent slots; surfaces and text stay neutral under every preset. */
 const OVERRIDE_KEYS = [
-  '--ui-accent-fill',
-  '--ui-accent-hover',
-  '--ui-accent-soft',
-  '--ui-accent-soft-hover',
-  '--ui-accent-invert',
-  '--ui-text-accent',
-  '--ui-border-accent',
+  '--ui-accent-solid',
+  '--ui-accent-solid-hover',
+  '--ui-accent-subtle',
+  '--ui-accent-subtle-hover',
+  '--ui-accent-text',
+  '--ui-accent-border',
   '--ui-focus-ring',
-  '--ui-surface-rail-active',
-  '--ui-surface-tint',
 ] as const
 
 const BRAND_OVERRIDES: Record<
   Exclude<BrandPreset, 'default'>,
   Record<ThemeMode, Record<(typeof OVERRIDE_KEYS)[number], string>>
 > = {
-  emerald: {
+  /** The pre-refresh DeepSeek blue, kept for side-by-side comparison. */
+  blue: {
     light: {
-      '--ui-accent-fill': '#0f766e',
-      '--ui-accent-hover': '#115e59',
-      '--ui-accent-soft': '#ecfdf5',
-      '--ui-accent-soft-hover': '#d1fae5',
-      '--ui-accent-invert': '#0f766e',
-      '--ui-text-accent': '#0f766e',
-      '--ui-border-accent': '#5eead4',
-      '--ui-focus-ring': '#0f766e',
-      '--ui-surface-rail-active': '#d1fae5',
-      '--ui-surface-tint': '#ecfdf5',
+      '--ui-accent-solid': '#3964fe',
+      '--ui-accent-solid-hover': '#2d55e4',
+      '--ui-accent-subtle': '#edf3fe',
+      '--ui-accent-subtle-hover': '#e4edfd',
+      '--ui-accent-text': '#2d55e4',
+      '--ui-accent-border': '#5686fe',
+      '--ui-focus-ring': '#3964fe',
     },
     dark: {
-      '--ui-accent-fill': '#0f766e',
-      '--ui-accent-hover': '#115e59',
-      '--ui-accent-soft': '#132a27',
-      '--ui-accent-soft-hover': '#1a3a36',
-      '--ui-accent-invert': '#ffffff',
-      '--ui-text-accent': '#5eead4',
-      '--ui-border-accent': '#2dd4bf',
-      '--ui-focus-ring': '#2dd4bf',
-      '--ui-surface-rail-active': '#1a3a36',
-      '--ui-surface-tint': '#1a2e2b',
+      '--ui-accent-solid': '#3964fe',
+      '--ui-accent-solid-hover': '#2d55e4',
+      '--ui-accent-subtle': '#283142',
+      '--ui-accent-subtle-hover': '#34415b',
+      '--ui-accent-text': '#679efe',
+      '--ui-accent-border': '#4868b2',
+      '--ui-focus-ring': '#679efe',
     },
   },
   terracotta: {
     light: {
-      '--ui-accent-fill': '#b45309',
-      '--ui-accent-hover': '#92400e',
-      '--ui-accent-soft': '#fff7ed',
-      '--ui-accent-soft-hover': '#ffedd5',
-      '--ui-accent-invert': '#9a3412',
-      '--ui-text-accent': '#9a3412',
-      '--ui-border-accent': '#fdba74',
+      '--ui-accent-solid': '#b45309',
+      '--ui-accent-solid-hover': '#92400e',
+      '--ui-accent-subtle': '#fff7ed',
+      '--ui-accent-subtle-hover': '#ffedd5',
+      '--ui-accent-text': '#9a3412',
+      '--ui-accent-border': '#c2410c',
       '--ui-focus-ring': '#b45309',
-      '--ui-surface-rail-active': '#ffedd5',
-      '--ui-surface-tint': '#fff7ed',
     },
     dark: {
-      '--ui-accent-fill': '#b45309',
-      '--ui-accent-hover': '#92400e',
-      '--ui-accent-soft': '#311f14',
-      '--ui-accent-soft-hover': '#42291b',
-      '--ui-accent-invert': '#ffffff',
-      '--ui-text-accent': '#fdba74',
-      '--ui-border-accent': '#f97316',
+      '--ui-accent-solid': '#b45309',
+      '--ui-accent-solid-hover': '#92400e',
+      '--ui-accent-subtle': '#311f14',
+      '--ui-accent-subtle-hover': '#42291b',
+      '--ui-accent-text': '#fdba74',
+      '--ui-accent-border': '#f97316',
       '--ui-focus-ring': '#fb923c',
-      '--ui-surface-rail-active': '#42291b',
-      '--ui-surface-tint': '#2d2018',
     },
   },
 }
@@ -148,48 +135,58 @@ const INSPECTED_PAIRS: ReadonlyArray<{
     bg: '--ui-surface-canvas',
     minRatio: 4.5,
   },
-  { label: 'Muted text on rail', fg: '--ui-text-muted', bg: '--ui-surface-rail', minRatio: 4.5 },
+  {
+    label: 'Muted text on sunken',
+    fg: '--ui-text-muted',
+    bg: '--ui-surface-sunken',
+    minRatio: 4.5,
+  },
   {
     label: 'Accent text on canvas',
-    fg: '--ui-text-accent',
+    fg: '--ui-accent-text',
     bg: '--ui-surface-canvas',
     minRatio: 4.5,
   },
-  { label: 'Accent text on soft', fg: '--ui-text-accent', bg: '--ui-accent-soft', minRatio: 4.5 },
   {
-    label: 'On-accent label on fill',
-    fg: '--ui-text-on-accent',
-    bg: '--ui-accent-fill',
+    label: 'Accent text on subtle',
+    fg: '--ui-accent-text',
+    bg: '--ui-accent-subtle',
     minRatio: 4.5,
   },
   {
-    label: 'Danger text on elevated',
-    fg: '--ui-text-danger',
-    bg: '--ui-surface-elevated',
+    label: 'Label on accent solid',
+    fg: '--ui-accent-on-solid',
+    bg: '--ui-accent-solid',
     minRatio: 4.5,
   },
   {
-    label: 'On-danger label on fill',
-    fg: '--ui-text-on-danger',
-    bg: '--ui-danger-fill',
+    label: 'Danger text on overlay',
+    fg: '--ui-danger-text',
+    bg: '--ui-surface-overlay',
     minRatio: 4.5,
   },
   {
-    label: 'Success text on soft',
-    fg: '--ui-success-on-soft',
-    bg: '--ui-success-soft',
+    label: 'Label on danger solid',
+    fg: '--ui-danger-on-solid',
+    bg: '--ui-danger-solid',
     minRatio: 4.5,
   },
   {
-    label: 'Warning text on soft',
-    fg: '--ui-warning-on-soft',
-    bg: '--ui-warning-soft',
+    label: 'Success text on subtle',
+    fg: '--ui-success-text',
+    bg: '--ui-success-subtle',
     minRatio: 4.5,
   },
   {
-    label: 'Toast text on toast',
-    fg: '--ui-text-on-toast',
-    bg: '--ui-surface-toast',
+    label: 'Warning text on subtle',
+    fg: '--ui-warning-text',
+    bg: '--ui-warning-subtle',
+    minRatio: 4.5,
+  },
+  {
+    label: 'Text on inverse surface',
+    fg: '--ui-text-on-inverse',
+    bg: '--ui-surface-inverse',
     minRatio: 4.5,
   },
   {
@@ -221,7 +218,15 @@ const resolveRenderedRgb = (tokenName: string): string => {
   document.body.appendChild(probe)
   const resolved = getComputedStyle(probe).color
   probe.remove()
-  return resolved
+  // Engines serialise OKLCH tokens as lab()/oklch(); painting one pixel converts any of them to sRGB.
+  const context = document.createElement('canvas').getContext('2d', { willReadFrequently: true })
+  if (!context) {
+    return resolved
+  }
+  context.fillStyle = resolved
+  context.fillRect(0, 0, 1, 1)
+  const [r, g, b] = context.getImageData(0, 0, 1, 1).data
+  return `rgb(${r}, ${g}, ${b})`
 }
 
 const luminance = ([r, g, b]: [number, number, number]) => {
@@ -387,9 +392,9 @@ export const Workbench = () => {
               value={brand}
               onChange={setBrand}
               options={[
-                { value: 'default', label: 'Default Blue' },
-                { value: 'emerald', label: 'Emerald Swap' },
-                { value: 'terracotta', label: 'Terracotta Swap' },
+                { value: 'default', label: 'Emerald' },
+                { value: 'blue', label: 'Legacy Blue' },
+                { value: 'terracotta', label: 'Terracotta' },
               ]}
             />
             <Switch label="320px Reflow" checked={reflow320} onChange={setReflow320} />
@@ -412,7 +417,7 @@ export const Workbench = () => {
                 to re-theme all 18 primitives at runtime with zero component code changes.
               </p>
               <div className={styles.heroMeta}>
-                <Badge tone="success">167 semantic tokens</Badge>
+                <Badge tone="success">136 semantic tokens</Badge>
                 <Badge tone="success">WCAG 2.2 AA verified</Badge>
                 <Badge tone="neutral">Native &lt;dialog&gt; top-layer</Badge>
                 <Badge tone="neutral">Tree-shaken from production</Badge>
@@ -883,7 +888,7 @@ export const Workbench = () => {
                   4. Live Computed Token &amp; WCAG 2.2 AA Contrast Inspector
                 </h2>
                 <p className={styles.sectionNote}>
-                  Computed dynamically from active <code>:root</code> styles ({theme} mode · {brand}{' '}
+                  Computed dynamically from active <code>:root</code> styles ({theme} mode, {brand}{' '}
                   preset)
                 </p>
               </div>
@@ -963,11 +968,11 @@ export const Workbench = () => {
                 <div className={styles.card}>
                   <h3 className={styles.cardTitle}>Typography Scale</h3>
                   <div className={styles.typeRow}>
-                    <span className={styles.typeH1}>Heading 1 — 24px / 34px</span>
-                    <span className={styles.typeH2}>Heading 2 — 22px / 32px</span>
-                    <span className={styles.typeH3}>Heading 3 — 20px / 30px</span>
-                    <span className={styles.typeBody}>Body prose — 16px / 28px</span>
-                    <span className={styles.typeLabel}>Control label — 14px / 22px</span>
+                    <span className={styles.typeH1}>Heading 1 — 24px / 32px</span>
+                    <span className={styles.typeH2}>Heading 2 — 20px / 28px</span>
+                    <span className={styles.typeH3}>Heading 3 — 16px / 26px</span>
+                    <span className={styles.typeBody}>Body prose — 16px / 26px</span>
+                    <span className={styles.typeLabel}>Control label — 14px / 20px</span>
                     <span className={styles.typeCaption}>Caption metadata — 13px / 20px</span>
                     <span>
                       Inline <code className={styles.typeCode}>--ui-type-code-inline</code> specimen

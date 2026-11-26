@@ -104,7 +104,7 @@
     &:hover::after,
     &:focus-visible::after,
     &.resizing::after {
-      background: var(--ui-accent-fill);
+      background: var(--ui-accent-solid);
     }
 
     &:focus-visible {

@@ -6,10 +6,10 @@
     box-sizing: border-box;
     padding: var(--ui-space-1-5);
     border-radius: var(--ui-radius-lg);
-    border: 1px solid var(--ui-border-default);
-    background-color: var(--ui-surface-popover);
+    border: 1px solid transparent;
+    background-color: var(--ui-surface-overlay);
     color: var(--ui-text-primary);
-    box-shadow: var(--ui-shadow-popover);
+    box-shadow: var(--ui-elevation-2);
     outline: none;
     max-width: calc(100vw - var(--ui-space-4));
     max-height: calc(100vh - var(--ui-space-4));

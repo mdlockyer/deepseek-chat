@@ -119,8 +119,8 @@
 
     @media (hover: hover) {
       &:hover {
-        background-color: var(--ui-surface-control);
-        border-color: var(--ui-border-hover-neutral);
+        background-color: var(--ui-surface-raised-1);
+        border-color: var(--ui-border-strong);
         color: var(--ui-text-primary);
 
         .apiKeyCueArrow {
@@ -144,7 +144,7 @@
     display: inline-flex;
     flex-shrink: 0;
     align-items: center;
-    color: var(--ui-text-accent);
+    color: var(--ui-accent-text);
   }
 
   .apiKeyCueText {

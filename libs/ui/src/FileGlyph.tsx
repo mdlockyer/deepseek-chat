@@ -70,7 +70,7 @@ const GlyphFrame = ({
     />
     <path
       d="M26.3909 7.37445L19.0525 0V3.77445C19.0525 4.89271 19.0525 5.45184 19.2352 5.89289C19.4788 6.48096 19.946 6.94818 20.5341 7.19176C20.9751 7.37445 21.5342 7.37445 22.6525 7.37445H26.3909Z"
-      fill="var(--ui-text-on-accent)"
+      fill="var(--ui-accent-on-solid)"
       fillOpacity=".7"
     />
     {children}
@@ -91,7 +91,7 @@ export const FileGlyph = ({ kind, size = 28, className }: FileGlyphProps) => {
       <GlyphFrame color={color} size={size} className={className}>
         <path
           d="M58.7034 18.7826C57.7262 18.7103 56.7852 18.3483 56.0251 17.6969C54.5412 18.0226 53.1297 18.4931 51.7182 19.0722C50.5962 21.0628 49.5466 22.0762 48.6418 22.0762C48.4608 22.0762 48.2437 22.04 48.0989 21.9314C47.7008 21.7505 47.4836 21.3523 47.4836 20.9542C47.4836 20.6285 47.556 19.7237 50.9943 18.2398C51.7906 16.7921 52.4058 15.3082 52.9125 13.7519C52.4782 12.8832 51.5372 10.7479 52.1887 9.66209C52.4058 9.26397 52.8402 9.04682 53.3107 9.08301C53.6726 9.08301 54.0345 9.26397 54.2517 9.55351C54.7222 10.205 54.686 11.5803 54.0707 13.6071C54.6498 14.6929 55.4098 15.6701 56.3147 16.5025C57.0747 16.3577 57.8348 16.2492 58.5948 16.2492C60.2959 16.2854 60.5492 17.0816 60.513 17.5521C60.513 18.7826 59.3187 18.7826 58.7034 18.7826ZM48.5694 21.0266L48.678 20.9904C49.1847 20.8094 49.5828 20.4475 49.8724 19.977C49.3295 20.1942 48.8952 20.5561 48.5694 21.0266ZM53.3831 10.1688H53.2745C53.2383 10.1688 53.1659 10.1688 53.1297 10.205C52.9849 10.8203 53.0935 11.4717 53.3469 12.0508C53.564 11.4355 53.564 10.7841 53.3831 10.1688ZM53.6364 15.4167L53.6002 15.4891L53.564 15.4529C53.2383 16.2854 52.8764 17.1178 52.4782 17.914L52.5506 17.8778V17.9502C53.3469 17.6607 54.2155 17.4073 55.0117 17.2264L54.9755 17.1902H55.0841C54.5412 16.6473 54.0345 16.032 53.6364 15.4167ZM58.5586 17.3349C58.2329 17.3349 57.9433 17.3349 57.6176 17.4073C57.9795 17.5883 58.3415 17.6607 58.7034 17.6969C58.9567 17.7331 59.2101 17.6969 59.4272 17.6245C59.4272 17.5159 59.2825 17.3349 58.5586 17.3349Z"
-          fill="var(--ui-text-on-accent)"
+          fill="var(--ui-accent-on-solid)"
           transform="translate(-40)"
         />
       </GlyphFrame>
@@ -100,7 +100,7 @@ export const FileGlyph = ({ kind, size = 28, className }: FileGlyphProps) => {
   if (kind === 'spreadsheet') {
     return (
       <GlyphFrame color={color} size={size} className={className}>
-        <g transform="translate(-80)" fill="var(--ui-text-on-accent)">
+        <g transform="translate(-80)" fill="var(--ui-accent-on-solid)">
           <rect x="89.3879" y="11.6172" width="4.24569" height="4.24569" rx=".458674" />
           <rect x="89.3879" y="16.5879" width="4.24569" height="4.24569" rx=".458674" />
           <rect x="94.3665" y="11.6172" width="4.24569" height="4.24569" rx=".458674" />
@@ -112,7 +112,7 @@ export const FileGlyph = ({ kind, size = 28, className }: FileGlyphProps) => {
   if (kind === 'image') {
     return (
       <GlyphFrame color={color} size={size} className={className}>
-        <g transform="translate(-120)" fill="var(--ui-text-on-accent)">
+        <g transform="translate(-120)" fill="var(--ui-accent-on-solid)">
           <path d="M130.421 15.9204C130.576 15.6558 130.958 15.6558 131.112 15.9204L133.649 20.2696C133.805 20.5362 133.612 20.8711 133.304 20.8711H128.23C127.921 20.8711 127.729 20.5362 127.884 20.2696L130.421 15.9204Z" />
           <path d="M135.498 13.186C135.65 12.9117 136.045 12.9117 136.197 13.186L140.137 20.2769C140.285 20.5435 140.092 20.8711 139.787 20.8711H131.908C131.603 20.8711 131.411 20.5435 131.559 20.2769L135.498 13.186Z" />
           <path d="M131.86 11.3997C131.86 12.286 131.142 13.0045 130.256 13.0045C129.369 13.0045 128.651 12.286 128.651 11.3997C128.651 10.5134 129.369 9.79492 130.256 9.79492C131.142 9.79492 131.86 10.5134 131.86 11.3997Z" />
@@ -123,7 +123,7 @@ export const FileGlyph = ({ kind, size = 28, className }: FileGlyphProps) => {
   if (kind === 'presentation') {
     return (
       <GlyphFrame color={color} size={size} className={className}>
-        <g transform="translate(-160)" fill="var(--ui-text-on-accent)">
+        <g transform="translate(-160)" fill="var(--ui-accent-on-solid)">
           <path d="M172.922 21.2661C175.337 21.2661 177.294 19.3088 177.294 16.8943H172.922V12.5225C170.508 12.5225 168.55 14.4798 168.55 16.8943C168.55 19.3088 170.508 21.2661 172.922 21.2661Z" />
           <path d="M174.089 10.3672C177.049 10.3672 179.45 12.7674 179.45 15.7283H174.089V10.3672Z" />
         </g>
@@ -132,9 +132,9 @@ export const FileGlyph = ({ kind, size = 28, className }: FileGlyphProps) => {
   }
   return (
     <GlyphFrame color={color} size={size} className={className}>
-      <path d="M8.10132 12.6846H19.8948" stroke="var(--ui-text-on-accent)" strokeWidth="1.6" />
-      <path d="M8.10132 16.4688H19.8948" stroke="var(--ui-text-on-accent)" strokeWidth="1.6" />
-      <path d="M8.10132 20.252H16.0199" stroke="var(--ui-text-on-accent)" strokeWidth="1.6" />
+      <path d="M8.10132 12.6846H19.8948" stroke="var(--ui-accent-on-solid)" strokeWidth="1.6" />
+      <path d="M8.10132 16.4688H19.8948" stroke="var(--ui-accent-on-solid)" strokeWidth="1.6" />
+      <path d="M8.10132 20.252H16.0199" stroke="var(--ui-accent-on-solid)" strokeWidth="1.6" />
     </GlyphFrame>
   )
 }

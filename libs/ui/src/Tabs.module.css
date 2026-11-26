@@ -56,17 +56,17 @@
   }
 
   .tabSelected {
-    background-color: var(--ui-accent-soft);
+    background-color: var(--ui-accent-subtle);
     color: var(--ui-text-primary);
     font-weight: 500;
 
     svg {
-      color: var(--ui-text-accent);
+      color: var(--ui-accent-text);
     }
 
     @media (hover: hover) {
       &:hover:not(:disabled) {
-        background-color: var(--ui-accent-soft-hover);
+        background-color: var(--ui-accent-subtle-hover);
       }
     }
   }
@@ -105,7 +105,7 @@
         left: 0;
         height: 2px;
         border-radius: var(--ui-radius-pill);
-        background-color: var(--ui-accent-fill);
+        background-color: var(--ui-accent-solid);
       }
 
       @media (hover: hover) {

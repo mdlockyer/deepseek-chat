@@ -11,7 +11,7 @@
     overflow: hidden;
     border-radius: var(--ui-radius-lg);
     border: 1px solid var(--ui-border-default);
-    background-color: var(--ui-surface-code-header);
+    background-color: var(--ui-surface-raised-1);
     font: inherit;
     text-decoration: none;
 
@@ -43,7 +43,7 @@
   }
 
   .retryImage {
-    border-color: var(--ui-border-danger);
+    border-color: var(--ui-danger-border);
   }
 
   .overlay {
@@ -88,7 +88,7 @@
     text-align: center;
     word-break: break-word;
     color: var(--ui-text-on-scrim);
-    background: linear-gradient(to bottom, transparent, var(--ui-surface-scrim-deep));
+    background: linear-gradient(to bottom, transparent, var(--ui-surface-scrim-strong));
     pointer-events: none;
   }
 

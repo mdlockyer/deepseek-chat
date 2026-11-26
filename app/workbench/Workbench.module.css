@@ -32,7 +32,7 @@
 
   .title {
     margin: 0;
-    font: var(--ui-type-h4);
+    font: var(--ui-type-h3);
     color: var(--ui-text-primary);
   }
 
@@ -60,7 +60,7 @@
     padding: var(--ui-space-4);
     border: 1px solid var(--ui-border-strong);
     border-radius: var(--ui-radius-lg);
-    box-shadow: var(--ui-shadow-md);
+    box-shadow: var(--ui-elevation-2);
   }
 
   .hero {
@@ -134,7 +134,7 @@
     padding: var(--ui-space-4);
     border-radius: var(--ui-radius-md);
     border: 1px solid var(--ui-border-default);
-    background-color: var(--ui-surface-elevated);
+    background-color: var(--ui-surface-overlay);
   }
 
   .cardTitle {
@@ -189,8 +189,8 @@
     gap: var(--ui-space-0-5);
     padding: var(--ui-space-1);
     border-radius: var(--ui-radius-md);
-    background-color: var(--ui-surface-rail);
-    --hover-glide-bg: var(--ui-surface-rail-hover);
+    background-color: var(--ui-surface-sunken);
+    --hover-glide-bg: var(--ui-surface-raised-1);
   }
 
   .glideItem {
@@ -214,8 +214,8 @@
   }
 
   .glideItemActive {
-    background-color: var(--ui-surface-rail-active);
-    color: var(--ui-accent-invert);
+    background-color: var(--ui-surface-raised-2);
+    color: var(--ui-accent-text);
   }
 
   .glideActions {
@@ -247,7 +247,7 @@
     overflow-x: auto;
     border: 1px solid var(--ui-border-default);
     border-radius: var(--ui-radius-md);
-    background-color: var(--ui-surface-elevated);
+    background-color: var(--ui-surface-overlay);
   }
 
   .table {
@@ -318,14 +318,14 @@
   .spaceBar {
     height: 16px;
     border-radius: var(--ui-radius-xs);
-    background-color: var(--ui-accent-fill);
+    background-color: var(--ui-accent-solid);
   }
 
   .radiusSpecimen {
     width: 48px;
     height: 48px;
-    border: 2px solid var(--ui-accent-fill);
-    background-color: var(--ui-accent-soft);
+    border: 2px solid var(--ui-accent-solid);
+    background-color: var(--ui-accent-subtle);
   }
 
   .typeRow {
@@ -363,7 +363,7 @@
     font: var(--ui-type-code-inline);
     padding: 0 var(--ui-space-1);
     border-radius: var(--ui-radius-xs);
-    background-color: var(--ui-surface-code-inline);
+    background-color: var(--ui-surface-raised-1);
   }
 
   .panelPreview {

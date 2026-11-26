@@ -11,14 +11,14 @@
     margin: 0 auto;
     padding: var(--ui-space-3) var(--ui-space-4);
     border-radius: var(--ui-radius-md);
-    border: 1px solid var(--ui-border-inverse);
+    border: 1px solid transparent;
     font: var(--ui-type-label);
     text-align: center;
     word-break: break-word;
     white-space: pre-wrap;
-    color: var(--ui-text-on-toast);
-    background-color: var(--ui-surface-toast);
-    box-shadow: var(--ui-shadow-toast);
+    color: var(--ui-text-on-inverse);
+    background-color: var(--ui-surface-inverse);
+    box-shadow: var(--ui-elevation-2);
     animation: ui-toast-enter var(--ui-duration-normal) var(--ui-ease-standard);
     pointer-events: none;
   }
@@ -33,7 +33,7 @@
   }
 
   .link {
-    color: var(--ui-text-on-toast-link);
+    color: var(--ui-text-on-inverse-link);
     text-decoration: none;
     pointer-events: auto;
     margin-inline-start: var(--ui-space-1);

@@ -303,7 +303,7 @@
 }
 
 .playing .bar {
-  fill: var(--ui-accent-fill);
+  fill: var(--ui-accent-solid);
 }
 
 @keyframes tts-settle {

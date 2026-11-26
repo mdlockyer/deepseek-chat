@@ -61,7 +61,7 @@
     padding: var(--ui-space-4);
     border: 1px solid var(--ui-border-default);
     border-radius: var(--ui-radius-md);
-    background-color: var(--ui-surface-elevated);
+    background-color: var(--ui-surface-overlay);
     min-width: 0;
   }
 
@@ -103,7 +103,7 @@
     border: 1px solid var(--ui-border-strong);
     border-radius: var(--ui-radius-lg);
     background-color: var(--ui-surface-canvas);
-    box-shadow: var(--ui-shadow-md);
+    box-shadow: var(--ui-elevation-2);
   }
 
   .eventList {
@@ -136,7 +136,7 @@
 
   .eventSeq {
     font-weight: 600;
-    color: var(--ui-text-accent);
+    color: var(--ui-accent-text);
   }
 
   .eventType {
@@ -185,7 +185,7 @@
     padding: var(--ui-space-2-5) var(--ui-space-3);
     border: 1px solid var(--ui-border-default);
     border-radius: var(--ui-radius-md);
-    background-color: var(--ui-surface-elevated);
+    background-color: var(--ui-surface-overlay);
   }
 
   .dualViewport {
@@ -195,7 +195,7 @@
     border: 1px solid var(--ui-border-strong);
     border-radius: var(--ui-radius-lg);
     background-color: var(--ui-surface-canvas);
-    box-shadow: var(--ui-shadow-md);
+    box-shadow: var(--ui-elevation-2);
   }
 
   .inspectorHeader {

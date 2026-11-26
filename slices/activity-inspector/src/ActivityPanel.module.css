@@ -128,7 +128,7 @@
     flex-shrink: 0;
     min-width: 0;
     padding: 0 var(--ui-space-2);
-    color: var(--ui-text-accent);
+    color: var(--ui-accent-text);
   }
 
   .liveBadge {
@@ -144,7 +144,7 @@
     width: var(--ui-space-1-5);
     height: var(--ui-space-1-5);
     border-radius: var(--ui-radius-pill);
-    background: var(--ui-accent-fill);
+    background: var(--ui-accent-solid);
     animation: live-pulse 1.4s var(--ui-ease-standard) infinite;
   }
 
@@ -435,7 +435,7 @@
     border: none;
     border-radius: var(--ui-radius-xs);
     background: transparent;
-    color: var(--ui-text-accent);
+    color: var(--ui-accent-text);
     text-align: left;
     cursor: pointer;
 
@@ -470,7 +470,7 @@
   }
 
   .stepSelected .stepDetail {
-    border-left-color: var(--ui-border-accent);
+    border-left-color: var(--ui-accent-border);
   }
 
   .rowButton,
@@ -522,11 +522,11 @@
   }
 
   .rowButtonSelected {
-    background: var(--ui-accent-soft);
+    background: var(--ui-accent-subtle);
     color: var(--ui-text-primary);
 
     .rowIcon:not(.rowIconError) {
-      color: var(--ui-text-accent);
+      color: var(--ui-accent-text);
     }
   }
 
@@ -547,7 +547,7 @@
   }
 
   .rowIconError {
-    color: var(--ui-text-danger);
+    color: var(--ui-danger-text);
   }
 
   .rowHeading {
@@ -605,7 +605,7 @@
   .statusRunning {
     font: var(--ui-type-micro);
     font-variant-numeric: tabular-nums;
-    color: var(--ui-text-accent);
+    color: var(--ui-accent-text);
     max-width: 150px;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -699,7 +699,7 @@
     padding: 0 var(--ui-space-1-5);
     border-radius: var(--ui-radius-xs);
     font: var(--ui-type-caption-strong);
-    color: var(--ui-text-accent);
+    color: var(--ui-accent-text);
     text-decoration: none;
 
     @media (hover: hover) {

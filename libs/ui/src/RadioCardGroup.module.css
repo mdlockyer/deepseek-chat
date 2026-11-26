@@ -31,7 +31,7 @@
 
     @media (hover: hover) {
       &:hover:not(:disabled) {
-        background-color: var(--ui-surface-control);
+        background-color: var(--ui-surface-raised-1);
       }
     }
 
@@ -47,12 +47,12 @@
   }
 
   .selected {
-    border-color: var(--ui-border-accent);
-    background-color: var(--ui-accent-soft);
+    border-color: var(--ui-accent-border);
+    background-color: var(--ui-accent-subtle);
 
     @media (hover: hover) {
       &:hover:not(:disabled) {
-        background-color: var(--ui-accent-soft-hover);
+        background-color: var(--ui-accent-subtle-hover);
       }
     }
   }
@@ -65,7 +65,7 @@
   }
 
   .selected .icon {
-    color: var(--ui-text-accent);
+    color: var(--ui-accent-text);
   }
 
   .description {

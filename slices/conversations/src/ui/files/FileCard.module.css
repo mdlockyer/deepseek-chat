@@ -33,11 +33,11 @@
   }
 
   .active {
-    border-color: var(--ui-border-accent);
-    background-color: var(--ui-accent-soft);
+    border-color: var(--ui-accent-border);
+    background-color: var(--ui-accent-subtle);
 
     &.clickable:hover {
-      background-color: var(--ui-accent-soft-hover);
+      background-color: var(--ui-accent-subtle-hover);
     }
   }
 
@@ -80,10 +80,10 @@
   }
 
   .failed {
-    border-color: var(--ui-border-danger);
+    border-color: var(--ui-danger-border);
 
     .subCaption {
-      color: var(--ui-text-danger);
+      color: var(--ui-danger-text);
     }
   }
 
@@ -141,7 +141,7 @@
     border: none;
     border-radius: var(--ui-radius-pill);
     color: var(--ui-text-on-inverse);
-    background-color: var(--ui-surface-contrast);
+    background-color: var(--ui-surface-inverse);
     cursor: pointer;
     opacity: 0;
     transition: opacity var(--ui-duration-normal) var(--ui-ease-standard);
@@ -149,7 +149,7 @@
 
   .invalidRemove {
     opacity: 1;
-    color: var(--ui-text-on-danger);
-    background-color: var(--ui-danger-fill);
+    color: var(--ui-danger-on-solid);
+    background-color: var(--ui-danger-solid);
   }
 }

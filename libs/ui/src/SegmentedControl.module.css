@@ -56,13 +56,13 @@
   }
 
   .active {
-    background-color: var(--ui-surface-elevated);
+    background-color: var(--ui-surface-overlay);
     color: var(--ui-text-primary);
-    box-shadow: var(--ui-shadow-sm);
+    box-shadow: var(--ui-elevation-1);
 
     @media (hover: hover) {
       &:hover:not(:disabled) {
-        background-color: var(--ui-surface-elevated);
+        background-color: var(--ui-surface-overlay);
       }
     }
   }

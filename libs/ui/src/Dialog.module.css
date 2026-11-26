@@ -59,8 +59,8 @@
     border-radius: var(--ui-radius-xl);
     font: var(--ui-type-label);
     color: var(--ui-text-primary);
-    background-color: var(--ui-surface-elevated);
-    box-shadow: var(--ui-shadow-dialog);
+    background-color: var(--ui-surface-overlay);
+    box-shadow: var(--ui-elevation-3);
     transition: transform var(--ui-duration-normal) var(--ui-ease-panel);
 
     @media (prefers-reduced-motion: no-preference) {
@@ -101,7 +101,7 @@
 
   .title {
     margin: 0;
-    font: var(--ui-type-h4);
+    font: var(--ui-type-h3);
     font-weight: 500;
     line-height: var(--ui-leading-md);
     color: var(--ui-text-primary);

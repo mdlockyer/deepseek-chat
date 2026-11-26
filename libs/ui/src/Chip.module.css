@@ -9,7 +9,7 @@
     padding: 0 var(--ui-space-2-5);
     border-radius: var(--ui-radius-sm);
     border: 1px solid var(--ui-border-default);
-    background-color: var(--ui-surface-elevated);
+    background-color: var(--ui-surface-overlay);
     color: var(--ui-text-secondary);
     font: var(--ui-type-micro);
     font-variant-numeric: tabular-nums;
@@ -49,15 +49,15 @@
   }
 
   .active {
-    color: var(--ui-text-accent);
-    border-color: var(--ui-border-accent);
-    background-color: var(--ui-accent-soft);
+    color: var(--ui-accent-text);
+    border-color: var(--ui-accent-border);
+    background-color: var(--ui-accent-subtle);
     font-weight: 600;
 
     @media (hover: hover) {
       &:hover:not(:disabled) {
-        background-color: var(--ui-accent-soft-hover);
-        color: var(--ui-text-accent);
+        background-color: var(--ui-accent-subtle-hover);
+        color: var(--ui-accent-text);
       }
     }
   }

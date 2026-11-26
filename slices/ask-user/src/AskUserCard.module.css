@@ -4,9 +4,9 @@
     width: 100%;
     padding: var(--ui-space-3) 14px 14px;
     border-radius: var(--ui-radius-xl);
-    border: 1px solid var(--ui-border-strong);
+    border: 1px solid transparent;
     background: var(--ui-surface-input);
-    box-shadow: var(--ui-shadow-md);
+    box-shadow: var(--ui-elevation-2);
     animation: ask-card-in var(--ui-duration-fast) var(--ui-ease-panel) both;
   }
 
@@ -85,7 +85,7 @@
 
   .tabCheck {
     display: inline-flex;
-    color: var(--ui-text-accent);
+    color: var(--ui-accent-text);
   }
 
   .headerActions {
@@ -161,10 +161,10 @@
   }
 
   .optionSelected {
-    background: var(--ui-accent-soft);
+    background: var(--ui-accent-subtle);
 
     &:hover {
-      background: var(--ui-accent-soft-hover);
+      background: var(--ui-accent-subtle-hover);
     }
   }
 
@@ -182,7 +182,7 @@
   }
 
   .optionSelected .optionIndex {
-    color: var(--ui-text-accent);
+    color: var(--ui-accent-text);
   }
 
   .checkbox {
@@ -197,15 +197,15 @@
     border-radius: var(--ui-radius-xs);
     border: 1.5px solid var(--ui-border-strong);
     background: transparent;
-    color: var(--ui-text-on-accent);
+    color: var(--ui-accent-on-solid);
     transition:
       background-color var(--ui-duration-normal) var(--ui-ease-standard),
       border-color var(--ui-duration-normal) var(--ui-ease-standard);
   }
 
   .checkboxChecked {
-    border-color: var(--ui-accent-fill);
-    background: var(--ui-accent-fill);
+    border-color: var(--ui-accent-solid);
+    background: var(--ui-accent-solid);
   }
 
   .optionBody {
@@ -234,7 +234,7 @@
     font-size: var(--ui-font-size-xs);
     line-height: var(--ui-leading-xs);
     font-weight: 400;
-    color: var(--ui-text-accent);
+    color: var(--ui-accent-text);
   }
 
   .optionDesc {
@@ -290,7 +290,7 @@
     outline: none;
 
     &::placeholder {
-      color: var(--ui-text-placeholder);
+      color: var(--ui-text-muted);
     }
   }
 
@@ -306,7 +306,7 @@
   .errorText {
     font-size: var(--ui-font-size-xs);
     line-height: var(--ui-leading-xs);
-    color: var(--ui-text-danger);
+    color: var(--ui-danger-text);
   }
 
   .footerButtons {

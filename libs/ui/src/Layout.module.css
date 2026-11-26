@@ -17,7 +17,7 @@
     font: var(--ui-type-label);
 
     & + & {
-      box-shadow: inset 0 1px 0 0 var(--ui-border-hairline);
+      box-shadow: inset 0 1px 0 0 var(--ui-border-subtle);
     }
   }
 
@@ -53,7 +53,7 @@
   }
 
   .settingError {
-    color: var(--ui-text-danger);
+    color: var(--ui-danger-text);
   }
 
   .settingAction {

@@ -65,7 +65,7 @@
     width: 6px;
     height: 6px;
     border-radius: var(--ui-radius-pill);
-    background-color: var(--ui-accent-fill);
+    background-color: var(--ui-accent-solid);
     box-shadow: 0 0 0 1.5px var(--ui-surface-input);
     pointer-events: none;
   }

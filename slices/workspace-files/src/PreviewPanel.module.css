@@ -162,7 +162,7 @@
   .codeWrap {
     display: flex;
     min-height: 100%;
-    background-color: var(--ui-surface-code);
+    background-color: var(--ui-surface-sunken);
     font: var(--ui-type-code-block);
   }
 
@@ -211,7 +211,7 @@
     outline: none;
 
     &::placeholder {
-      color: var(--ui-text-placeholder);
+      color: var(--ui-text-muted);
     }
 
     &:focus {
@@ -257,7 +257,7 @@
       z-index: var(--ui-z-base);
       font-weight: 600;
       color: var(--ui-text-primary);
-      background-color: var(--ui-surface-code-header);
+      background-color: var(--ui-surface-raised-1);
       border-bottom: 1px solid var(--ui-border-default);
       white-space: nowrap;
     }
@@ -288,7 +288,7 @@
     flex-direction: column;
     flex: 1;
     min-height: 0;
-    background-color: var(--ui-surface-code);
+    background-color: var(--ui-surface-sunken);
   }
 
   .imageScroll {
@@ -309,7 +309,7 @@
     object-fit: contain;
     border-radius: 6px;
     background-color: var(--ui-surface-paper);
-    box-shadow: var(--ui-shadow-sm);
+    box-shadow: var(--ui-elevation-1);
   }
 
   .imageActual {
@@ -318,7 +318,7 @@
     max-height: none;
     border-radius: 6px;
     background-color: var(--ui-surface-paper);
-    box-shadow: var(--ui-shadow-sm);
+    box-shadow: var(--ui-elevation-1);
   }
 
   .imageFooter {
@@ -389,7 +389,7 @@
     gap: var(--ui-space-2-5);
     padding: var(--ui-space-1-5) var(--ui-space-3);
     border-bottom: 1px solid var(--ui-border-subtle);
-    background-color: var(--ui-surface-code-header);
+    background-color: var(--ui-surface-raised-1);
     font: var(--ui-type-micro);
     font-weight: 400;
     color: var(--ui-text-secondary);

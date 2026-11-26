@@ -91,7 +91,7 @@
   }
 
   .tabActive .tabIcon {
-    color: var(--ui-text-accent);
+    color: var(--ui-accent-text);
   }
 
   .tabTitle {

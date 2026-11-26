@@ -19,7 +19,7 @@
     width: 2px;
     height: 5px;
     border-radius: 1px;
-    background-color: var(--ui-accent-fill);
+    background-color: var(--ui-accent-solid);
     transform-origin: center;
     will-change: transform;
   }

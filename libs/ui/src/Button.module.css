@@ -63,12 +63,12 @@
   }
 
   .primary {
-    color: var(--ui-text-on-accent);
-    background-color: var(--ui-accent-fill);
+    color: var(--ui-accent-on-solid);
+    background-color: var(--ui-accent-solid);
 
     @media (hover: hover) {
       &:hover:not(:disabled):not([aria-disabled='true']) {
-        background-color: var(--ui-accent-hover);
+        background-color: var(--ui-accent-solid-hover);
       }
     }
   }
@@ -111,12 +111,12 @@
   }
 
   .danger {
-    color: var(--ui-text-on-danger);
-    background-color: var(--ui-danger-fill);
+    color: var(--ui-danger-on-solid);
+    background-color: var(--ui-danger-solid);
 
     @media (hover: hover) {
       &:hover:not(:disabled):not([aria-disabled='true']) {
-        background-color: var(--ui-danger-hover);
+        background-color: var(--ui-danger-solid-hover);
       }
     }
 
@@ -126,14 +126,14 @@
   }
 
   .dangerOutlined {
-    color: var(--ui-text-danger);
+    color: var(--ui-danger-text);
     background-color: transparent;
-    border-color: var(--ui-border-danger);
+    border-color: var(--ui-danger-border);
     font-weight: 400;
 
     @media (hover: hover) {
       &:hover:not(:disabled):not([aria-disabled='true']) {
-        background-color: var(--ui-interactive-danger-hover);
+        background-color: var(--ui-danger-subtle-hover);
       }
     }
 

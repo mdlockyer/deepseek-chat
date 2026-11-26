@@ -95,7 +95,7 @@
 
   /* 上传失败：红色描边 + 暗色蒙层，可重试时中间为重试图标，原因写在图标下方 */
   .attachmentFailed {
-    border-color: var(--ui-border-danger);
+    border-color: var(--ui-danger-border);
   }
 
   .failed {
@@ -122,7 +122,7 @@
     justify-content: flex-end;
     padding-bottom: var(--ui-space-2);
     cursor: default;
-    background-color: var(--ui-surface-scrim-soft);
+    background-color: var(--ui-surface-scrim);
   }
 
   .failedReason {
@@ -153,8 +153,8 @@
     border: none;
     border-radius: var(--ui-radius-pill);
     color: var(--ui-text-on-inverse);
-    background-color: var(--ui-surface-contrast);
-    filter: drop-shadow(var(--ui-shadow-drop-subtle));
+    background-color: var(--ui-surface-inverse);
+    filter: drop-shadow(var(--ui-elevation-1));
     cursor: pointer;
     opacity: 0;
     transition: opacity var(--ui-duration-normal) var(--ui-ease-standard);
@@ -163,8 +163,8 @@
   /* 不可重试时删除按钮常显，提示需要先删除 */
   .invalidRemove {
     opacity: 1;
-    color: var(--ui-text-on-danger);
-    background-color: var(--ui-danger-fill);
+    color: var(--ui-danger-on-solid);
+    background-color: var(--ui-danger-solid);
   }
 
   .textareaWrapper {
@@ -197,10 +197,10 @@
     overscroll-behavior: contain;
     background-color: transparent;
     color: var(--ui-text-primary);
-    caret-color: var(--ui-text-accent);
+    caret-color: var(--ui-accent-text);
 
     &::placeholder {
-      color: var(--ui-text-placeholder);
+      color: var(--ui-text-muted);
       user-select: none;
     }
   }
@@ -318,7 +318,7 @@
   }
 
   .contextMeterFillWarn {
-    background-color: var(--ui-warning-fill);
+    background-color: var(--ui-warning-solid);
   }
 
   .contextMeterText {
@@ -366,8 +366,8 @@
     padding: 0;
     border: none;
     border-radius: var(--ui-radius-pill);
-    background: var(--ui-accent-fill);
-    color: var(--ui-text-on-accent);
+    background: var(--ui-accent-solid);
+    color: var(--ui-accent-on-solid);
     cursor: pointer;
     transition:
       background-color var(--ui-duration-normal) var(--ui-ease-standard),
@@ -379,7 +379,7 @@
     }
 
     &:not(.disabled):hover {
-      background: var(--ui-accent-hover);
+      background: var(--ui-accent-solid-hover);
     }
 
     &:focus-visible {

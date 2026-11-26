@@ -11,7 +11,7 @@
     padding: 0 var(--ui-space-10) 0 var(--ui-space-3-5);
     border: none;
     border-radius: var(--ui-radius-pill);
-    background-color: var(--ui-surface-control);
+    background-color: var(--ui-surface-raised-1);
     color: var(--ui-text-primary);
     font: var(--ui-type-label);
     white-space: nowrap;
@@ -22,7 +22,7 @@
 
     @media (hover: hover) {
       &:hover:not(:disabled) {
-        background-color: var(--ui-interactive-hover-strong);
+        background-color: var(--ui-interactive-active);
       }
     }
 
@@ -66,7 +66,7 @@
     max-width: 280px;
     padding: var(--ui-space-1);
     border-radius: var(--ui-radius-md);
-    border-color: var(--ui-border-inverse);
+    border-color: transparent;
   }
 
   .option {
@@ -105,7 +105,7 @@
   .check {
     display: inline-flex;
     flex-shrink: 0;
-    color: var(--ui-text-accent);
+    color: var(--ui-accent-text);
   }
 
   @media (pointer: coarse) {

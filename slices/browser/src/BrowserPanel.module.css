@@ -49,7 +49,7 @@
     font: var(--ui-type-caption);
 
     &::placeholder {
-      color: var(--ui-text-placeholder);
+      color: var(--ui-text-muted);
     }
   }
 
@@ -67,7 +67,7 @@
       display: block;
       width: 42%;
       height: 100%;
-      background-color: var(--ui-accent-fill);
+      background-color: var(--ui-accent-solid);
       animation: browser-progress 1.1s ease-in-out infinite;
     }
   }

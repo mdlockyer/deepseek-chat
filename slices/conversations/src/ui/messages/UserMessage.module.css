@@ -44,7 +44,7 @@
     font-size: var(--ui-font-size-lg);
     line-height: var(--ui-leading-md);
     color: var(--ui-text-primary);
-    background-color: var(--ui-surface-tint);
+    background-color: var(--ui-surface-raised-1);
     white-space: pre-wrap;
     word-break: break-word;
   }
@@ -82,7 +82,7 @@
   .editor {
     width: 100%;
     box-sizing: border-box;
-    border: 1px solid var(--ui-accent-fill);
+    border: 1px solid var(--ui-accent-solid);
     border-radius: var(--ui-radius-xl);
     background-color: var(--ui-surface-canvas);
     overflow: hidden;

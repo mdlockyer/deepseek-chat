@@ -30,7 +30,7 @@
     border-radius: var(--ui-radius-md);
     background: transparent;
     color: var(--ui-text-secondary);
-    font: var(--ui-type-small);
+    font: var(--ui-type-label);
     font-variant-numeric: tabular-nums;
     text-align: left;
     cursor: pointer;
@@ -59,11 +59,11 @@
   }
 
   .stripButtonActive {
-    background: var(--ui-accent-soft);
+    background: var(--ui-accent-subtle);
     color: var(--ui-text-primary);
 
     &:hover {
-      background: var(--ui-accent-soft-hover);
+      background: var(--ui-accent-subtle-hover);
       color: var(--ui-text-primary);
     }
   }
@@ -79,7 +79,7 @@
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    color: var(--ui-accent-fill);
+    color: var(--ui-accent-solid);
 
     > svg {
       width: 15px;
@@ -246,7 +246,7 @@
   }
 
   .liveTrackStatusError {
-    color: var(--ui-text-danger);
+    color: var(--ui-danger-text);
   }
 
   .liveTrackOverflow {
@@ -323,7 +323,7 @@
     margin-top: var(--ui-space-0-5);
     margin-left: var(--ui-space-2);
     padding: 0 0 var(--ui-space-1) var(--ui-space-2);
-    border-left: 1px solid var(--ui-border-accent);
+    border-left: 1px solid var(--ui-accent-border);
     animation: detail-in var(--ui-duration-normal) ease-out both;
   }
 
@@ -423,7 +423,7 @@
   }
 
   .traceIconError {
-    color: var(--ui-text-danger);
+    color: var(--ui-danger-text);
   }
 
   .traceLabel {
@@ -443,7 +443,7 @@
     flex-shrink: 0;
     font: var(--ui-type-micro);
     font-variant-numeric: tabular-nums;
-    color: var(--ui-text-accent);
+    color: var(--ui-accent-text);
   }
 
   .srOnly {
@@ -477,13 +477,13 @@
   }
 
   .inspectButtonActive {
-    background: var(--ui-accent-soft);
-    color: var(--ui-text-accent);
+    background: var(--ui-accent-subtle);
+    color: var(--ui-accent-text);
 
     @media (hover: hover) {
       &:hover {
-        background: var(--ui-accent-soft-hover);
-        color: var(--ui-text-accent);
+        background: var(--ui-accent-subtle-hover);
+        color: var(--ui-accent-text);
       }
     }
   }

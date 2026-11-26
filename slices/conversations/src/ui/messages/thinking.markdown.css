@@ -1,6 +1,6 @@
 @layer slice {
   .ds-think-content .ds-markdown {
-    font: var(--ui-type-small);
+    font: var(--ui-type-label);
     color: var(--ui-text-secondary);
 
     h1,
@@ -19,7 +19,7 @@
     h4,
     h5,
     h6 {
-      font: var(--ui-type-small-strong);
+      font: var(--ui-type-label-strong);
     }
 
     code {
@@ -40,11 +40,11 @@
     }
 
     th {
-      font: var(--ui-type-small-strong);
+      font: var(--ui-type-label-strong);
     }
 
     td {
-      font: var(--ui-type-small);
+      font: var(--ui-type-label);
     }
 
     h3 + ul,

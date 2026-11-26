@@ -41,7 +41,7 @@
 
     @media (hover: hover) {
       &:hover {
-        color: var(--ui-text-accent);
+        color: var(--ui-accent-text);
         text-decoration: underline;
       }
     }
