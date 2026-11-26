@@ -18,12 +18,13 @@
   }
 
   /*
-   * Focus: a 1px accent ring over the elevation. The composer has no visible label and is
-   * focused most of the time, so the ring stays thin rather than a heavy halo.
+   * Focus: the emerald caret is the primary indicator (WCAG 2.4.7 counts a text caret). The
+   * composer is focused most of the time, so the box only firms up its own hairline edge
+   * (the 6-8% elevation ring to the 18-20% strong border) instead of adding a coloured ring.
    */
   .wrapper:focus-within {
     box-shadow:
-      0 0 0 1px var(--ui-accent-border),
+      0 0 0 1px var(--ui-border-strong),
       var(--ui-elevation-2);
   }
 
