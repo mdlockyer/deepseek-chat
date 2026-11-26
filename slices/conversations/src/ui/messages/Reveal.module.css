@@ -3,6 +3,9 @@
      row below lands exactly where it was before the reveal mounted. Closing fades the
      content out faster than the height collapses, so lines are never visibly clipped. */
   .reveal {
+    /* Opening easing; flow reveals switch to a gentler start (below). */
+    --reveal-ease: var(--ui-ease-panel);
+
     display: grid;
     grid-template-rows: 0fr;
     margin-top: calc(var(--ui-space-1) * -1);
@@ -20,9 +23,8 @@
     margin-top: 0;
     opacity: 1;
     transition:
-      grid-template-rows calc(var(--ui-duration-panel) * var(--reveal-scale, 1))
-        var(--ui-ease-panel),
-      margin-top calc(var(--ui-duration-panel) * var(--reveal-scale, 1)) var(--ui-ease-panel),
+      grid-template-rows calc(var(--ui-duration-panel) * var(--reveal-scale, 1)) var(--reveal-ease),
+      margin-top calc(var(--ui-duration-panel) * var(--reveal-scale, 1)) var(--reveal-ease),
       opacity var(--ui-duration-normal) var(--ui-ease-fade) var(--ui-duration-fast);
   }
 
@@ -51,6 +53,46 @@
     }
 
     .reveal[data-phase='entering'] > .inner {
+      transform: none;
+    }
+  }
+}
+
+@layer slice {
+  /* Flow reveals: the container stays opaque while opening; each item fades and settles
+     downward into place when the unfolding edge reaches it (Reveal sets the delay). */
+  .reveal[data-flow] {
+    --reveal-ease: var(--ui-ease-standard);
+  }
+
+  .reveal[data-flow][data-phase='entering'],
+  .reveal[data-flow][data-phase='opening'] {
+    opacity: 1;
+  }
+
+  .reveal[data-flow][data-phase='entering'] > .inner {
+    transform: none;
+  }
+
+  /* No transition while entering: items must snap to their hidden start state, or a transition
+     toward it would start and then cancel when opening begins, leaving them visible. */
+  .reveal[data-flow]:not([data-phase='entering']) [data-reveal-flow] {
+    transition:
+      opacity var(--ui-duration-normal) var(--ui-ease-fade) var(--reveal-flow-delay, 0ms),
+      transform var(--ui-duration-slow) var(--ui-ease-fade) var(--reveal-flow-delay, 0ms);
+  }
+
+  .reveal[data-flow][data-phase='entering'] [data-reveal-flow] {
+    opacity: 0;
+    transform: translateY(calc(var(--ui-space-1) * -1));
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .reveal[data-flow]:not([data-phase='entering']) [data-reveal-flow] {
+      transition: opacity 120ms var(--ui-ease-fade);
+    }
+
+    .reveal[data-flow][data-phase='entering'] [data-reveal-flow] {
       transform: none;
     }
   }

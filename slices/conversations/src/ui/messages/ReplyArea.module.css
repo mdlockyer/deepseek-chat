@@ -332,8 +332,33 @@
     max-width: 560px;
     margin-top: var(--ui-space-0-5);
     margin-left: var(--ui-space-2);
+    position: relative;
     padding: 0 0 var(--ui-space-1) var(--ui-space-2);
-    border-left: 1px solid var(--ui-accent-border);
+
+    /* The spine. While the trace unfolds it draws down from the top in the solid accent, on
+       the same easing as the height but 120 ms longer so its tip trails the unfolding edge, then
+       settles to the quieter border accent. --reveal-scale and --reveal-ease come from the
+       enclosing Reveal. */
+    &::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 0;
+      width: 1px;
+      background-color: var(--ui-accent-border);
+      transform-origin: top;
+      transition:
+        transform calc(var(--ui-duration-panel) * var(--reveal-scale, 1) + var(--ui-duration-fast))
+          var(--reveal-ease, var(--ui-ease-standard)),
+        background-color var(--ui-duration-slow) var(--ui-ease-fade)
+          calc(var(--ui-duration-panel) * var(--reveal-scale, 1));
+    }
+  }
+
+  [data-phase='entering'] .inlineTrace::before {
+    transform: scaleY(0);
+    background-color: var(--ui-accent-solid);
   }
 
   .inlineThinking {
@@ -353,20 +378,9 @@
     list-style: none;
   }
 
-  /* Rows arrive one after another, 24 ms apart; rows past the sixth share the sixth's delay
-     so long lists don't drag. --trace-row is set per row by the component. */
   .traceItem {
     display: block;
     color: var(--ui-text-primary);
-    animation: trace-row-in var(--ui-duration-normal) var(--ui-ease-fade) both;
-    animation-delay: calc(var(--ui-duration-fast) / 5 * var(--trace-row, 0));
-  }
-
-  @keyframes trace-row-in {
-    from {
-      opacity: 0;
-      transform: translateY(var(--ui-space-0-5));
-    }
   }
 
   .traceItemGap {

@@ -7,7 +7,7 @@ import {
   hoverGlideItem,
 } from '@deepseek-chat/lib-ui'
 import clsx from 'clsx'
-import { memo, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
+import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { formatSize, getExtension } from '../../attachments.js'
 import { useConversations } from '../../context.js'
 import { useTranslate } from '../../messages.js'
@@ -31,8 +31,12 @@ import { SwapLabel } from './SwapLabel.js'
 import './thinking.markdown.css'
 import { WhaleLoader } from './WhaleLoader.js'
 
-/** Trace rows past this index share its entrance delay. */
-const TRACE_STAGGER_ROWS = 6
+/** Trace rows, thinking paragraphs and the footer enter one by one as the trace unfolds. */
+const TRACE_FLOW = [
+  `.${styles.traceItem}`,
+  `.${styles.inlineThinking} .ds-markdown > *`,
+  `.${styles.traceFooter}`,
+].join(', ')
 
 const useNoInspection = () => null
 const useNotShown = () => false
@@ -163,7 +167,7 @@ export const ReplyArea = memo(function ReplyArea({
             </span>
           </button>
 
-          <Reveal open={expanded} onSettle={syncFollow}>
+          <Reveal open={expanded} onSettle={syncFollow} flow={TRACE_FLOW}>
             {() => {
               const trace = buildInlineTrace(view)
               return (
@@ -267,7 +271,7 @@ export const ReplyArea = memo(function ReplyArea({
             </span>
           </button>
 
-          <Reveal open={expanded} onSettle={syncFollow}>
+          <Reveal open={expanded} onSettle={syncFollow} flow={TRACE_FLOW}>
             {() => (
               <InlineTraceInlay
                 messageId={message.id}
@@ -376,7 +380,6 @@ const InlineTraceInlay = ({
             return (
               <li
                 key={item.key}
-                style={{ '--trace-row': Math.min(index, TRACE_STAGGER_ROWS) } as CSSProperties}
                 className={clsx(
                   styles.traceItem,
                   gapBefore && styles.traceItemGap,
