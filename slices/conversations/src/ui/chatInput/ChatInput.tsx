@@ -1,16 +1,22 @@
 import type { ToolRegistry } from '@deepseek-chat/lib-tools'
 import {
+  Button,
   IconSendOutline16,
   IconStopFill16,
   IconThinkOutline16,
+  Popover,
   useIsMobile,
 } from '@deepseek-chat/lib-ui'
 import clsx from 'clsx'
-import { memo, useCallback, useEffect, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ACCEPT } from '../../attachments.js'
+import { getVisibleMessages } from '../../branches.js'
+import { estimateSessionContext } from '../../compaction/estimate.js'
 import { useConversations } from '../../context.js'
 import { EMPTY_DRAFT, prepareDraftMessage } from '../../drafts.js'
 import { useTranslate } from '../../messages.js'
+import { getContextRounds } from '../../reply.js'
+import { formatCompactTokenCount } from '../messages/CompactionDivider.js'
 import styles from './ChatInput.module.css'
 import { ComposerMenu, isUploadShortcut, type ComposerToolSwitch } from './ComposerMenu.js'
 import { DraftAttachments } from './DraftAttachments.js'
@@ -57,6 +63,7 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
   const {
     deps,
     tools,
+    provider,
     useChatStore,
     useThinkingStore,
     setThinking,
@@ -64,6 +71,7 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
     uploads,
     sendMessage,
     stopReply,
+    compactSession,
     ensureApiKey,
     showNotice,
   } = useConversations()
@@ -74,8 +82,16 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
   const { text, attachments } = draft
   const setText = (value: string) => drafts.setDraftText(sessionId, value)
   const draftReady = uploads.useUploads((state) => prepareDraftMessage(draft, state.tasks) !== null)
+  const session = useChatStore((state) =>
+    sessionId !== null && Object.hasOwn(state.sessionCache, sessionId)
+      ? state.sessionCache[sessionId]
+      : undefined
+  )
   const streaming = useChatStore(
     (state) => sessionId !== null && Object.hasOwn(state.streaming, sessionId)
+  )
+  const compacting = useChatStore(
+    (state) => sessionId !== null && state.compacting[sessionId] === true
   )
   const thinking = useThinkingStore((state) => state.thinking)
   const importingHistory = useChatStore((state) => state.importingHistory)
@@ -83,6 +99,34 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
   const capabilitySwitches = useCapabilityToggles(tools)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const meterAnchorRef = useRef<HTMLButtonElement>(null)
+  const [meterOpen, setMeterOpen] = useState(false)
+
+  const visibleMessages = useMemo(() => (session ? getVisibleMessages(session) : []), [session])
+  const hasCompactableTurns = useMemo(
+    () => getContextRounds(visibleMessages).length > 0,
+    [visibleMessages]
+  )
+  const contextEstimate = useMemo(() => {
+    if (!session || visibleMessages.length === 0) {
+      return null
+    }
+    return estimateSessionContext({
+      visibleMessages,
+      checkpoints: session.checkpoints,
+      modelSpec: provider.modelSpec(provider.defaultModel),
+      pendingDraftText: text,
+    })
+  }, [provider, session, text, visibleMessages])
+
+  const showContextMeter =
+    contextEstimate !== null && contextEstimate.tokens >= contextEstimate.policy.meterVisibleTokens
+  const meterRatio = contextEstimate
+    ? Math.min(1, contextEstimate.tokens / Math.max(1, contextEstimate.policy.line))
+    : 0
+  const meterUsedLabel = contextEstimate ? formatCompactTokenCount(contextEstimate.tokens) : ''
+  const meterLineLabel = contextEstimate ? formatCompactTokenCount(contextEstimate.policy.line) : ''
+  const canCompact = !importingHistory && !streaming && !compacting && hasCompactableTurns
 
   const openFilePicker = useCallback(() => {
     if (!useChatStore.getState().importingHistory && ensureApiKey()) {
@@ -141,7 +185,8 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
   )
 
   const recording = voice.status === 'recording'
-  const canSend = !importingHistory && !streaming && voice.status === 'idle' && draftReady
+  const busy = streaming || compacting
+  const canSend = !importingHistory && !busy && voice.status === 'idle' && draftReady
 
   const send = () => {
     if (
@@ -226,11 +271,84 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
         </div>
       </div>
       <div className={styles.functionRow}>
-        <ComposerMenu
-          tools={composerTools}
-          disabled={importingHistory}
-          onUploadFiles={openFilePicker}
-        />
+        <div className={styles.left}>
+          <ComposerMenu
+            tools={composerTools}
+            disabled={importingHistory || compacting}
+            canCompact={canCompact}
+            onUploadFiles={openFilePicker}
+            onCompact={sessionId ? () => void compactSession(sessionId) : undefined}
+          />
+          {showContextMeter && !compacting ? (
+            <>
+              <button
+                ref={meterAnchorRef}
+                type="button"
+                className={clsx(styles.contextMeter, meterOpen && styles.contextMeterOpen)}
+                aria-haspopup="dialog"
+                aria-expanded={meterOpen}
+                aria-label={t('contextMeterAriaLabel', {
+                  used: meterUsedLabel,
+                  line: meterLineLabel,
+                })}
+                data-context-meter=""
+                onClick={() => setMeterOpen((open) => !open)}
+              >
+                <span className={styles.contextMeterTrack} aria-hidden="true">
+                  <span
+                    className={clsx(
+                      styles.contextMeterFill,
+                      meterRatio >= 0.8 && styles.contextMeterFillWarn
+                    )}
+                    style={{ width: `${Math.round(meterRatio * 100)}%` }}
+                  />
+                </span>
+                <span className={styles.contextMeterText}>
+                  {t('contextMeterLabel', { used: meterUsedLabel, line: meterLineLabel })}
+                </span>
+              </button>
+              <Popover
+                open={meterOpen}
+                onOpenChange={setMeterOpen}
+                anchorRef={meterAnchorRef}
+                side="top"
+                align="start"
+                offset={8}
+                role="dialog"
+                ariaLabel={t('contextMeterAriaLabel', {
+                  used: meterUsedLabel,
+                  line: meterLineLabel,
+                })}
+                className={styles.contextPopover}
+              >
+                <p className={styles.contextPopoverText}>
+                  {t('contextMeterPopoverSummary', {
+                    used: meterUsedLabel,
+                    line: meterLineLabel,
+                  })}
+                </p>
+                <Button
+                  variant="outlined"
+                  size="s"
+                  disabled={!canCompact}
+                  onClick={() => {
+                    setMeterOpen(false)
+                    if (sessionId) {
+                      void compactSession(sessionId)
+                    }
+                  }}
+                >
+                  {t('compactConversation')}
+                </Button>
+              </Popover>
+            </>
+          ) : null}
+          {compacting && !streaming ? (
+            <span className={styles.compactingStatus} role="status" aria-live="polite">
+              {t('compactingConversation')}
+            </span>
+          ) : null}
+        </div>
         <input
           ref={fileInputRef}
           type="file"
@@ -258,7 +376,7 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
               }}
             />
           ) : null}
-          {streaming && sessionId ? (
+          {busy && sessionId ? (
             <button
               type="button"
               className={styles.sendButton}

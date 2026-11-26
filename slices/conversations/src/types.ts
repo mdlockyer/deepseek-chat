@@ -122,6 +122,27 @@ export type AssistantMessage = MessageBranch & {
 
 export type Message = UserMessage | AssistantMessage
 
+export type CompactionTrigger = 'turnStart' | 'betweenRounds' | 'manual' | 'fit' | 'overflow'
+
+export type CompactionCheckpoint = {
+  readonly id: string
+  /** Last visible-branch message covered by this checkpoint. */
+  readonly anchorMessageId: string
+  /** Set only for mid-turn compactions: covers `reply.blocks[0..afterBlockIndex]` inclusive. */
+  readonly afterBlockIndex?: number
+  readonly trigger: CompactionTrigger
+  readonly createdAt: number
+  /** Frozen wire text sent to the model (immutable across turns and reloads for KV-cache reuse). */
+  readonly renderedWireText: string
+  /** Model-written summary markdown shown when the user expands the transcript divider. */
+  readonly summary: string
+  readonly keptMessagesCount: number
+  readonly droppedMessagesCount: number
+  readonly droppedReasoning: boolean
+  readonly tokensBefore: number
+  readonly tokensAfter: number
+}
+
 export type Session = {
   id: string
   title: string
@@ -130,6 +151,7 @@ export type Session = {
   updatedAt: number
   messages: Message[]
   rootMessageId?: string | null
+  checkpoints?: CompactionCheckpoint[]
 }
 
 export type SessionSummary = Pick<Session, 'id' | 'title' | 'createdAt' | 'updatedAt'>

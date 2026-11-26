@@ -1,4 +1,5 @@
 import {
+  IconPanelContractOutline14,
   IconPaperclipOutline16,
   IconPlusOutline14,
   Popover,
@@ -34,11 +35,15 @@ export const isUploadShortcut = (
 export const ComposerMenu = ({
   tools,
   disabled = false,
+  canCompact = false,
   onUploadFiles,
+  onCompact,
 }: {
   tools: ComposerToolSwitch[]
   disabled?: boolean
+  canCompact?: boolean
   onUploadFiles: () => void
+  onCompact?: () => void
 }) => {
   const t = useTranslate()
   const [open, setOpen] = useState(false)
@@ -123,7 +128,7 @@ export const ComposerMenu = ({
         side="top"
         align="start"
         offset={8}
-        measureKey={tools.length}
+        measureKey={`${tools.length}:${onCompact ? 1 : 0}`}
         autoFocusSurface
         role="dialog"
         ariaLabel={t('composerMenuTooltip')}
@@ -167,6 +172,23 @@ export const ComposerMenu = ({
             <span className={styles.rowLabel}>{t('uploadFile')}</span>
             <kbd className={styles.shortcut}>{isMacPlatform ? '⌘U' : 'Ctrl+U'}</kbd>
           </button>
+          {onCompact ? (
+            <button
+              type="button"
+              data-composer-row=""
+              className={styles.row}
+              disabled={disabled || !canCompact}
+              onClick={() => {
+                setOpen(false)
+                onCompact()
+              }}
+            >
+              <span className={styles.rowIcon}>
+                <IconPanelContractOutline14 />
+              </span>
+              <span className={styles.rowLabel}>{t('compactConversation')}</span>
+            </button>
+          ) : null}
           <div className={styles.divider} role="separator" />
           {tools.map((tool) => (
             <Switch

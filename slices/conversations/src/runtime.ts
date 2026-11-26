@@ -24,16 +24,23 @@ import { localizeProvider } from './apiClient.js'
 import { createUploadsController } from './attachments.js'
 import { createAutoTitleRunner } from './autoTitleRunner.js'
 import { appendBranch, getVisibleMessages, normalizeSession, selectVersion } from './branches.js'
+import { computeCompactionPolicy } from './compaction/budget.js'
+import { runCompaction } from './compaction/compact.js'
+import { estimateMessagesTokens, estimateSessionContext } from './compaction/estimate.js'
 import { createDraftsController, prepareDraftMessage } from './drafts.js'
 import { createId } from './id.js'
 import { translate, type LinkedMessage } from './messages.js'
 import {
   canContinueReply,
   canResumeToolLoop,
+  findActiveCheckpoint,
+  getContextRounds,
   settleReply,
+  toHistoryPrefixMessages,
   trimAfterLastToolResult,
+  type InlineAttachmentData,
 } from './reply.js'
-import { createReplyRunner, type ReplyRunnerParams } from './replyRunner.js'
+import { SYSTEM_PROMPT, createReplyRunner, type ReplyRunnerParams } from './replyRunner.js'
 import {
   createIndexedDbSessionStore,
   reportStorageError,
@@ -43,6 +50,7 @@ import type { StreamTrace } from './streamTrace.js'
 import {
   toSessionSummary,
   type AssistantMessage,
+  type CompactionCheckpoint,
   type Message,
   type Session,
   type SessionSummary,
@@ -109,12 +117,24 @@ type ChatState = {
   sessionSaveErrors: Record<string, boolean>
   activeId: string | null
   streaming: Record<string, AbortController>
+  compacting: Record<string, boolean>
 }
 
 const THINKING_TOGGLE_KEY = 'chat-demo:thinking'
 const SESSION_CACHE_LIMIT = 5
 const NO_MESSAGES: readonly Message[] = []
+const NO_CHECKPOINTS: readonly CompactionCheckpoint[] = []
 const NO_TURNS: readonly SessionTurnSummary[] = []
+
+const blobToBase64 = async (blob: Blob): Promise<string> => {
+  const bytes = new Uint8Array(await blob.arrayBuffer())
+  let binary = ''
+  const chunkSize = 0x8000
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize))
+  }
+  return btoa(binary)
+}
 
 const excerptOfPrompt = (text: string): string => {
   const clean = text.replace(/\s+/g, ' ').trim()
@@ -216,6 +236,7 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
     sessionSaveErrors: {},
     activeId: null,
     streaming: {},
+    compacting: {},
   }))
   const { getState: get, setState: set } = useChatStore
 
@@ -242,6 +263,7 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
   const deletingSessions = new Set<string>()
   const deletionTasks = new Set<Promise<boolean>>()
   const streamFlushes = new Map<string, () => void>()
+  const manualCompactions = new Map<string, AbortController>()
   const publishedFileSessions = new Set<string>()
   const turnListeners = new Set<() => void>()
   const sessionLoads = new Map<string, { promise: Promise<void> }>()
@@ -277,6 +299,32 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
     return Object.hasOwn(streams, id) ? streams[id] : undefined
   }
 
+  const isSessionBusy = (id: string) =>
+    Boolean(getStreamController(id)) || manualCompactions.has(id) || get().compacting[id] === true
+
+  const setCompacting = (sessionId: string, active: boolean) => {
+    set((state) => {
+      const current = state.compacting[sessionId] === true
+      if (current === active) {
+        return state
+      }
+      return {
+        compacting: active
+          ? { ...state.compacting, [sessionId]: true }
+          : Object.fromEntries(Object.entries(state.compacting).filter(([id]) => id !== sessionId)),
+      }
+    })
+    notifyTurnListeners()
+  }
+
+  const appendCheckpoint = (sessionId: string, checkpoint: CompactionCheckpoint) => {
+    updateSession(sessionId, (session) => ({
+      ...session,
+      checkpoints: [...(session.checkpoints ?? []), checkpoint],
+    }))
+    persist(sessionId)
+  }
+
   const publishSessionFiles = (sessionId: string) => {
     const session = getSession(sessionId)
     if (!session) {
@@ -303,6 +351,7 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
         (id) =>
           id !== state.activeId &&
           !Object.hasOwn(state.streaming, id) &&
+          state.compacting[id] !== true &&
           !unsavedSessions.has(id) &&
           !deletingSessions.has(id)
       )
@@ -482,6 +531,10 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
       }))
       notifyTurnListeners()
     },
+    setCompacting,
+    appendCheckpoint,
+    notifyCompactionNotice: (key) => showNotice({ key }),
+    newId,
     registerFlush: (sessionId, flush) => {
       if (flush) {
         streamFlushes.set(sessionId, flush)
@@ -622,8 +675,8 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
     new Promise<void>((resolve) => {
       const isIdle = (state: ChatState) =>
         sessionId === undefined
-          ? Object.keys(state.streaming).length === 0
-          : !Object.hasOwn(state.streaming, sessionId)
+          ? Object.keys(state.streaming).length === 0 && Object.keys(state.compacting).length === 0
+          : !Object.hasOwn(state.streaming, sessionId) && state.compacting[sessionId] !== true
       if (isIdle(get())) {
         resolve()
         return
@@ -649,6 +702,9 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
     try {
       autoTitleRunner.cancel()
       for (const controller of Object.values(get().streaming)) {
+        controller.abort()
+      }
+      for (const controller of manualCompactions.values()) {
         controller.abort()
       }
       await Promise.all(deletionTasks)
@@ -755,6 +811,7 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
     try {
       autoTitleRunner.cancel(id)
       getStreamController(id)?.abort()
+      manualCompactions.get(id)?.abort()
       await waitForIdle(id)
       if (epoch !== historyEpoch) {
         return false
@@ -815,7 +872,127 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
     return task
   }
 
-  const stopReply = (sessionId: string) => getStreamController(sessionId)?.abort()
+  const stopReply = (sessionId: string) => {
+    getStreamController(sessionId)?.abort()
+    manualCompactions.get(sessionId)?.abort()
+  }
+
+  const compactSession = async (
+    sessionId: string
+  ): Promise<'compacted' | 'notNeeded' | 'cancelled' | 'failed'> => {
+    if (get().importingHistory || deletingSessions.has(sessionId) || isSessionBusy(sessionId)) {
+      return 'failed'
+    }
+    const session = getSession(sessionId)
+    if (!session) {
+      return 'failed'
+    }
+    const visible = getVisibleMessages(session)
+    if (getContextRounds(visible).length === 0) {
+      showNotice({ key: 'compactionNoticeNothingToCompact' })
+      return 'notNeeded'
+    }
+    if (!ensureApiKey()) {
+      return 'failed'
+    }
+
+    const epoch = historyEpoch
+    const controller = new AbortController()
+    manualCompactions.set(sessionId, controller)
+    setCompacting(sessionId, true)
+    try {
+      let inlineBlobs: Map<string, InlineAttachmentData> | undefined
+      if (!provider.attachments) {
+        inlineBlobs = new Map()
+        for (const [user] of getContextRounds(visible)) {
+          for (const file of user.files) {
+            if (inlineBlobs.has(file.id)) {
+              continue
+            }
+            if (controller.signal.aborted) {
+              return 'cancelled'
+            }
+            const blob = await readBlob(file.id)
+            if (!blob) {
+              continue
+            }
+            inlineBlobs.set(file.id, {
+              mediaType: file.mimeType || blob.type || 'application/octet-stream',
+              base64: await blobToBase64(blob),
+            })
+          }
+        }
+      }
+
+      const model = provider.defaultModel
+      const modelSpec = provider.modelSpec(model)
+      const policy = computeCompactionPolicy(modelSpec)
+      const enabledCapabilities = tools.snapshotEnabled()
+      const declaredTools = tools.declare({ questionText: '', enabledCapabilities })
+      const declaredClientNames = new Set(declaredTools.map((tool) => tool.name))
+      const system = [SYSTEM_PROMPT, ...tools.instructions(declaredClientNames, 'reply')].join(
+        '\n\n'
+      )
+      const priorCheckpoint = findActiveCheckpoint(visible, session.checkpoints)
+      const prefixMessages = toHistoryPrefixMessages(visible, {
+        checkpoint: priorCheckpoint ?? undefined,
+        clientTools: declaredClientNames,
+        providerId: provider.id,
+        inlineBlobs,
+      })
+      const systemOverheadTokens = estimateMessagesTokens([], system, declaredTools)
+      const wireEstimate = estimateMessagesTokens(prefixMessages, system, declaredTools)
+      const sessionEstimate = estimateSessionContext({
+        visibleMessages: visible,
+        checkpoints: session.checkpoints,
+        modelSpec,
+        systemOverheadTokens,
+      })
+      const tokensBefore = Math.max(wireEstimate, sessionEstimate.tokens)
+
+      const result = await runCompaction({
+        provider,
+        toolRegistry: tools,
+        trigger: 'manual',
+        model,
+        system,
+        tools: declaredTools,
+        history: visible,
+        priorCheckpoint: priorCheckpoint ?? undefined,
+        declaredClientNames,
+        providerId: provider.id,
+        inlineBlobs,
+        inlineToolImages: !provider.attachments,
+        includeInProgressThinking: false,
+        tokensBefore,
+        policy,
+        signal: controller.signal,
+        newId,
+      })
+
+      if (epoch !== historyEpoch || deletingSessions.has(sessionId)) {
+        return 'cancelled'
+      }
+      if (result.kind === 'compacted') {
+        appendCheckpoint(sessionId, result.checkpoint)
+        return 'compacted'
+      }
+      if (result.kind === 'notNeeded') {
+        showNotice({ key: 'compactionNoticeNothingToCompact' })
+        return 'notNeeded'
+      }
+      if (result.kind === 'cancelled') {
+        return 'cancelled'
+      }
+      showNotice({ key: 'compactionNoticeManualFailed', type: 'error' })
+      return 'failed'
+    } finally {
+      if (manualCompactions.get(sessionId) === controller) {
+        manualCompactions.delete(sessionId)
+      }
+      setCompacting(sessionId, false)
+    }
+  }
 
   const sendMessage = (targetSessionId: string | null) => {
     if (get().importingHistory || !get().ready) {
@@ -833,7 +1010,7 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
     let sessionId = targetSessionId
     if (
       sessionId !== null &&
-      (deletingSessions.has(sessionId) || getStreamController(sessionId) || !getSession(sessionId))
+      (deletingSessions.has(sessionId) || isSessionBusy(sessionId) || !getSession(sessionId))
     ) {
       return false
     }
@@ -899,7 +1076,7 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
       return
     }
     const session = getSession(sessionId)
-    if (!session || getStreamController(sessionId)) {
+    if (!session || isSessionBusy(sessionId)) {
       return
     }
     const path = getVisibleMessages(session)
@@ -926,7 +1103,7 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
       return false
     }
     const session = getSession(sessionId)
-    if (!session || getStreamController(sessionId)) {
+    if (!session || isSessionBusy(sessionId)) {
       return false
     }
     const path = getVisibleMessages(session)
@@ -956,11 +1133,7 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
   }
 
   const selectMessageVersion = (sessionId: string, messageId: string) => {
-    if (
-      get().importingHistory ||
-      deletingSessions.has(sessionId) ||
-      getStreamController(sessionId)
-    ) {
+    if (get().importingHistory || deletingSessions.has(sessionId) || isSessionBusy(sessionId)) {
       return
     }
     autoTitleRunner.cancel(sessionId)
@@ -974,7 +1147,7 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
       return
     }
     const session = getSession(sessionId)
-    if (!session || getStreamController(sessionId)) {
+    if (!session || isSessionBusy(sessionId)) {
       return
     }
     const path = getVisibleMessages(session)
@@ -1017,7 +1190,7 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
       return
     }
     const session = getSession(sessionId)
-    if (!session || getStreamController(sessionId)) {
+    if (!session || isSessionBusy(sessionId)) {
       return
     }
     const path = getVisibleMessages(session)
@@ -1056,6 +1229,11 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
   const getChatMessages = (sessionId: string): readonly Message[] => {
     const session = getSession(sessionId)
     return session ? getVisibleMessages(session) : NO_MESSAGES
+  }
+
+  const getChatCheckpoints = (sessionId: string): readonly CompactionCheckpoint[] => {
+    const session = getSession(sessionId)
+    return session?.checkpoints ?? NO_CHECKPOINTS
   }
 
   const useChatMessages = (sessionId: string | null): readonly Message[] => {
@@ -1165,6 +1343,10 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
     for (const controller of Object.values(get().streaming)) {
       controller.abort()
     }
+    for (const controller of manualCompactions.values()) {
+      controller.abort()
+    }
+    manualCompactions.clear()
     for (const unsubscribe of unsubscribers) {
       unsubscribe()
     }
@@ -1205,10 +1387,12 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
     continueReply,
     retryUpload,
     stopReply,
+    compactSession,
     waitForIdle,
     replaceSessions,
     snapshotForExport,
     getChatMessages,
+    getChatCheckpoints,
     useChatMessages,
     useHistoryState,
     getTurnSnapshot,

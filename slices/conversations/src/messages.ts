@@ -104,6 +104,26 @@ export const conversationsMessages = defineMessages({
     activityListPairSeparator: '、',
     activityListLastSeparator: '、',
     activityOutputImageAlt: '生成的图表 {index}',
+    compactConversation: '压缩对话',
+    compactingConversation: '正在压缩对话…',
+    contextCompacted: '已压缩上下文',
+    compactionDividerSummaryAuto:
+      '对话达到 {line} 词元线时已自动总结早期内容（从 {before} 压缩至 {after} 词元）。',
+    compactionDividerSummaryBetweenRounds:
+      '本轮工具调用达到 {line} 词元线时已自动压缩早期内容（从 {before} 压缩至 {after} 词元）。',
+    compactionDividerSummaryManual: '已手动总结早期对话内容（从 {before} 压缩至 {after} 词元）。',
+    compactionDividerSummaryFit:
+      '对话接近上下文上限，已自动压缩早期内容（从 {before} 压缩至 {after} 词元）。',
+    compactionDividerSummaryOverflow:
+      '超出模型上下文上限后已自动压缩并重试（从 {before} 压缩至 {after} 词元）。',
+    contextMeterLabel: '{used} / {line}',
+    contextMeterAriaLabel: '上下文用量：约 {used} 词元，达到 {line} 时自动压缩',
+    contextMeterPopoverSummary: '当前约使用 {used} 词元。达到 {line} 词元时将自动压缩早期内容。',
+    compactionNoticeFailedContinuing: '自动压缩未能完成，本次将使用原有上下文继续发送。',
+    compactionNoticeManualFailed: '压缩对话失败，原有上下文未受影响。',
+    compactionNoticeNothingToCompact: '当前对话尚无已完成的轮次可供压缩。',
+    compactionFitFailed:
+      '对话内容超出当前模型的上下文上限且自动压缩未能完成。请开启新对话或缩短消息后重试。',
   },
   'en-US': {
     requestTimedOut: 'Request timed out. Please check your network and try again.',
@@ -213,6 +233,30 @@ export const conversationsMessages = defineMessages({
     activityListPairSeparator: ' and ',
     activityListLastSeparator: ', and ',
     activityOutputImageAlt: 'Generated output {index}',
+    compactConversation: 'Compact conversation',
+    compactingConversation: 'Compacting conversation…',
+    contextCompacted: 'Context compacted',
+    compactionDividerSummaryAuto:
+      'Summarized earlier turns at the {line} token line ({before} to {after} tokens).',
+    compactionDividerSummaryBetweenRounds:
+      'Summarized earlier context between tool rounds at the {line} token line ({before} to {after} tokens).',
+    compactionDividerSummaryManual:
+      'Manually summarized earlier turns ({before} to {after} tokens).',
+    compactionDividerSummaryFit:
+      'Summarized earlier turns to fit the context ceiling ({before} to {after} tokens).',
+    compactionDividerSummaryOverflow:
+      'Summarized earlier turns after hitting the model context limit ({before} to {after} tokens).',
+    contextMeterLabel: '{used} / {line}',
+    contextMeterAriaLabel: 'Context usage: about {used} tokens, compacts automatically at {line}',
+    contextMeterPopoverSummary:
+      'Using about {used} tokens. Compacts automatically at {line} tokens.',
+    compactionNoticeFailedContinuing:
+      'Automatic compaction did not finish. Continuing with existing context.',
+    compactionNoticeManualFailed:
+      'Could not compact this conversation. Your existing context was kept.',
+    compactionNoticeNothingToCompact: 'There are no completed turns to compact yet.',
+    compactionFitFailed:
+      'This conversation exceeds the model context limit and automatic compaction could not complete. Start a new chat or shorten your message and try again.',
   },
 })
 

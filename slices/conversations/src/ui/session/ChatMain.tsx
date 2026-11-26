@@ -66,6 +66,9 @@ export const ChatMain = ({ siderMode }: { siderMode: SiderMode }) => {
   const streaming = useChatStore((state) =>
     state.activeId === null ? false : Object.hasOwn(state.streaming, state.activeId)
   )
+  const compacting = useChatStore((state) =>
+    state.activeId === null ? false : state.compacting[state.activeId] === true
+  )
   const activeId = useChatStore((state) => state.activeId)
 
   if (!ready || (activeId !== null && !session)) {
@@ -105,7 +108,12 @@ export const ChatMain = ({ siderMode }: { siderMode: SiderMode }) => {
     )
   }
   return session ? (
-    <SessionView session={session} streaming={streaming} siderMode={siderMode} />
+    <SessionView
+      session={session}
+      streaming={streaming}
+      compacting={compacting}
+      siderMode={siderMode}
+    />
   ) : (
     <Welcome siderMode={siderMode} />
   )

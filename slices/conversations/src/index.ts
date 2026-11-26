@@ -37,6 +37,8 @@ export type {
 export type { ClientTool } from '@deepseek-chat/lib-agent'
 export type {
   AssistantMessage,
+  CompactionCheckpoint,
+  CompactionTrigger,
   FileAttachment,
   Message,
   ReplyBlock,
@@ -90,7 +92,9 @@ export const createConversationsSlice = (deps: ConversationsDeps) => {
       /** Edits a question into a new version and replies to it; `false` when refused. */
       edit: runtime.editMessage,
       selectVersion: runtime.selectMessageVersion,
-      /** Resolves when that chat (or every chat) has no reply in progress. */
+      /** Manually compacts earlier history on the active visible branch into a checkpoint. */
+      compact: runtime.compactSession,
+      /** Resolves when that chat (or every chat) has no reply or compaction in progress. */
       whenIdle: runtime.waitForIdle,
     },
 
@@ -109,6 +113,7 @@ export const createConversationsSlice = (deps: ConversationsDeps) => {
 
     /** A loaded chat's visible branch; the React hook re-renders on change. */
     getChatMessages: runtime.getChatMessages,
+    getChatCheckpoints: runtime.getChatCheckpoints,
     useChatMessages: runtime.useChatMessages,
 
     /** Narrow read-only turn snapshot source consumed by `slices/activity-inspector`. */
@@ -156,12 +161,40 @@ export {
   CONTINUE_PROMPT,
   applyEvent,
   canContinueReply,
+  findActiveCheckpoint,
   pickImageResults,
   settleReply,
+  toHistoryPrefixMessages,
   toRequestMessages,
   type InlineAttachmentData,
   type ToRequestMessagesOptions,
 } from './reply.js'
+export {
+  computeCompactionPolicy,
+  selectCompactionTrigger,
+  type CompactionPolicy,
+} from './compaction/budget.js'
+export {
+  runCompaction,
+  type CompactionResult,
+  type RunCompactionParams,
+} from './compaction/compact.js'
+export {
+  estimateAttachmentTokens,
+  estimateMessagesTokens,
+  estimateSessionContext,
+  estimateTextTokens,
+  type SessionContextEstimate,
+} from './compaction/estimate.js'
+export { buildCompactionLedgerText } from './compaction/ledger.js'
+export {
+  CHECKPOINT_ACK,
+  buildChunkedCompactionPrompt,
+  buildCompactionInstruction,
+  renderCheckpointWireText,
+  validateCompactionSummary,
+} from './compaction/prompts.js'
+export { buildVerbatimSection, type VerbatimSelection } from './compaction/verbatim.js'
 export {
   createEnvironmentContext,
   formatLegacyLatestReminder,

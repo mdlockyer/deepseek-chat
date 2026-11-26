@@ -142,4 +142,27 @@ describe('lib-tools: createToolRegistry', () => {
     )
     assert.equal(reg.serializeForArchive({ id: '2', name: 'missing', input: {} }, undefined), null)
   })
+
+  it('aggregates capability compaction ledger sections in registration order and skips empty ones', () => {
+    const withLedger: ToolCapability = {
+      ...makeEchoCapability('alpha', 'alpha_run'),
+      buildCompactionLedger: (entries) =>
+        entries.length > 0
+          ? { title: 'Alpha facts', lines: entries.map((e) => `- ${e.call.name}`) }
+          : null,
+    }
+    const emptyLedger: ToolCapability = {
+      ...makeEchoCapability('beta', 'beta_run'),
+      buildCompactionLedger: () => ({ title: 'Empty', lines: [] }),
+    }
+    const reg = createToolRegistry([withLedger, emptyLedger])
+    const sections = reg.buildCompactionLedger(
+      new Map([
+        ['alpha', [{ call: { id: 'c1', name: 'alpha_run', input: {} } }]],
+        ['beta', [{ call: { id: 'c2', name: 'beta_run', input: {} } }]],
+      ]),
+      new Map()
+    )
+    assert.deepEqual(sections, [{ title: 'Alpha facts', lines: ['- alpha_run'] }])
+  })
 })

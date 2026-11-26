@@ -17,9 +17,14 @@ import { ApiError } from './apiClient.js'
 import { describeUploadError, type UploadsController } from './attachments.js'
 import type { AutoTitleParams } from './autoTitleRunner.js'
 import { collectCitedUrls } from './citations.js'
+import { computeCompactionPolicy, selectCompactionTrigger } from './compaction/budget.js'
+import { runCompaction } from './compaction/compact.js'
+import { estimateMessagesTokens, estimateSessionContext } from './compaction/estimate.js'
 import { createEnvironmentContext, resolveEnvironmentContext } from './environmentContext.js'
+import type { TranslationKey } from './messages.js'
 import {
   applyEvent,
+  findActiveCheckpoint,
   getContextRounds,
   pickImageResults,
   settleReply,
@@ -29,6 +34,8 @@ import {
 import { createStreamTracer, type StreamTrace } from './streamTrace.js'
 import type {
   AssistantMessage,
+  CompactionCheckpoint,
+  CompactionTrigger,
   FileAttachment,
   Message,
   Session,
@@ -53,6 +60,8 @@ export const SYSTEM_PROMPT = [
     '- Performing thoroughness: skip cheerleading openers, fake-profound signposts ("Crucially,", "What this means:"), unprompted "not X, but Y" setups, and wrap-up paragraphs that restate what you already said.\n' +
     "- Punctuation and decoration crutches: default to periods, commas, colons, and parentheses instead of em dashes, saving a dash for the rare sentence that truly needs an abrupt turn. Don't decorate headings, bullets, or explanations with emojis; keep them for moments where the user sets that tone or asks for them.\n\n" +
     'Never trade away accuracy for smoothness: keep important numbers, units, and conditions intact. What the user asks for always wins.',
+  'Your context:\n' +
+    'Long conversations are compacted into a checkpoint automatically when context approaches the model limit (between turns or between tool rounds), or when the user asks to compact. A checkpoint keeps a structured summary, recent messages verbatim, and a factual ledger of uploaded files, saved workspace artifacts, gathered sources, and answered decisions, while dropping raw older tool outputs, earlier attachments, and pre-checkpoint hidden reasoning. State settled conclusions, key numbers, and important decisions plainly in your reply prose as you work so they survive compaction cleanly; if you ever need exact raw content from an earlier saved file or webpage after a checkpoint, re-read it with the appropriate tool rather than guessing.',
 ].join('\n\n')
 
 const DEFAULT_TOOL_ROUND_LIMIT = 50
@@ -90,6 +99,10 @@ export type ReplyRunnerHost = {
   readonly persist: (sessionId: string) => void
   readonly publishSessionFiles: (sessionId: string) => void
   readonly setStreaming: (sessionId: string, controller: AbortController | null) => void
+  readonly setCompacting: (sessionId: string, active: boolean) => void
+  readonly appendCheckpoint: (sessionId: string, checkpoint: CompactionCheckpoint) => void
+  readonly notifyCompactionNotice: (key: TranslationKey) => void
+  readonly newId: () => string
   readonly registerFlush: (sessionId: string, flush: (() => void) | null) => void
   readonly onAutoTitle: (params: AutoTitleParams) => void
 }
@@ -550,24 +563,28 @@ export const createReplyRunner = (host: ReplyRunnerHost) => {
             readReplyState: <T = unknown>() => readCapState(effectiveCapId) as T | undefined,
             writeReplyState: (next, opts) => writeCapState(effectiveCapId, next, opts),
             ...(currentEnv ? { environmentContext: currentEnv } : {}),
-            forkMessages: () =>
-              toRequestMessages(
-                lastTurnContext?.history ?? request.history,
-                lastTurnContext?.question ?? request.question,
-                {
-                  environmentContext: currentEnv,
-                  inProgress: replyBeforeCall.blocks.length > 0 ? replyBeforeCall : undefined,
-                  includeInProgressThinking:
-                    Boolean(initial.thinking) &&
-                    (reply.provider ?? host.provider.id) === host.provider.id &&
-                    (reply.model ?? host.provider.defaultModel) ===
-                      (lastTurnContext?.model ?? initial.model ?? host.provider.defaultModel),
-                  clientTools: lastTurnContext?.declaredClientNames ?? true,
-                  providerId: host.provider.id,
-                  inlineBlobs: lastTurnContext?.inlineBlobs,
-                  inlineToolImages: !host.provider.attachments,
-                }
-              ),
+            forkMessages: () => {
+              const history = lastTurnContext?.history ?? request.history
+              const activeCheckpoint = findActiveCheckpoint(
+                history,
+                host.getSession(sessionId)?.checkpoints,
+                replyBeforeCall.blocks.length > 0 ? replyBeforeCall.id : undefined
+              )
+              return toRequestMessages(history, lastTurnContext?.question ?? request.question, {
+                checkpoint: activeCheckpoint ?? undefined,
+                environmentContext: currentEnv,
+                inProgress: replyBeforeCall.blocks.length > 0 ? replyBeforeCall : undefined,
+                includeInProgressThinking:
+                  Boolean(initial.thinking) &&
+                  (reply.provider ?? host.provider.id) === host.provider.id &&
+                  (reply.model ?? host.provider.defaultModel) ===
+                    (lastTurnContext?.model ?? initial.model ?? host.provider.defaultModel),
+                clientTools: lastTurnContext?.declaredClientNames ?? true,
+                providerId: host.provider.id,
+                inlineBlobs: lastTurnContext?.inlineBlobs,
+                inlineToolImages: !host.provider.attachments,
+              })
+            },
           }
         )
 
@@ -691,7 +708,58 @@ export const createReplyRunner = (host: ReplyRunnerHost) => {
       }
     }
 
+    const performCompaction = async (args: {
+      readonly trigger: CompactionTrigger
+      readonly model: ChatModel
+      readonly system: string
+      readonly tools: CreateMessageRequest['tools']
+      readonly history: Message[]
+      readonly question: UserMessage
+      readonly inProgressReply?: AssistantMessage
+      readonly priorCheckpoint?: CompactionCheckpoint
+      readonly declaredClientNames: ReadonlySet<string>
+      readonly inlineBlobs?: ReadonlyMap<string, InlineAttachmentData>
+      readonly environmentContext?: string
+      readonly includeInProgressThinking: boolean
+      readonly tokensBefore: number
+    }) => {
+      const policy = computeCompactionPolicy(host.provider.modelSpec(args.model))
+      host.setCompacting(sessionId, true)
+      try {
+        const result = await runCompaction({
+          provider: host.provider,
+          toolRegistry: host.tools,
+          trigger: args.trigger,
+          model: args.model,
+          system: args.system,
+          tools: args.tools,
+          history: args.history,
+          pendingQuestion: args.question,
+          inProgressReply: args.inProgressReply,
+          priorCheckpoint: args.priorCheckpoint,
+          declaredClientNames: args.declaredClientNames,
+          providerId: host.provider.id,
+          inlineBlobs: args.inlineBlobs,
+          inlineToolImages: !host.provider.attachments,
+          environmentContext: args.environmentContext,
+          includeInProgressThinking: args.includeInProgressThinking,
+          tokensBefore: args.tokensBefore,
+          policy,
+          signal: controller.signal,
+          newId: host.newId,
+        })
+        if (result.kind === 'compacted') {
+          host.appendCheckpoint(sessionId, result.checkpoint)
+        }
+        return result
+      } finally {
+        host.setCompacting(sessionId, false)
+      }
+    }
+
     let networkRetries = 0
+    let lineCompactionFailed = false
+    let overflowRetried = false
     try {
       for (let attempt = 0; ; attempt += 1) {
         let preparing = true
@@ -757,24 +825,96 @@ export const createReplyRunner = (host: ReplyRunnerHost) => {
             SYSTEM_PROMPT,
             ...host.tools.instructions(declaredClientNames, 'reply'),
           ]
+          const system = systemParts.join('\n\n')
           const includeInProgressThinking =
             Boolean(initial.thinking) &&
             (reply.provider ?? host.provider.id) === host.provider.id &&
             (reply.model ?? model) === model
-          const messages = toRequestMessages(prepared.history, prepared.question, {
-            continueReply: toolRound > 0 ? undefined : prepared.continueReply,
-            environmentContext,
-            inProgress: toolRound > 0 ? reply : undefined,
-            includeInProgressThinking,
-            clientTools: declaredClientNames,
-            providerId: host.provider.id,
-            inlineBlobs: prepared.inlineBlobs,
-            inlineToolImages: !host.provider.attachments,
+          const buildMessages = (checkpoint: CompactionCheckpoint | null) =>
+            toRequestMessages(prepared.history, prepared.question, {
+              checkpoint: checkpoint ?? undefined,
+              continueReply: toolRound > 0 ? undefined : prepared.continueReply,
+              environmentContext,
+              inProgress: toolRound > 0 ? reply : undefined,
+              includeInProgressThinking,
+              clientTools: declaredClientNames,
+              providerId: host.provider.id,
+              inlineBlobs: prepared.inlineBlobs,
+              inlineToolImages: !host.provider.attachments,
+            })
+
+          const checkpoints = host.getSession(sessionId)?.checkpoints
+          let activeCheckpoint = findActiveCheckpoint(
+            prepared.history,
+            checkpoints,
+            toolRound > 0 ? reply.id : undefined
+          )
+          let messages = buildMessages(activeCheckpoint)
+
+          const modelSpec = host.provider.modelSpec(model)
+          const policy = computeCompactionPolicy(modelSpec)
+          const systemOverheadTokens = estimateMessagesTokens([], system, declaredTools)
+          const wireEstimate = estimateMessagesTokens(messages, system, declaredTools)
+          const sessionEstimate = estimateSessionContext({
+            visibleMessages: [...prepared.history, prepared.question],
+            checkpoints,
+            modelSpec,
+            inProgressReply: toolRound > 0 ? reply : undefined,
+            systemOverheadTokens,
           })
+          const estimatedTokens = Math.max(wireEstimate, sessionEstimate.tokens)
+          const preTrigger = selectCompactionTrigger(
+            estimatedTokens,
+            policy,
+            toolRound > 0 ? 'betweenRounds' : 'turnStart',
+            lineCompactionFailed
+          )
+          const hasCompactableHistory =
+            toolRound > 0
+              ? reply.blocks.length > 0 || getContextRounds(prepared.history).length > 0
+              : getContextRounds(prepared.history).length > 0
+
+          if (preTrigger && hasCompactableHistory) {
+            const compResult = await performCompaction({
+              trigger: preTrigger,
+              model,
+              system,
+              tools: declaredTools,
+              history: prepared.history,
+              question: prepared.question,
+              inProgressReply: toolRound > 0 ? reply : undefined,
+              priorCheckpoint: activeCheckpoint ?? undefined,
+              declaredClientNames,
+              inlineBlobs: prepared.inlineBlobs,
+              environmentContext,
+              includeInProgressThinking,
+              tokensBefore: estimatedTokens,
+            })
+            if (compResult.kind === 'cancelled' || controller.signal.aborted) {
+              settleTurnHooks('user')
+              reply = settleReply(reply, 'stopped', Date.now())
+              break
+            }
+            if (compResult.kind === 'compacted') {
+              activeCheckpoint = compResult.checkpoint
+              messages = buildMessages(activeCheckpoint)
+            } else if (compResult.kind === 'failed') {
+              if (preTrigger === 'fit') {
+                reply = settleReply(reply, 'error', Date.now(), {
+                  kind: 'protocol',
+                  message: compResult.reason,
+                  localMessage: { key: 'compactionFitFailed' },
+                })
+                break
+              }
+              lineCompactionFailed = true
+              host.notifyCompactionNotice('compactionNoticeFailedContinuing')
+            }
+          }
+
           if (host.onStreamTrace) {
             tracer = createStreamTracer(toolRound, Date.now())
           }
-          const system = systemParts.join('\n\n')
           lastTurnContext = {
             model,
             system,
@@ -904,6 +1044,70 @@ export const createReplyRunner = (host: ReplyRunnerHost) => {
             attempt -= 1
             continue
           }
+          const errorCondition = host.provider.classifyError(error)
+          if (
+            !receivedContent &&
+            !overflowRetried &&
+            lastTurnContext &&
+            (errorCondition === 'contextOverflow' || errorCondition === 'payloadTooLarge')
+          ) {
+            overflowRetried = true
+            const hasCompactable =
+              toolRound > 0
+                ? reply.blocks.length > 0 || getContextRounds(lastTurnContext.history).length > 0
+                : getContextRounds(lastTurnContext.history).length > 0
+            if (hasCompactable) {
+              const priorCheckpoint = findActiveCheckpoint(
+                lastTurnContext.history,
+                host.getSession(sessionId)?.checkpoints,
+                toolRound > 0 ? reply.id : undefined
+              )
+              const policy = computeCompactionPolicy(host.provider.modelSpec(lastTurnContext.model))
+              const estimatedBefore = Math.max(
+                policy.ceiling,
+                estimateMessagesTokens(
+                  toRequestMessages(lastTurnContext.history, lastTurnContext.question, {
+                    checkpoint: priorCheckpoint ?? undefined,
+                    environmentContext: resolveEnvironmentContext(reply),
+                    inProgress: toolRound > 0 ? reply : undefined,
+                    clientTools: lastTurnContext.declaredClientNames,
+                    providerId: host.provider.id,
+                    inlineBlobs: lastTurnContext.inlineBlobs,
+                    inlineToolImages: !host.provider.attachments,
+                  }),
+                  lastTurnContext.system,
+                  lastTurnContext.tools
+                )
+              )
+              const compResult = await performCompaction({
+                trigger: 'overflow',
+                model: lastTurnContext.model,
+                system: lastTurnContext.system,
+                tools: lastTurnContext.tools,
+                history: lastTurnContext.history,
+                question: lastTurnContext.question,
+                inProgressReply: toolRound > 0 ? reply : undefined,
+                priorCheckpoint: priorCheckpoint ?? undefined,
+                declaredClientNames: lastTurnContext.declaredClientNames,
+                inlineBlobs: lastTurnContext.inlineBlobs,
+                environmentContext: resolveEnvironmentContext(reply),
+                includeInProgressThinking:
+                  Boolean(initial.thinking) &&
+                  (reply.provider ?? host.provider.id) === host.provider.id &&
+                  (reply.model ?? lastTurnContext.model) === lastTurnContext.model,
+                tokensBefore: estimatedBefore,
+              })
+              if (compResult.kind === 'cancelled' || controller.signal.aborted) {
+                settleTurnHooks('user')
+                reply = settleReply(reply, 'stopped', Date.now())
+                break
+              }
+              if (compResult.kind === 'compacted') {
+                attempt -= 1
+                continue
+              }
+            }
+          }
           if (error instanceof ApiError) {
             reply = settleReply(reply, 'error', Date.now(), {
               kind: error.kind,
@@ -932,6 +1136,7 @@ export const createReplyRunner = (host: ReplyRunnerHost) => {
       host.registerFlush(sessionId, null)
       cancelAnimationFrame(frame)
       host.updateReply(sessionId, reply)
+      host.setCompacting(sessionId, false)
       host.setStreaming(sessionId, null)
       host.persist(sessionId)
       host.log.publish<ReplyLifecycleChanged>({

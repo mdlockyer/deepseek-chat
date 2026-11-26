@@ -58,6 +58,7 @@ export const ReplyArea = memo(function ReplyArea({
   message,
   view,
   streaming,
+  compacting = false,
   stalled,
   hasResponse,
 }: {
@@ -65,6 +66,7 @@ export const ReplyArea = memo(function ReplyArea({
   message: AssistantMessage
   view: ReplyView
   streaming: boolean
+  compacting?: boolean
   stalled: boolean
   hasResponse: boolean
 }) {
@@ -86,7 +88,8 @@ export const ReplyArea = memo(function ReplyArea({
     streaming,
     Date.now() + tick * 0,
     stalled,
-    hasResponse
+    hasResponse,
+    compacting
   )
   const notes = getFrontStageNotes(view)
 

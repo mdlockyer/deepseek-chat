@@ -16,20 +16,20 @@ the `EventLog`, and optional view ports.
 `createConversationsSlice(deps)` creates an isolated slice instance (multiple independent instances
 may coexist in the same process) and returns:
 
-| Member                                                                   | Meaning                                                                                                                                                                                      |
-| :----------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `stopReply(sessionId)`                                                   | Stops that chat's reply in progress.                                                                                                                                                         |
-| `commands`                                                               | Headless operations: `init`, `newChat`, `selectSession`, `renameSession`, `removeSession`, `setDraft`, `attach`, `send`, `regenerate`, `continueReply`, `edit`, `selectVersion`, `whenIdle`. |
-| `getState()`, `subscribe(listener)`                                      | Session summaries (newest first), `activeId`, `ready`, `replying` session IDs, and change subscription.                                                                                      |
-| `getThinking()`, `setThinking(enabled)`                                  | Instance-scoped DeepThink toggle (`chat-demo:thinking`).                                                                                                                                     |
-| `getChatMessages(id)`, `useChatMessages(id)`                             | A loaded chat's visible branch (empty while not loaded).                                                                                                                                     |
-| `getTurnSnapshot(sid, mid)`, `listSessionTurns(sid)`, `subscribeToTurns` | Referentially stable read-only live turn snapshot & session turn-list source consumed by `slices/activity-inspector` (safe for `useSyncExternalStore`).                                      |
-| `snapshotForExport()`, `replaceSessions(fn)`                             | Atomic storage ports consumed by `slices/history-backup`.                                                                                                                                    |
-| `useHistoryState()`, `describeReplyNotice(msg)`                          | History replacement/empty state and plain reply error/template text.                                                                                                                         |
-| `useChatLifecycle()`, `useActiveSessionId()`                             | Lifecycle hooks for upload notices, persistence flush, mobile drawer, and init.                                                                                                              |
-| `Sider`, `MobileSider`, `CollapsedSider`                                 | Bound session-list views (`CollapsedSider` supports `enterMode` / `exitMode`: `'morph' \| 'fade'`).                                                                                          |
-| `ChatMain({ siderMode })`, `ChatSaveBanner`                              | Bound chat/welcome main area (`siderMode`: `'absent' \| 'collapsed' \| 'expanded'`), top-right Settings trigger, and save-failure banner.                                                    |
-| `dispose()`                                                              | Aborts active streams, cancels timers, unsubscribes from `EventLog`, closes DB.                                                                                                              |
+| Member                                                                   | Meaning                                                                                                                                                                                                 |
+| :----------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `stopReply(sessionId)`                                                   | Stops that chat's reply or manual compaction in progress.                                                                                                                                               |
+| `commands`                                                               | Headless operations: `init`, `newChat`, `selectSession`, `renameSession`, `removeSession`, `setDraft`, `attach`, `send`, `regenerate`, `continueReply`, `edit`, `selectVersion`, `compact`, `whenIdle`. |
+| `getState()`, `subscribe(listener)`                                      | Session summaries (newest first), `activeId`, `ready`, `replying` session IDs, and change subscription.                                                                                                 |
+| `getThinking()`, `setThinking(enabled)`                                  | Instance-scoped DeepThink toggle (`chat-demo:thinking`).                                                                                                                                                |
+| `getChatMessages(id)`, `getChatCheckpoints(id)`, `useChatMessages(id)`   | A loaded chat's visible branch and stored compaction checkpoints (empty while not loaded).                                                                                                              |
+| `getTurnSnapshot(sid, mid)`, `listSessionTurns(sid)`, `subscribeToTurns` | Referentially stable read-only live turn snapshot & session turn-list source consumed by `slices/activity-inspector` (safe for `useSyncExternalStore`).                                                 |
+| `snapshotForExport()`, `replaceSessions(fn)`                             | Atomic storage ports consumed by `slices/history-backup`.                                                                                                                                               |
+| `useHistoryState()`, `describeReplyNotice(msg)`                          | History replacement/empty state and plain reply error/template text.                                                                                                                                    |
+| `useChatLifecycle()`, `useActiveSessionId()`                             | Lifecycle hooks for upload notices, persistence flush, mobile drawer, and init.                                                                                                                         |
+| `Sider`, `MobileSider`, `CollapsedSider`                                 | Bound session-list views (`CollapsedSider` supports `enterMode` / `exitMode`: `'morph' \| 'fade'`).                                                                                                     |
+| `ChatMain({ siderMode })`, `ChatSaveBanner`                              | Bound chat/welcome main area (`siderMode`: `'absent' \| 'collapsed' \| 'expanded'`), top-right Settings trigger, and save-failure banner.                                                               |
+| `dispose()`                                                              | Aborts active streams, cancels timers, unsubscribes from `EventLog`, closes DB.                                                                                                                         |
 
 The package also exports pure model functions (`branches`, `reply`, `environmentContext`, `view`,
 `workStrip`, `citations`, `autoTitle`, `requestWith`, `ServerSentEventDecoder`) and session store
@@ -121,6 +121,20 @@ factories (`createIndexedDbSessionStore`, `memorySessionStore`).
     Any user mutation cancels an in-flight fork.
 11. **Stream traces.** When `onStreamTrace` is provided, every request reports sizes and timings
     without message, tool input, or reply text.
+12. **Branch-anchored conversation compaction.** Five triggers (`turnStart`, `betweenRounds`,
+    `manual`, `fit`, `overflow`) funnel through one `runCompaction` pipeline governed by a
+    window-adaptive policy derived from `ModelSpec` (interpolating smoothly from 70% line / 20K
+    verbatim keep at <=200K windows to 50% line / 40K verbatim keep at >=1M windows, with output
+    reserve capped at 10% of the window and strictly monotonic line scaling). Normal compactions
+    ride the active `(model, system, tools, messages)` KV-cache prefix with thinking disabled;
+    oversized spans fall back to bounded plain-text chunked folding (preserving prior checkpoint
+    summaries). Summaries must validate (`Goal` + `Next Steps`, no tool calls, not truncated or
+    refused); failed or aborted compactions leave existing context intact. Validated checkpoints
+    store immutable `renderedWireText` anchored to `(anchorMessageId, afterBlockIndex?)` on
+    `Session.checkpoints`, isolating branches completely while preserving original messages and
+    attachments in storage. Capability-specific factual ledgers flow domain-blindly through
+    `ToolRegistry.buildCompactionLedger`. Reactive `overflow` compaction retries at most once per
+    turn on `contextOverflow` or `payloadTooLarge` errors.
 
 ## Parameters
 
@@ -135,6 +149,8 @@ factories (`createIndexedDbSessionStore`, `memorySessionStore`).
 | Attachments per message                     | 50                                          |
 | Attachment size                             | 64 MB                                       |
 | Concurrent uploads                          | 3                                           |
-| Request body limit                          | 3,000,000 bytes                             |
+| Compaction line scaling                     | 70% at <=200K -> 50% at >=1M (`ModelSpec`)  |
+| Verbatim dialogue retention budget          | 20K at <=200K -> 40K at >=1M (<=25% window) |
+| Composer context meter visibility threshold | 40% of compaction line                      |
 | Stall delay before "Working…"               | 1.5 s                                       |
 | Inline trace preview cap                    | 6 steps (`INLINE_TRACE_PREVIEW_LIMIT`)      |

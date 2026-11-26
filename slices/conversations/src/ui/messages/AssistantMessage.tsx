@@ -46,6 +46,7 @@ export const AssistantMessage = memo(function AssistantMessage({
   message,
   isLast,
   streaming,
+  compacting = false,
   busy,
   versions,
   onSelectVersion,
@@ -54,6 +55,7 @@ export const AssistantMessage = memo(function AssistantMessage({
   message: AssistantMessageType
   isLast: boolean
   streaming: boolean
+  compacting?: boolean
   busy: boolean
   versions: MessageVersions
   onSelectVersion: SelectMessageVersion
@@ -96,6 +98,7 @@ export const AssistantMessage = memo(function AssistantMessage({
           message={message}
           view={view}
           streaming={streaming}
+          compacting={compacting}
           stalled={stalled}
           hasResponse={!!responseText}
         />

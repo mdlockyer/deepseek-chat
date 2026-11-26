@@ -9,8 +9,10 @@ import {
   type ToolResultBlockParam,
 } from '@deepseek-chat/lib-agent'
 import { resolveEnvironmentContext } from './environmentContext.js'
+import { CHECKPOINT_ACK } from './compaction/prompts.js'
 import type {
   AssistantMessage,
+  CompactionCheckpoint,
   FileAttachment,
   Message,
   ReplyBlock,
@@ -426,9 +428,54 @@ export const getContextRounds = (history: Message[]): [UserMessage, AssistantMes
   return rounds
 }
 
+/**
+ * Returns the furthest compaction checkpoint anchored on the active visible branch (or on an
+ * in-progress reply being streamed on top of it), ignoring checkpoints belonging to sibling branches.
+ */
+export const findActiveCheckpoint = (
+  visibleMessages: readonly Message[],
+  checkpoints?: readonly CompactionCheckpoint[],
+  inProgressReplyId?: string
+): CompactionCheckpoint | null => {
+  if (!checkpoints || checkpoints.length === 0) {
+    return null
+  }
+  const indexById = new Map<string, number>()
+  visibleMessages.forEach((message, index) => indexById.set(message.id, index))
+  if (inProgressReplyId && !indexById.has(inProgressReplyId)) {
+    indexById.set(inProgressReplyId, visibleMessages.length)
+  }
+
+  let best: CompactionCheckpoint | null = null
+  let bestPos = -1
+  let bestBlock = -1
+
+  for (const checkpoint of checkpoints) {
+    const pos = indexById.get(checkpoint.anchorMessageId)
+    if (pos === undefined) {
+      continue
+    }
+    const blockRank = checkpoint.afterBlockIndex ?? Number.POSITIVE_INFINITY
+    const isNewer =
+      pos > bestPos ||
+      (pos === bestPos && blockRank > bestBlock) ||
+      (pos === bestPos &&
+        blockRank === bestBlock &&
+        checkpoint.createdAt >= (best?.createdAt ?? -1))
+    if (isNewer) {
+      best = checkpoint
+      bestPos = pos
+      bestBlock = blockRank
+    }
+  }
+  return best
+}
+
 export type ToRequestMessagesOptions = {
   /** Existing stopped or max-token prose reply being continued via a standard user prompt. */
   readonly continueReply?: AssistantMessage
+  /** Active branch compaction checkpoint replacing earlier turns on the wire. */
+  readonly checkpoint?: CompactionCheckpoint
   /** Dynamic `<environment_context>` for the current turn (prepended only when changed). */
   readonly environmentContext?: string
   /** In-progress tool-loop reply whose tool calls and results follow the current question. */
@@ -445,9 +492,99 @@ export type ToRequestMessagesOptions = {
   readonly inlineToolImages?: boolean
 }
 
+const pushUserParam = (
+  messages: MessageParam[],
+  param: Extract<MessageParam, { role: 'user' }>
+) => {
+  const last = messages.at(-1)
+  if (last?.role === 'user') {
+    const prevBlocks =
+      typeof last.content === 'string'
+        ? [{ type: 'text' as const, text: last.content }]
+        : last.content
+    const extra =
+      typeof param.content === 'string'
+        ? [{ type: 'text' as const, text: param.content }]
+        : param.content
+    last.content = [...prevBlocks, ...extra]
+  } else {
+    messages.push(param)
+  }
+}
+
+/**
+ * Serializes completed history rounds (respecting an active branch checkpoint if present) using
+ * the exact wire format of `toRequestMessages` so cache-riding compaction requests hit KV cache.
+ */
+export const toHistoryPrefixMessages = (
+  history: Message[],
+  options: Pick<
+    ToRequestMessagesOptions,
+    'checkpoint' | 'clientTools' | 'providerId' | 'inlineBlobs'
+  > = {}
+): MessageParam[] => {
+  const { checkpoint, clientTools = true, providerId, inlineBlobs } = options
+  const messages: MessageParam[] = []
+  let previousEnv: string | undefined
+  const nextEnvPrefix = (env: string | undefined): string | undefined => {
+    if (env && env !== previousEnv) {
+      previousEnv = env
+      return env
+    }
+    return undefined
+  }
+
+  let historySlice = history
+  if (checkpoint) {
+    const anchorIdx = history.findIndex((message) => message.id === checkpoint.anchorMessageId)
+    if (anchorIdx >= 0) {
+      messages.push({ role: 'user', content: checkpoint.renderedWireText })
+      const anchor = history[anchorIdx]
+      if (checkpoint.afterBlockIndex !== undefined && anchor.role === 'assistant') {
+        const tailBlocks = anchor.blocks.slice(checkpoint.afterBlockIndex + 1)
+        const tailMessages =
+          tailBlocks.length > 0
+            ? toAssistantMessages(
+                { ...anchor, blocks: tailBlocks },
+                { includeThinking: false, includeImages: false, clientTools }
+              )
+            : []
+        if (tailMessages.length > 0) {
+          messages.push(...tailMessages)
+        }
+        if (messages.at(-1)?.role !== 'assistant') {
+          messages.push({ role: 'assistant', content: [{ type: 'text', text: CHECKPOINT_ACK }] })
+        }
+      } else {
+        messages.push({ role: 'assistant', content: [{ type: 'text', text: CHECKPOINT_ACK }] })
+      }
+      historySlice = history.slice(anchorIdx + 1)
+    }
+  }
+
+  for (const [user, reply] of getContextRounds(historySlice)) {
+    if (!user.content && toFileBlocks(user.files, providerId, inlineBlobs).length === 0) {
+      continue
+    }
+    const envPrefix = nextEnvPrefix(resolveEnvironmentContext(reply))
+    pushUserParam(messages, toUserParam(user, envPrefix, providerId, inlineBlobs))
+    messages.push(
+      ...toAssistantMessages(reply, {
+        includeThinking: false,
+        includeImages: false,
+        clientTools,
+      })
+    )
+  }
+
+  return messages
+}
+
 /**
  * Serializes conversation history + current turn into strictly standard `user` / `assistant`
  * Messages API entries:
+ * - When an active branch `checkpoint` is supplied, earlier history up through `anchorMessageId`
+ *   is replaced by the frozen `checkpoint.renderedWireText` prefix for KV-cache byte stability.
  * - Dynamic `<environment_context>` is prepended to a `user` turn only when it first appears or
  *   changes (preserving KV-cache prefixes without proprietary roles).
  * - Historical completed turns never replay `thinking` blocks; only an active `inProgress` tool
@@ -462,6 +599,7 @@ export const toRequestMessages = (
 ): MessageParam[] => {
   const {
     continueReply,
+    checkpoint,
     environmentContext,
     inProgress,
     includeInProgressThinking = false,
@@ -471,24 +609,41 @@ export const toRequestMessages = (
     inlineToolImages = false,
   } = options
 
-  const messages: MessageParam[] = []
-  const pushUser = (param: Extract<MessageParam, { role: 'user' }>) => {
-    const last = messages.at(-1)
-    if (last?.role === 'user') {
-      const prevBlocks =
-        typeof last.content === 'string'
-          ? [{ type: 'text' as const, text: last.content }]
-          : last.content
-      const extra =
-        typeof param.content === 'string'
-          ? [{ type: 'text' as const, text: param.content }]
-          : param.content
-      last.content = [...prevBlocks, ...extra]
-    } else {
-      messages.push(param)
+  // Mid-turn checkpoint anchored on the currently active `inProgress` reply:
+  // start from the frozen checkpoint wire text and replay only post-checkpoint blocks.
+  if (
+    checkpoint &&
+    inProgress &&
+    checkpoint.anchorMessageId === inProgress.id &&
+    checkpoint.afterBlockIndex !== undefined
+  ) {
+    const messages: MessageParam[] = []
+    const currentFiles =
+      checkpoint.trigger === 'overflow' ? [] : toFileBlocks(question.files, providerId, inlineBlobs)
+    const checkpointContent: Extract<MessageParam, { role: 'user' }>['content'] =
+      currentFiles.length > 0
+        ? [...currentFiles, { type: 'text' as const, text: checkpoint.renderedWireText }]
+        : checkpoint.renderedWireText
+    messages.push({ role: 'user', content: checkpointContent })
+
+    const tailBlocks = inProgress.blocks.slice(checkpoint.afterBlockIndex + 1)
+    if (tailBlocks.length > 0) {
+      messages.push(
+        ...toAssistantMessages(
+          { ...inProgress, blocks: tailBlocks },
+          {
+            includeThinking: includeInProgressThinking,
+            includeImages: true,
+            inlineImages: inlineToolImages,
+            clientTools: true,
+          }
+        )
+      )
     }
+    return messages
   }
 
+  const messages: MessageParam[] = []
   let previousEnv: string | undefined
   const nextEnvPrefix = (env: string | undefined): string | undefined => {
     if (env && env !== previousEnv) {
@@ -498,12 +653,40 @@ export const toRequestMessages = (
     return undefined
   }
 
-  for (const [user, reply] of getContextRounds(history)) {
+  let historySlice = history
+  if (checkpoint) {
+    const anchorIdx = history.findIndex((message) => message.id === checkpoint.anchorMessageId)
+    if (anchorIdx >= 0) {
+      messages.push({ role: 'user', content: checkpoint.renderedWireText })
+      const anchor = history[anchorIdx]
+      if (checkpoint.afterBlockIndex !== undefined && anchor.role === 'assistant') {
+        const tailBlocks = anchor.blocks.slice(checkpoint.afterBlockIndex + 1)
+        const tailMessages =
+          tailBlocks.length > 0
+            ? toAssistantMessages(
+                { ...anchor, blocks: tailBlocks },
+                { includeThinking: false, includeImages: false, clientTools }
+              )
+            : []
+        if (tailMessages.length > 0) {
+          messages.push(...tailMessages)
+        }
+        if (messages.at(-1)?.role !== 'assistant') {
+          messages.push({ role: 'assistant', content: [{ type: 'text', text: CHECKPOINT_ACK }] })
+        }
+      } else {
+        messages.push({ role: 'assistant', content: [{ type: 'text', text: CHECKPOINT_ACK }] })
+      }
+      historySlice = history.slice(anchorIdx + 1)
+    }
+  }
+
+  for (const [user, reply] of getContextRounds(historySlice)) {
     if (!user.content && toFileBlocks(user.files, providerId, inlineBlobs).length === 0) {
       continue
     }
     const envPrefix = nextEnvPrefix(resolveEnvironmentContext(reply))
-    pushUser(toUserParam(user, envPrefix, providerId, inlineBlobs))
+    pushUserParam(messages, toUserParam(user, envPrefix, providerId, inlineBlobs))
     messages.push(
       ...toAssistantMessages(reply, {
         includeThinking: false,
@@ -514,7 +697,7 @@ export const toRequestMessages = (
   }
 
   const currentEnvPrefix = nextEnvPrefix(environmentContext)
-  pushUser(toUserParam(question, currentEnvPrefix, providerId, inlineBlobs))
+  pushUserParam(messages, toUserParam(question, currentEnvPrefix, providerId, inlineBlobs))
 
   if (inProgress) {
     messages.push(
@@ -536,7 +719,7 @@ export const toRequestMessages = (
     })
     if (partial.length > 0) {
       messages.push(...partial)
-      pushUser({ role: 'user', content: CONTINUE_PROMPT })
+      pushUserParam(messages, { role: 'user', content: CONTINUE_PROMPT })
     }
   }
 

@@ -17,10 +17,12 @@ const useNoDock = () => false
 export const SessionView = ({
   session,
   streaming,
+  compacting,
   siderMode,
 }: {
   session: Session
   streaming: boolean
+  compacting: boolean
   siderMode: SiderMode
 }) => {
   const t = useTranslate()
@@ -56,6 +58,7 @@ export const SessionView = ({
       <MessageList
         session={session}
         streaming={streaming}
+        compacting={compacting}
         footer={
           <div className={styles.inputContainer}>
             {hasDock && ComposerDock ? (

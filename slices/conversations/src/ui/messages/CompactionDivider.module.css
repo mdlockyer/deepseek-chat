@@ -1,0 +1,98 @@
+@layer slice {
+  .wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ui-space-2);
+    margin: var(--ui-space-4) 0;
+  }
+
+  .header {
+    display: flex;
+    align-items: center;
+    gap: var(--ui-space-3);
+  }
+
+  .rule {
+    flex: 1;
+    height: 1px;
+    background-color: var(--ui-border-subtle);
+  }
+
+  .toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--ui-space-1-5);
+    min-height: var(--ui-control-sm);
+    padding: 0 var(--ui-space-2-5);
+    border: 1px solid transparent;
+    border-radius: var(--ui-radius-pill);
+    background-color: transparent;
+    color: var(--ui-text-secondary);
+    font: var(--ui-type-caption);
+    cursor: pointer;
+    outline: none;
+    transition:
+      background-color var(--ui-duration-normal) var(--ui-ease-standard),
+      border-color var(--ui-duration-normal) var(--ui-ease-standard),
+      color var(--ui-duration-normal) var(--ui-ease-standard);
+
+    @media (hover: hover) {
+      &:hover {
+        background-color: var(--ui-interactive-hover);
+        color: var(--ui-text-primary);
+      }
+    }
+
+    &:active {
+      background-color: var(--ui-interactive-active);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--ui-focus-ring);
+      outline-offset: 2px;
+    }
+
+    @media (pointer: coarse) {
+      min-height: var(--ui-control-xl);
+      padding: 0 var(--ui-space-3);
+    }
+  }
+
+  .toggleExpanded {
+    border-color: var(--ui-border-subtle);
+    background-color: var(--ui-surface-sunken);
+    color: var(--ui-text-primary);
+  }
+
+  .icon,
+  .chevron {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    color: var(--ui-text-muted);
+  }
+
+  .label {
+    white-space: nowrap;
+  }
+
+  .panel {
+    padding: var(--ui-space-3) var(--ui-space-4);
+    border: 1px solid var(--ui-border-subtle);
+    border-radius: var(--ui-radius-md);
+    background-color: var(--ui-surface-sunken);
+    color: var(--ui-text-primary);
+  }
+
+  .meta {
+    margin: 0 0 var(--ui-space-2-5);
+    color: var(--ui-text-secondary);
+    font: var(--ui-type-caption);
+  }
+
+  .summary {
+    font: var(--ui-type-caption);
+    color: var(--ui-text-primary);
+  }
+}

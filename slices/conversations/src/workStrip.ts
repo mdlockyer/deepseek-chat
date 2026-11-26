@@ -201,10 +201,29 @@ export const buildTurnWorkStrip = (
   streaming: boolean,
   now: number,
   stalled: boolean,
-  hasResponse: boolean
+  hasResponse: boolean,
+  compacting = false
 ): TurnWorkStripState => {
   const hasSteps = view.steps.length > 0
   const thinkingEnabled = message.thinking ?? view.steps.some((step) => step.type === 'thinking')
+
+  if (streaming && compacting) {
+    if (!hasSteps) {
+      return {
+        mode: 'waiting',
+        label: translate('compactingConversation'),
+      }
+    }
+    return {
+      mode: 'live',
+      headline: translate('compactingConversation'),
+      detail: null,
+      liveTracks: [],
+      overflowTracks: 0,
+      waitingForUser: false,
+      hasInspectableWork: true,
+    }
+  }
 
   if (!hasSteps) {
     if (streaming && !hasResponse) {
