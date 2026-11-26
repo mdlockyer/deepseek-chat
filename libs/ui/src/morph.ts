@@ -32,7 +32,7 @@ export type MorphMotion = {
 export const MORPH_EDGE = -1
 
 /** How long a closing MorphMenu stays mounted while it folds back into its trigger. */
-export const MORPH_CLOSE_MS = 180
+export const MORPH_CLOSE_MS = 140
 
 export const MORPH_FADE_EASE = 'cubic-bezier(0.22, 1, 0.36, 1)'
 
@@ -49,19 +49,19 @@ export const spring = (zeta: number) => {
 export const easeOutCubic = (t: number) => 1 - (1 - t) ** 3
 
 /**
- * Open: the menu spreads sideways on a firm spring (about 0.6% overshoot, 170ms) slightly ahead
- * of growing vertically on a slightly livelier one (about 1.5%, 250ms), so it unfolds out of the trigger
- * rather than scaling. Both are about 90% of the way there by 90ms. Close: height folds first
- * (130ms), then width (160ms), both easing out, so it narrows back into the trigger.
+ * Open: the menu spreads sideways on a firm spring (about 0.6% overshoot, 130ms) slightly ahead
+ * of growing vertically on a slightly livelier one (about 1.5%, 180ms), so it unfolds out of the
+ * trigger rather than scaling. Both are about 90% of the way there by 65ms. Close: height folds
+ * first (100ms), then width (120ms), both easing out, so it narrows back into the trigger.
  */
-export const MORPH_OPEN: MorphMotion = { yMs: 250, y: spring(0.8), xMs: 170, x: spring(0.85) }
-export const MORPH_CLOSE: MorphMotion = { yMs: 130, y: easeOutCubic, xMs: 160, x: easeOutCubic }
+export const MORPH_OPEN: MorphMotion = { yMs: 180, y: spring(0.8), xMs: 130, x: spring(0.85) }
+export const MORPH_CLOSE: MorphMotion = { yMs: 100, y: easeOutCubic, xMs: 120, x: easeOutCubic }
 
 /**
- * Shared icons (see MorphMenu): opening, they fly over the open's 250ms on a near-critical
- * spring (damping 0.9: 78% of the way by 100ms, 99% by 200ms, overshoot under 0.01%), so they
+ * Shared icons (see MorphMenu): opening, they fly over the open's 180ms on a near-critical
+ * spring (damping 0.9: 78% of the way by 72ms, 99% by 144ms, overshoot under 0.01%), so they
  * settle onto their row without the bounce the menu's livelier unfold spring would give a small
- * glyph; closing, they ease out over the close's width fold (160ms).
+ * glyph; closing, they ease out over the close's width fold (120ms).
  */
 export const MORPH_ICON_SPRING = spring(0.9)
 export const MORPH_ICON_CLOSE_EASE = 'cubic-bezier(0.33, 1, 0.68, 1)'

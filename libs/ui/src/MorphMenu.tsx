@@ -38,18 +38,18 @@ export type MorphMenuProps = Omit<
  * A menu that grows out of the button that opens it. The menu opens over its trigger, sharing
  * one corner with it (see `side` and `align`), and its background morphs between the two:
  *
- * - Opening, the trigger's contents fade out as the background fades in on top of them (60ms
- *   and 70ms), the background unfolds from the trigger's box and corners to the menu's (see
+ * - Opening, the trigger's contents fade out as the background fades in on top of them (45ms
+ *   and 50ms), the background unfolds from the trigger's box and corners to the menu's (see
  *   MORPH_OPEN), and the rows, revealed as the background grows over them, slide 8px into place
- *   one after another, nearest the trigger first (10ms apart, 180ms each). Elements marked
+ *   one after another, nearest the trigger first (8ms apart, 140ms each). Elements marked
  *   `data-morph-pop` pop in last on a bouncier spring.
- * - Closing, the rows fade out (50ms), the background folds back into the trigger (see
+ * - Closing, the rows fade out (40ms), the background folds back into the trigger (see
  *   MORPH_CLOSE) and fades out over its second half, and the trigger's contents settle back in.
  *
  * - Shared icons: a trigger element marked `data-morph-from="<key>"` and a menu element marked
  *   `data-morph-to="<key>"` are the same icon in two places. Opening, a copy of the trigger's
- *   icon flies to the menu's on the open spring (250ms) while the real one stays hidden until it
- *   lands; closing, the menu's icon flies back into the trigger (160ms). Size and colour travel
+ *   icon flies to the menu's on the open spring (180ms) while the real one stays hidden until it
+ *   lands; closing, the menu's icon flies back into the trigger (120ms). Size and colour travel
  *   with it. Unmatched icons fade with their row or trigger as above.
  *
  * Either run starts from wherever the previous one was, so reopening mid-close does not jump.
@@ -328,13 +328,13 @@ const MorphBackground = ({
         ...flights.animations,
         ...morph(current?.shape ?? start, full, MORPH_OPEN),
         shell.animate([{ opacity: current?.opacity ?? 0 }, { opacity: 1 }], {
-          duration: 70,
+          duration: 50,
           easing: MORPH_FADE_EASE,
           fill: 'both',
         }),
         ...triggerParts.map((part) =>
           part.animate([{ opacity: current?.triggerOpacity ?? 1 }, { opacity: 0 }], {
-            duration: 60,
+            duration: 45,
             easing: 'linear',
             fill: 'forwards',
           })
@@ -351,8 +351,8 @@ const MorphBackground = ({
                 { opacity: 1, translate: '0 0' },
               ],
               {
-                duration: 180,
-                delay: 12 + fromTrigger * 10,
+                duration: 140,
+                delay: 8 + fromTrigger * 8,
                 easing: MORPH_FADE_EASE,
                 fill: 'backwards',
               }
@@ -364,12 +364,12 @@ const MorphBackground = ({
           return { opacity: Math.min(1, amount * 1.6), scale: `${0.4 + 0.6 * amount}` }
         })
         for (const element of content.querySelectorAll('[data-morph-pop]')) {
-          animations.push(element.animate(pop, { duration: 280, delay: 90, fill: 'backwards' }))
+          animations.push(element.animate(pop, { duration: 220, delay: 65, fill: 'backwards' }))
         }
       } else {
         animations.push(
           content.animate([{ opacity: current?.contentOpacity ?? 0 }, { opacity: 1 }], {
-            duration: 120,
+            duration: 90,
             easing: MORPH_FADE_EASE,
             fill: 'both',
           })
@@ -391,7 +391,7 @@ const MorphBackground = ({
         { duration: MORPH_CLOSE.xMs, easing: 'linear', fill: 'both' }
       ),
       content.animate([{ opacity: current?.contentOpacity ?? 1 }, { opacity: 0 }], {
-        duration: 50,
+        duration: 40,
         easing: 'linear',
         fill: 'both',
       }),
@@ -401,7 +401,7 @@ const MorphBackground = ({
             { opacity: 0, translate: `0 ${3 * away}px` },
             { opacity: 1, translate: '0 0' },
           ],
-          { duration: 110, delay: 60, easing: MORPH_FADE_EASE, fill: 'backwards' }
+          { duration: 90, delay: 45, easing: MORPH_FADE_EASE, fill: 'backwards' }
         )
       ),
     ]
