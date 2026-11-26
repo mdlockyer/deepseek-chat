@@ -16,7 +16,8 @@
     outline: none;
     transition:
       background-color var(--ui-duration-normal) var(--ui-ease-standard),
-      color var(--ui-duration-normal) var(--ui-ease-standard);
+      color var(--ui-duration-normal) var(--ui-ease-standard),
+      transform var(--ui-duration-fast) var(--ui-ease-standard);
 
     @media (hover: hover) {
       &:hover:not(:disabled) {
@@ -26,6 +27,7 @@
 
     &:active:not(:disabled) {
       background-color: var(--ui-interactive-active);
+      transform: scale(0.97);
     }
 
     &:focus-visible {
@@ -82,11 +84,18 @@
     background-color: var(--ui-surface-overlay);
   }
 
+  /* A switch turned on: its icon pops into the pill on the spring. */
+  .iconEntering {
+    animation: model-pill-icon-in var(--ui-duration-spring) var(--ui-ease-panel) both;
+    animation-timing-function: var(--ui-ease-spring);
+  }
+
   .chevron {
     display: inline-flex;
     flex-shrink: 0;
     color: var(--ui-text-muted);
-    transition: transform var(--ui-duration-normal) var(--ui-ease-panel);
+    transition: transform var(--ui-duration-spring) var(--ui-ease-panel);
+    transition-timing-function: var(--ui-ease-spring);
   }
 
   /* The menu opens upwards, so the chevron points up while it is open. */
@@ -99,6 +108,85 @@
     padding: var(--ui-space-1-5);
     border-radius: var(--ui-radius-lg);
     outline: none;
+  }
+
+  /*
+   * Opening: the menu grows out of the pill's corner on a damped spring while it fades and
+   * sharpens in the first 120ms; its rows follow in a short cascade. Closing is a quick, quiet
+   * fade and shrink back toward the pill.
+   */
+  .menu[data-state='open'] {
+    animation:
+      model-menu-grow var(--ui-duration-spring) var(--ui-ease-panel) both,
+      model-menu-fade var(--ui-duration-fast) var(--ui-ease-standard) both;
+    animation-timing-function: var(--ui-ease-spring), var(--ui-ease-standard);
+  }
+
+  .menu[data-state='closed'] {
+    animation: model-menu-close 150ms var(--ui-ease-standard) both;
+  }
+
+  .menu[data-state='open'] .list > * {
+    animation: model-menu-row 240ms var(--ui-ease-panel) both;
+  }
+
+  .menu[data-state='open'] .list > :nth-child(2) {
+    animation-delay: 20ms;
+  }
+
+  .menu[data-state='open'] .list > :nth-child(3) {
+    animation-delay: 40ms;
+  }
+
+  .menu[data-state='open'] .list > :nth-child(4) {
+    animation-delay: 60ms;
+  }
+
+  .menu[data-state='open'] .list > :nth-child(5) {
+    animation-delay: 80ms;
+  }
+
+  .menu[data-state='open'] .list > :nth-child(6) {
+    animation-delay: 100ms;
+  }
+
+  .menu[data-state='open'] .list > :nth-child(n + 7) {
+    animation-delay: 120ms;
+  }
+
+  @keyframes model-menu-grow {
+    from {
+      transform: translateY(8px) scale(0.92);
+    }
+  }
+
+  @keyframes model-menu-fade {
+    from {
+      opacity: 0;
+      filter: blur(4px);
+    }
+  }
+
+  @keyframes model-menu-close {
+    to {
+      opacity: 0;
+      filter: blur(2px);
+      transform: translateY(4px) scale(0.96);
+    }
+  }
+
+  @keyframes model-menu-row {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+  }
+
+  @keyframes model-pill-icon-in {
+    from {
+      opacity: 0;
+      transform: scale(0.4);
+    }
   }
 
   .section {

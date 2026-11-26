@@ -31,6 +31,8 @@ export type PopoverProps = {
   autoFocusSurface?: boolean
   /** Acquires an OverlayPort lock while mounted (default true). */
   lockOverlay?: boolean
+  /** How long the surface stays mounted after closing, for a custom exit animation (default 140ms). */
+  exitDurationMs?: number
   role?: 'dialog' | 'menu' | 'listbox'
   ariaLabel?: string
   className?: string
@@ -57,13 +59,14 @@ export const Popover = ({
   captureEscape = false,
   autoFocusSurface = false,
   lockOverlay = true,
+  exitDurationMs = EXIT_DURATION_MS,
   role = 'dialog',
   ariaLabel,
   className,
   onKeyDown,
   children,
 }: PopoverProps) => {
-  const { mounted, exiting } = usePresence(open, EXIT_DURATION_MS)
+  const { mounted, exiting } = usePresence(open, exitDurationMs)
   const {
     anchorRef: internalAnchorRef,
     floatingRef,
@@ -113,6 +116,8 @@ export const Popover = ({
       aria-label={ariaLabel}
       data-ui-floating=""
       data-side={position?.resolvedSide ?? side}
+      data-align={align}
+      data-state={exiting ? 'closed' : 'open'}
       className={clsx(styles.surface, exiting && styles.exiting, className)}
       style={
         position

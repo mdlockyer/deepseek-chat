@@ -5,7 +5,7 @@ import {
   Switch,
 } from '@deepseek-chat/lib-ui'
 import clsx from 'clsx'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslate } from '../../messages.js'
 import { handleMenuRowKey, type ComposerToolSwitch } from './ComposerMenu.js'
 import styles from './ModelMenu.module.css'
@@ -28,6 +28,18 @@ export const ModelMenu = ({
   const anchorRef = useRef<HTMLButtonElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
   const active = tools.filter((tool) => tool.checked)
+  // Icons already shown (or present on first render) appear without the pop-in animation.
+  const seenIconsRef = useRef<Set<string> | null>(null)
+  if (seenIconsRef.current === null) {
+    seenIconsRef.current = new Set(active.map((tool) => tool.key))
+  }
+  const seenIcons = seenIconsRef.current
+  useEffect(() => {
+    seenIcons.clear()
+    for (const tool of active) {
+      seenIcons.add(tool.key)
+    }
+  })
   const summary =
     active.length > 0
       ? t('modelMenuSummary', {
@@ -52,7 +64,10 @@ export const ModelMenu = ({
         {active.length > 0 ? (
           <span className={styles.icons} aria-hidden="true">
             {active.map((tool) => (
-              <span key={tool.key} className={styles.icon}>
+              <span
+                key={tool.key}
+                className={clsx(styles.icon, !seenIcons.has(tool.key) && styles.iconEntering)}
+              >
                 {tool.icon}
               </span>
             ))}
@@ -70,6 +85,7 @@ export const ModelMenu = ({
         align="end"
         offset={8}
         measureKey={tools.length}
+        exitDurationMs={150}
         autoFocusSurface
         role="dialog"
         ariaLabel={t('modelMenuLabel')}
@@ -80,7 +96,7 @@ export const ModelMenu = ({
           }
         }}
       >
-        <div ref={listRef}>
+        <div ref={listRef} className={styles.list}>
           <p className={styles.section}>{t('modelMenuModel')}</p>
           <div className={styles.modelRow}>
             <span className={styles.modelRowLabel}>{modelLabel}</span>

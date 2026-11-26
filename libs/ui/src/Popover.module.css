@@ -27,6 +27,23 @@
     transform-origin: top left;
   }
 
+  /* Grow from the corner nearest the anchor. */
+  .surface[data-side='top'][data-align='end'] {
+    transform-origin: bottom right;
+  }
+
+  .surface[data-side='bottom'][data-align='end'] {
+    transform-origin: top right;
+  }
+
+  .surface[data-side='top'][data-align='center'] {
+    transform-origin: bottom center;
+  }
+
+  .surface[data-side='bottom'][data-align='center'] {
+    transform-origin: top center;
+  }
+
   .exiting {
     animation: ui-popover-out 140ms var(--ui-ease-standard) both;
     pointer-events: none;
