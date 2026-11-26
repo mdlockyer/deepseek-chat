@@ -1,8 +1,25 @@
 @layer slice {
-  .container {
-    position: absolute;
-    inset: 0;
+  /* Above and below share the free height equally, so the composer between them sits at the
+     centre; `below` reserves 68px more, which lifts the composer to where the old centred
+     layout put it (64px lift, plus the 4px the composer slot's top padding added). */
+  .above,
+  .below {
     display: flex;
+    flex: 1 1 0;
+    flex-direction: column;
+    align-items: center;
+    min-height: 0;
+    box-sizing: border-box;
+    padding: 0 var(--message-list-padding-horizontal);
+  }
+
+  .above {
+    justify-content: flex-end;
+  }
+
+  .below {
+    justify-content: flex-start;
+    padding-bottom: calc(64px + var(--ui-space-1));
   }
 
   /* 新对话：品牌放在会话标题的位置，左对齐与标题一致，垂直中心与交通灯同一线；右侧常驻设置按钮 */
@@ -67,31 +84,12 @@
     color: var(--ui-text-primary);
   }
 
-  .welcome {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    box-sizing: border-box;
-    width: 100%;
-    max-width: var(--message-list-max-width);
-    margin: auto;
-    padding: 0 var(--message-list-padding-horizontal) 64px;
-    animation: welcome-in var(--ui-duration-normal) var(--ui-ease-panel) both;
-  }
-
-  @keyframes welcome-in {
-    from {
-      opacity: 0;
-      transform: translateY(8px);
-    }
-  }
-
   .greeting {
     display: flex;
     align-items: center;
     justify-content: center;
-    margin-bottom: var(--ui-space-6);
+    /* 24px to the composer box: 16px here plus the composer slot's 8px top padding. */
+    margin-bottom: var(--ui-space-4);
     font: var(--ui-type-display);
     letter-spacing: var(--ui-tracking-tight);
     text-align: center;
@@ -178,17 +176,16 @@
     }
   }
 
+  /* Mobile: the greeting floats in the free space, the composer sits on the bottom edge as it
+     does in a conversation, and the cue and caveat follow it. */
   @media not all and (min-width: 768px) {
-    .container {
-      flex-direction: column;
+    /* The mobile header spans the full width; the greeting keeps its own side margins. */
+    .above {
+      padding: 0;
     }
 
-    .welcome {
-      flex: 1;
-      min-height: 0;
-      justify-content: flex-end;
-      max-width: none;
-      margin: 0;
+    .below {
+      flex: 0 0 auto;
       padding: 0 var(--ui-space-4) env(safe-area-inset-bottom);
     }
 

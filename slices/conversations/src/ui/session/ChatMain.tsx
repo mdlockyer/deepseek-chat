@@ -6,9 +6,8 @@ import type { ConversationsRuntime } from '../../runtime.js'
 import type { SiderMode } from '../../views.js'
 import styles from './ChatMain.module.css'
 import { MobileHeader } from './MobileHeader.js'
-import { SessionView } from './SessionView.js'
+import { ChatStage } from './ChatStage.js'
 import { SettingsHeaderButton } from './SettingsHeaderButton.js'
-import { Welcome } from './Welcome.js'
 
 /** 保存失败时的提示条，可重试 */
 export const ChatSaveBanner = () => {
@@ -107,14 +106,12 @@ export const ChatMain = ({ siderMode }: { siderMode: SiderMode }) => {
       </div>
     )
   }
-  return session ? (
-    <SessionView
+  return (
+    <ChatStage
       session={session}
       streaming={streaming}
       compacting={compacting}
       siderMode={siderMode}
     />
-  ) : (
-    <Welcome siderMode={siderMode} />
   )
 }

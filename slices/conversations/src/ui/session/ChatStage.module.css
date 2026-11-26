@@ -1,0 +1,198 @@
+@layer slice {
+  .stage {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* One composer for both screens, at the conversation column's width so it never resizes
+     while it travels. */
+  .composerSlot {
+    position: relative;
+    z-index: var(--ui-z-sticky);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex-shrink: 0;
+    box-sizing: border-box;
+    width: calc(var(--message-list-max-width) - var(--message-list-padding-horizontal) * 2);
+    max-width: calc(100% - var(--ui-space-8));
+    margin: 0 auto;
+    padding-top: var(--ui-space-2);
+    background: var(--ui-surface-canvas);
+  }
+
+  /* In a conversation, messages fade out under the composer's top edge. */
+  .stage[data-mode='chat'] .composerSlot::before {
+    content: '';
+    position: absolute;
+    bottom: 100%;
+    left: 0;
+    right: 0;
+    height: 18px;
+    pointer-events: none;
+    background: linear-gradient(to bottom, transparent, var(--ui-surface-canvas));
+  }
+
+  .caveat {
+    width: 100%;
+    padding: var(--ui-space-1-5) 0;
+    font-size: var(--ui-font-size-xs);
+    line-height: var(--ui-leading-xs);
+    text-align: center;
+    color: var(--ui-text-muted);
+    user-select: none;
+  }
+
+  @media not all and (min-width: 768px) {
+    .composerSlot {
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+  }
+
+  /* Outgoing copies sit above the new screen and under the composer and title bar. */
+  .ghostLayer {
+    position: absolute;
+    inset: 0;
+    z-index: var(--ui-z-base);
+    overflow: hidden;
+    pointer-events: none;
+  }
+
+  .ghost {
+    position: absolute;
+    box-sizing: border-box;
+    margin: 0;
+    overflow: hidden;
+    animation: stage-fade-out var(--ui-duration-fast) var(--ui-ease-fade) both;
+  }
+
+  /* ---- Launch: the first message is sent ---------------------------------------------- */
+
+  /* The greeting lifts away first; the composer starts 40 ms later. */
+  .stage[data-transition='launch'] .ghost[data-ghost='greeting'] {
+    animation: stage-lift-out var(--ui-duration-fast) var(--ui-ease-fade) both;
+  }
+
+  /* The brand hands over to the chat title at 300 ms. */
+  .stage[data-transition='launch'] .ghost[data-ghost='brand'] {
+    animation: stage-fade-out var(--ui-duration-normal) var(--ui-ease-fade) var(--ui-duration-fast)
+      both;
+  }
+
+  .stage[data-transition='launch'] [data-stage-enter='title'],
+  .stage[data-transition='launch'] [data-stage-enter='actions'] {
+    animation: stage-fade-in var(--ui-duration-normal) var(--ui-ease-fade) var(--ui-duration-slow)
+      both;
+  }
+
+  /* The sent message rises into place from 120 ms while the composer is still travelling. */
+  .stage[data-transition='launch'] [data-stage-enter='messages'] > :first-child {
+    transform-origin: 100% 100%;
+    animation: stage-bubble-in var(--ui-duration-slow) var(--ui-ease-fade) var(--ui-duration-fast)
+      both;
+  }
+
+  /* The reply's "Thinking" strip follows at 300 ms. */
+  .stage[data-transition='launch'] [data-stage-enter='messages'] > :nth-child(n + 2) {
+    animation: stage-fade-in var(--ui-duration-normal) var(--ui-ease-fade) var(--ui-duration-slow)
+      both;
+  }
+
+  /* The caveat appears once the composer has landed. */
+  .stage[data-transition='launch'] [data-stage-enter='caveat'] {
+    animation: stage-fade-in var(--ui-duration-normal) var(--ui-ease-fade) var(--ui-duration-spring)
+      both;
+  }
+
+  /* ---- Home: a new chat is started from a conversation -------------------------------- */
+
+  .stage[data-transition='home'] .ghost[data-ghost='list'] {
+    animation: stage-fade-out var(--ui-duration-normal) var(--ui-ease-fade) both;
+  }
+
+  /* The greeting settles in from above as the composer rises to meet it. */
+  .stage[data-transition='home'] [data-stage-enter='greeting'] {
+    animation: stage-settle-in var(--ui-duration-slow) var(--ui-ease-fade) var(--ui-duration-fast)
+      both;
+  }
+
+  .stage[data-transition='home'] [data-stage-enter='brand'],
+  .stage[data-transition='home'] [data-stage-enter='below'] {
+    animation: stage-fade-in var(--ui-duration-normal) var(--ui-ease-fade) var(--ui-duration-slow)
+      both;
+  }
+
+  /* ---- Open and swap: a plain crossfade, no travel ------------------------------------ */
+
+  .stage[data-transition='open'] [data-stage-enter='messages'],
+  .stage[data-transition='open'] [data-stage-enter='title'],
+  .stage[data-transition='open'] [data-stage-enter='actions'],
+  .stage[data-transition='open'] .composerSlot:not(.ghost),
+  .stage[data-transition='swap'] [data-stage-enter='messages'] {
+    animation: stage-fade-in var(--ui-duration-normal) var(--ui-ease-fade) var(--ui-duration-fast)
+      both;
+  }
+
+  /* ---- First screen after startup ------------------------------------------------------ */
+
+  .stage[data-intro] [data-stage-enter='greeting'] {
+    animation: stage-rise-in var(--ui-duration-normal) var(--ui-ease-panel) both;
+  }
+
+  @keyframes stage-fade-in {
+    from {
+      opacity: 0;
+    }
+  }
+
+  @keyframes stage-fade-out {
+    to {
+      opacity: 0;
+    }
+  }
+
+  @keyframes stage-lift-out {
+    to {
+      opacity: 0;
+      transform: translateY(calc(var(--ui-space-2) * -1));
+    }
+  }
+
+  @keyframes stage-bubble-in {
+    from {
+      opacity: 0;
+      transform: translateY(var(--ui-space-3)) scale(0.98);
+    }
+  }
+
+  @keyframes stage-settle-in {
+    from {
+      opacity: 0;
+      transform: translateY(calc(var(--ui-space-2) * -1));
+    }
+  }
+
+  @keyframes stage-rise-in {
+    from {
+      opacity: 0;
+      transform: translateY(var(--ui-space-2));
+    }
+  }
+
+  /* Reduced motion: nothing travels or drifts; everything crossfades in place over 150ms. The
+     duration tokens collapse to 1ms here, so these are set directly. */
+  @media (prefers-reduced-motion: reduce) {
+    .stage .ghost,
+    .stage[data-transition] .ghost[data-ghost] {
+      animation: stage-fade-out 150ms var(--ui-ease-fade) both;
+    }
+
+    .stage[data-transition] [data-stage-enter],
+    .stage[data-transition] [data-stage-enter='messages'] > *,
+    .stage[data-transition='open'] .composerSlot:not(.ghost) {
+      animation: stage-fade-in 150ms var(--ui-ease-fade) both;
+    }
+  }
+}

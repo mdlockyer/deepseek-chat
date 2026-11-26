@@ -31,7 +31,8 @@ export const MessageList = ({
   session: Session
   streaming: boolean
   compacting?: boolean
-  footer: React.ReactNode
+  /** Rendered under the scroll area; the session stage places the composer itself. */
+  footer?: React.ReactNode
 }) => {
   const { selectMessageVersion } = useConversations()
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -174,8 +175,8 @@ export const MessageList = ({
     <ScrollToBottomContext.Provider value={scrollToBottom}>
       <ScrollFollowContext.Provider value={follow}>
         <div className={styles.container}>
-          <div ref={scrollRef} className={styles.scroll}>
-            <div ref={contentRef} className={styles.column}>
+          <div ref={scrollRef} className={styles.scroll} data-message-scroll>
+            <div ref={contentRef} className={styles.column} data-stage-enter="messages">
               {messages.map((message, index) => {
                 const anchoredCheckpoints = checkpointsByAnchor.get(message.id)
                 return (

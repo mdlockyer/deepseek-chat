@@ -16,6 +16,7 @@ import { groupSessions } from '../../sessionGroups.js'
 import { type SessionSummary } from '../../types.js'
 import { NewChatIcon } from './NewChatIcon.js'
 import { SessionItem } from './SessionItem.js'
+import { useListFlip } from './useListFlip.js'
 import styles from './Sider.module.css'
 
 /**
@@ -45,6 +46,10 @@ export const Sider = ({
   const shownDeleting = deleting ?? lastDeletingRef.current
   const [deletePending, setDeletePending] = useState(false)
   const listRef = useRef<HTMLDivElement | null>(null)
+  useListFlip(
+    listRef,
+    groups.map((group) => `${group.key}:${group.sessions.map((s) => s.id).join(',')}`).join('|')
+  )
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>
@@ -138,7 +143,9 @@ export const Sider = ({
             <ul className={styles.groups}>
               {groups.map((group) => (
                 <li key={group.key} className={styles.section}>
-                  <div className={styles.sectionHeader}>{group.label}</div>
+                  <div className={styles.sectionHeader} data-flip-key={`section:${group.key}`}>
+                    {group.label}
+                  </div>
                   <ul className={styles.sessions}>
                     {group.sessions.map((session) => (
                       <SessionItem

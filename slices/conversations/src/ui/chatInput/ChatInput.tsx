@@ -58,21 +58,40 @@ const useCapabilityToggles = (tools: ToolRegistry): ComposerToolSwitch[] => {
 export const ChatInput = memo(function ChatInput({
   sessionId,
   caveat = false,
+  instanceKey,
+  onSent,
 }: {
   sessionId: string | null
   /** Show the AI caveat centred under the box (conversation view). */
   caveat?: boolean
+  /**
+   * Identity of the composer instance. Defaults to one instance per session; a caller can keep
+   * the same instance across a session change (the new-chat composer becoming the first chat's
+   * composer) so focus and the element itself carry over.
+   */
+  instanceKey?: string
+  /** Called after a message is accepted for sending, before the next render. */
+  onSent?: (fromSessionId: string | null) => void
 }) {
   return (
     <Input
-      key={sessionId === null ? 'new' : `session:${sessionId}`}
+      key={instanceKey ?? (sessionId === null ? 'new' : `session:${sessionId}`)}
       sessionId={sessionId}
       caveat={caveat}
+      onSent={onSent}
     />
   )
 })
 
-const Input = ({ sessionId, caveat }: { sessionId: string | null; caveat: boolean }) => {
+const Input = ({
+  sessionId,
+  caveat,
+  onSent,
+}: {
+  sessionId: string | null
+  caveat: boolean
+  onSent?: (fromSessionId: string | null) => void
+}) => {
   const t = useTranslate()
   const {
     deps,
@@ -193,6 +212,7 @@ const Input = ({ sessionId, caveat }: { sessionId: string | null; caveat: boolea
     if (!ensureApiKey() || !sendMessage(sessionId)) {
       return
     }
+    onSent?.(sessionId)
     if (isMobile) {
       textareaRef.current?.blur()
     } else {
@@ -335,7 +355,13 @@ const Input = ({ sessionId, caveat }: { sessionId: string | null; caveat: boolea
             </span>
           ) : null}
         </div>
-        {caveat ? <p className={styles.caveat}>{t('contentCaveat')}</p> : <span />}
+        {caveat ? (
+          <p className={styles.caveat} data-stage-enter="caveat">
+            {t('contentCaveat')}
+          </p>
+        ) : (
+          <span />
+        )}
         <div className={styles.right}>
           <ModelMenu modelLabel={modelLabel} tools={composerTools} disabled={importingHistory} />
         </div>

@@ -5,15 +5,16 @@ import { sessionTitle } from '../../format.js'
 import { useTranslate } from '../../messages.js'
 import { type Session } from '../../types.js'
 import type { SiderMode } from '../../views.js'
-import { ChatInput } from '../chatInput/ChatInput.js'
 import { MessageList } from '../messages/MessageList.js'
+import { SwapLabel } from '../messages/SwapLabel.js'
 import { MobileHeader } from './MobileHeader.js'
 import styles from './SessionView.module.css'
 import { SettingsHeaderButton } from './SettingsHeaderButton.js'
 
-const useNoDock = () => false
-
-/** 会话页：标题栏（移动端为顶栏）+ 消息列表，输入框吸底 */
+/**
+ * Conversation, above the composer: the title bar (top bar on mobile) and the message list. The
+ * session stage places the composer under it.
+ */
 export const SessionView = ({
   session,
   streaming,
@@ -27,9 +28,8 @@ export const SessionView = ({
 }) => {
   const t = useTranslate()
   const isMobile = useIsMobile()
-  const { deps, stopReply } = useConversations()
-  const { headerActions = [], composerDock: ComposerDock, useHasComposerDock = useNoDock } = deps.ui
-  const hasDock = useHasComposerDock(session.id)
+  const { deps } = useConversations()
+  const { headerActions = [] } = deps.ui
   const title = sessionTitle(session, t('untitledChat'))
   return (
     <div className={styles.view}>
@@ -40,12 +40,20 @@ export const SessionView = ({
           <div
             className={clsx(styles.title, siderMode === 'collapsed' && styles.withCollapsedSider)}
             data-tauri-drag-region
+            data-stage-exit="title"
+            data-stage-enter="title"
           >
-            {title}
+            <SwapLabel swapKey={title} className={styles.titleText}>
+              {title}
+            </SwapLabel>
           </div>
           <div className={styles.headerActions}>
             {headerActions.length > 0 ? (
-              <div className={styles.sessionActions}>
+              <div
+                className={styles.sessionActions}
+                data-stage-exit="actions"
+                data-stage-enter="actions"
+              >
                 {headerActions.map((Action, index) => (
                   <Action key={index} sessionId={session.id} />
                 ))}
@@ -55,23 +63,9 @@ export const SessionView = ({
           </div>
         </div>
       )}
-      <MessageList
-        session={session}
-        streaming={streaming}
-        compacting={compacting}
-        footer={
-          <div className={styles.inputContainer}>
-            {hasDock && ComposerDock ? (
-              <>
-                <ComposerDock sessionId={session.id} onStopReply={() => stopReply(session.id)} />
-                <div className={styles.caveat}>{t('contentCaveat')}</div>
-              </>
-            ) : (
-              <ChatInput sessionId={session.id} caveat />
-            )}
-          </div>
-        }
-      />
+      <div className={styles.list} data-stage-exit="list">
+        <MessageList session={session} streaming={streaming} compacting={compacting} />
+      </div>
     </div>
   )
 }

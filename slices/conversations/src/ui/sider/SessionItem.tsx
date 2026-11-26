@@ -65,6 +65,7 @@ export const SessionItem = memo(function SessionItem({
   return (
     <li
       className={clsx(styles.item, active && styles.active)}
+      data-flip-key={session.id}
       style={enterDelay ? { animationDelay: `${enterDelay}ms` } : undefined}
       {...hoverGlideItem(active)}
     >
