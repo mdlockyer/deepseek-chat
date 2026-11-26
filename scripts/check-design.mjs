@@ -75,7 +75,27 @@ const darkVars = extractBlockVars(tokensCss, ":root[data-theme='dark']")
 const definedUiTokens = new Set([...lightVars.keys()].filter((name) => name.startsWith('--ui-')))
 
 // D7: Automated WCAG 2.2 AA contrast & token symmetry verification on tokens.css
-const resolveVar = (name, themeVars, baseVars, depth = 0) => {
+/** Splits `a, b` at the top-level comma, ignoring commas nested inside parentheses. */
+const splitTopLevelComma = (text) => {
+  let depth = 0
+  for (let i = 0; i < text.length; i += 1) {
+    const ch = text[i]
+    if (ch === '(') {
+      depth += 1
+    } else if (ch === ')') {
+      depth -= 1
+    } else if (ch === ',' && depth === 0) {
+      return [text.slice(0, i).trim(), text.slice(i + 1).trim()]
+    }
+  }
+  return null
+}
+
+/**
+ * Resolves a token to a concrete color for one theme. Tokens are written once with
+ * `light-dark(<light>, <dark>)`; the dark block may still override a token outright.
+ */
+const resolveVar = (name, themeVars, baseVars, themeName, depth = 0) => {
   if (depth >= 8) {
     fail('D7', `Circular CSS variable reference at ${name}`)
     return null
@@ -85,10 +105,59 @@ const resolveVar = (name, themeVars, baseVars, depth = 0) => {
     fail('D7', `Undefined CSS variable ${name}`)
     return null
   }
-  const ref = /^var\((--[\w-]+)\)$/.exec(raw)
-  return ref ? resolveVar(ref[1], themeVars, baseVars, depth + 1) : raw
+  return resolveValue(raw, themeVars, baseVars, themeName, depth)
 }
 
+const resolveValue = (raw, themeVars, baseVars, themeName, depth) => {
+  const lightDark = /^light-dark\(([\s\S]*)\)$/.exec(raw)
+  if (lightDark) {
+    const parts = splitTopLevelComma(lightDark[1])
+    if (!parts) {
+      fail('D7', `Malformed light-dark() value "${raw}"`)
+      return null
+    }
+    return resolveValue(
+      themeName === 'dark' ? parts[1] : parts[0],
+      themeVars,
+      baseVars,
+      themeName,
+      depth + 1
+    )
+  }
+  const ref = /^var\((--[\w-]+)\)$/.exec(raw)
+  return ref ? resolveVar(ref[1], themeVars, baseVars, themeName, depth + 1) : raw
+}
+
+/** Converts OKLCH to linear-light sRGB; channels outside 0–1 mean the color is out of gamut. */
+const oklchToLinearRgb = (l, c, h) => {
+  const a = c * Math.cos((h * Math.PI) / 180)
+  const b = c * Math.sin((h * Math.PI) / 180)
+  const l_ = (l + 0.3963377774 * a + 0.2158037573 * b) ** 3
+  const m_ = (l - 0.1055613458 * a - 0.0638541728 * b) ** 3
+  const s_ = (l - 0.0894841775 * a - 1.291485548 * b) ** 3
+  return [
+    4.0767416621 * l_ - 3.3077115913 * m_ + 0.2309699292 * s_,
+    -1.2684380046 * l_ + 2.6097574011 * m_ - 0.3413193965 * s_,
+    -0.0041960863 * l_ - 0.7034186147 * m_ + 1.707614701 * s_,
+  ]
+}
+
+const OKLCH_RE = /^oklch\(\s*([\d.]+)(%?)\s+([\d.]+)\s+([\d.]+)\s*(?:\/\s*[\d.]+%?\s*)?\)$/i
+const OKLCH_OPAQUE_RE = /^oklch\(\s*([\d.]+)(%?)\s+([\d.]+)\s+([\d.]+)\s*\)$/i
+const parseOklch = (match) => [
+  Number(match[1]) / (match[2] === '%' ? 100 : 1),
+  Number(match[3]),
+  Number(match[4]),
+]
+
+/** Converts OKLCH to gamma-encoded sRGB channels (0–255), clamped to the sRGB gamut. */
+const oklchToRgb = (l, c, h) =>
+  oklchToLinearRgb(l, c, h).map((x) => {
+    const v = Math.min(1, Math.max(0, x))
+    return Math.round((v <= 0.0031308 ? 12.92 * v : 1.055 * v ** (1 / 2.4) - 0.055) * 255)
+  })
+
+/** Parses an opaque color (hex, rgb(), oklch()); returns null for translucent or unknown values. */
 const parseRgb = (color) => {
   const hex = /^#([0-9a-f]{6})$/i.exec(color)
   if (hex) {
@@ -99,7 +168,20 @@ const parseRgb = (color) => {
   if (rgb) {
     return [Number(rgb[1]), Number(rgb[2]), Number(rgb[3])]
   }
+  const oklch = OKLCH_OPAQUE_RE.exec(color)
+  if (oklch) {
+    return oklchToRgb(...parseOklch(oklch))
+  }
   return null
+}
+
+// D7: every OKLCH primitive must sit inside the sRGB gamut, so the hex fallbacks that Lightning
+// CSS emits for older engines match what modern engines draw.
+for (const [name, value] of lightVars) {
+  const match = OKLCH_RE.exec(value)
+  if (match && oklchToLinearRgb(...parseOklch(match)).some((x) => x < -0.002 || x > 1.002)) {
+    fail('D7', `${name} (${value}) is outside the sRGB gamut`)
+  }
 }
 
 const luminance = ([r, g, b]) => {
@@ -168,8 +250,8 @@ for (const [themeName, themeMap] of [
   ['dark', darkVars],
 ]) {
   for (const [fgVar, bgVar] of TEXT_CONTRAST_PAIRS) {
-    const fg = resolveVar(fgVar, themeMap, lightVars)
-    const bg = resolveVar(bgVar, themeMap, lightVars)
+    const fg = resolveVar(fgVar, themeMap, lightVars, themeName)
+    const bg = resolveVar(bgVar, themeMap, lightVars, themeName)
     if (!fg || !bg) {
       continue
     }
@@ -188,8 +270,8 @@ for (const [themeName, themeMap] of [
     }
   }
   for (const [fgVar, bgVar] of UI_CONTRAST_PAIRS) {
-    const fg = resolveVar(fgVar, themeMap, lightVars)
-    const bg = resolveVar(bgVar, themeMap, lightVars)
+    const fg = resolveVar(fgVar, themeMap, lightVars, themeName)
+    const bg = resolveVar(bgVar, themeMap, lightVars, themeName)
     if (!fg || !bg) {
       continue
     }
