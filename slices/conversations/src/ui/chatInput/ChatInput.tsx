@@ -113,7 +113,6 @@ const Input = ({ sessionId, caveat }: { sessionId: string | null; caveat: boolea
   const capabilitySwitches = useCapabilityToggles(tools)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-  const boxRef = useRef<HTMLDivElement>(null)
 
   const visibleMessages = useMemo(() => (session ? getVisibleMessages(session) : []), [session])
   const hasCompactableTurns = useMemo(
@@ -215,7 +214,6 @@ const Input = ({ sessionId, caveat }: { sessionId: string | null; caveat: boolea
   return (
     <div className={styles.composer}>
       <div
-        ref={boxRef}
         className={styles.wrapper}
         onClick={(event) => {
           if (event.target === event.currentTarget) {
@@ -339,12 +337,7 @@ const Input = ({ sessionId, caveat }: { sessionId: string | null; caveat: boolea
         </div>
         {caveat ? <p className={styles.caveat}>{t('contentCaveat')}</p> : <span />}
         <div className={styles.right}>
-          <ModelMenu
-            modelLabel={modelLabel}
-            tools={composerTools}
-            disabled={importingHistory}
-            positionRef={boxRef}
-          />
+          <ModelMenu modelLabel={modelLabel} tools={composerTools} disabled={importingHistory} />
         </div>
       </div>
     </div>

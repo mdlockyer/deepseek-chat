@@ -18,11 +18,6 @@ export type PopoverProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   anchorRef: RefObject<HTMLElement | null>
-  /**
-   * Element to place the surface against, when it differs from the trigger (default: anchorRef).
-   * The trigger still owns outside-click dismissal and focus return.
-   */
-  positionRef?: RefObject<HTMLElement | null>
   side?: Side
   align?: Align
   alignOffset?: number
@@ -54,7 +49,6 @@ export const Popover = ({
   open,
   onOpenChange,
   anchorRef,
-  positionRef,
   side = 'bottom',
   align = 'start',
   alignOffset = 0,
@@ -87,7 +81,7 @@ export const Popover = ({
     measureKey,
   })
 
-  internalAnchorRef.current = (positionRef ?? anchorRef).current
+  internalAnchorRef.current = anchorRef.current
 
   const dismiss = useCallback(
     (restoreFocus: boolean) => {

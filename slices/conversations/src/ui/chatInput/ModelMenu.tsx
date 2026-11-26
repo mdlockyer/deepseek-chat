@@ -5,7 +5,7 @@ import {
   Switch,
 } from '@deepseek-chat/lib-ui'
 import clsx from 'clsx'
-import { useEffect, useRef, useState, type RefObject } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslate } from '../../messages.js'
 import { handleMenuRowKey, type ComposerToolSwitch } from './ComposerMenu.js'
 import styles from './ModelMenu.module.css'
@@ -18,13 +18,10 @@ export const ModelMenu = ({
   modelLabel,
   tools,
   disabled = false,
-  positionRef,
 }: {
   modelLabel: string
   tools: ComposerToolSwitch[]
   disabled?: boolean
-  /** Element the menu opens above (the composer box), so it never covers the draft. */
-  positionRef?: RefObject<HTMLElement | null>
 }) => {
   const t = useTranslate()
   const [open, setOpen] = useState(false)
@@ -84,7 +81,6 @@ export const ModelMenu = ({
         open={open}
         onOpenChange={setOpen}
         anchorRef={anchorRef}
-        positionRef={positionRef}
         side="top"
         align="end"
         offset={8}
