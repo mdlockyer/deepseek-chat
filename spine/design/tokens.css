@@ -284,8 +284,7 @@
     --ui-duration-spring: 440ms;
     --ui-ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
     --ui-ease-panel: cubic-bezier(0.32, 0.72, 0, 1);
-    /* Decelerating curve for opacity fades. Layers that fade together (a dialog
-       and its scrim) share it so neither visibly leads the other. */
+    /* Decelerating curve for opacity fades: quick to start, soft to settle. */
     --ui-ease-fade: cubic-bezier(0.2, 0, 0, 1);
     /* Soft damped spring (about 1.1% overshoot) sampled for linear(); pair it with
        --ui-duration-spring. Engines without linear() fall back to plain ease. */

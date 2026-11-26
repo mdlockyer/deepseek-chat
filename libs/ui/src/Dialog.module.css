@@ -9,24 +9,32 @@
     max-width: calc(100vw - var(--ui-space-8));
     max-height: calc(100dvh - var(--ui-space-8));
     opacity: 0;
-    transition-property: opacity, display, overlay;
-    transition-duration: var(--ui-duration-normal);
-    transition-timing-function: var(--ui-ease-fade);
-    transition-behavior: allow-discrete;
 
-    /* The scrim fades on the same duration and curve as the dialog so the two
-       arrive together. Only opacity animates: a fixed colour faded by opacity is
-       composited, whereas animating background-color or backdrop-filter repaints
-       (and re-blurs) the whole page behind the dialog on every frame. */
+    /* Order of the two fades. While the panel is partly transparent, the dark
+       scrim shows through it, so the white panel flashes grey if both fade at
+       once. The panel therefore stays opaque whenever the scrim is dark: on open
+       it fades in ahead of the scrim, and on close (the transitions below) the
+       scrim clears first and the panel fades out after it. Closing finishes
+       within --ui-duration-normal, before Dialog.tsx unmounts the content at
+       200 ms.
+       Only opacity animates: a fixed scrim colour faded by opacity is composited,
+       whereas animating background-color or backdrop-filter repaints the whole
+       page behind the dialog on every frame. */
+    transition:
+      opacity var(--ui-duration-fast) var(--ui-ease-fade)
+        calc(var(--ui-duration-normal) - var(--ui-duration-fast)),
+      display var(--ui-duration-normal) allow-discrete,
+      overlay var(--ui-duration-normal) allow-discrete;
+
     &::backdrop {
       background-color: var(--ui-surface-scrim);
       opacity: 0;
       overflow: hidden;
       overscroll-behavior: contain;
-      transition-property: opacity, display, overlay;
-      transition-duration: var(--ui-duration-normal);
-      transition-timing-function: var(--ui-ease-fade);
-      transition-behavior: allow-discrete;
+      transition:
+        opacity var(--ui-duration-fast) var(--ui-ease-fade),
+        display var(--ui-duration-normal) allow-discrete,
+        overlay var(--ui-duration-normal) allow-discrete;
     }
   }
 
@@ -36,13 +44,24 @@
 
   .dialog[open]:where(:not([data-closing])) {
     opacity: 1;
+    transition:
+      opacity var(--ui-duration-fast) var(--ui-ease-fade),
+      display var(--ui-duration-normal) allow-discrete,
+      overlay var(--ui-duration-normal) allow-discrete;
 
     @starting-style {
       opacity: 0;
     }
 
+    /* Starts a beat after the panel on a slow-starting curve, so the panel is
+       nearly opaque before the scrim darkens behind it. */
     &::backdrop {
       opacity: 1;
+      transition:
+        opacity var(--ui-duration-normal) var(--ui-ease-standard)
+          calc((var(--ui-duration-normal) - var(--ui-duration-fast)) / 2),
+        display var(--ui-duration-normal) allow-discrete,
+        overlay var(--ui-duration-normal) allow-discrete;
 
       @starting-style {
         opacity: 0;
