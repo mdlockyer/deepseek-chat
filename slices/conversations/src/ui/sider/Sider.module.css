@@ -31,7 +31,7 @@
   }
 
   /* 内部容器保持展开时的完整宽度（261px = 12 左内边距 + 236 内容 + 13 右内边距含 1px 边线）：
-     开合过程中只做裁切而不发生任何 12px 水平位移；非切换按钮内容在收起时统一淡出 */
+     开合过程中只做裁切而不发生任何水平位移。内容不淡入淡出：移动的面板边缘把它露出或盖住 */
   .siderInner {
     display: flex;
     flex-direction: column;
@@ -41,25 +41,13 @@
     padding: 0 calc(var(--ui-space-3) + 1px) 0 var(--ui-space-3);
   }
 
+  /* Closing runs a little faster than opening; visibility flips only once the edge has landed. */
   .collapsedSider {
     width: 0;
     visibility: hidden;
     transition:
-      width var(--ui-duration-panel) var(--ui-ease-panel),
-      visibility 0s linear var(--ui-duration-panel);
-  }
-
-  .listWrap,
-  .top {
-    transition: opacity var(--ui-duration-normal) var(--ui-ease-panel) 80ms;
-  }
-
-  .collapsedSider .newChat,
-  .collapsedSider .listWrap,
-  .collapsedSider:not(.controlsHidden) .top {
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 80ms var(--ui-ease-standard) 0ms;
+      width var(--ui-duration-panel-close) var(--ui-ease-panel),
+      visibility 0s linear var(--ui-duration-panel-close);
   }
 
   .top {
@@ -98,7 +86,6 @@
     user-select: none;
     box-shadow: var(--ui-elevation-1);
     transition:
-      opacity var(--ui-duration-normal) var(--ui-ease-panel) 80ms,
       box-shadow var(--ui-duration-slow) ease,
       transform var(--ui-duration-normal) var(--ui-ease-standard);
 
@@ -119,27 +106,6 @@
   .newChatIcon {
     display: flex;
     margin-right: var(--ui-space-1-5);
-  }
-
-  /* 收起瞬间仅隐藏侧边栏切换按钮，由顶栏变形胶囊里的切换按钮无缝接管；展开末段再淡入交接 */
-  .controlsHidden [data-sider-toggle] {
-    opacity: 0;
-    pointer-events: none;
-    transition: none;
-  }
-
-  .controlsLanding [data-sider-toggle] {
-    animation: source-in 80ms var(--ui-ease-standard) 190ms both;
-  }
-
-  @keyframes source-in {
-    from {
-      opacity: 0;
-    }
-
-    to {
-      opacity: 1;
-    }
   }
 
   .listWrap {
@@ -231,158 +197,54 @@
     user-select: none;
   }
 
-  /* 收起后的按钮组：挂载在静止的 .frame 标题行上，桌面端左缘 96px 让开交通灯，网页端 14px，
-     且不随 main 区域宽度变化产生位移抖动 */
-  .collapsed {
+  /*
+   * Desktop sidebar toolbar: pinned after the traffic lights (96px on desktop, 14px on the web)
+   * in both sidebar states and layered above the sidebar, so the toggle never moves under the
+   * cursor. It fades only when it appears with the first chat or leaves with the last one.
+   */
+  .toolbar {
     position: absolute;
     top: 0;
     left: var(--collapsed-sider-left, 96px);
     z-index: var(--ui-z-chrome-floating);
     display: flex;
     align-items: center;
-    height: var(--ui-panel-header-height);
-  }
-
-  .collapsedExiting {
-    pointer-events: none;
-  }
-
-  .collapsedGroup {
-    position: relative;
-    display: flex;
-    align-items: center;
     gap: var(--ui-space-1);
-    width: 78px;
-    height: var(--ui-control-lg);
+    height: var(--ui-panel-header-height);
     padding: 0 var(--ui-space-1);
-    box-sizing: border-box;
-    overflow: hidden;
-    border-radius: var(--ui-radius-pill);
-    will-change: transform, width;
+    animation: toolbar-in var(--ui-duration-normal) var(--ui-ease-standard) both;
   }
 
-  /* 胶囊外壳与宽度同步变形；收起起始从切换按钮位置柔化浮现，展开末段溶回侧边栏切换按钮 */
-  .collapsedGroup::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    box-sizing: border-box;
-    border-radius: inherit;
-    border: 1px solid transparent;
-    background: var(--ui-surface-overlay);
-    box-shadow: var(--ui-elevation-2);
+  .toolbarExiting {
     pointer-events: none;
-    animation: pill-surface-in var(--ui-duration-fast) var(--ui-ease-panel) both;
+    animation: toolbar-out var(--ui-duration-fast) var(--ui-ease-standard) both;
   }
 
-  .toggleSlot {
-    position: relative;
+  /* "+" shows only while the sidebar is collapsed and fades in place, starting with the panel. */
+  .toolbarNewChat {
     display: inline-flex;
-    flex-shrink: 0;
+    transition:
+      opacity var(--ui-duration-normal) var(--ui-ease-standard),
+      visibility 0s;
   }
 
-  .newChatSlot {
-    position: relative;
-    display: inline-flex;
-    flex-shrink: 0;
-    animation: new-chat-unfurl 150ms var(--ui-ease-panel) 120ms both;
+  .toolbarExpanded .toolbarNewChat {
+    opacity: 0;
+    visibility: hidden;
+    transition:
+      opacity var(--ui-duration-fast) var(--ui-ease-standard),
+      visibility 0s linear var(--ui-duration-fast);
   }
 
-  .collapsedStatic::before,
-  .collapsedStatic .newChatSlot,
-  .collapsedFadeIn .collapsedGroup::before,
-  .collapsedFadeIn .newChatSlot,
-  .collapsedFadeOut .collapsedGroup::before,
-  .collapsedFadeOut .toggleSlot,
-  .collapsedFadeOut .newChatSlot {
-    animation: none;
-  }
-
-  .collapsedFadeIn .collapsedGroup {
-    animation: collapsed-fade-in var(--ui-duration-normal) var(--ui-ease-panel) both;
-  }
-
-  .collapsedFadeOut .collapsedGroup {
-    animation: collapsed-fade-out var(--ui-duration-fast) var(--ui-ease-standard) both;
-  }
-
-  .collapsedExiting:not(.collapsedFadeOut) .collapsedGroup::before {
-    animation: pill-surface-out 90ms var(--ui-ease-standard) 190ms both;
-  }
-
-  .collapsedExiting:not(.collapsedFadeOut) .toggleSlot {
-    animation: pill-surface-out 80ms var(--ui-ease-standard) 200ms both;
-  }
-
-  .collapsedExiting:not(.collapsedFadeOut) .newChatSlot {
-    animation: new-chat-tuck 50ms var(--ui-ease-standard) both;
-  }
-
-  @keyframes collapsed-fade-in {
-    from {
-      opacity: 0;
-      transform: translateY(-2px) scale(0.96);
-    }
-
-    to {
-      opacity: 1;
-      transform: none;
-    }
-  }
-
-  @keyframes collapsed-fade-out {
-    from {
-      opacity: 1;
-      transform: none;
-    }
-
-    to {
-      opacity: 0;
-      transform: translateY(-2px) scale(0.96);
-    }
-  }
-
-  @keyframes pill-surface-in {
+  @keyframes toolbar-in {
     from {
       opacity: 0;
     }
-
-    to {
-      opacity: 1;
-    }
   }
 
-  @keyframes pill-surface-out {
-    from {
-      opacity: 1;
-    }
-
+  @keyframes toolbar-out {
     to {
       opacity: 0;
-    }
-  }
-
-  @keyframes new-chat-unfurl {
-    from {
-      opacity: 0;
-      transform: translateX(-8px);
-    }
-
-    to {
-      opacity: 1;
-      transform: translateX(0);
-    }
-  }
-
-  @keyframes new-chat-tuck {
-    from {
-      opacity: 1;
-      transform: translateX(0);
-    }
-
-    to {
-      opacity: 0;
-      transform: translateX(-14px);
     }
   }
 

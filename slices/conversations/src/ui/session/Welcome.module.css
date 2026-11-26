@@ -32,6 +32,8 @@
      用内边距而不是外边距，整行保持满宽，仍可拖动窗口 */
   .withCollapsedSider {
     padding-left: calc(var(--collapsed-sider-left, 96px) + 96px);
+    /* Moves with the sidebar edge, which closes faster than it opens. */
+    transition-duration: var(--ui-duration-panel-close);
   }
 
   .brand {

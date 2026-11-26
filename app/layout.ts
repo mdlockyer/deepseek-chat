@@ -1,12 +1,9 @@
-import type { CollapsedTransition, SiderMode } from '@deepseek-chat/slice-conversations'
+import type { SiderMode } from '@deepseek-chat/slice-conversations'
 import type { SessionHistoryReplaced } from '@deepseek-chat/spine/facts/session'
 import type { EventLog } from '@deepseek-chat/spine/runtime'
 import { create } from 'zustand'
 
-export type SiderLayoutState =
-  | { readonly mode: 'absent'; readonly collapsedExit: CollapsedTransition }
-  | { readonly mode: 'collapsed'; readonly reveal: CollapsedTransition }
-  | { readonly mode: 'expanded'; readonly collapsedExit: CollapsedTransition }
+export type SiderLayoutState = { readonly mode: SiderMode }
 
 export type SiderLayoutEvent =
   | { readonly type: 'hydrated'; readonly sessionCount: number }
@@ -22,8 +19,9 @@ export type SessionCountSource = {
   readonly subscribe: (listener: () => void) => () => void
 }
 
-const absentState = (): SiderLayoutState => ({ mode: 'absent', collapsedExit: 'fade' })
-const expandedState = (): SiderLayoutState => ({ mode: 'expanded', collapsedExit: 'morph' })
+const absentState = (): SiderLayoutState => ({ mode: 'absent' })
+const expandedState = (): SiderLayoutState => ({ mode: 'expanded' })
+const collapsedState = (): SiderLayoutState => ({ mode: 'collapsed' })
 
 /** Pure state transition for the desktop sidebar lifecycle (`absent` / `collapsed` / `expanded`). */
 export const transitionSiderLayout = (
@@ -38,7 +36,7 @@ export const transitionSiderLayout = (
         return state.mode === 'absent' ? state : absentState()
       }
       if (state.mode === 'absent') {
-        return event.fromHistoryReplace ? expandedState() : { mode: 'collapsed', reveal: 'fade' }
+        return event.fromHistoryReplace ? expandedState() : collapsedState()
       }
       return state
     case 'setCollapsed':
@@ -46,7 +44,7 @@ export const transitionSiderLayout = (
         return state
       }
       if (event.collapsed) {
-        return state.mode === 'collapsed' ? state : { mode: 'collapsed', reveal: 'morph' }
+        return state.mode === 'collapsed' ? state : collapsedState()
       }
       return state.mode === 'expanded' ? state : expandedState()
   }

@@ -124,18 +124,34 @@ describe('conversations: permanent top-right Settings & first-launch chrome', ()
     slice.dispose()
   })
 
-  it('renders CollapsedSider controls cleanly in both fade and morph modes', async () => {
+  it('renders SiderToolbar with one toggle that follows the sidebar mode, and hides "+" while the sidebar is open', async () => {
     const slice = createTestSlice()
     await slice.commands.init()
 
-    const fadeHtml = renderWithEnglish(() =>
-      renderToStaticMarkup(
-        createElement(slice.CollapsedSider, { enterMode: 'fade', exitMode: 'fade' })
-      )
+    const collapsedHtml = renderWithEnglish(() =>
+      renderToStaticMarkup(createElement(slice.SiderToolbar, { siderMode: 'collapsed' }))
     )
-    assert.match(fadeHtml, /aria-label="Open sidebar"/)
-    assert.match(fadeHtml, /aria-label="New chat"/)
-    assert.doesNotMatch(fadeHtml, /aria-label="Settings"/)
+    assert.match(collapsedHtml, /aria-label="Open sidebar"/)
+    assert.match(collapsedHtml, /aria-expanded="false"/)
+    assert.match(collapsedHtml, /aria-label="New chat"/)
+    assert.doesNotMatch(
+      collapsedHtml,
+      /aria-hidden="true">(?:<span[^>]*>)?<button[^>]*aria-label="New chat"/
+    )
+    assert.doesNotMatch(collapsedHtml, /aria-label="New chat"[^>]*tabindex="-1"/)
+    assert.doesNotMatch(collapsedHtml, /aria-label="Settings"/)
+
+    const expandedHtml = renderWithEnglish(() =>
+      renderToStaticMarkup(createElement(slice.SiderToolbar, { siderMode: 'expanded' }))
+    )
+    assert.match(expandedHtml, /aria-label="Close sidebar"/)
+    assert.match(expandedHtml, /aria-expanded="true"/)
+    // The sidebar's own New chat button is visible, so "+" leaves the tab order and the a11y tree.
+    assert.match(
+      expandedHtml,
+      /aria-hidden="true">(?:<span[^>]*>)?<button[^>]*aria-label="New chat"[^>]*tabindex="-1"/
+    )
+    assert.equal(expandedHtml.match(/aria-label="(?:Open|Close) sidebar"/g)?.length, 1)
 
     slice.dispose()
   })

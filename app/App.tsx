@@ -1,6 +1,6 @@
 import { MarkdownTheme } from '@deepseek-chat/lib-markdown'
 import { ToastViewport, UiProvider, usePresence } from '@deepseek-chat/lib-ui'
-import type { CollapsedTransition, SiderMode } from '@deepseek-chat/slice-conversations'
+import type { SiderMode } from '@deepseek-chat/slice-conversations'
 import { PANEL_DURATION_MS } from '@deepseek-chat/spine/design'
 import { useLocale } from '@deepseek-chat/spine/i18n'
 import clsx from 'clsx'
@@ -22,23 +22,22 @@ import { useIsMobile, useMobileViewport, usePreventPageScroll } from './viewport
 export const App = ({ embedded = false }: { embedded?: boolean }) => {
   const runtime = useAppRuntime()
   const { browser, conversations, preferences } = runtime.slices
-  const { ChatMain, ChatSaveBanner, CollapsedSider, MobileSider, Sider } = conversations
+  const { ChatMain, ChatSaveBanner, MobileSider, Sider, SiderToolbar } = conversations
 
   const isMobile = useIsMobile() && !embedded
   const dark = useRuntimeTheme(preferences) === 'dark'
   const locale = useLocale()
   const layoutState = runtime.layout.useStore()
   const siderMode: SiderMode = isMobile ? 'absent' : layoutState.mode
-  const lastCollapsedRevealRef = useRef<CollapsedTransition>('fade')
-  if (layoutState.mode === 'collapsed') {
-    lastCollapsedRevealRef.current = layoutState.reveal
+  // The toolbar fades out when the last chat is deleted; it keeps showing the mode it had.
+  const lastToolbarModeRef = useRef<'collapsed' | 'expanded'>('collapsed')
+  if (siderMode !== 'absent') {
+    lastToolbarModeRef.current = siderMode
   }
-  const collapsedExitMode: CollapsedTransition =
-    layoutState.mode === 'collapsed' ? 'morph' : layoutState.collapsedExit
   const frameRef = useMobileViewport(isMobile)
   const activeId = conversations.useActiveSessionId()
-  const { mounted: showCollapsedSider, exiting: collapsedSiderExiting } = usePresence(
-    siderMode === 'collapsed',
+  const { mounted: showToolbar, exiting: toolbarExiting } = usePresence(
+    siderMode !== 'absent',
     PANEL_DURATION_MS
   )
 
@@ -97,17 +96,9 @@ export const App = ({ embedded = false }: { embedded?: boolean }) => {
             <MobileSider />
           ) : (
             <>
-              <Sider
-                collapsed={siderMode !== 'expanded'}
-                controlsHidden={siderMode === 'collapsed'}
-                controlsLanding={collapsedSiderExiting && collapsedExitMode === 'morph'}
-              />
-              {showCollapsedSider ? (
-                <CollapsedSider
-                  exiting={collapsedSiderExiting}
-                  enterMode={lastCollapsedRevealRef.current}
-                  exitMode={collapsedExitMode}
-                />
+              <Sider collapsed={siderMode !== 'expanded'} />
+              {showToolbar ? (
+                <SiderToolbar siderMode={lastToolbarModeRef.current} exiting={toolbarExiting} />
               ) : null}
             </>
           )}

@@ -62,6 +62,8 @@
   /* 收起后让开左上角按钮组：桌面端 18 + (96 + 66) + 12 = 192px 起，网页端 110px 起 */
   .withCollapsedSider {
     margin-left: calc(var(--collapsed-sider-left, 96px) + 66px);
+    /* Moves with the sidebar edge, which closes faster than it opens. */
+    transition-duration: var(--ui-duration-panel-close);
   }
 
   .inputContainer {

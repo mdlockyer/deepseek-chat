@@ -54,12 +54,9 @@ const sampleSession = (id: string, title = 'Saved chat'): Session => ({
 })
 
 describe('transitionSiderLayout pure state machine', () => {
-  it('enforces absent, fade-collapsed, morph-collapsed, and expanded invariants', () => {
-    const absent = transitionSiderLayout(
-      { mode: 'absent', collapsedExit: 'fade' },
-      { type: 'hydrated', sessionCount: 0 }
-    )
-    assert.deepEqual(absent, { mode: 'absent', collapsedExit: 'fade' })
+  it('enforces absent, collapsed and expanded invariants', () => {
+    const absent = transitionSiderLayout({ mode: 'absent' }, { type: 'hydrated', sessionCount: 0 })
+    assert.deepEqual(absent, { mode: 'absent' })
 
     // Cannot expand or collapse while zero sessions exist.
     assert.deepEqual(
@@ -71,24 +68,24 @@ describe('transitionSiderLayout pure state machine', () => {
       absent
     )
 
-    // 0 -> 1 via normal send reveals collapsed pill with fade (zero layout jump).
+    // 0 -> 1 via normal send shows the toolbar with the sidebar collapsed (no layout jump).
     const firstReveal = transitionSiderLayout(absent, {
       type: 'sessionsChanged',
       sessionCount: 1,
       fromHistoryReplace: false,
     })
-    assert.deepEqual(firstReveal, { mode: 'collapsed', reveal: 'fade' })
+    assert.deepEqual(firstReveal, { mode: 'collapsed' })
 
-    // User expands -> morph exit back to sidebar toggle.
+    // User expands.
     const expanded = transitionSiderLayout(firstReveal, { type: 'setCollapsed', collapsed: false })
-    assert.deepEqual(expanded, { mode: 'expanded', collapsedExit: 'morph' })
+    assert.deepEqual(expanded, { mode: 'expanded' })
 
-    // User collapses -> morph entrance from open sidebar toggle.
-    const morphCollapsed = transitionSiderLayout(expanded, {
+    // User collapses again.
+    const collapsed = transitionSiderLayout(expanded, {
       type: 'setCollapsed',
       collapsed: true,
     })
-    assert.deepEqual(morphCollapsed, { mode: 'collapsed', reveal: 'morph' })
+    assert.deepEqual(collapsed, { mode: 'collapsed' })
 
     // 0 -> N via history import expands sidebar immediately.
     const imported = transitionSiderLayout(absent, {
@@ -96,16 +93,16 @@ describe('transitionSiderLayout pure state machine', () => {
       sessionCount: 3,
       fromHistoryReplace: true,
     })
-    assert.deepEqual(imported, { mode: 'expanded', collapsedExit: 'morph' })
+    assert.deepEqual(imported, { mode: 'expanded' })
 
-    // Deleting last session from either collapsed or expanded returns to absent with fade exit.
+    // Deleting the last session from either collapsed or expanded returns to absent.
     assert.deepEqual(
-      transitionSiderLayout(morphCollapsed, {
+      transitionSiderLayout(collapsed, {
         type: 'sessionsChanged',
         sessionCount: 0,
         fromHistoryReplace: false,
       }),
-      { mode: 'absent', collapsedExit: 'fade' }
+      { mode: 'absent' }
     )
     assert.deepEqual(
       transitionSiderLayout(expanded, {
@@ -113,7 +110,7 @@ describe('transitionSiderLayout pure state machine', () => {
         sessionCount: 0,
         fromHistoryReplace: false,
       }),
-      { mode: 'absent', collapsedExit: 'fade' }
+      { mode: 'absent' }
     )
   })
 })
@@ -130,7 +127,7 @@ describe('AppRuntime sidebar lifecycle & startup hydration', () => {
 
     assert.equal(runtime.slices.conversations.getState().ready, true)
     assert.equal(runtime.slices.conversations.getState().sessions.length, 0)
-    assert.deepEqual(runtime.layout.getState(), { mode: 'absent', collapsedExit: 'fade' })
+    assert.deepEqual(runtime.layout.getState(), { mode: 'absent' })
     assert.equal(
       runtime.settingsDialog.useStore.getState().open,
       false,
@@ -139,7 +136,7 @@ describe('AppRuntime sidebar lifecycle & startup hydration', () => {
 
     // Attempting to expand an empty sidebar is a no-op.
     runtime.layout.setSiderCollapsed(false)
-    assert.deepEqual(runtime.layout.getState(), { mode: 'absent', collapsedExit: 'fade' })
+    assert.deepEqual(runtime.layout.getState(), { mode: 'absent' })
     runtime.dispose()
   })
 
@@ -161,11 +158,11 @@ describe('AppRuntime sidebar lifecycle & startup hydration', () => {
 
     assert.equal(runtime.slices.conversations.getState().ready, true)
     assert.equal(runtime.slices.conversations.getState().sessions.length, 1)
-    assert.deepEqual(runtime.layout.getState(), { mode: 'expanded', collapsedExit: 'morph' })
+    assert.deepEqual(runtime.layout.getState(), { mode: 'expanded' })
     runtime.dispose()
   })
 
-  it('fades in the collapsed pill on first message, preserves manual toggles, and hides again when last chat is deleted', async () => {
+  it('shows the collapsed toolbar on first message, preserves manual toggles, and hides again when last chat is deleted', async () => {
     const runtime = createAppRuntime({
       store: memoryStore({ 'chat-demo:api-key': 'sk-first' }),
       fetch: makeInstantReplyFetch(),
@@ -173,36 +170,36 @@ describe('AppRuntime sidebar lifecycle & startup hydration', () => {
     })
 
     await runtime.hydrate()
-    assert.deepEqual(runtime.layout.getState(), { mode: 'absent', collapsedExit: 'fade' })
+    assert.deepEqual(runtime.layout.getState(), { mode: 'absent' })
 
-    // Send first message -> calm reveal (collapsed pill with fade, no sidebar layout jump).
+    // Send first message -> toolbar appears with the sidebar collapsed (no sidebar layout jump).
     runtime.slices.conversations.commands.setDraft(null, 'My very first question')
     assert.equal(runtime.slices.conversations.commands.send(null), true)
-    assert.deepEqual(runtime.layout.getState(), { mode: 'collapsed', reveal: 'fade' })
+    assert.deepEqual(runtime.layout.getState(), { mode: 'collapsed' })
     await runtime.slices.conversations.commands.whenIdle()
 
     // Starting a second chat while collapsed keeps the user's collapsed preference.
     runtime.slices.conversations.commands.newChat()
     runtime.slices.conversations.commands.setDraft(null, 'Second chat')
     assert.equal(runtime.slices.conversations.commands.send(null), true)
-    assert.deepEqual(runtime.layout.getState(), { mode: 'collapsed', reveal: 'fade' })
+    assert.deepEqual(runtime.layout.getState(), { mode: 'collapsed' })
     await runtime.slices.conversations.commands.whenIdle()
 
-    // User opens sidebar, then collapses it manually -> morph transition.
+    // User opens the sidebar, then collapses it manually.
     runtime.layout.setSiderCollapsed(false)
-    assert.deepEqual(runtime.layout.getState(), { mode: 'expanded', collapsedExit: 'morph' })
+    assert.deepEqual(runtime.layout.getState(), { mode: 'expanded' })
     runtime.layout.setSiderCollapsed(true)
-    assert.deepEqual(runtime.layout.getState(), { mode: 'collapsed', reveal: 'morph' })
+    assert.deepEqual(runtime.layout.getState(), { mode: 'collapsed' })
 
     // Delete first of two sessions -> still 1 session left, remains collapsed.
     const [firstId, secondId] = runtime.slices.conversations.getState().sessions.map((s) => s.id)
     assert.ok(firstId && secondId)
     assert.equal(await runtime.slices.conversations.commands.removeSession(firstId), true)
-    assert.deepEqual(runtime.layout.getState(), { mode: 'collapsed', reveal: 'morph' })
+    assert.deepEqual(runtime.layout.getState(), { mode: 'collapsed' })
 
-    // Delete last remaining session -> returns cleanly to absent with fade exit.
+    // Delete last remaining session -> returns cleanly to absent.
     assert.equal(await runtime.slices.conversations.commands.removeSession(secondId), true)
-    assert.deepEqual(runtime.layout.getState(), { mode: 'absent', collapsedExit: 'fade' })
+    assert.deepEqual(runtime.layout.getState(), { mode: 'absent' })
 
     runtime.dispose()
   })
@@ -219,23 +216,23 @@ describe('AppRuntime sidebar lifecycle & startup hydration', () => {
 
     // Importing an empty archive keeps mode absent and must NOT leak onto a later first message.
     await runtime.slices.conversations.replaceSessions(async () => ({ sessions: [], blobs: [] }))
-    assert.deepEqual(runtime.layout.getState(), { mode: 'absent', collapsedExit: 'fade' })
+    assert.deepEqual(runtime.layout.getState(), { mode: 'absent' })
 
     runtime.slices.conversations.commands.setDraft(null, 'First real message')
     assert.equal(runtime.slices.conversations.commands.send(null), true)
-    assert.deepEqual(runtime.layout.getState(), { mode: 'collapsed', reveal: 'fade' })
+    assert.deepEqual(runtime.layout.getState(), { mode: 'collapsed' })
     await runtime.slices.conversations.commands.whenIdle()
 
-    // Clear all chats -> returns to absent with fade exit.
+    // Clear all chats -> returns to absent.
     await runtime.slices.conversations.replaceSessions(async () => ({ sessions: [], blobs: [] }))
-    assert.deepEqual(runtime.layout.getState(), { mode: 'absent', collapsedExit: 'fade' })
+    assert.deepEqual(runtime.layout.getState(), { mode: 'absent' })
 
     // Import non-empty backup from absent -> expands full sidebar immediately for clear feedback.
     await runtime.slices.conversations.replaceSessions(async () => ({
       sessions: [sampleSession('imp-1', 'Imported 1'), sampleSession('imp-2', 'Imported 2')],
       blobs: [],
     }))
-    assert.deepEqual(runtime.layout.getState(), { mode: 'expanded', collapsedExit: 'morph' })
+    assert.deepEqual(runtime.layout.getState(), { mode: 'expanded' })
 
     runtime.dispose()
   })
@@ -258,8 +255,8 @@ describe('AppRuntime sidebar lifecycle & startup hydration', () => {
 
     runtimeA.slices.conversations.commands.setDraft(null, 'Only in A')
     assert.equal(runtimeA.slices.conversations.commands.send(null), true)
-    assert.deepEqual(runtimeA.layout.getState(), { mode: 'collapsed', reveal: 'fade' })
-    assert.deepEqual(runtimeB.layout.getState(), { mode: 'absent', collapsedExit: 'fade' })
+    assert.deepEqual(runtimeA.layout.getState(), { mode: 'collapsed' })
+    assert.deepEqual(runtimeB.layout.getState(), { mode: 'absent' })
 
     await runtimeA.slices.conversations.commands.whenIdle()
     runtimeA.dispose()

@@ -18,22 +18,21 @@ import { NewChatIcon } from './NewChatIcon.js'
 import { SessionItem } from './SessionItem.js'
 import styles from './Sider.module.css'
 
-/** 展开的侧边栏：收起按钮、开启新对话、按时间分组的会话列表；移动端放在抽屉里，收起按钮关闭抽屉 */
+/**
+ * The sidebar: new chat and the session list grouped by date. On desktop the open/close toggle
+ * lives in `SiderToolbar`, which stays put while this panel slides underneath it; in the mobile
+ * drawer the panel carries its own close button.
+ */
 export const Sider = ({
   mobile = false,
   collapsed = false,
-  controlsHidden = false,
-  controlsLanding = false,
 }: {
   mobile?: boolean
   collapsed?: boolean
-  controlsHidden?: boolean
-  controlsLanding?: boolean
 }) => {
   const t = useTranslate()
   const tc = useConversationsTranslate()
-  const { deps, useChatStore, newChat, removeSession, closeMobileSider, showNotice } =
-    useConversations()
+  const { useChatStore, newChat, removeSession, closeMobileSider, showNotice } = useConversations()
   const sessions = useChatStore((state) => state.sessions)
   const activeId = useChatStore((state) => state.activeId)
   const [now, setNow] = useState(Date.now)
@@ -106,27 +105,20 @@ export const Sider = ({
 
   return (
     <div
-      className={clsx(
-        styles.sider,
-        mobile && styles.mobile,
-        collapsed && styles.collapsedSider,
-        controlsHidden && styles.controlsHidden,
-        controlsLanding && styles.controlsLanding
-      )}
+      className={clsx(styles.sider, mobile && styles.mobile, collapsed && styles.collapsedSider)}
       aria-hidden={collapsed || undefined}
-      data-sider-root
     >
       <div className={styles.siderInner}>
         <div className={styles.top} data-tauri-drag-region>
-          <IconButton
-            size="m"
-            icon={<IconPanelLeftOutline16 />}
-            tooltip={t('collapseSiderbarButton')}
-            tooltipPlacement="bottom"
-            tooltipDisabled={controlsHidden}
-            data-sider-toggle
-            onClick={() => (mobile ? closeMobileSider() : deps.ui.setSiderCollapsed(true))}
-          />
+          {mobile ? (
+            <IconButton
+              size="m"
+              icon={<IconPanelLeftOutline16 />}
+              tooltip={t('collapseSiderbarButton')}
+              tooltipPlacement="bottom"
+              onClick={closeMobileSider}
+            />
+          ) : null}
         </div>
         <button
           type="button"

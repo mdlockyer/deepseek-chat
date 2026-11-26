@@ -34,11 +34,11 @@ export type InspectionTarget = {
 
 export type SettingsSection = 'general' | 'apiKey' | 'data'
 
-/** Visual presence of the desktop session rail: absent when no sessions exist, collapsed to a top-left pill, or expanded. */
+/**
+ * Visual presence of the desktop session rail: absent when no sessions exist (no toolbar), or
+ * collapsed / expanded under a toolbar that stays pinned after the traffic lights.
+ */
 export type SiderMode = 'absent' | 'collapsed' | 'expanded'
-
-/** How the collapsed top-left pill enters or leaves: morphing to/from the open sidebar toggle, or fading in place. */
-export type CollapsedTransition = 'morph' | 'fade'
 
 /** What the chat UI needs from the app shell around it. Optional ports degrade cleanly when omitted. */
 export type ConversationsViewDeps = {

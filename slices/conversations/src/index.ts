@@ -9,7 +9,7 @@ import { bindView } from './context.js'
 import { describeReply } from './describe.js'
 import { createConversationsRuntime, type ConversationsDeps } from './runtime.js'
 import { ChatMain, ChatSaveBanner, createChatHooks } from './ui/session/ChatMain.js'
-import { CollapsedSider } from './ui/sider/CollapsedSider.js'
+import { SiderToolbar } from './ui/sider/SiderToolbar.js'
 import { MobileSider, Sider } from './ui/sider/Sider.js'
 
 export {
@@ -27,7 +27,6 @@ export {
 export type { StreamTrace, StreamTraceBlock } from './streamTrace.js'
 export type {
   ChatFile,
-  CollapsedTransition,
   ConversationsViewDeps,
   InspectionTarget,
   SettingsSection,
@@ -56,7 +55,7 @@ export const createConversationsSlice = (deps: ConversationsDeps) => {
 
   const BoundSider = bindView(runtime, Sider)
   const BoundMobileSider = bindView(runtime, MobileSider)
-  const BoundCollapsedSider = bindView(runtime, CollapsedSider)
+  const BoundSiderToolbar = bindView(runtime, SiderToolbar)
   const BoundChatMain = bindView(runtime, ChatMain)
   const BoundChatSaveBanner = bindView(runtime, ChatSaveBanner)
 
@@ -134,7 +133,7 @@ export const createConversationsSlice = (deps: ConversationsDeps) => {
     useActiveSessionId,
     Sider: BoundSider,
     MobileSider: BoundMobileSider,
-    CollapsedSider: BoundCollapsedSider,
+    SiderToolbar: BoundSiderToolbar,
     ChatMain: BoundChatMain,
     ChatSaveBanner: BoundChatSaveBanner,
 
