@@ -27,7 +27,7 @@
   }
 
   /*
-   * Focus: the emerald caret is the primary indicator (WCAG 2.4.7 counts a text caret). The
+   * Focus: the accent caret is the primary indicator (WCAG 2.4.7 counts a text caret). The
    * composer is focused most of the time, so the box only firms up its own hairline edge
    * (the 6-8% elevation ring to the 18-20% strong border) instead of adding a coloured ring.
    */

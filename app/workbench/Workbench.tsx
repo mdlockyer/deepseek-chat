@@ -57,7 +57,7 @@ import { SsaDemo } from './SsaDemo.js'
 import styles from './Workbench.module.css'
 
 type WorkbenchTab = 'ssa' | 'kit'
-type BrandPreset = 'default' | 'blue' | 'terracotta'
+type BrandPreset = 'default' | 'emerald' | 'terracotta'
 
 /** Presets override only the accent slots; surfaces and text stay neutral under every preset. */
 const OVERRIDE_KEYS = [
@@ -74,25 +74,25 @@ const BRAND_OVERRIDES: Record<
   Exclude<BrandPreset, 'default'>,
   Record<ThemeMode, Record<(typeof OVERRIDE_KEYS)[number], string>>
 > = {
-  /** The pre-refresh DeepSeek blue, kept for side-by-side comparison. */
-  blue: {
+  /** The emerald accent the blue replaced, kept for side-by-side comparison. */
+  emerald: {
     light: {
-      '--ui-accent-solid': '#3964fe',
-      '--ui-accent-solid-hover': '#2d55e4',
-      '--ui-accent-subtle': '#edf3fe',
-      '--ui-accent-subtle-hover': '#e4edfd',
-      '--ui-accent-text': '#2d55e4',
-      '--ui-accent-border': '#5686fe',
-      '--ui-focus-ring': '#3964fe',
+      '--ui-accent-solid': 'oklch(0.5 0.108 163)',
+      '--ui-accent-solid-hover': 'oklch(0.44 0.095 163)',
+      '--ui-accent-subtle': 'oklch(0.975 0.025 163)',
+      '--ui-accent-subtle-hover': 'oklch(0.95 0.045 163)',
+      '--ui-accent-text': 'oklch(0.5 0.108 163)',
+      '--ui-accent-border': 'oklch(0.6 0.129 163)',
+      '--ui-focus-ring': 'oklch(0.5 0.108 163)',
     },
     dark: {
-      '--ui-accent-solid': '#3964fe',
-      '--ui-accent-solid-hover': '#2d55e4',
-      '--ui-accent-subtle': '#283142',
-      '--ui-accent-subtle-hover': '#34415b',
-      '--ui-accent-text': '#679efe',
-      '--ui-accent-border': '#4868b2',
-      '--ui-focus-ring': '#679efe',
+      '--ui-accent-solid': 'oklch(0.5 0.108 163)',
+      '--ui-accent-solid-hover': 'oklch(0.44 0.095 163)',
+      '--ui-accent-subtle': 'oklch(0.25 0.045 163)',
+      '--ui-accent-subtle-hover': 'oklch(0.3 0.06 163)',
+      '--ui-accent-text': 'oklch(0.78 0.13 163)',
+      '--ui-accent-border': 'oklch(0.6 0.129 163)',
+      '--ui-focus-ring': 'oklch(0.78 0.13 163)',
     },
   },
   terracotta: {
@@ -392,8 +392,8 @@ export const Workbench = () => {
               value={brand}
               onChange={setBrand}
               options={[
-                { value: 'default', label: 'Emerald' },
-                { value: 'blue', label: 'Legacy Blue' },
+                { value: 'default', label: 'Blue' },
+                { value: 'emerald', label: 'Emerald' },
                 { value: 'terracotta', label: 'Terracotta' },
               ]}
             />
