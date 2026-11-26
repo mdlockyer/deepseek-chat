@@ -494,6 +494,7 @@
     align-items: flex-start;
 
     .rowLabel {
+      font-weight: 550;
       white-space: normal;
       overflow: visible;
       text-overflow: clip;
@@ -553,6 +554,7 @@
     flex: 1;
     min-width: 0;
     font: var(--ui-type-caption-strong);
+    font-weight: 550;
     color: var(--ui-text-primary);
     white-space: nowrap;
     overflow: hidden;
@@ -562,6 +564,7 @@
   .rowLabel {
     flex: 1;
     min-width: 0;
+    font-weight: 450;
     color: var(--ui-text-primary);
     white-space: nowrap;
     overflow: hidden;
@@ -569,7 +572,7 @@
   }
 
   .rowLabelActive {
-    font-weight: 500;
+    font-weight: 550;
   }
 
   .rowTrailing {
