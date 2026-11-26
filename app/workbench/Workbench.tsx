@@ -54,6 +54,7 @@ import { applyDocumentTheme, type ThemeMode } from '@deepseek-chat/spine/design'
 import clsx from 'clsx'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { SsaDemo } from './SsaDemo.js'
+import { ChapterRailDemo } from './ChapterRailDemo.js'
 import styles from './Workbench.module.css'
 
 type WorkbenchTab = 'ssa' | 'kit'
@@ -879,6 +880,8 @@ export const Workbench = () => {
                     description="Reusable zero-data layout with consistent typography and spacing."
                   />
                 </div>
+
+                <ChapterRailDemo />
               </div>
             </section>
 

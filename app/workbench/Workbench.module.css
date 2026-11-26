@@ -386,4 +386,58 @@
     font: var(--ui-type-caption);
     color: var(--ui-text-secondary);
   }
+
+  /* ---------- ChapterRail demo ---------- */
+
+  .chapterDemo {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--ui-border-default);
+    border-radius: var(--ui-radius-md);
+    overflow: hidden;
+  }
+
+  .chapterDemoHeader {
+    display: flex;
+    align-items: center;
+    height: var(--ui-control-lg);
+    padding: 0 var(--ui-space-4);
+    border-bottom: 1px solid var(--ui-border-default);
+    font: var(--ui-type-caption);
+    color: var(--ui-text-secondary);
+  }
+
+  .chapterDemoBody {
+    position: relative;
+    height: 360px;
+  }
+
+  .chapterDemoScroll {
+    height: 100%;
+    overflow-y: auto;
+    padding: 0 var(--ui-space-6) 0 var(--ui-space-12);
+    scrollbar-color: var(--ui-scrollbar-thumb) transparent;
+  }
+
+  .chapterDemoGutter {
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: var(--ui-space-12);
+  }
+
+  .chapterDemoSection {
+    padding: var(--ui-space-4) 0;
+  }
+
+  .chapterDemoTitle {
+    margin: 0 0 var(--ui-space-2);
+    font: var(--ui-type-label-strong);
+  }
+
+  .chapterDemoText {
+    margin: 0 0 var(--ui-space-2);
+    font: var(--ui-type-label);
+    color: var(--ui-text-secondary);
+  }
 }

@@ -13,15 +13,15 @@ every slice's UI and pass the full gate with zero slice edits.
 
 ## Public Entrypoint (`@deepseek-chat/lib-ui`)
 
-| Category                | Exports                                                                                                                                                                                                                                                                                                                                       |
-| :---------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Runtime & Provider**  | `UiProvider`, `createOverlayCoordinator`, `createNoticeBus`, `useOverlayPort`, `useOverlayLock`, `useUiNotice`, `useIsMobile`, `usePresence`, `copyText`, `computeAnchoredPosition`, `useAnchoredPosition`, `useDismiss`, `useDelayedOpen`, `VIEWPORT_PADDING`                                                                                |
-| **Actions**             | `Button`, `LinkButton`, `IconButton`, `Chip`                                                                                                                                                                                                                                                                                                  |
-| **Inputs & Selection**  | `TextField`, `PasswordField`, `Select`, `Switch`, `SegmentedControl`, `RadioCardGroup`                                                                                                                                                                                                                                                        |
-| **Overlays & Floating** | `Dialog`, `Popover`, `MorphMenu` (with `morph.ts` geometry: `triggerShape`, `menuShape`, `contentClip`, `sampleMorph`, `spring`, `MORPH_OPEN`, `MORPH_CLOSE`, `MORPH_CLOSE_MS`), `Menu`, `Tooltip`, `HoverCard`, `ToastViewport`                                                                                                              |
-| **Navigation & Motion** | `Tabs`, `TabList`, `Tab`, `TabPanel`, `HoverGlide`, `useHoverGlide`, `HoverGlideIndicator`, `hoverGlideItem`, `HOVER_GLIDE_ITEM_ATTR`, `HOVER_GLIDE_SURFACE_ATTR`, `INITIAL_HOVER_GLIDE_STATE`, `enterGlideTarget`, `leaveGlideTarget`, `expireGlideCooldown`, `syncGlideRect`, `measureGlideRect`, `normalizeGlideRadius`, `glideRectsEqual` |
-| **Feedback & Layout**   | `Badge`, `Banner`, `EmptyState`, `Spinner`, `SettingGroup`, `SettingRow`, `SettingInlineConfirm`, `PanelHeader`                                                                                                                                                                                                                               |
-| **Icons & Glyphs**      | Domain-blind `Icon*` SVG components and `FileGlyph` (`kind: 'document' \| 'pdf' \| 'spreadsheet' \| 'presentation' \| 'image'`)                                                                                                                                                                                                               |
+| Category                | Exports                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| :---------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Runtime & Provider**  | `UiProvider`, `createOverlayCoordinator`, `createNoticeBus`, `useOverlayPort`, `useOverlayLock`, `useUiNotice`, `useIsMobile`, `usePresence`, `copyText`, `computeAnchoredPosition`, `useAnchoredPosition`, `useDismiss`, `useDelayedOpen`, `VIEWPORT_PADDING`                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| **Actions**             | `Button`, `LinkButton`, `IconButton`, `Chip`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| **Inputs & Selection**  | `TextField`, `PasswordField`, `Select`, `Switch`, `SegmentedControl`, `RadioCardGroup`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| **Overlays & Floating** | `Dialog`, `Popover`, `MorphMenu` (with `morph.ts` geometry: `triggerShape`, `menuShape`, `contentClip`, `sampleMorph`, `spring`, `MORPH_OPEN`, `MORPH_CLOSE`, `MORPH_CLOSE_MS`), `Menu`, `Tooltip`, `HoverCard`, `ToastViewport`                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| **Navigation & Motion** | `ChapterRail` (with `chapterRailLayout.ts` geometry: `layoutChapterRail`, `chapterPositionY`, `nearestChapter`, `CHAPTER_*` sizes), `RollingNumber`, `createScrollGlide`, `onScrollIntent` (with `scrollGlide.ts` maths: `stepScrollSpring`, `scrollSpringSettled`, `planScrollGlide`, `readMotionMs`, `readMotionEasing`, `SCROLL_GLIDE_*`), `Tabs`, `TabList`, `Tab`, `TabPanel`, `HoverGlide`, `useHoverGlide`, `HoverGlideIndicator`, `hoverGlideItem`, `HOVER_GLIDE_ITEM_ATTR`, `HOVER_GLIDE_SURFACE_ATTR`, `INITIAL_HOVER_GLIDE_STATE`, `enterGlideTarget`, `leaveGlideTarget`, `expireGlideCooldown`, `syncGlideRect`, `measureGlideRect`, `normalizeGlideRadius`, `glideRectsEqual` |
+| **Feedback & Layout**   | `Badge`, `Banner`, `EmptyState`, `Spinner`, `SettingGroup`, `SettingRow`, `SettingInlineConfirm`, `PanelHeader`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| **Icons & Glyphs**      | Domain-blind `Icon*` SVG components and `FileGlyph` (`kind: 'document' \| 'pdf' \| 'spreadsheet' \| 'presentation' \| 'image'`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 
 ## Behavioural & Accessibility Invariants
 
@@ -92,16 +92,45 @@ every slice's UI and pass the full gate with zero slice edits.
     before unmounting, cancels pending exit timers if reopened mid-exit, and unmounts immediately
     when `durationMs <= 0` or `(prefers-reduced-motion: reduce)` matches.
 
+11. **Chapter rail (`ChapterRail`).** Renders a `<nav aria-label>` holding an ordered list of
+    native `<button>` chapters, each named by `accessibleLabel`, with `aria-current="location"` and
+    the only `tabindex="0"` on the current chapter (roving: `ArrowUp`/`ArrowDown`/`Home`/`End` move
+    focus, `Enter`/`Space` navigate, `Escape` folds the card). At rest the chapters are short ticks
+    centred in the consumer's box, the current one longest, with a bar marking the viewport the
+    consumer reports through `setViewport(start, end)` (written to the DOM, never re-rendering). Hover
+    (after a short intent delay) or keyboard focus opens the ticks into the rows of a card naming every
+    chapter; rows spring into place nearest the current chapter first, and the card folds back onto
+    the ticks when the pointer leaves or focus moves out. A card too tall for its box scrolls (wheel,
+    and it follows keyboard focus and the current chapter) with rows outside it clipped. A click navigates once (`'jump'`); dragging
+    past a few px scrubs (`'scrub'` for each new chapter under the pointer, then `onScrubEnd`). A
+    trailing `action` per chapter is reachable while the card is open and never starts a scrub.
+    `returnTo` shows a labelled return button under the rail and a hollow ring on the origin chapter.
+    Every duration and easing comes from motion tokens, so reduced motion makes it change in place.
+12. **Scroll glide (`createScrollGlide`).** Drives `scrollTop` with a critically damped spring that
+    never overshoots, clamps targets to the scroll range, retargets in flight without resetting
+    velocity, and calls `onDone` only when it lands. Jumps longer than `SCROLL_GLIDE_LONG_JUMP`
+    viewports fade the given content out, cut to `SCROLL_GLIDE_LEAD_IN` viewports short of the target,
+    and glide the rest while fading back in. Under reduced motion it jumps. `onScrollIntent` reports
+    the reader's own wheel, touch, pointer and key input so consumers can cancel glides and tell the
+    reader's scrolling from programmatic scrolling.
+13. **Rolling number (`RollingNumber`).** Rolls up to a larger value and down to a smaller one over
+    `--ui-duration-panel`; the outgoing value is `aria-hidden`, so only the current value is read.
+
 ## Tunable Parameters
 
-| Parameter                    | Default   | Meaning                                                                   |
-| :--------------------------- | :-------- | :------------------------------------------------------------------------ |
-| `VIEWPORT_PADDING`           | `8` px    | Minimum clearance between an anchored floating surface and viewport edges |
-| Tooltip enter delay          | `100` ms  | Pointer hover delay before showing a tooltip                              |
-| Popover exit duration        | `140` ms  | Fade/scale exit animation duration                                        |
-| MorphMenu open               | `250` ms  | Height on a spring (~1.5% overshoot); width on a firmer one in `170` ms   |
-| MorphMenu close              | `180` ms  | Height folds in `130` ms, width in `160` ms; exit duration `180` ms       |
-| Dialog / Toast exit duration | `160` ms  | Fade/scale exit animation duration                                        |
-| Notice default duration      | `3000` ms | Auto-dismiss timeout for plain notices                                    |
-| Notice link duration         | `5000` ms | Auto-dismiss timeout for notices containing a link                        |
-| Hover glide cooldown         | `120` ms  | Window to glide across inter-item gaps before snapping cold               |
+| Parameter                       | Default         | Meaning                                                                                        |
+| :------------------------------ | :-------------- | :--------------------------------------------------------------------------------------------- |
+| `VIEWPORT_PADDING`              | `8` px          | Minimum clearance between an anchored floating surface and viewport edges                      |
+| Tooltip enter delay             | `100` ms        | Pointer hover delay before showing a tooltip                                                   |
+| Popover exit duration           | `140` ms        | Fade/scale exit animation duration                                                             |
+| MorphMenu open                  | `250` ms        | Height on a spring (~1.5% overshoot); width on a firmer one in `170` ms                        |
+| MorphMenu close                 | `180` ms        | Height folds in `130` ms, width in `160` ms; exit duration `180` ms                            |
+| Dialog / Toast exit duration    | `160` ms        | Fade/scale exit animation duration                                                             |
+| Notice default duration         | `3000` ms       | Auto-dismiss timeout for plain notices                                                         |
+| Notice link duration            | `5000` ms       | Auto-dismiss timeout for notices containing a link                                             |
+| Hover glide cooldown            | `120` ms        | Window to glide across inter-item gaps before snapping cold                                    |
+| Chapter rail open / close delay | `90` / `180` ms | Hover intent before the card opens, and grace before it folds                                  |
+| Chapter rail spacing            | `12` / `32` px  | Resting tick gap / open row height; they shrink to `4` / `24` px to fit, then the card scrolls |
+| Chapter rail wake               | `1400` ms       | How long the ticks stay at full strength after the last scroll                                 |
+| Scroll glide stiffness          | `210` /s²       | Critically damped (about 0.7 s to land a 1000 px jump)                                         |
+| Scroll glide long jump          | `1.4` viewports | Beyond this a glide fades and cuts to `0.42` viewports short                                   |

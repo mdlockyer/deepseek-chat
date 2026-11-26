@@ -147,6 +147,44 @@ export {
   type HoverGlideTransition,
 } from './hoverGlideState.js'
 export {
+  ChapterRail,
+  type ChapterRailHandle,
+  type ChapterRailItem,
+  type ChapterRailProps,
+  type ChapterRailReturn,
+} from './ChapterRail.js'
+export {
+  CHAPTER_CARD_INSET,
+  CHAPTER_CARD_PADDING,
+  CHAPTER_DIVIDER_GAP,
+  CHAPTER_DIVIDER_ROW,
+  CHAPTER_ROW_HEIGHT,
+  CHAPTER_ROW_MIN_HEIGHT,
+  CHAPTER_TICK_GAP,
+  CHAPTER_TICK_MIN_GAP,
+  chapterPositionY,
+  layoutChapterRail,
+  nearestChapter,
+  revealChapterRow,
+  type ChapterRailLayout,
+} from './chapterRailLayout.js'
+export { RollingNumber, type RollingNumberProps } from './RollingNumber.js'
+export {
+  SCROLL_GLIDE_LEAD_IN,
+  SCROLL_GLIDE_LONG_JUMP,
+  SCROLL_GLIDE_STIFFNESS,
+  createScrollGlide,
+  onScrollIntent,
+  planScrollGlide,
+  readMotionEasing,
+  readMotionMs,
+  scrollSpringSettled,
+  stepScrollSpring,
+  type ScrollGlide,
+  type ScrollGlideOptions,
+  type ScrollSpring,
+} from './scrollGlide.js'
+export {
   FileGlyph,
   fileGlyphKindFromExt,
   type FileGlyphKind,

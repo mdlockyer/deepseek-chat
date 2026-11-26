@@ -1182,3 +1182,47 @@ export const IconSlidersOutline14 = () => (
     <circle cx={9} cy={9.5} r={1.5} stroke="currentColor" strokeWidth={1.25} />
   </svg>
 )
+
+export const IconChevronUpOutline14 = () => (
+  <svg
+    aria-hidden="true"
+    focusable="false"
+    width={14}
+    height={14}
+    viewBox="0 0 14 14"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <path
+      d="M2.15137 8.5 L2.57617 8.07617 L5.30273 5.34863 C5.55843 5.09294 5.78438 4.86618 5.98828 4.70215 C6.20088 4.53117 6.44405 4.38244 6.75 4.33398 C6.91565 4.30778 7.08435 4.30778 7.25 4.33398 C7.55595 4.38244 7.79912 4.53117 8.01172 4.70215 C8.21561 4.86618 8.44157 5.09294 8.69727 5.34863 L11.4238 8.07617 L11.8486 8.5 L11 9.34863 L10.5762 8.92383 L7.84863 6.19727 C7.57405 5.92268 7.40124 5.75151 7.25977 5.6377 C7.12709 5.53096 7.07728 5.52187 7.0625 5.51953 C7.02105 5.51297 6.97895 5.51297 6.9375 5.51953 C6.92272 5.52187 6.87291 5.53096 6.74023 5.6377 C6.59876 5.75152 6.42595 5.92268 6.15137 6.19727 L3.42383 8.92383 L3 9.34863 L2.15137 8.5 Z"
+      fill="currentColor"
+    />
+  </svg>
+)
+
+/** Arrow that bends back on itself: "return to where you were". */
+export const IconReturnOutline14 = () => (
+  <svg
+    aria-hidden="true"
+    focusable="false"
+    width={14}
+    height={14}
+    viewBox="0 0 14 14"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <path
+      d="M5 2.75L2.25 5.5L5 8.25"
+      stroke="currentColor"
+      strokeWidth="1.25"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <path
+      d="M2.5 5.5H8.25C10.0449 5.5 11.5 6.95507 11.5 8.75C11.5 10.5449 10.0449 12 8.25 12H6.5"
+      stroke="currentColor"
+      strokeWidth="1.25"
+      strokeLinecap="round"
+    />
+  </svg>
+)
