@@ -22,6 +22,7 @@ export type ButtonProps = {
   block?: boolean
   loading?: boolean
   icon?: ReactNode
+  trailingIcon?: ReactNode
 } & ButtonHTMLAttributes<HTMLButtonElement>
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
@@ -32,6 +33,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
     loading = false,
     disabled = false,
     icon,
+    trailingIcon,
     className,
     type = 'button',
     children,
@@ -56,6 +58,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
     >
       {loading ? <span className={styles.spinner} aria-hidden="true" /> : icon}
       {children}
+      {trailingIcon}
     </button>
   )
 })

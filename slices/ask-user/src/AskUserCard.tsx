@@ -1,4 +1,4 @@
-import { Button, IconCheckedOutline14 } from '@deepseek-chat/lib-ui'
+import { Button, IconCheckedOutline14, IconChevronRightOutline14 } from '@deepseek-chat/lib-ui'
 import clsx from 'clsx'
 import { useEffect, useState } from 'react'
 import type { AskUserQuestion, AskUserState, PendingAskUser } from './askUser.js'
@@ -290,7 +290,12 @@ const AskUserCardBody = ({
               </Button>
             ) : null}
             {showPrimaryAction ? (
-              <Button variant="primary" size="s" onClick={handleSubmitOrNext}>
+              <Button
+                variant="primary"
+                size="s"
+                trailingIcon={isLast ? undefined : <IconChevronRightOutline14 />}
+                onClick={handleSubmitOrNext}
+              >
                 {isLast ? t('askSubmit') : t('askNext')}
               </Button>
             ) : null}

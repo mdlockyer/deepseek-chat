@@ -5,7 +5,6 @@ import {
   IconCheckedOutline14,
   IconChevronDownOutline14,
   IconChevronRightOutline14,
-  IconPanelRightOutline16,
   hoverGlideItem,
 } from '@deepseek-chat/lib-ui'
 import clsx from 'clsx'
@@ -422,7 +421,7 @@ const InlineTraceInlay = ({
             <Button
               variant="ghost"
               size="s"
-              icon={<IconPanelRightOutline16 />}
+              trailingIcon={<IconChevronRightOutline14 />}
               className={clsx(styles.traceFooterAction, isInspecting && styles.inspectButtonActive)}
               aria-pressed={isInspecting}
               {...hoverGlideItem(isInspecting)}

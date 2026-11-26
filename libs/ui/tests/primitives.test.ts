@@ -33,17 +33,27 @@ import {
 } from '@deepseek-chat/lib-ui'
 
 describe('lib-ui primitives semantic & accessibility contracts', () => {
-  it('renders Button and LinkButton with native semantics and loading state', () => {
+  it('renders Button and LinkButton with native semantics, loading state, and trailingIcon', () => {
     const html = renderToStaticMarkup(
       createElement(
         'div',
         null,
         createElement(Button, { variant: 'primary', loading: true }, 'Save'),
+        createElement(
+          Button,
+          {
+            variant: 'ghost',
+            size: 's',
+            trailingIcon: createElement('span', { 'data-trailing': 'true' }, '›'),
+          },
+          'Open'
+        ),
         createElement(LinkButton, { href: 'https://example.test' }, 'Console')
       )
     )
     assert.match(html, /<button[^>]*type="button"[^>]*aria-busy="true"/)
     assert.match(html, />Save</)
+    assert.match(html, />Open<span data-trailing="true">›<\/span><\/button>/)
     assert.match(html, /<a[^>]*href="https:\/\/example\.test"/)
   })
 

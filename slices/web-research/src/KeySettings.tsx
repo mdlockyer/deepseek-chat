@@ -3,7 +3,7 @@ import {
   Button,
   IconCheckOutline16,
   IconKeyOutline16,
-  IconToastError16,
+  IconPlusOutline14,
   LinkButton,
   PasswordField,
   SettingInlineConfirm,
@@ -246,7 +246,6 @@ export const KeySettings = ({
               </div>
               {errorMessage ? (
                 <div className={styles.errorRow} role="alert">
-                  <IconToastError16 />
                   <span>{errorMessage}</span>
                 </div>
               ) : null}
@@ -283,7 +282,12 @@ export const KeySettings = ({
             </>
           ) : (
             <div className={styles.actions}>
-              <Button variant="outlined" size="m" onClick={editor.startEdit}>
+              <Button
+                variant="outlined"
+                size="m"
+                icon={<IconPlusOutline14 />}
+                onClick={editor.startEdit}
+              >
                 {tr('firecrawlKeyAdd')}
               </Button>
               <span className={styles.description}>{tr('firecrawlKeyKeylessStatus')}</span>

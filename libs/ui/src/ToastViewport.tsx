@@ -1,7 +1,6 @@
 import { useLocale } from '@deepseek-chat/spine/i18n'
 import clsx from 'clsx'
 import { useEffect, useRef, useSyncExternalStore } from 'react'
-import { IconToastError16 } from './icons.js'
 import { usePresence, type NoticeBus, type NoticeSnapshot } from './runtime.js'
 import { useNoticeBus } from './UiProvider.js'
 import styles from './ToastViewport.module.css'
@@ -76,11 +75,6 @@ export const ToastViewport = ({ bus: explicitBus }: { bus?: NoticeBus } = {}) =>
       role="status"
       aria-live={error ? 'assertive' : 'polite'}
     >
-      {error ? (
-        <span className={styles.icon}>
-          <IconToastError16 />
-        </span>
-      ) : null}
       <span className={styles.content}>
         {content.text()}
         {content.link ? (

@@ -816,6 +816,39 @@ describe('browser: ToolCapability, toggle, presenter, and archive serialization'
     assert.match(html, /role="note"/)
     assert.match(html, /Navigation blocked by policy/)
     assert.match(html, /<button[^>]*type="button"[^>]*><img/)
+
+    // Output preview strips attributed untrusted_webpage_content wrappers and omits duplicate tech notes.
+    const outputHtml = renderToStaticMarkup(
+      createElement(Detail, {
+        entry: {
+          call: {
+            id: 'b4',
+            name: 'browser_tabs',
+            input: { summary: 'Switching back to the first Wikipedia tab' },
+          },
+          result: {
+            tool_use_id: 'b4',
+            content:
+              'Switched to tab tab-abc.\n\n<untrusted_webpage_content url="https://en.wikipedia.org/wiki/Red_panda">\nRed panda article\n</untrusted_webpage_content>',
+            status: 'ok',
+            payload: {
+              tool: 'browser_tabs',
+              summary: 'Switched to tab-abc',
+              url: 'https://en.wikipedia.org/wiki/Red_panda',
+              title: 'Red panda - Wikipedia',
+            },
+          },
+        },
+        sessionId: 's1',
+        streaming: false,
+        now: 0,
+        openLink: () => undefined,
+        renderMarkdown: ({ content }) => createElement('pre', null, content),
+      })
+    )
+    assert.doesNotMatch(outputHtml, /untrusted_webpage_content/)
+    assert.match(outputHtml, /Red panda article/)
+    assert.doesNotMatch(outputHtml, /Switched to tab-abc/)
     env.browser.dispose()
   })
 })

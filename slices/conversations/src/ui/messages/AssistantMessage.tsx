@@ -1,6 +1,7 @@
 import {
   Button,
   IconButton,
+  IconChevronRightOutline14,
   IconGlobeLanguageOutline16,
   IconRefreshOutline16,
 } from '@deepseek-chat/lib-ui'
@@ -186,6 +187,9 @@ export const AssistantMessage = memo(function AssistantMessage({
             <IconGlobeLanguageOutline16 />
           </span>
           <span className={styles.sourcesLabel}>{sourcesLabel}</span>
+          <span className={styles.sourcesChevron} aria-hidden="true">
+            <IconChevronRightOutline14 />
+          </span>
         </button>
       ) : null}
       {streaming ? null : (

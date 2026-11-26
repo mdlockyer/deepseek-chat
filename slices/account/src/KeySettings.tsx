@@ -3,7 +3,6 @@ import {
   Button,
   IconCheckOutline16,
   IconKeyOutline16,
-  IconToastError16,
   LinkButton,
   PasswordField,
   SettingInlineConfirm,
@@ -240,7 +239,6 @@ export const createKeySettings = (account: Account) => {
                 </div>
                 {errorMessage ? (
                   <div className={styles.errorRow} role="alert">
-                    <IconToastError16 />
                     <span>{errorMessage}</span>
                   </div>
                 ) : null}

@@ -28,16 +28,6 @@
     text-align: left;
   }
 
-  .icon {
-    display: inline-flex;
-    flex-shrink: 0;
-    width: 16px;
-    height: 16px;
-    margin-right: 7px;
-    margin-top: 3px;
-    color: var(--ui-text-danger);
-  }
-
   .content {
     min-width: 0;
   }

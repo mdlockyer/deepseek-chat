@@ -98,7 +98,10 @@ const screenshotsOf = (result: ToolResultRecord | undefined): readonly string[] 
   result?.previewImages?.length ? result.previewImages : (result?.images ?? [])
 
 const formatOutputPreview = (raw: string): string => {
-  const cleaned = raw.replace(/<\/?untrusted_webpage_content>/g, '').trim()
+  const cleaned = raw
+    .replace(/<untrusted_webpage_content(?:\s[^>]*)?>|<\/untrusted_webpage_content>/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
   if (cleaned.length <= MAX_OUTPUT_PREVIEW_CHARS) {
     return cleaned
   }
@@ -180,7 +183,10 @@ const BrowserStepDetail = ({
       call.name === BROWSER_EVAL_TOOL_NAME ||
       call.name === BROWSER_OBSERVE_TOOL_NAME)
   const showTechNote = Boolean(
-    humanSummary && meta.summary && meta.summary.toLowerCase() !== humanSummary.toLowerCase()
+    !showOutput &&
+    humanSummary &&
+    meta.summary &&
+    meta.summary.toLowerCase() !== humanSummary.toLowerCase()
   )
 
   return (

@@ -3,7 +3,6 @@ import {
   IconButton,
   IconCheckedOutline14,
   IconSwapOutline14,
-  IconToastError16,
   IconViewportOutline14,
   Popover,
   Tooltip,
@@ -418,7 +417,6 @@ export const ViewportMenu = ({
             </div>
             {errorMsg ? (
               <div id={errorId} className={styles.viewportCustomError} role="alert">
-                <IconToastError16 />
                 <span>{errorMsg}</span>
               </div>
             ) : (

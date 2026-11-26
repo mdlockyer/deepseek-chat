@@ -110,6 +110,7 @@ export const VisualLightbox = ({
                 <Button
                   variant="secondary"
                   size="s"
+                  trailingIcon={<IconChevronRightOutline14 />}
                   onClick={() => {
                     onClose()
                     onInspectStep(current.callId)

@@ -3,7 +3,7 @@ import { defineMessages } from '@deepseek-chat/spine/i18n'
 export const historyBackupMessages = defineMessages({
   'zh-CN': {
     cancel: '取消',
-    delete: '删除',
+    delete: '删除…',
     upload: '上传',
     backupIncomplete: '文件内容不完整，无法导入',
     backupInvalidJson: '文件不是有效的 JSON',
@@ -36,7 +36,7 @@ export const historyBackupMessages = defineMessages({
   },
   'en-US': {
     cancel: 'Cancel',
-    delete: 'Delete',
+    delete: 'Delete…',
     upload: 'Upload',
     backupIncomplete: 'The file is incomplete and cannot be imported.',
     backupInvalidJson: 'The file is not valid JSON.',

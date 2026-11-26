@@ -11,8 +11,7 @@
     gap: var(--ui-space-1);
     max-width: 100%;
     width: fit-content;
-    min-height: var(--ui-control-xs);
-    padding: var(--ui-space-0-5) 0;
+    min-height: var(--ui-space-6);
     border-radius: var(--ui-radius-xs);
     font: var(--ui-type-caption);
     color: var(--ui-text-accent);
@@ -90,9 +89,9 @@
 
   .output {
     margin: 0;
-    max-height: 200px;
+    max-height: 220px;
     overflow: auto;
-    padding: var(--ui-space-2);
+    padding: var(--ui-space-2) var(--ui-space-2-5);
     border-radius: var(--ui-radius-sm);
     background: var(--ui-surface-sunken);
     font: var(--ui-type-code-block);
