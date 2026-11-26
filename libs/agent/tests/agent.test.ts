@@ -3,7 +3,6 @@ import { describe, it } from 'node:test'
 import {
   ApiError,
   DEEPSEEK_MODELS,
-  MAX_REQUEST_BYTES,
   ServerSentEventDecoder,
   applyEvent,
   classifyApiError,
@@ -290,16 +289,22 @@ describe('libs/agent SSE chunk invariance and pure reducer', () => {
 
 describe('libs/agent ModelSpec and DeepSeek ModelProvider', () => {
   it('resolves known and fallback ModelSpecs cleanly', () => {
+    assert.deepEqual(
+      DEEPSEEK_MODELS.map((m) => m.id),
+      ['deepseek-flash']
+    )
     const flash = resolveModelSpec(DEEPSEEK_MODELS, 'deepseek', 'deepseek-flash')
     assert.equal(flash.id, 'deepseek-flash')
     assert.equal(flash.provider, 'deepseek')
-    assert.ok(flash.contextWindow > 0 && flash.maxOutputTokens > 0)
+    assert.equal(flash.contextWindow, 1_048_576)
+    assert.equal(flash.maxOutputTokens, 393_216)
     assert.equal(flash.capabilities.promptCaching, true)
 
     const custom = resolveModelSpec(DEEPSEEK_MODELS, 'custom', 'my-custom-model')
     assert.equal(custom.id, 'my-custom-model')
     assert.equal(custom.provider, 'custom')
-    assert.ok(custom.contextWindow > 0 && custom.maxOutputTokens > 0)
+    assert.equal(custom.contextWindow, 128_000)
+    assert.equal(custom.maxOutputTokens, 16_384)
   })
 
   it('sends standard Anthropic Messages requests without DeepSeek-proprietary fields and scopes Files beta header', async () => {
@@ -498,24 +503,33 @@ describe('libs/agent error classification and timeouts', () => {
         err instanceof ApiError && err.kind === 'protocol' && err.message === 'Unexpected JSON'
     )
 
-    // Protocol error: request body > MAX_REQUEST_BYTES -> classified as payloadTooLarge
+    // Large payloads (> 3 MB) are not blocked client-side; HTTP 413 from the server classifies as payloadTooLarge
+    let sawLargeRequest = false
+    const largePayload = 'a'.repeat(3_500_000)
     await assert.rejects(
       async () => {
-        const provider = makeProvider(async () => new Response('', { status: 200 }))
-        const huge = 'a'.repeat(MAX_REQUEST_BYTES + 10)
+        const provider = makeProvider(async (_url, init) => {
+          sawLargeRequest = String(init.body).length > 3_500_000
+          return new Response(JSON.stringify({ error: { message: 'Request body too large' } }), {
+            status: 413,
+            headers: { 'Content-Type': 'application/json' },
+          })
+        })
         await drain(
           provider.streamMessage(
-            sampleRequest({ messages: [{ role: 'user', content: huge }] }),
+            sampleRequest({ messages: [{ role: 'user', content: largePayload }] }),
             controller.signal
           )
         )
       },
       (err: unknown) =>
         err instanceof ApiError &&
-        err.kind === 'protocol' &&
+        err.kind === 'http' &&
+        err.status === 413 &&
         classifyApiError(err) === 'payloadTooLarge' &&
         !isRetryableApiError(err)
     )
+    assert.equal(sawLargeRequest, true)
 
     // Stream error: SSE event: error with JSON error payload
     await assert.rejects(

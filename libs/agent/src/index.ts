@@ -1,7 +1,6 @@
 export {
   ApiError,
   DEFAULT_REST_TIMEOUT_MS,
-  MAX_REQUEST_BYTES,
   UPLOAD_TIMEOUT_MS,
   readErrorResponse,
   readMessagesEventStream,
@@ -17,7 +16,6 @@ export {
   type ApiErrorCondition,
 } from './errors.js'
 export {
-  DEEPSEEK_MAX_REQUEST_BYTES,
   DEEPSEEK_MODELS,
   DEFAULT_DEEPSEEK_MODEL,
   resolveModelSpec,

@@ -17,14 +17,10 @@ export type ModelSpec = {
   readonly contextWindow: number
   /** Maximum output tokens the model can produce in one response. */
   readonly maxOutputTokens: number
-  /** Optional hard transport JSON payload cap in UTF-8 bytes. */
-  readonly maxRequestBytes?: number
   readonly capabilities: ModelCapabilities
 }
 
 export const DEFAULT_DEEPSEEK_MODEL: ModelId = 'deepseek-flash'
-
-export const DEEPSEEK_MAX_REQUEST_BYTES = 3_000_000
 
 const DEFAULT_FALLBACK_CAPABILITIES: ModelCapabilities = {
   thinking: true,
@@ -39,24 +35,8 @@ export const DEEPSEEK_MODELS: readonly ModelSpec[] = [
     id: 'deepseek-flash',
     provider: 'deepseek',
     label: 'DeepSeek Flash',
-    contextWindow: 128_000,
-    maxOutputTokens: 8_192,
-    maxRequestBytes: DEEPSEEK_MAX_REQUEST_BYTES,
-    capabilities: {
-      thinking: true,
-      vision: true,
-      documents: true,
-      tools: true,
-      promptCaching: true,
-    },
-  },
-  {
-    id: 'deepseek-v4-pro',
-    provider: 'deepseek',
-    label: 'DeepSeek V4 Pro',
-    contextWindow: 128_000,
-    maxOutputTokens: 8_192,
-    maxRequestBytes: DEEPSEEK_MAX_REQUEST_BYTES,
+    contextWindow: 1_048_576,
+    maxOutputTokens: 393_216,
     capabilities: {
       thinking: true,
       vision: true,
@@ -71,9 +51,7 @@ export const resolveModelSpec = (
   models: readonly ModelSpec[],
   providerId: ProviderId,
   modelId: ModelId,
-  fallbackOverrides?: Partial<
-    Pick<ModelSpec, 'contextWindow' | 'maxOutputTokens' | 'maxRequestBytes'>
-  >
+  fallbackOverrides?: Partial<Pick<ModelSpec, 'contextWindow' | 'maxOutputTokens'>>
 ): ModelSpec => {
   const exact = models.find((spec) => spec.id === modelId)
   if (exact) {
@@ -84,10 +62,7 @@ export const resolveModelSpec = (
     provider: providerId,
     label: modelId,
     contextWindow: fallbackOverrides?.contextWindow ?? 128_000,
-    maxOutputTokens: fallbackOverrides?.maxOutputTokens ?? 8_192,
-    ...(fallbackOverrides?.maxRequestBytes !== undefined
-      ? { maxRequestBytes: fallbackOverrides.maxRequestBytes }
-      : {}),
+    maxOutputTokens: fallbackOverrides?.maxOutputTokens ?? 16_384,
     capabilities: DEFAULT_FALLBACK_CAPABILITIES,
   }
 }

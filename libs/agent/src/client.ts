@@ -1,10 +1,8 @@
 import type { HttpFetch } from '@deepseek-chat/spine/ports'
-import { DEEPSEEK_MAX_REQUEST_BYTES } from './models.js'
 import { readMessageEvent } from './parseEvent.js'
 import { readServerSentEvents } from './sse.js'
 import type { ApiErrorBody, MessageStreamEvent } from './types.js'
 
-export const MAX_REQUEST_BYTES = DEEPSEEK_MAX_REQUEST_BYTES
 export const DEFAULT_REST_TIMEOUT_MS = 15_000
 export const UPLOAD_TIMEOUT_MS = 60_000
 

@@ -8,7 +8,6 @@ import {
 } from './client.js'
 import { classifyApiError } from './errors.js'
 import {
-  DEEPSEEK_MAX_REQUEST_BYTES,
   DEEPSEEK_MODELS,
   DEFAULT_DEEPSEEK_MODEL,
   resolveModelSpec,
@@ -127,7 +126,7 @@ export type DeepSeekProviderDeps = {
 
 /**
  * Creates a `ModelProvider` backed by DeepSeek's `/anthropic/v1/messages` and Files API endpoints.
- * Keeps all DeepSeek-specific headers, file purposes, byte caps, and error regexes isolated here.
+ * Keeps all DeepSeek-specific headers, file purposes, and error regexes isolated here.
  */
 export const createDeepSeekProvider = (deps: DeepSeekProviderDeps): ModelProvider => {
   const models = deps.models ?? DEEPSEEK_MODELS
@@ -185,10 +184,7 @@ export const createDeepSeekProvider = (deps: DeepSeekProviderDeps): ModelProvide
         : MAX_LAYOUT_SIZE_MB,
   }
 
-  const modelSpec = (modelId: string): ModelSpec =>
-    resolveModelSpec(models, 'deepseek', modelId, {
-      maxRequestBytes: DEEPSEEK_MAX_REQUEST_BYTES,
-    })
+  const modelSpec = (modelId: string): ModelSpec => resolveModelSpec(models, 'deepseek', modelId)
 
   return {
     id: 'deepseek',
@@ -200,8 +196,6 @@ export const createDeepSeekProvider = (deps: DeepSeekProviderDeps): ModelProvide
     classifyError: classifyApiError,
     attachments,
     streamMessage: async function* (body: CreateMessageRequest, signal: AbortSignal) {
-      const spec = modelSpec(body.model)
-      const maxBytes = spec.maxRequestBytes ?? DEEPSEEK_MAX_REQUEST_BYTES
       const wireBody = {
         ...body,
         messages: serializeDeepSeekMessages(body.messages),
@@ -209,13 +203,6 @@ export const createDeepSeekProvider = (deps: DeepSeekProviderDeps): ModelProvide
         stream: true,
       }
       const json = JSON.stringify(wireBody)
-      const bytes = new TextEncoder().encode(json).length
-      if (bytes > maxBytes) {
-        throw new ApiError(
-          'protocol',
-          `This request is ${(bytes / 1e6).toFixed(1)} MB, above the API's limit of about ${(maxBytes / 1e6).toFixed(0)} MB. Start a new chat or edit an earlier message to shorten the conversation.`
-        )
-      }
       const response = await request(deps.fetch, `${baseUrl}/messages`, {
         method: 'POST',
         headers: {
