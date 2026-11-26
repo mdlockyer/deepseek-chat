@@ -198,21 +198,60 @@
   }
 
   /*
-   * Desktop sidebar toolbar: pinned after the traffic lights (96px on desktop, 14px on the web)
-   * in both sidebar states and layered above the sidebar, so the toggle never moves under the
-   * cursor. It fades only when it appears with the first chat or leaves with the last one.
+   * Desktop sidebar toggle. One element in both states, travelling with the sidebar:
+   * - expanded: the toggle sits at the sidebar's right edge (left 214px = 261px sidebar - 13px
+   *   right padding - 34px button), on the sidebar's own surface;
+   * - collapsed: it settles after the traffic lights (96px desktop, 14px web) inside a pill
+   *   with the "+".
+   * The slide, the pill surface and the "+" all start at 0ms on the panel curve, with the same
+   * duration as the sidebar width in each direction (280ms opening, 220ms closing).
    */
   .toolbar {
+    --toolbar-expanded-x: 210px; /* 214px toggle position - 4px pill padding */
     position: absolute;
     top: 0;
-    left: var(--collapsed-sider-left, 96px);
+    left: 0;
     z-index: var(--ui-z-chrome-floating);
     display: flex;
     align-items: center;
     gap: var(--ui-space-1);
     height: var(--ui-panel-header-height);
     padding: 0 var(--ui-space-1);
+    transform: translateX(var(--collapsed-sider-left, 96px));
+    transition: transform var(--ui-duration-panel-close) var(--ui-ease-panel);
     animation: toolbar-in var(--ui-duration-normal) var(--ui-ease-standard) both;
+  }
+
+  .toolbarExpanded {
+    transform: translateX(var(--toolbar-expanded-x));
+    transition-duration: var(--ui-duration-panel);
+  }
+
+  /* Paint the buttons above the pill surface (the tooltip wrapper uses display: contents). */
+  .toolbar button {
+    position: relative;
+  }
+
+  /* The collapsed pill's surface: present while collapsed, gone on the open sidebar. */
+  .toolbar::before {
+    content: '';
+    position: absolute;
+    inset: calc((var(--ui-panel-header-height) - var(--ui-control-lg)) / 2) 0;
+    border-radius: var(--ui-radius-pill);
+    background: var(--ui-surface-overlay);
+    box-shadow: var(--ui-elevation-2);
+    pointer-events: none;
+    transition: opacity var(--ui-duration-panel-close) var(--ui-ease-panel);
+  }
+
+  .toolbarExpanded::before {
+    opacity: 0;
+    transition-duration: var(--ui-duration-panel);
+  }
+
+  /* While the toggle travels away from the cursor, its hover fill would ride along with it. */
+  .toolbarMoving button {
+    background-color: transparent;
   }
 
   .toolbarExiting {
@@ -220,11 +259,12 @@
     animation: toolbar-out var(--ui-duration-fast) var(--ui-ease-standard) both;
   }
 
-  /* "+" shows only while the sidebar is collapsed and fades in place, starting with the panel. */
+  /* "+" shows only while collapsed; it fades on the same clock as the slide. */
   .toolbarNewChat {
+    position: relative;
     display: inline-flex;
     transition:
-      opacity var(--ui-duration-normal) var(--ui-ease-standard),
+      opacity var(--ui-duration-panel-close) var(--ui-ease-panel),
       visibility 0s;
   }
 

@@ -1,14 +1,16 @@
 import { IconButton, IconPanelLeftOutline16 } from '@deepseek-chat/lib-ui'
 import clsx from 'clsx'
+import { useEffect, useRef, useState } from 'react'
 import { useConversations } from '../../context.js'
 import { useTranslate } from '../../messages.js'
 import { NewChatIcon } from './NewChatIcon.js'
 import styles from './Sider.module.css'
 
 /**
- * Desktop sidebar toolbar, pinned after the traffic lights in both the expanded and collapsed
- * states. The sidebar slides underneath it, so the toggle the user clicks never moves. The "+"
- * shows only while the sidebar is collapsed; when it is open the sidebar's own "New chat"
+ * Desktop sidebar toggle. A single button that travels with the sidebar: at the sidebar's right
+ * edge while it is open, and beside the traffic lights (in a pill with "+") while it is
+ * collapsed. Because it is one element moving on the panel's curve, there is no hand-off between
+ * two buttons. The "+" shows only while collapsed; when the sidebar is open its own "New chat"
  * button sits right below.
  */
 export const SiderToolbar = ({
@@ -21,19 +23,42 @@ export const SiderToolbar = ({
   const t = useTranslate()
   const { deps, newChat } = useConversations()
   const expanded = siderMode === 'expanded'
+  const toolbarRef = useRef<HTMLDivElement | null>(null)
+  const [moving, setMoving] = useState(false)
+
+  useEffect(() => {
+    const toolbar = toolbarRef.current
+    if (!toolbar) {
+      return
+    }
+    const isSlide = (event: TransitionEvent) =>
+      event.target === toolbar && event.propertyName === 'transform'
+    const onRun = (event: TransitionEvent) => isSlide(event) && setMoving(true)
+    const onDone = (event: TransitionEvent) => isSlide(event) && setMoving(false)
+    toolbar.addEventListener('transitionrun', onRun)
+    toolbar.addEventListener('transitionend', onDone)
+    toolbar.addEventListener('transitioncancel', onDone)
+    return () => {
+      toolbar.removeEventListener('transitionrun', onRun)
+      toolbar.removeEventListener('transitionend', onDone)
+      toolbar.removeEventListener('transitioncancel', onDone)
+    }
+  }, [])
 
   return (
     <div
+      ref={toolbarRef}
       className={clsx(
         styles.toolbar,
         expanded && styles.toolbarExpanded,
+        moving && styles.toolbarMoving,
         exiting && styles.toolbarExiting
       )}
       data-tauri-drag-region="deep"
     >
       <IconButton
         size="m"
-        tone="primary"
+        tone={expanded ? 'tertiary' : 'primary'}
         icon={<IconPanelLeftOutline16 />}
         tooltip={t(expanded ? 'collapseSiderbarButton' : 'expandSiderbarButton')}
         tooltipPlacement="bottom"
