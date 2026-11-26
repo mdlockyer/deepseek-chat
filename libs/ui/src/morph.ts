@@ -57,6 +57,13 @@ export const easeOutCubic = (t: number) => 1 - (1 - t) ** 3
 export const MORPH_OPEN: MorphMotion = { yMs: 250, y: spring(0.8), xMs: 170, x: spring(0.85) }
 export const MORPH_CLOSE: MorphMotion = { yMs: 130, y: easeOutCubic, xMs: 160, x: easeOutCubic }
 
+/**
+ * Shared icons (see MorphMenu): opening, they fly on the open's vertical spring so they land as
+ * the menu does; closing, they ease out over the close's width fold (160ms).
+ */
+export const MORPH_ICON_SPRING = spring(0.8)
+export const MORPH_ICON_CLOSE_EASE = 'cubic-bezier(0.33, 1, 0.68, 1)'
+
 /** Spring for elements marked `data-morph-pop`, which pop in once the menu has formed. */
 export const MORPH_POP = spring(0.6)
 

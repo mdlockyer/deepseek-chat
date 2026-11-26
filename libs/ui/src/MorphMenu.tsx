@@ -4,6 +4,8 @@ import {
   MORPH_CLOSE,
   MORPH_CLOSE_MS,
   MORPH_FADE_EASE,
+  MORPH_ICON_CLOSE_EASE,
+  MORPH_ICON_SPRING,
   MORPH_OPEN,
   MORPH_POP,
   contentClip,
@@ -43,6 +45,12 @@ export type MorphMenuProps = Omit<
  *   `data-morph-pop` pop in last on a bouncier spring.
  * - Closing, the rows fade out (50ms), the background folds back into the trigger (see
  *   MORPH_CLOSE) and fades out over its second half, and the trigger's contents settle back in.
+ *
+ * - Shared icons: a trigger element marked `data-morph-from="<key>"` and a menu element marked
+ *   `data-morph-to="<key>"` are the same icon in two places. Opening, a copy of the trigger's
+ *   icon flies to the menu's on the open spring (250ms) while the real one stays hidden until it
+ *   lands; closing, the menu's icon flies back into the trigger (160ms). Size and colour travel
+ *   with it. Unmatched icons fade with their row or trigger as above.
  *
  * Either run starts from wherever the previous one was, so reopening mid-close does not jump.
  * The trigger should not scale on press: the menu is placed from the trigger's measured box.
@@ -86,6 +94,128 @@ export const MorphMenu = ({
   )
 }
 
+type IconPair = { from: Element; to: Element }
+
+/** Each trigger icon marked `data-morph-from` with the menu icon marked with the same key. */
+const pairIcons = (trigger: HTMLElement, content: HTMLElement): IconPair[] =>
+  Array.from(trigger.querySelectorAll<HTMLElement>('[data-morph-from]')).flatMap((source) => {
+    const key = source.dataset.morphFrom ?? ''
+    const target = content.querySelector(`[data-morph-to="${CSS.escape(key)}"]`)
+    // Fly the glyphs themselves, so chip and row padding do not shift the landing point.
+    const from = source.querySelector('svg') ?? source
+    const to = target?.querySelector('svg') ?? target
+    return to ? [{ from, to }] : []
+  })
+
+/** The open spring as keyframes for a move from `dx, dy` and `scale` to rest. */
+const springFrames = (dx: number, dy: number, scale: number): Keyframe[] =>
+  Array.from({ length: 21 }, (_, index) => {
+    const amount = MORPH_ICON_SPRING(index / 20)
+    return {
+      translate: `${dx * (1 - amount)}px ${dy * (1 - amount)}px`,
+      scale: `${scale + (1 - scale) * amount}`,
+    }
+  })
+
+/**
+ * Flies a copy of each shared icon between the trigger and the menu, above both: the menu's
+ * content is clipped to its growing background, which would cut a real icon off mid-flight, and
+ * the menu is removed as it closes, so the copy is placed on the page in screen coordinates.
+ * The real icon at the destination stays hidden until the copy lands on it.
+ */
+const flyIcons = ({
+  surface,
+  trigger,
+  side,
+  align,
+  pairs,
+  direction,
+}: {
+  surface: HTMLElement
+  trigger: HTMLElement
+  side: MorphSide
+  align: MorphAlign
+  pairs: IconPair[]
+  direction: 'open' | 'close'
+}): { animations: Animation[]; flyers: HTMLElement[] } => {
+  // On opening this runs before the Popover has placed the menu, so the menu's icons are
+  // measured against wherever the menu sits now and shifted to where it will be placed: the
+  // corner it shares with the trigger (as the morph assumes). The trigger's icons are already
+  // where they are.
+  const measured = surface.getBoundingClientRect()
+  const anchor = trigger.getBoundingClientRect()
+  const placed = {
+    left: align === 'end' ? anchor.right - surface.offsetWidth : anchor.left,
+    top: side === 'top' ? anchor.bottom - surface.offsetHeight : anchor.top,
+  }
+  const inMenu = (rect: DOMRect) => ({
+    left: rect.left - measured.left + placed.left,
+    top: rect.top - measured.top + placed.top,
+    width: rect.width,
+    height: rect.height,
+  })
+  const onScreen = (rect: DOMRect) => ({
+    left: rect.left,
+    top: rect.top,
+    width: rect.width,
+    height: rect.height,
+  })
+  const animations: Animation[] = []
+  const flyers: HTMLElement[] = []
+  const duration = direction === 'open' ? MORPH_OPEN.yMs : MORPH_CLOSE.xMs
+  for (const pair of pairs) {
+    const [source, target] = direction === 'open' ? [pair.from, pair.to] : [pair.to, pair.from]
+    // Both ends in screen coordinates. The copy lives on the page, not in the menu, which is
+    // torn down as it closes.
+    const from =
+      direction === 'open'
+        ? onScreen(source.getBoundingClientRect())
+        : inMenu(source.getBoundingClientRect())
+    const to =
+      direction === 'open'
+        ? inMenu(target.getBoundingClientRect())
+        : onScreen(target.getBoundingClientRect())
+    if (from.width === 0 || to.width === 0) {
+      continue
+    }
+    const flyer = document.createElement('div')
+    flyer.className = styles.flyer
+    flyer.setAttribute('aria-hidden', 'true')
+    flyer.append(target.cloneNode(true))
+    Object.assign(flyer.style, {
+      left: `${to.left}px`,
+      top: `${to.top}px`,
+      width: `${to.width}px`,
+      height: `${to.height}px`,
+    })
+    document.body.append(flyer)
+    flyers.push(flyer)
+    // Lands on the destination glyph: drawn at its size and place, started from the source's.
+    const dx = from.left + from.width / 2 - (to.left + to.width / 2)
+    const dy = from.top + from.height / 2 - (to.top + to.height / 2)
+    const scale = from.width / to.width
+    const move =
+      direction === 'open'
+        ? flyer.animate(springFrames(dx, dy, scale), { duration, fill: 'both' })
+        : flyer.animate(
+            [
+              { translate: `${dx}px ${dy}px`, scale: `${scale}` },
+              { translate: '0 0', scale: '1' },
+            ],
+            { duration, easing: MORPH_ICON_CLOSE_EASE, fill: 'both' }
+          )
+    const tint = flyer.animate(
+      [{ color: getComputedStyle(source).color }, { color: getComputedStyle(target).color }],
+      { duration, easing: MORPH_FADE_EASE, fill: 'both' }
+    )
+    // The real icon appears the moment the copy lands on it.
+    const hold = target.animate([{ opacity: 0 }, { opacity: 0 }], { duration, fill: 'backwards' })
+    move.onfinish = () => flyer.remove()
+    animations.push(move, tint, hold)
+  }
+  return { animations, flyers }
+}
+
 const MorphBackground = ({
   open,
   side,
@@ -101,6 +231,7 @@ const MorphBackground = ({
 }) => {
   const shellRef = useRef<HTMLDivElement>(null)
   const runningRef = useRef<Animation[]>([])
+  const flyersRef = useRef<HTMLElement[]>([])
 
   useLayoutEffect(() => {
     const shell = shellRef.current
@@ -130,6 +261,10 @@ const MorphBackground = ({
     for (const animation of runningRef.current) {
       animation.cancel()
     }
+    for (const flyer of flyersRef.current) {
+      flyer.remove()
+    }
+    flyersRef.current = []
 
     const full = menuShape(Number.parseFloat(getComputedStyle(shell).borderRadius))
     const start = triggerShape(
@@ -174,8 +309,23 @@ const MorphBackground = ({
     // and `scale` properties, so they combine with any transform the elements already have.
     const away = side === 'top' ? 1 : -1
 
+    // Shared icons fly only on a fresh open or close, not when a run reverses mid-flight.
+    const flights =
+      current === null && !reduce
+        ? flyIcons({
+            surface,
+            trigger,
+            side,
+            align,
+            pairs: pairIcons(trigger, content),
+            direction: open ? 'open' : 'close',
+          })
+        : { animations: [], flyers: [] }
+    flyersRef.current = flights.flyers
+
     if (open) {
       const animations = [
+        ...flights.animations,
         ...morph(current?.shape ?? start, full, MORPH_OPEN),
         shell.animate([{ opacity: current?.opacity ?? 0 }, { opacity: 1 }], {
           duration: 70,
@@ -230,6 +380,7 @@ const MorphBackground = ({
     }
 
     runningRef.current = [
+      ...flights.animations,
       ...morph(current?.shape ?? full, start, MORPH_CLOSE),
       shell.animate(
         [
@@ -263,6 +414,9 @@ const MorphBackground = ({
         if (animation.effect?.getTiming().fill === 'forwards') {
           animation.cancel()
         }
+      }
+      for (const flyer of flyersRef.current) {
+        flyer.remove()
       }
     },
     []

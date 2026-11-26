@@ -71,6 +71,15 @@
     }
   }
 
+  /* The menu is placed from the pill's measured box, so the pill never scales on press;
+     its chips brighten on hover instead. */
+  @media (hover: hover) {
+    .pill:hover:not(:disabled) .icon:not(.iconIdle) {
+      background-color: var(--ui-surface-raised-2);
+      color: var(--ui-text-primary);
+    }
+  }
+
   /* All switches off: a plain sliders glyph, no chip. */
   .iconIdle {
     background-color: transparent;
@@ -87,10 +96,19 @@
     animation-timing-function: var(--ui-ease-spring);
   }
 
-  /* MorphMenu draws the background; this sizes the menu. */
+  /* MorphMenu draws the background; this sizes the menu. Icon, label and switch fit in 232px,
+     so it unfolds from the pill as the pill growing; the 20px corners sit between the pill's
+     full round and the default 16px. */
   .menu {
-    width: 280px;
+    --morph-menu-radius: calc(var(--ui-radius-lg) + var(--ui-space-1));
+
+    width: 232px;
     padding: var(--ui-space-1-5);
+  }
+
+  /* Wraps a row's icon only to mark it for the flight; it adds no box of its own. */
+  .rowIcon {
+    display: contents;
   }
 
   @keyframes tools-pill-icon-in {

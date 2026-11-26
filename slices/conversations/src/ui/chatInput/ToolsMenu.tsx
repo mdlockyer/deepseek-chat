@@ -8,7 +8,8 @@ import styles from './ToolsMenu.module.css'
 /**
  * Pill under the composer's right edge: one icon per switch that is on (DeepThink and the
  * mounted tools), or a neutral sliders icon when all are off. It grows into a menu with every
- * switch.
+ * switch, and the pill's icons fly to their rows as it opens and back as it closes, so a switch
+ * turned on in the menu lands in the pill.
  */
 export const ToolsMenu = ({
   tools,
@@ -56,7 +57,13 @@ export const ToolsMenu = ({
             active.map((tool) => (
               <span
                 key={tool.key}
-                className={clsx(styles.icon, !seenIcons.has(tool.key) && styles.iconEntering)}
+                className={clsx(
+                  styles.icon,
+                  // A switch turned on in the menu arrives by flying in as the menu closes, so
+                  // its chip does not also pop in (hidden under the menu, then mid-scale).
+                  !open && !seenIcons.has(tool.key) && styles.iconEntering
+                )}
+                data-morph-from={tool.key}
               >
                 {tool.icon}
               </span>
@@ -91,7 +98,12 @@ export const ToolsMenu = ({
             key={tool.key}
             block
             data-composer-row=""
-            icon={tool.icon}
+            icon={
+              // Same key as the pill's chip: MorphMenu flies the icon between the two.
+              <span className={styles.rowIcon} data-morph-to={tool.key}>
+                {tool.icon}
+              </span>
+            }
             label={tool.label}
             checked={tool.checked}
             onChange={tool.onToggle}
