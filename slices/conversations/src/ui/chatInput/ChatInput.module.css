@@ -18,6 +18,7 @@
     cursor: text;
     font-size: var(--ui-font-size-lg);
     line-height: var(--line-height);
+    /* Half the one-line height (48px), so one line is a pill; see .inputRow. */
     border-radius: var(--ui-radius-xl);
     background: var(--ui-surface-input);
     /* Elevation carries the edge (its hairline ring), so the composer needs no border. */
@@ -237,12 +238,18 @@
     }
   }
 
-  /* Text field and send / stop on one row; the button stays on the last line as text grows. */
+  /*
+   * Text field and send / stop on one row; the button stays on the last line as text grows.
+   * One line is a true pill: 8px + 32px row + 8px = 48px tall, and the box's 24px radius
+   * (--ui-radius-xl) is exactly half of that. The 32px send button sits 8px in from the top,
+   * bottom and right, so its round end is concentric with the pill's (16px + 8px = 24px).
+   * Longer drafts keep the same radius and grow into a rounded rectangle.
+   */
   .inputRow {
     display: flex;
     align-items: flex-end;
     gap: var(--ui-space-3);
-    padding: var(--ui-space-3) var(--ui-space-3) var(--ui-space-3) var(--ui-space-6);
+    padding: var(--ui-space-2) var(--ui-space-2) var(--ui-space-2) var(--ui-space-5);
   }
 
   .textareaWrapper {
