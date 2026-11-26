@@ -1,0 +1,67 @@
+@layer slice {
+  .root {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  /* While the width eases, the new text is clipped by the root rather than ellipsized. */
+  .incoming {
+    flex-shrink: 0;
+    animation: swap-in var(--ui-duration-normal) var(--ui-ease-fade) var(--ui-duration-fast) both;
+  }
+
+  .outgoing {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    display: flex;
+    align-items: center;
+    width: max-content;
+    max-width: none;
+    overflow: visible;
+    pointer-events: none;
+    animation: swap-out var(--ui-duration-fast) var(--ui-ease-fade) both;
+  }
+
+  @keyframes swap-in {
+    from {
+      opacity: 0;
+      transform: translateY(var(--ui-space-0-5));
+    }
+  }
+
+  @keyframes swap-out {
+    to {
+      opacity: 0;
+      transform: translateY(calc(var(--ui-space-0-5) * -1));
+    }
+  }
+
+  /* Reduced motion keeps the crossfade but drops the vertical drift. */
+  @media (prefers-reduced-motion: reduce) {
+    .incoming {
+      flex-shrink: 0;
+      animation: swap-fade-in 120ms var(--ui-ease-fade) both;
+    }
+
+    .outgoing {
+      animation: swap-fade-out 120ms var(--ui-ease-fade) both;
+    }
+  }
+
+  @keyframes swap-fade-in {
+    from {
+      opacity: 0;
+    }
+  }
+
+  @keyframes swap-fade-out {
+    to {
+      opacity: 0;
+    }
+  }
+}

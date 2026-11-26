@@ -11,6 +11,10 @@
     color: var(--whale-color, var(--ui-text-secondary));
     font-size: var(--ui-font-size-lg);
     line-height: 1;
+    /* The settled icon is 1px narrower and may change colour; ease both instead of snapping. */
+    transition:
+      font-size var(--ui-duration-slow) var(--ui-ease-fade),
+      color var(--ui-duration-slow) var(--ui-ease-fade);
   }
 
   /* 用两级类名压过宿主的 `svg { width: 14px }` 一类图标规则 */

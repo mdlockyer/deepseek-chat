@@ -7,7 +7,7 @@ import {
   hoverGlideItem,
 } from '@deepseek-chat/lib-ui'
 import clsx from 'clsx'
-import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { memo, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
 import { formatSize, getExtension } from '../../attachments.js'
 import { useConversations } from '../../context.js'
 import { useTranslate } from '../../messages.js'
@@ -26,8 +26,13 @@ import { FileCard } from '../files/FileCard.js'
 import { ChatMarkdown as Markdown } from './ChatMarkdown.js'
 import styles from './ReplyArea.module.css'
 import { Reveal } from './Reveal.js'
+import { useScrollFollow } from './scrollContext.js'
+import { SwapLabel } from './SwapLabel.js'
 import './thinking.markdown.css'
 import { WhaleLoader } from './WhaleLoader.js'
+
+/** Trace rows past this index share its entrance delay. */
+const TRACE_STAGGER_ROWS = 6
 
 const useNoInspection = () => null
 const useNotShown = () => false
@@ -80,6 +85,7 @@ export const ReplyArea = memo(function ReplyArea({
     target.messageId === message.id &&
     target.tab === 'activity'
   const [expanded, setExpanded] = useState(false)
+  const follow = useScrollFollow()
 
   const tick = useTicker(streaming, 1000)
   const strip = buildTurnWorkStrip(
@@ -97,7 +103,15 @@ export const ReplyArea = memo(function ReplyArea({
     return null
   }
 
-  const toggleExpanded = () => setExpanded((value) => !value)
+  const toggleExpanded = () => {
+    if (!expanded) {
+      // Opening is for reading in place: growth below must not pull the list to the bottom.
+      follow.stop()
+    }
+    setExpanded(!expanded)
+  }
+  // Once the trace has finished moving, follow new output again only if the reader is at the bottom.
+  const syncFollow = () => follow.sync()
   const inspectActivity = (callId?: string) =>
     requestTurnInspection(sessionId, message.id, 'activity', callId)
 
@@ -138,7 +152,9 @@ export const ReplyArea = memo(function ReplyArea({
             <span className={clsx(styles.iconSlot, strip.waitingForUser && styles.waitingIcon)}>
               <WhaleLoader width={strip.waitingForUser ? 15 : 16} still={strip.waitingForUser} />
             </span>
-            <span className={styles.headline}>{strip.headline}</span>
+            <SwapLabel swapKey={`live:${strip.headline}`} className={styles.headline}>
+              {strip.headline}
+            </SwapLabel>
             <span
               className={clsx(styles.chevron, expanded && styles.chevronOpen)}
               aria-hidden="true"
@@ -147,7 +163,7 @@ export const ReplyArea = memo(function ReplyArea({
             </span>
           </button>
 
-          <Reveal open={expanded}>
+          <Reveal open={expanded} onSettle={syncFollow}>
             {() => {
               const trace = buildInlineTrace(view)
               return (
@@ -163,60 +179,66 @@ export const ReplyArea = memo(function ReplyArea({
             }}
           </Reveal>
 
-          {expanded ? null : strip.liveTracks.length > 0 ? (
-            <div className={styles.liveTracks} role="status" aria-live="polite">
-              {strip.liveTracks.map((track) => {
-                const isRunning = track.status === 'running'
-                const isFailed = track.status === 'failed'
-                const isSettled = !isRunning && !isFailed
-                const showDetail = (isRunning || isFailed) && Boolean(track.detail)
-                const statusText = trackStatusLabel(track)
-                return (
-                  <button
-                    key={track.id}
-                    type="button"
-                    className={clsx(
-                      styles.liveTrackRow,
-                      isSettled && styles.liveTrackSettled,
-                      isFailed && styles.liveTrackFailed
-                    )}
-                    onClick={toggleExpanded}
-                  >
-                    <span className={styles.liveTrackMain}>
-                      <span className={styles.liveTrackLabel}>{track.label}</span>
-                      {showDetail ? (
-                        <span className={styles.liveTrackDetail}>{track.detail}</span>
-                      ) : null}
-                    </span>
-                    {statusText ? (
-                      <span
-                        className={clsx(
-                          styles.liveTrackStatus,
-                          isFailed && styles.liveTrackStatusError
-                        )}
+          {strip.liveTracks.length > 0 || strip.detail ? (
+            <Reveal open={!expanded}>
+              {() =>
+                strip.liveTracks.length > 0 ? (
+                  <div className={styles.liveTracks} role="status" aria-live="polite">
+                    {strip.liveTracks.map((track) => {
+                      const isRunning = track.status === 'running'
+                      const isFailed = track.status === 'failed'
+                      const isSettled = !isRunning && !isFailed
+                      const showDetail = (isRunning || isFailed) && Boolean(track.detail)
+                      const statusText = trackStatusLabel(track)
+                      return (
+                        <button
+                          key={track.id}
+                          type="button"
+                          className={clsx(
+                            styles.liveTrackRow,
+                            isSettled && styles.liveTrackSettled,
+                            isFailed && styles.liveTrackFailed
+                          )}
+                          onClick={toggleExpanded}
+                        >
+                          <span className={styles.liveTrackMain}>
+                            <span className={styles.liveTrackLabel}>{track.label}</span>
+                            {showDetail ? (
+                              <span className={styles.liveTrackDetail}>{track.detail}</span>
+                            ) : null}
+                          </span>
+                          {statusText ? (
+                            <span
+                              className={clsx(
+                                styles.liveTrackStatus,
+                                isFailed && styles.liveTrackStatusError
+                              )}
+                            >
+                              {statusText}
+                            </span>
+                          ) : null}
+                        </button>
+                      )
+                    })}
+                    {strip.overflowTracks > 0 ? (
+                      <button
+                        type="button"
+                        className={styles.liveTrackOverflow}
+                        onClick={() => inspectActivity()}
                       >
-                        {statusText}
-                      </span>
+                        {t('activityMoreTracks', { count: strip.overflowTracks })}
+                      </button>
                     ) : null}
-                  </button>
-                )
-              })}
-              {strip.overflowTracks > 0 ? (
-                <button
-                  type="button"
-                  className={styles.liveTrackOverflow}
-                  onClick={() => inspectActivity()}
-                >
-                  {t('activityMoreTracks', { count: strip.overflowTracks })}
-                </button>
-              ) : null}
-            </div>
-          ) : strip.detail ? (
-            <div className={styles.liveDetailRail} role="status" aria-live="polite">
-              <button type="button" className={styles.liveDetail} onClick={toggleExpanded}>
-                {strip.detail}
-              </button>
-            </div>
+                  </div>
+                ) : strip.detail ? (
+                  <div className={styles.liveDetailRail} role="status" aria-live="polite">
+                    <button type="button" className={styles.liveDetail} onClick={toggleExpanded}>
+                      {strip.detail}
+                    </button>
+                  </div>
+                ) : null
+              }
+            </Reveal>
           ) : null}
         </div>
       ) : strip.mode === 'settled' ? (
@@ -234,7 +256,9 @@ export const ReplyArea = memo(function ReplyArea({
             <span className={clsx(styles.iconSlot, strip.stopped && styles.stoppedIcon)}>
               <WhaleLoader width={15} still />
             </span>
-            <span className={styles.settledLabel}>{strip.label}</span>
+            <SwapLabel swapKey="settled" className={styles.settledLabel}>
+              {strip.label}
+            </SwapLabel>
             <span
               className={clsx(styles.chevron, expanded && styles.chevronOpen)}
               aria-hidden="true"
@@ -243,7 +267,7 @@ export const ReplyArea = memo(function ReplyArea({
             </span>
           </button>
 
-          <Reveal open={expanded}>
+          <Reveal open={expanded} onSettle={syncFollow}>
             {() => (
               <InlineTraceInlay
                 messageId={message.id}
@@ -352,6 +376,7 @@ const InlineTraceInlay = ({
             return (
               <li
                 key={item.key}
+                style={{ '--trace-row': Math.min(index, TRACE_STAGGER_ROWS) } as CSSProperties}
                 className={clsx(
                   styles.traceItem,
                   gapBefore && styles.traceItemGap,

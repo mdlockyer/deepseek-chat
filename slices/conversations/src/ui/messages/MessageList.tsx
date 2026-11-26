@@ -5,7 +5,7 @@ import { type CompactionCheckpoint, type Message, type Session } from '../../typ
 import { AssistantMessage } from './AssistantMessage.js'
 import { CompactionDivider } from './CompactionDivider.js'
 import styles from './MessageList.module.css'
-import { ScrollToBottomContext } from './scrollContext.js'
+import { ScrollFollowContext, ScrollToBottomContext, type ScrollFollow } from './scrollContext.js'
 import { UserMessage } from './UserMessage.js'
 
 const getUploadRetryId = (messages: Message[], streaming: boolean) => {
@@ -58,6 +58,21 @@ export const MessageList = ({
       scrollTopRef.current = el.scrollTop
     }
   }, [])
+
+  const follow = useMemo<ScrollFollow>(
+    () => ({
+      stop: () => {
+        stickyRef.current = false
+      },
+      sync: () => {
+        const el = scrollRef.current
+        if (el) {
+          stickyRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < STICKY_THRESHOLD
+        }
+      },
+    }),
+    []
+  )
 
   useLayoutEffect(() => {
     const content = contentRef.current
@@ -157,46 +172,48 @@ export const MessageList = ({
   const uploadRetryId = getUploadRetryId(messages, busy)
   return (
     <ScrollToBottomContext.Provider value={scrollToBottom}>
-      <div className={styles.container}>
-        <div ref={scrollRef} className={styles.scroll}>
-          <div ref={contentRef} className={styles.column}>
-            {messages.map((message, index) => {
-              const anchoredCheckpoints = checkpointsByAnchor.get(message.id)
-              return (
-                <Fragment key={message.id}>
-                  {message.role === 'user' ? (
-                    <UserMessage
-                      sessionId={session.id}
-                      message={message}
-                      retryUploadId={uploadRetryId}
-                      isFirst={index === 0}
-                      isLast={index === lastIndex || index === lastIndex - 1}
-                      busy={busy}
-                      versions={versions.get(message.id) ?? EMPTY_VERSIONS}
-                      onSelectVersion={selectVersion}
-                    />
-                  ) : (
-                    <AssistantMessage
-                      sessionId={session.id}
-                      message={message}
-                      isLast={index === lastIndex}
-                      streaming={streaming && index === lastIndex}
-                      compacting={compacting && index === lastIndex}
-                      busy={busy}
-                      versions={versions.get(message.id) ?? EMPTY_VERSIONS}
-                      onSelectVersion={selectVersion}
-                    />
-                  )}
-                  {anchoredCheckpoints?.map((checkpoint) => (
-                    <CompactionDivider key={checkpoint.id} checkpoint={checkpoint} />
-                  ))}
-                </Fragment>
-              )
-            })}
+      <ScrollFollowContext.Provider value={follow}>
+        <div className={styles.container}>
+          <div ref={scrollRef} className={styles.scroll}>
+            <div ref={contentRef} className={styles.column}>
+              {messages.map((message, index) => {
+                const anchoredCheckpoints = checkpointsByAnchor.get(message.id)
+                return (
+                  <Fragment key={message.id}>
+                    {message.role === 'user' ? (
+                      <UserMessage
+                        sessionId={session.id}
+                        message={message}
+                        retryUploadId={uploadRetryId}
+                        isFirst={index === 0}
+                        isLast={index === lastIndex || index === lastIndex - 1}
+                        busy={busy}
+                        versions={versions.get(message.id) ?? EMPTY_VERSIONS}
+                        onSelectVersion={selectVersion}
+                      />
+                    ) : (
+                      <AssistantMessage
+                        sessionId={session.id}
+                        message={message}
+                        isLast={index === lastIndex}
+                        streaming={streaming && index === lastIndex}
+                        compacting={compacting && index === lastIndex}
+                        busy={busy}
+                        versions={versions.get(message.id) ?? EMPTY_VERSIONS}
+                        onSelectVersion={selectVersion}
+                      />
+                    )}
+                    {anchoredCheckpoints?.map((checkpoint) => (
+                      <CompactionDivider key={checkpoint.id} checkpoint={checkpoint} />
+                    ))}
+                  </Fragment>
+                )
+              })}
+            </div>
           </div>
+          {footer}
         </div>
-        {footer}
-      </div>
+      </ScrollFollowContext.Provider>
     </ScrollToBottomContext.Provider>
   )
 }

@@ -1,4 +1,6 @@
 import clsx from 'clsx'
+import { useLayoutEffect, useRef, useState } from 'react'
+import { readDurationMs, readMotionToken } from './motion.js'
 import styles from './WhaleLoader.module.css'
 
 /**
@@ -17,6 +19,58 @@ const TAIL_PATH =
 /** 标志的宽高比（viewBox 56.8 × 41.36） */
 const ASPECT = 56.8 / 41.36
 
+/**
+ * Settling: when `still` turns on mid-swim, the whale and tail ease from their current pose
+ * back to rest, and the bubbles fade, instead of snapping. Durations come from the motion tokens,
+ * so reduced motion makes this immediate.
+ */
+const useSettle = (still: boolean) => {
+  const whaleRef = useRef<SVGSVGElement | null>(null)
+  const tailRef = useRef<SVGPathElement | null>(null)
+  const bubblesRef = useRef<HTMLSpanElement | null>(null)
+  const [resting, setResting] = useState(still)
+  const restingRef = useRef(resting)
+  restingRef.current = resting
+  const [bubbles, setBubbles] = useState(!still)
+
+  useLayoutEffect(() => {
+    if (!still) {
+      setResting(false)
+      setBubbles(true)
+      return
+    }
+    const whale = whaleRef.current
+    if (restingRef.current || !whale) {
+      return
+    }
+    const duration = readDurationMs(whale, '--ui-duration-slow')
+    const easing = readMotionToken(whale, '--ui-ease-fade')
+    for (const el of [whale, tailRef.current]) {
+      // The CSS swim is still applied in this pass, so this reads the live pose.
+      const pose = el ? getComputedStyle(el).transform : 'none'
+      if (el && pose !== 'none') {
+        el.animate([{ transform: pose }, { transform: 'none' }], { duration, easing })
+      }
+    }
+    const fade = bubblesRef.current?.animate([{ opacity: 1 }, { opacity: 0 }], {
+      duration: readDurationMs(whale, '--ui-duration-fast'),
+      easing,
+      fill: 'forwards',
+    })
+    setResting(true)
+    if (!fade) {
+      setBubbles(false)
+      return
+    }
+    fade.onfinish = () => setBubbles(false)
+    return () => {
+      fade.onfinish = null
+    }
+  }, [still])
+
+  return { whaleRef, tailRef, bubblesRef, resting, bubbles }
+}
+
 export const WhaleLoader = ({
   width = 22,
   still = false,
@@ -28,22 +82,25 @@ export const WhaleLoader = ({
   still?: boolean
   /** 独立出现时作为状态播报的文字；放在已有文字旁时不传，整体对读屏隐藏 */
   label?: string
-}) => (
-  <span
-    className={clsx(styles.loader, still && styles.still)}
-    style={{ fontSize: width / ASPECT }}
-    {...(label ? { role: 'status', 'aria-label': label } : { 'aria-hidden': true })}
-  >
-    {still ? null : (
-      <>
-        <span className={styles.bubble} />
-        <span className={styles.bubble} />
-        <span className={styles.bubble} />
-      </>
-    )}
-    <svg className={styles.whale} viewBox="-0.6 0 56.8 41.36" focusable="false">
-      <path d={BODY_PATH} fill="currentColor" />
-      <path className={styles.tail} d={TAIL_PATH} fill="currentColor" />
-    </svg>
-  </span>
-)
+}) => {
+  const { whaleRef, tailRef, bubblesRef, resting, bubbles } = useSettle(still)
+  return (
+    <span
+      className={clsx(styles.loader, resting && styles.still)}
+      style={{ fontSize: width / ASPECT }}
+      {...(label ? { role: 'status', 'aria-label': label } : { 'aria-hidden': true })}
+    >
+      {bubbles ? (
+        <span ref={bubblesRef}>
+          <span className={styles.bubble} />
+          <span className={styles.bubble} />
+          <span className={styles.bubble} />
+        </span>
+      ) : null}
+      <svg ref={whaleRef} className={styles.whale} viewBox="-0.6 0 56.8 41.36" focusable="false">
+        <path d={BODY_PATH} fill="currentColor" />
+        <path ref={tailRef} className={styles.tail} d={TAIL_PATH} fill="currentColor" />
+      </svg>
+    </span>
+  )
+}

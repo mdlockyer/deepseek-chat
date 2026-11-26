@@ -1,14 +1,16 @@
 @layer slice {
   /* Collapsed by default. The negative margin cancels the parent's flex gap so the
-     row below lands exactly where it was before the reveal mounted. */
+     row below lands exactly where it was before the reveal mounted. Closing fades the
+     content out faster than the height collapses, so lines are never visibly clipped. */
   .reveal {
     display: grid;
     grid-template-rows: 0fr;
     margin-top: calc(var(--ui-space-1) * -1);
     opacity: 0;
     transition:
-      grid-template-rows var(--ui-duration-panel-close) var(--ui-ease-panel),
-      margin-top var(--ui-duration-panel-close) var(--ui-ease-panel),
+      grid-template-rows calc(var(--ui-duration-panel-close) * var(--reveal-scale, 1))
+        var(--ui-ease-panel),
+      margin-top calc(var(--ui-duration-panel-close) * var(--reveal-scale, 1)) var(--ui-ease-panel),
       opacity var(--ui-duration-fast) var(--ui-ease-fade);
   }
 
@@ -18,17 +20,38 @@
     margin-top: 0;
     opacity: 1;
     transition:
-      grid-template-rows var(--ui-duration-panel) var(--ui-ease-panel),
-      margin-top var(--ui-duration-panel) var(--ui-ease-panel),
+      grid-template-rows calc(var(--ui-duration-panel) * var(--reveal-scale, 1))
+        var(--ui-ease-panel),
+      margin-top calc(var(--ui-duration-panel) * var(--reveal-scale, 1)) var(--ui-ease-panel),
       opacity var(--ui-duration-normal) var(--ui-ease-fade) var(--ui-duration-fast);
   }
 
+  /* Content drifts up into place as it fades in; it does not drift on the way out. */
   .inner {
     min-height: 0;
     overflow: hidden;
+    transition: transform var(--ui-duration-slow) var(--ui-ease-fade) var(--ui-duration-fast);
+  }
+
+  .reveal[data-phase='entering'] > .inner {
+    transform: translateY(var(--ui-space-1));
   }
 
   .reveal[data-phase='open'] > .inner {
     overflow: visible;
+  }
+
+  /* Reduced motion removes movement, not feedback: height snaps, opacity still crossfades.
+     The duration tokens collapse to 1ms here, so this one is set directly. */
+  @media (prefers-reduced-motion: reduce) {
+    .reveal,
+    .reveal[data-phase='opening'],
+    .reveal[data-phase='open'] {
+      transition: opacity 120ms var(--ui-ease-fade);
+    }
+
+    .reveal[data-phase='entering'] > .inner {
+      transform: none;
+    }
   }
 }
