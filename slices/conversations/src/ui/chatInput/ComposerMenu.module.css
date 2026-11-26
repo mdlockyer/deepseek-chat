@@ -16,8 +16,7 @@
     outline: none;
     transition:
       background-color var(--ui-duration-normal) var(--ui-ease-standard),
-      color var(--ui-duration-normal) var(--ui-ease-standard),
-      transform var(--ui-duration-normal) var(--ui-ease-standard);
+      color var(--ui-duration-normal) var(--ui-ease-standard);
 
     @media (hover: hover) {
       &:hover:not(:disabled) {
@@ -26,8 +25,8 @@
       }
     }
 
+    /* No press scale: MorphMenu places the menu from this button's measured box. */
     &:active:not(:disabled) {
-      transform: scale(0.94);
       background-color: var(--ui-interactive-active);
     }
 
@@ -58,11 +57,10 @@
     transform: rotate(45deg);
   }
 
+  /* MorphMenu draws the background; this sizes the menu. */
   .menu {
     width: 256px;
     padding: var(--ui-space-1-5);
-    border-radius: var(--ui-radius-lg);
-    outline: none;
   }
 
   .row {

@@ -47,6 +47,21 @@ export {
 export { Chip, type ChipProps } from './Chip.js'
 export { Dialog, type DialogProps, type DialogSize } from './Dialog.js'
 export { Popover, type PopoverProps } from './Popover.js'
+export { MorphMenu, type MorphMenuProps } from './MorphMenu.js'
+export {
+  MORPH_CLOSE,
+  MORPH_CLOSE_MS,
+  MORPH_OPEN,
+  contentClip,
+  menuShape,
+  sampleMorph,
+  spring,
+  triggerShape,
+  type MorphAlign,
+  type MorphMotion,
+  type MorphShape,
+  type MorphSide,
+} from './morph.js'
 export {
   Menu,
   type MenuCommandOption,

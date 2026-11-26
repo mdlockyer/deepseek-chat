@@ -93,33 +93,10 @@
     animation-timing-function: var(--ui-ease-spring);
   }
 
-  /*
-   * The menu grows out of the pill (MenuMorph in ModelMenu.tsx animates it), so the surface
-   * itself is bare: the shell behind the rows carries the fill, shadow and corners, and the
-   * shared popover entrance and exit are switched off.
-   */
+  /* MorphMenu draws the background; this sizes the menu. */
   .menu {
     width: 280px;
     padding: var(--ui-space-1-5);
-    border-radius: var(--ui-radius-lg);
-    background-color: transparent;
-    box-shadow: none;
-    overflow: visible;
-    outline: none;
-  }
-
-  .menu[data-state] {
-    animation: none;
-  }
-
-  .shell {
-    position: absolute;
-    z-index: -1;
-    inset: -1px;
-    border-radius: var(--ui-radius-lg);
-    background-color: var(--ui-surface-overlay);
-    box-shadow: var(--ui-elevation-2);
-    pointer-events: none;
   }
 
   @keyframes model-pill-icon-in {

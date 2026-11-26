@@ -91,8 +91,9 @@ factories (`createIndexedDbSessionStore`, `memorySessionStore`).
    All other composer toggles come dynamically from `tools.toggles`.
    The composer box holds only the draft (attachments, text, send / stop). Under it, `+` offers
    file upload and conversation compaction, and the model pill shows the model's label plus one
-   icon per toggle that is on, with no chevron; it grows into the menu with DeepThink and every
-   tool toggle, which opens over the pill with their bottom-right corners together. The
+   icon per toggle that is on, with no chevron; it opens the menu with DeepThink and every tool
+   toggle. Both open as `MorphMenu`s that grow out of their button: the `+` menu shares its
+   bottom-left corner with `+`, the model menu its bottom-right corner with the pill. The
    composer shows no context meter; compaction stays automatic and reachable from `+`.
 7. **Branches.** A chat is a tree. Sending appends below the visible leaf; editing adds a sibling
    user node and reply; regenerating adds a sibling assistant node; switching versions updates

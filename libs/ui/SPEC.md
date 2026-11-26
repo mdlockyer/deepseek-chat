@@ -18,7 +18,7 @@ every slice's UI and pass the full gate with zero slice edits.
 | **Runtime & Provider**  | `UiProvider`, `createOverlayCoordinator`, `createNoticeBus`, `useOverlayPort`, `useOverlayLock`, `useUiNotice`, `useIsMobile`, `usePresence`, `copyText`, `computeAnchoredPosition`, `useAnchoredPosition`, `useDismiss`, `useDelayedOpen`, `VIEWPORT_PADDING`                                                                                |
 | **Actions**             | `Button`, `LinkButton`, `IconButton`, `Chip`                                                                                                                                                                                                                                                                                                  |
 | **Inputs & Selection**  | `TextField`, `PasswordField`, `Select`, `Switch`, `SegmentedControl`, `RadioCardGroup`                                                                                                                                                                                                                                                        |
-| **Overlays & Floating** | `Dialog`, `Popover`, `Menu`, `Tooltip`, `HoverCard`, `ToastViewport`                                                                                                                                                                                                                                                                          |
+| **Overlays & Floating** | `Dialog`, `Popover`, `MorphMenu` (with `morph.ts` geometry: `triggerShape`, `menuShape`, `contentClip`, `sampleMorph`, `spring`, `MORPH_OPEN`, `MORPH_CLOSE`, `MORPH_CLOSE_MS`), `Menu`, `Tooltip`, `HoverCard`, `ToastViewport`                                                                                                              |
 | **Navigation & Motion** | `Tabs`, `TabList`, `Tab`, `TabPanel`, `HoverGlide`, `useHoverGlide`, `HoverGlideIndicator`, `hoverGlideItem`, `HOVER_GLIDE_ITEM_ATTR`, `HOVER_GLIDE_SURFACE_ATTR`, `INITIAL_HOVER_GLIDE_STATE`, `enterGlideTarget`, `leaveGlideTarget`, `expireGlideCooldown`, `syncGlideRect`, `measureGlideRect`, `normalizeGlideRadius`, `glideRectsEqual` |
 | **Feedback & Layout**   | `Badge`, `Banner`, `EmptyState`, `Spinner`, `SettingGroup`, `SettingRow`, `SettingInlineConfirm`, `PanelHeader`                                                                                                                                                                                                                               |
 | **Icons & Glyphs**      | Domain-blind `Icon*` SVG components and `FileGlyph` (`kind: 'document' \| 'pdf' \| 'spreadsheet' \| 'presentation' \| 'image'`)                                                                                                                                                                                                               |
@@ -51,6 +51,13 @@ every slice's UI and pass the full gate with zero slice edits.
      `OverlayPort` lock while open.
    - `Tooltip` satisfies WCAG 1.4.13: opens on both hover and focus, stays open while hovered, and
      dismisses on `Escape` without moving the pointer.
+   - `MorphMenu` is a `Popover` that grows out of its trigger. It opens over the trigger with one
+     corner shared (`side` `top` or `bottom`, `align` `start` or `end`); its background starts on
+     the trigger's box and corner radius and unfolds to the menu, the content is clipped to the
+     background, and the trigger's own contents fade out while open and back in on close. A run
+     starts from the previous run's current shape, so reopening mid-close does not jump. Under
+     `prefers-reduced-motion` the background appears at full size and only fades. Triggers must
+     not scale on press, because placement uses the trigger's measured box.
 6. **Form fields (`TextField`, `PasswordField`, `Switch`, `SegmentedControl`, `RadioCardGroup`).**
    - `TextField` and `PasswordField` programmatically associate visible `<label htmlFor>`, place
      hints above the input linked via `aria-describedby`, set `aria-invalid="true"` only when an
@@ -92,6 +99,8 @@ every slice's UI and pass the full gate with zero slice edits.
 | `VIEWPORT_PADDING`           | `8` px    | Minimum clearance between an anchored floating surface and viewport edges |
 | Tooltip enter delay          | `100` ms  | Pointer hover delay before showing a tooltip                              |
 | Popover exit duration        | `140` ms  | Fade/scale exit animation duration                                        |
+| MorphMenu open               | `340` ms  | Height on a spring (~2.8% overshoot); width on a firmer one in `230` ms   |
+| MorphMenu close              | `240` ms  | Height folds in `180` ms, width in `220` ms; exit duration `240` ms       |
 | Dialog / Toast exit duration | `160` ms  | Fade/scale exit animation duration                                        |
 | Notice default duration      | `3000` ms | Auto-dismiss timeout for plain notices                                    |
 | Notice link duration         | `5000` ms | Auto-dismiss timeout for notices containing a link                        |

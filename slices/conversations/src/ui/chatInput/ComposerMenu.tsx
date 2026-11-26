@@ -2,7 +2,7 @@ import {
   IconPanelContractOutline14,
   IconPaperclipOutline16,
   IconPlusOutline14,
-  Popover,
+  MorphMenu,
   Tooltip,
 } from '@deepseek-chat/lib-ui'
 import clsx from 'clsx'
@@ -139,18 +139,18 @@ export const ComposerMenu = ({
           </span>
         </button>
       </Tooltip>
-      <Popover
+      <MorphMenu
         open={open}
         onOpenChange={setOpen}
         anchorRef={anchorRef}
         side="top"
         align="start"
-        offset={8}
         measureKey={onCompact ? 'compact' : 'files'}
         autoFocusSurface
         role="dialog"
         ariaLabel={t('composerMenuTooltip')}
         className={styles.menu}
+        contentRef={listRef}
         onKeyDown={(event) => {
           if (isUploadShortcut(event.nativeEvent)) {
             event.preventDefault()
@@ -163,42 +163,40 @@ export const ComposerMenu = ({
           }
         }}
       >
-        <div ref={listRef}>
+        <button
+          type="button"
+          data-composer-row=""
+          className={styles.row}
+          disabled={disabled}
+          onClick={() => {
+            setOpen(false)
+            onUploadFiles()
+          }}
+        >
+          <span className={styles.rowIcon}>
+            <IconPaperclipOutline16 />
+          </span>
+          <span className={styles.rowLabel}>{t('uploadFile')}</span>
+          <kbd className={styles.shortcut}>{isMacPlatform ? '⌘U' : 'Ctrl+U'}</kbd>
+        </button>
+        {onCompact ? (
           <button
             type="button"
             data-composer-row=""
             className={styles.row}
-            disabled={disabled}
+            disabled={disabled || !canCompact}
             onClick={() => {
               setOpen(false)
-              onUploadFiles()
+              onCompact()
             }}
           >
             <span className={styles.rowIcon}>
-              <IconPaperclipOutline16 />
+              <IconPanelContractOutline14 />
             </span>
-            <span className={styles.rowLabel}>{t('uploadFile')}</span>
-            <kbd className={styles.shortcut}>{isMacPlatform ? '⌘U' : 'Ctrl+U'}</kbd>
+            <span className={styles.rowLabel}>{t('compactConversation')}</span>
           </button>
-          {onCompact ? (
-            <button
-              type="button"
-              data-composer-row=""
-              className={styles.row}
-              disabled={disabled || !canCompact}
-              onClick={() => {
-                setOpen(false)
-                onCompact()
-              }}
-            >
-              <span className={styles.rowIcon}>
-                <IconPanelContractOutline14 />
-              </span>
-              <span className={styles.rowLabel}>{t('compactConversation')}</span>
-            </button>
-          ) : null}
-        </div>
-      </Popover>
+        ) : null}
+      </MorphMenu>
     </>
   )
 }

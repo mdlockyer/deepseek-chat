@@ -1,0 +1,28 @@
+@layer components {
+  /*
+   * The surface is bare: the background layer behind the content carries the fill, shadow and
+   * corners, and morphs (MorphMenu.tsx). The attribute selectors outrank Popover's own surface
+   * rules, including its entrance and exit animations, which the morph replaces.
+   */
+  .surface[data-ui-floating] {
+    border-radius: var(--ui-radius-lg);
+    background-color: transparent;
+    box-shadow: none;
+    overflow: visible;
+    outline: none;
+  }
+
+  .surface[data-ui-floating][data-state] {
+    animation: none;
+  }
+
+  .background {
+    position: absolute;
+    z-index: -1;
+    inset: -1px;
+    border-radius: var(--ui-radius-lg);
+    background-color: var(--ui-surface-overlay);
+    box-shadow: var(--ui-elevation-2);
+    pointer-events: none;
+  }
+}
