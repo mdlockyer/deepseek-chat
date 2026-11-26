@@ -9,13 +9,14 @@ either `follow_latest` mode (tracking the latest or currently streaming turn) or
 `Latest` return button when pinned behind a newer turn).
 
 Rather than duplicating the left chat pane's step list under stacked filter bars, the drawer keeps
-**one single 52px header** (with underline `Activity` | `Sources` tabs when sources exist), pins a
-**Visuals strip** at the top of the scrollable body whenever screenshots or figures were captured
-(opening a full-size native `Dialog` lightbox), groups multi-round **Reasoning** inside a single top
-disclosure with per-round causal step links, folds inter-tool model narration prose inside each
-step's expanded detail, and renders one unified scannable step-row grammar across all capabilities
-(marking failed tool calls quietly via a danger-tinted step icon so users can expand the row for
-details without loud top-level error banners).
+**one single 52px header** (with underline `Activity` | `Sources` tabs when sources exist), pins an
+**Outputs strip** at the top of the scrollable body whenever files, charts, or screenshots were
+produced (opening generated files in File Preview and opening visuals in a native `Dialog`
+lightbox), groups multi-round **Reasoning** inside a single top disclosure with per-round causal
+step links, folds inter-tool model narration prose inside each step's expanded detail, and renders
+one unified scannable step-row grammar across all capabilities (marking failed tool calls quietly
+via a danger-tinted step icon so users can expand the row for details without loud top-level error
+banners).
 
 ## Public entrypoint
 
@@ -63,13 +64,15 @@ Pure exports: `buildActivityTimeline`, `extractTurnSources`, `SiteLogo`, `Source
    collapsed timeline). Multi-round `thinking` blocks live inside a single top Reasoning disclosure
    (expanded on thinking-only turns, collapsed on tool turns) with causal links to the step each
    round led into.
-5. **Visuals strip, Lightbox, & quiet failed steps (zero mode switching).** Mid-turn tool errors are
+5. **Outputs strip, Lightbox, & quiet failed steps (zero mode switching).** Mid-turn tool errors are
    routine in agentic turns and stay quiet in the collapsed timeline: a failed step tints its tool
    icon (`--ui-text-danger`) with screen-reader `(Failed)` status and reveals the full error detail
-   when expanded, without promoting an error banner above the timeline. When a turn captures visual
-   artifacts, a clickable horizontal thumbnail filmstrip renders above the timeline; clicking any
-   filmstrip thumbnail or expanded-step visual opens a native `Dialog` lightbox with keyboard
-   prev/next navigation, descriptive external link, and `"Show step"`.
+   when expanded, without promoting an error banner above the timeline. When a turn delivers files
+   (`result.files`, deduplicated by path/name in first-seen order at the latest version) or captures
+   visual artifacts, a unified `Outputs (N)` horizontal strip renders above the timeline: clicking a
+   file opens it via `openFile` (File Preview), and clicking a visual thumbnail or expanded-step
+   visual opens a native `Dialog` lightbox with keyboard prev/next navigation, descriptive external
+   link, and `"Show step"`.
 6. **Stable mount across `Sources` transitions & accessible navigation.** `Activity` / `Sources`
    navigation uses `@deepseek-chat/lib-ui` `Tabs` (`variant="underline"`, `keepMounted`). The
    Activity scroll container stays mounted at one stable tree position when `hasSources` changes

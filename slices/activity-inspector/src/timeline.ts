@@ -1,5 +1,6 @@
 import type {
   ActivityStepEntry,
+  DeliveredFileRef,
   ToolStepPresenter,
   ToolStepSummary,
   ToolStepVisualArtifact,
@@ -65,6 +66,12 @@ export type ActivityVisualItem = {
   readonly href?: string
 }
 
+export type ActivityFileItem = {
+  readonly key: string
+  readonly callId: string
+  readonly file: DeliveredFileRef
+}
+
 export type ActivityTimeline = {
   readonly phases: ActivityTimelinePhase[]
   readonly thinkingBlocks: TurnThinkingBlock[]
@@ -78,6 +85,7 @@ export type ActivityTimeline = {
   readonly errorCount: number
   readonly failedSteps: readonly ActivityFailedStep[]
   readonly tallyLabel: string | null
+  readonly files: readonly ActivityFileItem[]
   readonly visuals: readonly ActivityVisualItem[]
 }
 
@@ -237,6 +245,7 @@ export const buildActivityTimeline = (
   const thinkingRounds: MutableThinkingRound[] = []
   const pendingThinkingRounds: MutableThinkingRound[] = []
   const tallies = new Map<string, TallyEntry>()
+  const filesByKey = new Map<string, ActivityFileItem>()
   const visuals: ActivityVisualItem[] = []
   const failedSteps: ActivityFailedStep[] = []
   let pendingText: string[] = []
@@ -405,6 +414,16 @@ export const buildActivityTimeline = (
       if (summary?.tally) {
         addTally(summary.tally.key, summary.tally.count, summary.tally.label)
       }
+      if (result?.status === 'ok' && result.files?.length) {
+        for (const file of result.files) {
+          const dedupeKey = (file.path ?? file.name).toLowerCase()
+          filesByKey.set(dedupeKey, {
+            key: `${block.id}-f-${file.id}`,
+            callId: block.id,
+            file,
+          })
+        }
+      }
       stepVisuals.forEach((visual, visualIndex) => {
         visuals.push({
           key: `${block.id}-v-${visualIndex}`,
@@ -468,6 +487,7 @@ export const buildActivityTimeline = (
     errorCount,
     failedSteps,
     tallyLabel,
+    files: [...filesByKey.values()],
     visuals,
   }
 }

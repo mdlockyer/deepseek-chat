@@ -231,6 +231,112 @@
     scroll-snap-align: start;
   }
 
+  .fileButton,
+  .fileStatic {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ui-space-1);
+    width: 148px;
+    padding: 0;
+    border: none;
+    border-radius: var(--ui-radius-sm);
+    background: transparent;
+    text-align: left;
+    color: var(--ui-text-secondary);
+    transition: color var(--ui-duration-fast) var(--ui-ease-standard);
+  }
+
+  .fileButton {
+    cursor: pointer;
+
+    @media (hover: hover) {
+      &:hover {
+        color: var(--ui-text-primary);
+
+        .fileTileBox {
+          border-color: var(--ui-border-strong);
+        }
+      }
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--ui-focus-ring);
+      outline-offset: 2px;
+    }
+  }
+
+  .fileTileBox {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    box-sizing: border-box;
+    width: 148px;
+    height: 82px;
+    padding: var(--ui-space-2) var(--ui-space-2-5);
+    border-radius: var(--ui-radius-sm);
+    border: 1px solid var(--ui-border-default);
+    background: var(--ui-surface-sunken);
+    transition: border-color var(--ui-duration-fast) var(--ui-ease-standard);
+  }
+
+  .fileTileTop {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--ui-space-1-5);
+  }
+
+  .fileTileIcon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--ui-text-muted);
+    flex-shrink: 0;
+
+    > svg {
+      width: 14px;
+      height: 14px;
+    }
+  }
+
+  .fileGlyphDoc {
+    color: var(--ui-glyph-doc);
+  }
+
+  .fileGlyphPdf {
+    color: var(--ui-glyph-pdf);
+  }
+
+  .fileGlyphSheet {
+    color: var(--ui-glyph-sheet);
+  }
+
+  .fileGlyphSlide {
+    color: var(--ui-glyph-slide);
+  }
+
+  .fileGlyphMedia {
+    color: var(--ui-glyph-media);
+  }
+
+  .fileTileExt {
+    font: var(--ui-type-micro);
+    font-variant-numeric: tabular-nums;
+    color: var(--ui-text-muted);
+    letter-spacing: 0.02em;
+  }
+
+  .fileTileTitle {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    font: var(--ui-type-caption-strong);
+    line-height: 18px;
+    color: var(--ui-text-primary);
+    overflow-wrap: anywhere;
+  }
+
   .thumbButton {
     display: flex;
     flex-direction: column;

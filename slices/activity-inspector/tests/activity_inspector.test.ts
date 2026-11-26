@@ -519,6 +519,26 @@ describe('slice-activity-inspector: redesigned ActivityPanel rendering', () => {
         capability: 'demo',
         content: 'BETA_OUTPUT',
         status: 'ok',
+        files: [
+          {
+            id: 'f1',
+            name: 'report.md',
+            path: 'docs/report.md',
+            title: 'Quarterly Report',
+            size: 2048,
+            mimeType: 'text/markdown',
+            version: 1,
+          },
+          {
+            id: 'f2',
+            name: 'report.md',
+            path: 'docs/report.md',
+            title: 'Quarterly Report',
+            size: 3072,
+            mimeType: 'text/markdown',
+            version: 2,
+          },
+        ],
         sources: [
           {
             url: 'https://example.test',
@@ -545,6 +565,7 @@ describe('slice-activity-inspector: redesigned ActivityPanel rendering', () => {
       },
       getPresenter: (capId) => (capId === 'demo' ? presenter : null),
       openInApp: null,
+      openFile: () => undefined,
     })
 
     log.publish<TurnInspectionRequested>({
@@ -582,9 +603,17 @@ describe('slice-activity-inspector: redesigned ActivityPanel rendering', () => {
     )
     assert.match(
       collapsedHtml,
-      /Visuals \(1\)/,
-      'Evidence Shelf surfaces visual filmstrip directly'
+      /Outputs \(2\)/,
+      'Outputs strip combines deduplicated delivered files and captured visuals'
     )
+    assert.match(
+      collapsedHtml,
+      /Open file: Quarterly Report/,
+      'delivered files render as clickable output cards opening File Preview'
+    )
+    assert.match(collapsedHtml, /report\.md/, 'file card caption shows filename under title')
+    assert.match(collapsedHtml, /MD/, 'file card shows crisp extension tag')
+    assert.doesNotMatch(collapsedHtml, /·/, 'never renders middot separators')
     assert.match(
       collapsedHtml,
       /Inspect visual: Second human step/,

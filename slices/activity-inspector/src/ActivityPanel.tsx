@@ -774,7 +774,12 @@ export const createActivityPanel = (state: ActivityPanelState, deps: ActivityIns
 
       return (
         <div className={styles.bodyStack}>
-          <EvidenceShelf visuals={timeline.visuals} onOpenVisual={openVisualAt} />
+          <EvidenceShelf
+            files={timeline.files}
+            visuals={timeline.visuals}
+            onOpenFile={deps.openFile ? (file) => deps.openFile?.(turn.sessionId, file) : undefined}
+            onOpenVisual={openVisualAt}
+          />
 
           <HoverGlide className={styles.stream}>
             {hasReasoning ? (

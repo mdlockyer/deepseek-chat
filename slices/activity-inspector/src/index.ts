@@ -10,6 +10,7 @@ import { createActivityPanelState } from './state.js'
 import {
   buildActivityTimeline,
   type ActivityFailedStep,
+  type ActivityFileItem,
   type ActivityLanePhase,
   type ActivityServerSearchPhase,
   type ActivityStepRecord,
@@ -37,6 +38,7 @@ import type {
 export { SiteLogo, SourceCard, buildActivityTimeline, extractTurnSources }
 export type {
   ActivityFailedStep,
+  ActivityFileItem,
   ActivityInspectorDeps,
   ActivityLanePhase,
   ActivitySelection,
