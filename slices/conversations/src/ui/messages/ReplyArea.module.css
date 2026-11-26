@@ -58,8 +58,7 @@
     color: var(--ui-text-secondary);
   }
 
-  .stripButtonActive,
-  .stripButtonInspecting {
+  .stripButtonActive {
     background: var(--ui-accent-soft);
     color: var(--ui-text-primary);
 

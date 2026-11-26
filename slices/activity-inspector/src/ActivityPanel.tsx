@@ -384,11 +384,11 @@ const ActivityStepRow = ({
           className={clsx(
             styles.rowButton,
             open && styles.rowButtonOpen,
-            selected && styles.rowButtonSelected
+            open && selected && styles.rowButtonSelected
           )}
           title={item.label}
           aria-expanded={open}
-          {...hoverGlideItem(selected)}
+          {...hoverGlideItem(open && selected)}
           onClick={onToggle}
         >
           {rowContent}
@@ -680,18 +680,22 @@ export const createActivityPanel = (state: ActivityPanelState, deps: ActivityIns
       el.scrollTop = el.scrollHeight
     }, [live, scrollTarget, stepCount])
 
-    const toggleStep = useCallback((callId: string) => {
-      setSelectedCallId(callId)
-      setOpenStepIds((prev) => {
-        const next = new Set(prev)
-        if (next.has(callId)) {
-          next.delete(callId)
-        } else {
-          next.add(callId)
-        }
-        return next
-      })
-    }, [])
+    const toggleStep = useCallback(
+      (callId: string) => {
+        const closing = openStepIds.has(callId)
+        setOpenStepIds((prev) => {
+          const next = new Set(prev)
+          if (next.has(callId)) {
+            next.delete(callId)
+          } else {
+            next.add(callId)
+          }
+          return next
+        })
+        setSelectedCallId((current) => (closing ? (current === callId ? null : current) : callId))
+      },
+      [openStepIds]
+    )
 
     const inspectStep = useCallback((callId: string) => {
       setSelectedCallId(callId)
