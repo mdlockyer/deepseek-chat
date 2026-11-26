@@ -1,5 +1,6 @@
 import clsx from 'clsx'
 import type { ReactNode } from 'react'
+import { IconCheckOutline16 } from './icons.js'
 import { uiMessages } from './messages.js'
 import styles from './Feedback.module.css'
 
@@ -20,9 +21,16 @@ const BADGE_TONE_CLASS: Record<BadgeTone, string> = {
   danger: styles.badgeDanger,
 }
 
+/**
+ * Success shares a green family with the accent, so success badges and banners always show a
+ * check mark (unless the caller passes its own icon): the colour is never the only signal.
+ */
+const withSuccessIcon = (tone: string, icon: ReactNode | undefined): ReactNode =>
+  icon ?? (tone === 'success' ? <IconCheckOutline16 /> : undefined)
+
 export const Badge = ({ tone = 'neutral', icon, className, children }: BadgeProps) => (
   <span className={clsx(styles.badge, BADGE_TONE_CLASS[tone], className)}>
-    {icon}
+    {withSuccessIcon(tone, icon)}
     <span>{children}</span>
   </span>
 )
@@ -54,25 +62,28 @@ export const Banner = ({
   role,
   className,
   children,
-}: BannerProps) => (
-  <div
-    role={role ?? (tone === 'error' ? 'alert' : 'status')}
-    className={clsx(
-      styles.banner,
-      BANNER_TONE_CLASS[tone],
-      compact && styles.bannerCompact,
-      className
-    )}
-  >
-    {icon ? (
-      <span className={styles.bannerIcon} aria-hidden="true">
-        {icon}
-      </span>
-    ) : null}
-    <div className={styles.bannerBody}>{children}</div>
-    {action ? <div className={styles.bannerAction}>{action}</div> : null}
-  </div>
-)
+}: BannerProps) => {
+  const bannerIcon = withSuccessIcon(tone, icon)
+  return (
+    <div
+      role={role ?? (tone === 'error' ? 'alert' : 'status')}
+      className={clsx(
+        styles.banner,
+        BANNER_TONE_CLASS[tone],
+        compact && styles.bannerCompact,
+        className
+      )}
+    >
+      {bannerIcon ? (
+        <span className={styles.bannerIcon} aria-hidden="true">
+          {bannerIcon}
+        </span>
+      ) : null}
+      <div className={styles.bannerBody}>{children}</div>
+      {action ? <div className={styles.bannerAction}>{action}</div> : null}
+    </div>
+  )
+}
 
 export type EmptyStateProps = {
   icon?: ReactNode

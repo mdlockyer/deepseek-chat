@@ -10,33 +10,21 @@
     font-size: var(--ui-font-size-lg);
     line-height: var(--line-height);
     border-radius: var(--ui-radius-xl);
-    border: 1px solid var(--ui-border-strong);
     background: var(--ui-surface-input);
+    /* Elevation carries the edge (its hairline ring), so the composer needs no border. */
+    box-shadow: var(--ui-elevation-2);
     overflow: hidden;
-    transition:
-      border-color var(--ui-duration-normal) var(--ui-ease-standard),
-      box-shadow var(--ui-duration-normal) var(--ui-ease-standard);
-
-    &:hover {
-      border-color: var(--ui-border-hover-neutral);
-    }
-  }
-
-  .session {
-    box-shadow: var(--ui-shadow-md);
-  }
-
-  .home {
-    box-shadow: var(--ui-shadow-composer);
+    transition: box-shadow var(--ui-duration-normal) var(--ui-ease-standard);
   }
 
   /*
-   * 焦点：中性灰描边 + 4px 柔和光晕 + 轻微抬升。输入框没有可见标签，焦点由容器给出。
-   * 写在 .session / .home 之后，覆盖它们的阴影。
+   * Focus: a 1px accent ring over the elevation. The composer has no visible label and is
+   * focused most of the time, so the ring stays thin rather than a heavy halo.
    */
   .wrapper:focus-within {
-    border-color: var(--ui-border-focus-neutral);
-    box-shadow: var(--ui-shadow-composer-focus);
+    box-shadow:
+      0 0 0 1px var(--ui-accent-border),
+      var(--ui-elevation-2);
   }
 
   .attachments {
@@ -325,7 +313,7 @@
     display: block;
     height: 100%;
     border-radius: var(--ui-radius-pill);
-    background-color: var(--ui-accent-fill);
+    background-color: var(--ui-handle-fill);
     transition: width var(--ui-duration-normal) var(--ui-ease-standard);
   }
 
@@ -399,8 +387,10 @@
       outline-offset: 2px;
     }
 
+    /* Nothing to send yet: neutral, so the accent appears only once the button does something. */
     &.disabled {
-      opacity: 0.4;
+      background: var(--ui-surface-raised-2);
+      color: var(--ui-text-muted);
       cursor: not-allowed;
     }
   }

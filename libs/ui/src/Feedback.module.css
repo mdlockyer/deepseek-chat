@@ -57,34 +57,39 @@
     box-sizing: border-box;
     padding: var(--ui-space-2) var(--ui-space-3);
     border-radius: var(--ui-radius-sm);
-    border: 1px solid var(--ui-border-default);
+    border: 1px solid var(--ui-border-subtle);
     background-color: var(--ui-surface-sunken);
     color: var(--ui-text-primary);
     font: var(--ui-type-caption);
   }
 
+  /* Info is neutral: the accent colour is reserved for things you can act on. */
   .bannerInfo {
-    border-color: var(--ui-border-accent);
-    background-color: var(--ui-accent-soft);
-    color: var(--ui-text-accent);
+    background-color: var(--ui-surface-raised-1);
+    color: var(--ui-text-primary);
+
+    .bannerIcon {
+      color: var(--ui-text-secondary);
+    }
   }
 
+  /* Status banners: tinted surface and text, hairline border, no heavy coloured outline. */
   .bannerWarning {
-    border-color: var(--ui-warning-fill);
-    background-color: var(--ui-warning-soft);
-    color: var(--ui-warning-on-soft);
+    border-color: var(--ui-border-subtle);
+    background-color: var(--ui-warning-subtle);
+    color: var(--ui-warning-text);
   }
 
   .bannerError {
-    border-color: var(--ui-border-danger);
-    background-color: var(--ui-danger-soft);
-    color: var(--ui-text-danger);
+    border-color: var(--ui-border-subtle);
+    background-color: var(--ui-danger-subtle);
+    color: var(--ui-danger-text);
   }
 
   .bannerSuccess {
-    border-color: var(--ui-success-fill);
-    background-color: var(--ui-success-soft);
-    color: var(--ui-success-on-soft);
+    border-color: var(--ui-border-subtle);
+    background-color: var(--ui-success-subtle);
+    color: var(--ui-success-text);
   }
 
   .bannerBody {
@@ -107,8 +112,8 @@
     height: var(--ui-space-5);
 
     > svg {
-      width: 15px;
-      height: 15px;
+      width: 16px;
+      height: 16px;
     }
   }
 

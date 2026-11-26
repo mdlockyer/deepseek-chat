@@ -8,7 +8,7 @@
     display: inline-flex;
     flex-shrink: 0;
     /* 宿主可用 --whale-color 换色（如已停止的标题用三级灰） */
-    color: var(--whale-color, var(--ui-accent-fill));
+    color: var(--whale-color, var(--ui-text-secondary));
     font-size: var(--ui-font-size-lg);
     line-height: 1;
   }

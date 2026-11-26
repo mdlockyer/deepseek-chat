@@ -13,6 +13,16 @@
     }
   }
 
+  /*
+   * Reading measure: prose blocks stop near 70 characters per line; code blocks, tables and
+   * diagrams keep the full column width.
+   */
+  .message
+    :global(.ds-markdown.ds-assistant-message-main-content)
+    > :is(p, ul, ol, blockquote, h1, h2, h3, h4, h5, h6) {
+    max-width: 70ch;
+  }
+
   @keyframes message-in {
     from {
       opacity: 0;

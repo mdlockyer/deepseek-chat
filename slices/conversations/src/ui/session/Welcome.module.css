@@ -53,7 +53,8 @@
     display: flex;
     flex-shrink: 0;
     align-items: center;
-    color: var(--ui-accent-fill);
+    /* The DeepSeek mark is attribution for the model provider, so it stays neutral. */
+    color: var(--ui-text-primary);
   }
 
   .brandName {
@@ -89,9 +90,8 @@
     align-items: center;
     justify-content: center;
     margin-bottom: var(--ui-space-6);
-    font-size: var(--ui-font-size-2xl);
-    line-height: var(--ui-leading-xl);
-    font-weight: 600;
+    font: var(--ui-type-display);
+    letter-spacing: var(--ui-tracking-tight);
     text-align: center;
     color: var(--ui-text-primary);
   }
