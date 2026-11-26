@@ -1,0 +1,65 @@
+@layer slice {
+  /* The transcript's left gutter: the space between the scroll area's edge and the message
+     column, which the chapter rail draws in. The open card overlaps the column. */
+  .gutter {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: max(
+      0px,
+      calc(
+        (
+            100% -
+              min(
+                calc(var(--message-list-max-width) - 2 * var(--message-list-padding-horizontal)),
+                calc(100% - var(--ui-space-10))
+              )
+          ) /
+          2
+      )
+    );
+  }
+
+  @media not all and (min-width: 768px) {
+    .gutter {
+      display: none;
+    }
+  }
+
+  .activityChip {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--ui-space-1);
+    box-sizing: border-box;
+    height: var(--ui-space-6);
+    padding: 0 var(--ui-space-2);
+    border: 0;
+    border-radius: var(--ui-radius-pill);
+    background: transparent;
+    color: var(--ui-text-muted);
+    font: var(--ui-type-micro);
+    font-variant-numeric: tabular-nums;
+    cursor: pointer;
+    transition:
+      background-color var(--ui-duration-fast) var(--ui-ease-standard),
+      color var(--ui-duration-fast) var(--ui-ease-standard);
+
+    svg {
+      width: 14px;
+      height: 14px;
+    }
+
+    @media (hover: hover) {
+      &:hover {
+        background: var(--ui-accent-subtle);
+        color: var(--ui-accent-text);
+      }
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--ui-focus-ring);
+      outline-offset: 1px;
+    }
+  }
+}

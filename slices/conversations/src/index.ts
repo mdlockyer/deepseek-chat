@@ -24,6 +24,7 @@ export {
   memorySessionStore,
   type SessionStore,
 } from './sessionStore.js'
+export type { ReadingCause, ReadingPosition } from './reading.js'
 export type { StreamTrace, StreamTraceBlock } from './streamTrace.js'
 export type {
   ChatFile,
@@ -119,6 +120,16 @@ export const createConversationsSlice = (deps: ConversationsDeps) => {
     getTurnSnapshot: runtime.getTurnSnapshot,
     listSessionTurns: runtime.listSessionTurns,
     subscribeToTurns: runtime.subscribeToTurns,
+
+    /**
+     * The turn each chat's transcript is on (changes once per turn crossed) and requests to bring
+     * a turn, or the latest output, into view. Consumed by `slices/activity-inspector`, so the
+     * Activity panel follows the reader and the transcript follows the panel.
+     */
+    getReadingPosition: runtime.reading.getReadingPosition,
+    subscribeToReading: runtime.reading.subscribeToReading,
+    revealTurn: runtime.reading.revealTurn,
+    revealLatest: runtime.reading.revealLatest,
 
     // Storage ports consumed by `slices/history-backup` via app composition.
     snapshotForExport: runtime.snapshotForExport,

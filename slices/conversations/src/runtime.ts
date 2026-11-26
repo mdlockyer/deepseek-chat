@@ -40,6 +40,7 @@ import {
   trimAfterLastToolResult,
   type InlineAttachmentData,
 } from './reply.js'
+import { createReadingPositions } from './reading.js'
 import { SYSTEM_PROMPT, createReplyRunner, type ReplyRunnerParams } from './replyRunner.js'
 import {
   createIndexedDbSessionStore,
@@ -47,6 +48,7 @@ import {
   type SessionStore,
 } from './sessionStore.js'
 import type { StreamTrace } from './streamTrace.js'
+import { excerptOfPrompt, hasTurnActivity } from './turns.js'
 import {
   toSessionSummary,
   type AssistantMessage,
@@ -136,17 +138,6 @@ const blobToBase64 = async (blob: Blob): Promise<string> => {
   return btoa(binary)
 }
 
-const excerptOfPrompt = (text: string): string => {
-  const clean = text.replace(/\s+/g, ' ').trim()
-  return clean.length > 56 ? `${clean.slice(0, 55)}…` : clean
-}
-
-const hasTurnActivity = (message: AssistantMessage): boolean =>
-  message.blocks.some(
-    (block) =>
-      block.type === 'thinking' || block.type === 'tool_use' || block.type === 'tool_result'
-  )
-
 const sortSessions = (sessions: SessionSummary[]) =>
   [...sessions].sort((a, b) => b.updatedAt - a.updatedAt)
 
@@ -221,6 +212,8 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
     deps.store.set(THINKING_TOGGLE_KEY, String(thinking))
     useThinkingStore.setState({ thinking })
   }
+
+  const reading = createReadingPositions()
 
   const useMobileSider = create<{ open: boolean }>(() => ({ open: false }))
   const openMobileSider = () => useMobileSider.setState({ open: true })
@@ -722,6 +715,7 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
       }
       publishedFileSessions.clear()
       deps.log.publish<SessionHistoryReplaced>({ type: 'SessionHistoryReplaced' })
+      reading.clear()
       sessionAccess.clear()
       unsavedSessions.clear()
       pendingBlobs.clear()
@@ -824,6 +818,7 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
         deps.log.tombstone('SessionFilesChanged', id)
       }
       deps.log.publish<SessionDeleted>({ type: 'SessionDeleted', sessionId: id })
+      reading.forget(id)
       if (epoch !== historyEpoch) {
         return true
       }
@@ -1399,6 +1394,7 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
     listSessionTurns,
     subscribeToTurns,
     requestTurnInspection,
+    reading,
     dispose,
   }
 }

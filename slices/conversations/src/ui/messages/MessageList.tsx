@@ -1,3 +1,4 @@
+import { useIsMobile } from '@deepseek-chat/lib-ui'
 import { Fragment, useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { buildMessageVersions, getVisibleMessages, type MessageVersions } from '../../branches.js'
 import { useConversations } from '../../context.js'
@@ -6,6 +7,7 @@ import { AssistantMessage } from './AssistantMessage.js'
 import { CompactionDivider } from './CompactionDivider.js'
 import styles from './MessageList.module.css'
 import { ScrollFollowContext, ScrollToBottomContext, type ScrollFollow } from './scrollContext.js'
+import { TranscriptChapters, buildTranscriptTurns, turnStartIds } from './TranscriptChapters.js'
 import { UserMessage } from './UserMessage.js'
 
 const getUploadRetryId = (messages: Message[], streaming: boolean) => {
@@ -169,48 +171,67 @@ export const MessageList = ({
     return map
   }, [messages, session.checkpoints])
 
+  const isMobile = useIsMobile()
+  const turns = useMemo(
+    () => buildTranscriptTurns(getVisibleMessages(session), session.checkpoints ?? [], streaming),
+    [session, streaming]
+  )
+  const turnStarts = useMemo(() => turnStartIds(getVisibleMessages(session)), [session])
+
   const lastIndex = messages.length - 1
   const uploadRetryId = getUploadRetryId(messages, busy)
   return (
     <ScrollToBottomContext.Provider value={scrollToBottom}>
       <ScrollFollowContext.Provider value={follow}>
         <div className={styles.container}>
-          <div ref={scrollRef} className={styles.scroll} data-message-scroll>
-            <div ref={contentRef} className={styles.column} data-stage-enter="messages">
-              {messages.map((message, index) => {
-                const anchoredCheckpoints = checkpointsByAnchor.get(message.id)
-                return (
-                  <Fragment key={message.id}>
-                    {message.role === 'user' ? (
-                      <UserMessage
-                        sessionId={session.id}
-                        message={message}
-                        retryUploadId={uploadRetryId}
-                        isFirst={index === 0}
-                        isLast={index === lastIndex || index === lastIndex - 1}
-                        busy={busy}
-                        versions={versions.get(message.id) ?? EMPTY_VERSIONS}
-                        onSelectVersion={selectVersion}
-                      />
-                    ) : (
-                      <AssistantMessage
-                        sessionId={session.id}
-                        message={message}
-                        isLast={index === lastIndex}
-                        streaming={streaming && index === lastIndex}
-                        compacting={compacting && index === lastIndex}
-                        busy={busy}
-                        versions={versions.get(message.id) ?? EMPTY_VERSIONS}
-                        onSelectVersion={selectVersion}
-                      />
-                    )}
-                    {anchoredCheckpoints?.map((checkpoint) => (
-                      <CompactionDivider key={checkpoint.id} checkpoint={checkpoint} />
-                    ))}
-                  </Fragment>
-                )
-              })}
+          <div className={styles.scrollArea}>
+            <div ref={scrollRef} className={styles.scroll} data-message-scroll>
+              <div ref={contentRef} className={styles.column} data-stage-enter="messages">
+                {messages.map((message, index) => {
+                  const anchoredCheckpoints = checkpointsByAnchor.get(message.id)
+                  const startsTurn = turnStarts.get(message.id)
+                  return (
+                    <Fragment key={message.id}>
+                      {startsTurn ? <div data-turn-anchor={startsTurn} /> : null}
+                      {message.role === 'user' ? (
+                        <UserMessage
+                          sessionId={session.id}
+                          message={message}
+                          retryUploadId={uploadRetryId}
+                          isFirst={index === 0}
+                          isLast={index === lastIndex || index === lastIndex - 1}
+                          busy={busy}
+                          versions={versions.get(message.id) ?? EMPTY_VERSIONS}
+                          onSelectVersion={selectVersion}
+                        />
+                      ) : (
+                        <AssistantMessage
+                          sessionId={session.id}
+                          message={message}
+                          isLast={index === lastIndex}
+                          streaming={streaming && index === lastIndex}
+                          compacting={compacting && index === lastIndex}
+                          busy={busy}
+                          versions={versions.get(message.id) ?? EMPTY_VERSIONS}
+                          onSelectVersion={selectVersion}
+                        />
+                      )}
+                      {anchoredCheckpoints?.map((checkpoint) => (
+                        <CompactionDivider key={checkpoint.id} checkpoint={checkpoint} />
+                      ))}
+                    </Fragment>
+                  )
+                })}
+              </div>
             </div>
+            {turns.length >= 2 && !isMobile ? (
+              <TranscriptChapters
+                sessionId={session.id}
+                turns={turns}
+                scrollRef={scrollRef}
+                contentRef={contentRef}
+              />
+            ) : null}
           </div>
           {footer}
         </div>

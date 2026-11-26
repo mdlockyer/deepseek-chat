@@ -49,6 +49,25 @@
     word-break: break-word;
   }
 
+  /* Arriving at this turn from the chapter rail, a shortcut or the Activity panel: a soft accent
+     ring swells and fades so the eye finds where the jump landed. */
+  .bubble[data-landing] {
+    animation: turn-landing calc(var(--ui-duration-slow) * 3) var(--ui-ease-fade);
+  }
+
+  @keyframes turn-landing {
+    0% {
+      box-shadow: 0 0 0 0 transparent;
+    }
+    18% {
+      background-color: var(--ui-accent-subtle);
+      box-shadow: 0 0 0 3px color-mix(in oklch, var(--ui-accent-solid) 32%, transparent);
+    }
+    100% {
+      box-shadow: 0 0 0 10px transparent;
+    }
+  }
+
   @media not all and (min-width: 440px) {
     .bubble {
       max-width: calc(100% - 68px);

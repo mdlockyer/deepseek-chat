@@ -7,6 +7,15 @@
     overflow: hidden;
   }
 
+  /* The scroll area and the chapter rail drawn over its left gutter. */
+  .scrollArea {
+    position: relative;
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+  }
+
   .scroll {
     display: flex;
     flex: 1;
