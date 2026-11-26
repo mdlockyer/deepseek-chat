@@ -6,8 +6,9 @@
     flex-direction: column;
   }
 
-  /* One composer for both screens, at the conversation column's width so it never resizes
-     while it travels. */
+  /* One composer for both screens. In a conversation it spans the message column (752px at
+     the default width); on the new-chat screen it is 80px narrower (672px), and it widens or
+     narrows as it travels between the two. Narrow windows clamp both to the same width. */
   .composerSlot {
     position: relative;
     z-index: var(--ui-z-sticky);
@@ -21,6 +22,22 @@
     margin: 0 auto;
     padding-top: var(--ui-space-2);
     background: var(--ui-surface-canvas);
+  }
+
+  .stage[data-mode='welcome'] .composerSlot {
+    width: calc(
+      var(--message-list-max-width) - var(--message-list-padding-horizontal) * 2 -
+        var(--ui-space-10) * 2
+    );
+  }
+
+  /* The width change rides the composer's travel: same spring, same 40 ms launch delay. */
+  .stage[data-transition='launch'] .composerSlot:not(.ghost) {
+    transition: width var(--ui-duration-spring) var(--ui-ease-spring) 40ms;
+  }
+
+  .stage[data-transition='home'] .composerSlot:not(.ghost) {
+    transition: width var(--ui-duration-spring) var(--ui-ease-spring);
   }
 
   /* In a conversation, messages fade out under the composer's top edge. */
