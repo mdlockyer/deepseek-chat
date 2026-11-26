@@ -258,7 +258,7 @@
     min-width: 0;
   }
 
-  /* Row under the box: tools left, caveat centred on the box, model pill right. */
+  /* Row under the box: tools left, caveat centred on the box, tools pill right. */
   .toolbar {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);

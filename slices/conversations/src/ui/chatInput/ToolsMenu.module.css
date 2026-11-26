@@ -6,7 +6,8 @@
     flex-shrink: 0;
     max-width: 100%;
     height: var(--ui-control-md);
-    padding: 0 var(--ui-space-3-5);
+    /* 24px icon chips in a 36px pill: 6px in from each end keeps them concentric (12 + 6 = 18). */
+    padding: 0 var(--ui-space-1-5);
     border: none;
     border-radius: var(--ui-radius-pill);
     background-color: transparent;
@@ -43,21 +44,8 @@
     }
   }
 
-  /* Icon chips end the pill: keep them concentric with its rounded end. */
-  .pill:has(.icons) {
-    padding-right: var(--ui-space-1);
-  }
-
   .pillOpen {
     background-color: var(--ui-interactive-active);
-  }
-
-  .model {
-    min-width: 0;
-    overflow: hidden;
-    font-weight: 500;
-    white-space: nowrap;
-    text-overflow: ellipsis;
   }
 
   .icons {
@@ -83,13 +71,19 @@
     }
   }
 
-  .pillOpen .icon {
+  /* All switches off: a plain sliders glyph, no chip. */
+  .iconIdle {
+    background-color: transparent;
+    color: var(--ui-text-muted);
+  }
+
+  .pillOpen .icon:not(.iconIdle) {
     background-color: var(--ui-surface-overlay);
   }
 
   /* A switch turned on: its icon pops into the pill on the spring. */
   .iconEntering {
-    animation: model-pill-icon-in var(--ui-duration-spring) var(--ui-ease-panel) both;
+    animation: tools-pill-icon-in var(--ui-duration-spring) var(--ui-ease-panel) both;
     animation-timing-function: var(--ui-ease-spring);
   }
 
@@ -99,45 +93,10 @@
     padding: var(--ui-space-1-5);
   }
 
-  @keyframes model-pill-icon-in {
+  @keyframes tools-pill-icon-in {
     from {
       opacity: 0;
       transform: scale(0.4);
     }
-  }
-
-  .section {
-    margin: 0;
-    padding: var(--ui-space-1-5) var(--ui-space-2-5) var(--ui-space-0-5);
-    font: var(--ui-type-micro);
-    color: var(--ui-text-muted);
-  }
-
-  .modelRow {
-    display: flex;
-    align-items: center;
-    gap: var(--ui-space-2-5);
-    min-height: var(--ui-control-md);
-    padding: 0 var(--ui-space-2-5);
-    border-radius: var(--ui-radius-md);
-    background-color: var(--ui-surface-raised-1);
-  }
-
-  .modelRowLabel {
-    flex: 1;
-    min-width: 0;
-    font: var(--ui-type-label-strong);
-    color: var(--ui-text-primary);
-  }
-
-  .check {
-    display: inline-flex;
-    color: var(--ui-accent-text);
-  }
-
-  .divider {
-    height: 1px;
-    margin: var(--ui-space-1-5) var(--ui-space-1);
-    background-color: var(--ui-border-subtle);
   }
 }

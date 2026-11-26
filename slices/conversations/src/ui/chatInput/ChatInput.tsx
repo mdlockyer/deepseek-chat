@@ -17,7 +17,7 @@ import styles from './ChatInput.module.css'
 import { ComposerMenu, isUploadShortcut, type ComposerToolSwitch } from './ComposerMenu.js'
 import { DraftAttachments } from './DraftAttachments.js'
 import { DragMask, useFileDrop } from './DragMask.js'
-import { ModelMenu } from './ModelMenu.js'
+import { ToolsMenu } from './ToolsMenu.js'
 
 const NO_VOICE = {
   status: 'idle' as const,
@@ -53,7 +53,7 @@ const useCapabilityToggles = (tools: ToolRegistry): ComposerToolSwitch[] => {
 /**
  * Composer. The box holds only the draft: attachments, the auto-growing text field and
  * send / stop. The row under it holds "+" (files, compact) and voice on the left, the AI caveat
- * centred, and the model pill (model, DeepThink and tool switches) on the right.
+ * centred, and the tools pill (DeepThink and tool switches) on the right.
  */
 export const ChatInput = memo(function ChatInput({
   sessionId,
@@ -96,7 +96,6 @@ const Input = ({
   const {
     deps,
     tools,
-    provider,
     useChatStore,
     useThinkingStore,
     setThinking,
@@ -138,7 +137,6 @@ const Input = ({
     () => getContextRounds(visibleMessages).length > 0,
     [visibleMessages]
   )
-  const modelLabel = provider.modelSpec(provider.defaultModel).label
   const canCompact = !importingHistory && !streaming && !compacting && hasCompactableTurns
 
   const openFilePicker = useCallback(() => {
@@ -363,7 +361,7 @@ const Input = ({
           <span />
         )}
         <div className={styles.right}>
-          <ModelMenu modelLabel={modelLabel} tools={composerTools} disabled={importingHistory} />
+          <ToolsMenu tools={composerTools} disabled={importingHistory} />
         </div>
       </div>
     </div>

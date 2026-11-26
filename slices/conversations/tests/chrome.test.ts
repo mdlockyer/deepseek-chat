@@ -125,7 +125,7 @@ describe('conversations: permanent top-right Settings & first-launch chrome', ()
     slice.dispose()
   })
 
-  it('keeps only the draft in the composer box and summarises model and switches in the pill under it', async () => {
+  it('keeps only the draft in the composer box and summarises the switches, not the model, in the pill under it', async () => {
     const provider = createDeepSeekProvider({
       apiOrigin: 'https://api.test',
       fetch: (url, init) => globalThis.fetch(url, init),
@@ -161,18 +161,16 @@ describe('conversations: permanent top-right Settings & first-launch chrome', ()
     assert.equal(thinkingOn.match(/AI responses may be inaccurate\./g)?.length, 1)
     assert.match(
       thinkingOn,
-      new RegExp(
-        `<button[^>]*aria-label="${modelLabel}, with DeepThink on"[^>]*aria-haspopup="dialog"`
-      )
+      /<button[^>]*aria-label="Tools, with DeepThink on"[^>]*aria-haspopup="dialog"/
     )
+    // The composer names no model: not in the pill, its label, or anywhere around it.
+    assert.ok(!thinkingOn.includes(modelLabel), `composer shows the model name "${modelLabel}"`)
 
     slice.setThinking(false)
     const thinkingOff = render()
-    assert.match(
-      thinkingOff,
-      new RegExp(`<button[^>]*aria-label="${modelLabel}"[^>]*aria-haspopup="dialog"`)
-    )
+    assert.match(thinkingOff, /<button[^>]*aria-label="Tools"[^>]*aria-haspopup="dialog"/)
     assert.doesNotMatch(thinkingOff, /DeepThink on/)
+    assert.ok(!thinkingOff.includes(modelLabel), `composer shows the model name "${modelLabel}"`)
 
     slice.dispose()
   })

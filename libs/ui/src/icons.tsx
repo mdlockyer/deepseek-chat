@@ -1160,3 +1160,25 @@ export const IconPanelContractOutline14 = () => (
     />
   </svg>
 )
+
+/** Two slider tracks with knobs: a generic "tools and options" glyph. */
+export const IconSlidersOutline14 = () => (
+  <svg
+    aria-hidden="true"
+    focusable="false"
+    width={14}
+    height={14}
+    viewBox="0 0 14 14"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <path
+      d="M2.25 4.5H3.5M6.5 4.5H11.75M2.25 9.5H7.5M10.5 9.5H11.75"
+      stroke="currentColor"
+      strokeWidth={1.25}
+      strokeLinecap="round"
+    />
+    <circle cx={5} cy={4.5} r={1.5} stroke="currentColor" strokeWidth={1.25} />
+    <circle cx={9} cy={9.5} r={1.5} stroke="currentColor" strokeWidth={1.25} />
+  </svg>
+)

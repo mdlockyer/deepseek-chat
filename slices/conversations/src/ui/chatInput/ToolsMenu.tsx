@@ -1,20 +1,19 @@
-import { IconCheckOutline16, MorphMenu, Switch } from '@deepseek-chat/lib-ui'
+import { IconSlidersOutline14, MorphMenu, Switch } from '@deepseek-chat/lib-ui'
 import clsx from 'clsx'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslate } from '../../messages.js'
 import { handleMenuRowKey, type ComposerToolSwitch } from './ComposerMenu.js'
-import styles from './ModelMenu.module.css'
+import styles from './ToolsMenu.module.css'
 
 /**
- * Pill under the composer's right edge: the model name plus one icon per switch that is on
- * (DeepThink and the mounted tools). It grows into a menu with the model and every switch.
+ * Pill under the composer's right edge: one icon per switch that is on (DeepThink and the
+ * mounted tools), or a neutral sliders icon when all are off. It grows into a menu with every
+ * switch.
  */
-export const ModelMenu = ({
-  modelLabel,
+export const ToolsMenu = ({
   tools,
   disabled = false,
 }: {
-  modelLabel: string
   tools: ComposerToolSwitch[]
   disabled?: boolean
 }) => {
@@ -37,11 +36,8 @@ export const ModelMenu = ({
   })
   const summary =
     active.length > 0
-      ? t('modelMenuSummary', {
-          model: modelLabel,
-          tools: active.map((tool) => tool.label).join(', '),
-        })
-      : modelLabel
+      ? t('toolsMenuSummary', { tools: active.map((tool) => tool.label).join(', ') })
+      : t('toolsMenuLabel')
 
   return (
     <>
@@ -55,19 +51,22 @@ export const ModelMenu = ({
         disabled={disabled}
         onClick={() => setOpen((value) => !value)}
       >
-        <span className={styles.model}>{modelLabel}</span>
-        {active.length > 0 ? (
-          <span className={styles.icons} aria-hidden="true">
-            {active.map((tool) => (
+        <span className={styles.icons} aria-hidden="true">
+          {active.length > 0 ? (
+            active.map((tool) => (
               <span
                 key={tool.key}
                 className={clsx(styles.icon, !seenIcons.has(tool.key) && styles.iconEntering)}
               >
                 {tool.icon}
               </span>
-            ))}
-          </span>
-        ) : null}
+            ))
+          ) : (
+            <span key="none" className={clsx(styles.icon, styles.iconIdle)}>
+              <IconSlidersOutline14 />
+            </span>
+          )}
+        </span>
       </button>
       <MorphMenu
         open={open}
@@ -78,7 +77,7 @@ export const ModelMenu = ({
         measureKey={tools.length}
         autoFocusSurface
         role="dialog"
-        ariaLabel={t('modelMenuLabel')}
+        ariaLabel={t('toolsMenuLabel')}
         className={styles.menu}
         contentRef={listRef}
         onKeyDown={(event) => {
@@ -87,15 +86,6 @@ export const ModelMenu = ({
           }
         }}
       >
-        <p className={styles.section}>{t('modelMenuModel')}</p>
-        <div className={styles.modelRow}>
-          <span className={styles.modelRowLabel}>{modelLabel}</span>
-          <span className={styles.check} aria-hidden="true" data-morph-pop="">
-            <IconCheckOutline16 />
-          </span>
-        </div>
-        <div className={styles.divider} role="separator" />
-        <p className={styles.section}>{t('modelMenuTools')}</p>
         {tools.map((tool) => (
           <Switch
             key={tool.key}
