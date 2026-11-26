@@ -381,7 +381,12 @@ const ActivityStepRow = ({
       {item.hasDetail ? (
         <button
           type="button"
-          className={clsx(styles.rowButton, selected && styles.rowButtonSelected)}
+          className={clsx(
+            styles.rowButton,
+            open && styles.rowButtonOpen,
+            selected && styles.rowButtonSelected
+          )}
+          title={item.label}
           aria-expanded={open}
           {...hoverGlideItem(selected)}
           onClick={onToggle}
@@ -389,7 +394,10 @@ const ActivityStepRow = ({
           {rowContent}
         </button>
       ) : (
-        <div className={clsx(styles.rowStatic, selected && styles.rowButtonSelected)}>
+        <div
+          className={clsx(styles.rowStatic, selected && styles.rowButtonSelected)}
+          title={item.label}
+        >
           {rowContent}
         </div>
       )}
