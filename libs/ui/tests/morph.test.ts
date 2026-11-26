@@ -85,10 +85,10 @@ describe('MorphMenu motion', () => {
       x: (from.left - shape.left) / (from.left - to.left),
       y: (from.top - shape.top) / (from.top - to.top),
     })
-    const early = progress(at(60))
-    assert.ok(early.x > early.y, `at 60ms x ${early.x} should lead y ${early.y}`)
-    // About 90% of the way by 120ms on both axes.
-    assert.ok(progress(at(120)).x > 0.85 && progress(at(120)).y > 0.85)
+    const early = progress(at(40))
+    assert.ok(early.x > early.y, `at 40ms x ${early.x} should lead y ${early.y}`)
+    // About 90% of the way by 90ms on both axes.
+    assert.ok(progress(at(90)).x > 0.85 && progress(at(90)).y > 0.85)
     // The rise passes the menu's edge by a few pixels (about 2.8% of 189px) before settling.
     const highest = Math.min(...run.shapes.map((shape) => shape.top))
     assert.ok(highest < -3 && highest > -8, `peak overshoot ${highest}`)
@@ -96,10 +96,10 @@ describe('MorphMenu motion', () => {
 
   it('closes by folding height before width, without overshoot', () => {
     const run = sampleMorph(to, from, MORPH_CLOSE)
-    const mid = shapeAt(run, 90)
+    const mid = shapeAt(run, 60)
     const y = (mid.top - to.top) / (from.top - to.top)
     const x = (mid.left - to.left) / (from.left - to.left)
-    assert.ok(y > x, `at 90ms height ${y} should lead width ${x}`)
+    assert.ok(y > x, `at 60ms height ${y} should lead width ${x}`)
     assert.ok(run.shapes.every((shape) => shape.top <= from.top && shape.left <= from.left))
   })
 })

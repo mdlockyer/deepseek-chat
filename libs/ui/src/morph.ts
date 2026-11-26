@@ -32,7 +32,7 @@ export type MorphMotion = {
 export const MORPH_EDGE = -1
 
 /** How long a closing MorphMenu stays mounted while it folds back into its trigger. */
-export const MORPH_CLOSE_MS = 240
+export const MORPH_CLOSE_MS = 180
 
 export const MORPH_FADE_EASE = 'cubic-bezier(0.22, 1, 0.36, 1)'
 
@@ -49,13 +49,13 @@ export const spring = (zeta: number) => {
 export const easeOutCubic = (t: number) => 1 - (1 - t) ** 3
 
 /**
- * Open: the menu spreads sideways on a firm spring (about 0.6% overshoot, 230ms) slightly ahead
- * of growing vertically on a livelier one (about 2.8%, 340ms), so it unfolds out of the trigger
- * rather than scaling. Both are about 90% of the way there by 120ms. Close: height folds first
- * (180ms), then width (220ms), both easing out, so it narrows back into the trigger.
+ * Open: the menu spreads sideways on a firm spring (about 0.6% overshoot, 170ms) slightly ahead
+ * of growing vertically on a livelier one (about 2.8%, 250ms), so it unfolds out of the trigger
+ * rather than scaling. Both are about 90% of the way there by 90ms. Close: height folds first
+ * (130ms), then width (160ms), both easing out, so it narrows back into the trigger.
  */
-export const MORPH_OPEN: MorphMotion = { yMs: 340, y: spring(0.75), xMs: 230, x: spring(0.85) }
-export const MORPH_CLOSE: MorphMotion = { yMs: 180, y: easeOutCubic, xMs: 220, x: easeOutCubic }
+export const MORPH_OPEN: MorphMotion = { yMs: 250, y: spring(0.75), xMs: 170, x: spring(0.85) }
+export const MORPH_CLOSE: MorphMotion = { yMs: 130, y: easeOutCubic, xMs: 160, x: easeOutCubic }
 
 /** Spring for elements marked `data-morph-pop`, which pop in once the menu has formed. */
 export const MORPH_POP = spring(0.6)

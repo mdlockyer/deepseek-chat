@@ -99,8 +99,8 @@ every slice's UI and pass the full gate with zero slice edits.
 | `VIEWPORT_PADDING`           | `8` px    | Minimum clearance between an anchored floating surface and viewport edges |
 | Tooltip enter delay          | `100` ms  | Pointer hover delay before showing a tooltip                              |
 | Popover exit duration        | `140` ms  | Fade/scale exit animation duration                                        |
-| MorphMenu open               | `340` ms  | Height on a spring (~2.8% overshoot); width on a firmer one in `230` ms   |
-| MorphMenu close              | `240` ms  | Height folds in `180` ms, width in `220` ms; exit duration `240` ms       |
+| MorphMenu open               | `250` ms  | Height on a spring (~2.8% overshoot); width on a firmer one in `170` ms   |
+| MorphMenu close              | `180` ms  | Height folds in `130` ms, width in `160` ms; exit duration `180` ms       |
 | Dialog / Toast exit duration | `160` ms  | Fade/scale exit animation duration                                        |
 | Notice default duration      | `3000` ms | Auto-dismiss timeout for plain notices                                    |
 | Notice link duration         | `5000` ms | Auto-dismiss timeout for notices containing a link                        |
