@@ -37,9 +37,15 @@ import { setupDocumentTheme } from './theme.js'
 const rootElement = document.getElementById('root') as HTMLElement
 
 if (__DEV__ && new URLSearchParams(window.location.search).get('workbench') === '1') {
-  void import('./workbench/Workbench.js').then(({ Workbench }) => {
-    createRoot(rootElement).render(<Workbench />)
-  })
+  if (new URLSearchParams(window.location.search).get('study') === 'minimap') {
+    void import('./workbench/MinimapStudy.js').then(({ MinimapStudy }) => {
+      createRoot(rootElement).render(<MinimapStudy />)
+    })
+  } else {
+    void import('./workbench/Workbench.js').then(({ Workbench }) => {
+      createRoot(rootElement).render(<Workbench />)
+    })
+  }
 } else {
   ensureKatex()
 
