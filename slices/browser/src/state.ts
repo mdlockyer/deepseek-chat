@@ -40,6 +40,8 @@ type BrowserStoreState = {
   controllingSessionId: string | null
   bounds: BrowserBounds | null
   stageSize: { width: number; height: number } | null
+  /** What the agent cursor is typing into a tab's address bar, shown there until it navigates. */
+  agentAddress: { readonly tabId: string; readonly text: string } | null
 }
 
 const DEFAULT_BOUNDS: BrowserBounds = {
@@ -168,6 +170,7 @@ export const createBrowserState = (deps: BrowserStateDeps) => {
     controllingSessionId: null,
     bounds: null,
     stageSize: null,
+    agentAddress: null,
   }))
 
   const { getState: get, setState: set } = useBrowserStore
@@ -1369,6 +1372,17 @@ export const createBrowserState = (deps: BrowserStateDeps) => {
     return session.tabs.find((t) => t.id === session.activeTabId) ?? session.tabs[0] ?? null
   }
 
+  const setAgentAddress = (tabId: string, text: string | null) => {
+    const current = get().agentAddress
+    if (text === null) {
+      if (current?.tabId === tabId) {
+        set({ agentAddress: null })
+      }
+      return
+    }
+    set({ agentAddress: { tabId, text } })
+  }
+
   /** Whether `tabId` is the page the reader can see right now. */
   const isTabOnScreen = (tabId: string): boolean =>
     shouldShowNativeWebview(get()) && getActiveBrowserTab()?.id === tabId
@@ -1405,6 +1419,7 @@ export const createBrowserState = (deps: BrowserStateDeps) => {
     setBrowserControlling,
     getActiveBrowserTab,
     isTabOnScreen,
+    setAgentAddress,
   }
 }
 

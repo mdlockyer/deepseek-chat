@@ -8,6 +8,7 @@ import type { BrowserControlTakenOver } from '@deepseek-chat/spine/facts/browser
 import type {
   ActiveSessionChanged,
   SessionDeleted,
+  ReplyLifecycleChanged,
   SessionHistoryReplaced,
 } from '@deepseek-chat/spine/facts/session'
 import {
@@ -99,6 +100,7 @@ export const createBrowserSlice = (deps: BrowserSliceDeps) => {
   }
 
   const takeOver = (sessionId: string) => {
+    tools.hideCursor(sessionId)
     deps.log.publish<BrowserControlTakenOver>({
       type: 'BrowserControlTakenOver',
       sessionId,
@@ -114,6 +116,12 @@ export const createBrowserSlice = (deps: BrowserSliceDeps) => {
     }),
     deps.log.subscribe<SessionHistoryReplaced>('SessionHistoryReplaced', () => {
       void state.clearAllSessionBrowsers()
+    }),
+    // The agent cursor stays on screen for the whole reply that drives the browser, then goes.
+    deps.log.subscribe<ReplyLifecycleChanged>('ReplyLifecycleChanged', ({ fact }) => {
+      if (fact.phase === 'settled') {
+        tools.hideCursor(fact.sessionId)
+      }
     }),
   ]
 

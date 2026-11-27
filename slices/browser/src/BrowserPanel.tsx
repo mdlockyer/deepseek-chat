@@ -88,6 +88,7 @@ export const createBrowserPanel = (state: BrowserState, deps: BrowserPanelDeps) 
     const viewportRef = useRef<HTMLDivElement>(null)
     const omniboxRef = useRef<HTMLInputElement>(null)
     const [addressDraft, setAddressDraft] = useState('')
+    const agentAddress = useBrowserStore((state) => state.agentAddress)
     const [editingAddress, setEditingAddress] = useState(false)
 
     const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? tabs[0] ?? null
@@ -228,6 +229,7 @@ export const createBrowserPanel = (state: BrowserState, deps: BrowserPanelDeps) 
                     key={tab.id}
                     role="tab"
                     aria-selected={active}
+                    data-agent-target={`tab:${tab.id}`}
                     tabIndex={0}
                     className={clsx(chrome.tab, active && chrome.tabActive)}
                     onClick={() => void switchBrowserTab(tab.id)}
@@ -250,6 +252,7 @@ export const createBrowserPanel = (state: BrowserState, deps: BrowserPanelDeps) 
                       type="button"
                       className={chrome.tabClose}
                       aria-label={t('browserCloseTab')}
+                      data-agent-target={`close:${tab.id}`}
                       onClick={(e) => {
                         e.stopPropagation()
                         void closeBrowserTab(tab.id)
@@ -263,6 +266,7 @@ export const createBrowserPanel = (state: BrowserState, deps: BrowserPanelDeps) 
               <IconButton
                 size="xs"
                 icon={<IconPlusOutline14 />}
+                data-agent-target="new-tab"
                 tooltip={t('browserNewTab')}
                 tooltipPlacement="bottom"
                 onClick={() =>
@@ -290,6 +294,7 @@ export const createBrowserPanel = (state: BrowserState, deps: BrowserPanelDeps) 
               <IconButton
                 size="xs"
                 icon={<IconChevronLeftOutline14 />}
+                data-agent-target="back"
                 tooltip={t('browserBack')}
                 disabled={!activeTab?.canGoBack}
                 onClick={() => activeTab && void runBrowserHistory(activeTab.id, 'back')}
@@ -297,6 +302,7 @@ export const createBrowserPanel = (state: BrowserState, deps: BrowserPanelDeps) 
               <IconButton
                 size="xs"
                 icon={<IconChevronRightOutline14 />}
+                data-agent-target="forward"
                 tooltip={t('browserForward')}
                 disabled={!activeTab?.canGoForward}
                 onClick={() => activeTab && void runBrowserHistory(activeTab.id, 'forward')}
@@ -304,6 +310,7 @@ export const createBrowserPanel = (state: BrowserState, deps: BrowserPanelDeps) 
               <IconButton
                 size="xs"
                 icon={activeTab?.isLoading ? <IconCloseOutline16 /> : <IconRefreshOutline16 />}
+                data-agent-target="reload"
                 tooltip={activeTab?.isLoading ? t('browserStopLoad') : t('browserReload')}
                 disabled={!activeUrl}
                 onClick={() =>
@@ -333,7 +340,12 @@ export const createBrowserPanel = (state: BrowserState, deps: BrowserPanelDeps) 
                 className={styles.omniboxInput}
                 aria-label={t('browserAddressPlaceholder')}
                 placeholder={t('browserAddressPlaceholder')}
-                value={addressDraft}
+                value={
+                  agentAddress && agentAddress.tabId === activeTab?.id
+                    ? agentAddress.text
+                    : addressDraft
+                }
+                data-agent-target="address"
                 spellCheck={false}
                 autoCapitalize="off"
                 autoCorrect="off"
@@ -427,7 +439,7 @@ export const createBrowserPanel = (state: BrowserState, deps: BrowserPanelDeps) 
         >
           {(fit, { viewport: liveViewport }) => (
             <>
-              <div ref={viewportRef} className={styles.viewport} />
+              <div ref={viewportRef} className={styles.viewport} data-browser-viewport="" />
               {!activeUrl ? (
                 <div className={styles.emptyOverlay}>
                   <EmptyState

@@ -93,17 +93,27 @@ panel, from `spine/design`), `KeyValueStore`.
     changed lines (or full text when the page mostly changed); `browser_observe` and navigations
     return full page text unless `text: false`. `browser_tabs` `close` reports the newly active tab
     (or notes when no tabs remain).
-12. **Agent cursor.** Before `browser_click`, `browser_type` and `browser_select` act, a small
-    solid kite in the app's accent blue (white edge, tip on the target) glides on a critically
-    damped spring to the point the action will use (a ref's centre after it is scrolled into view,
-    explicit `(x, y)`, or the focused element), and the action waits for it to land (at most
-    700 ms) only while that tab is the page on screen. It presses (scales to 0.84) as the action
-    fires. A faint glow follows the kite's outline: almost none at rest, more as it moves faster,
-    and a short bloom on each press; reduced motion makes it jump with no glow. It lives in a closed
-    shadow root on the top document, takes no pointer events, carries over to the same spot after a
-    page load, is hidden while a screenshot is captured, and fades out when the reader uses the page
-    (a trusted pointer, key or wheel event) or after 20 s with no action. A target that cannot be
-    resolved never blocks the action, which reports the error itself.
+12. **Agent cursor.** One small solid kite in the app's accent blue (white edge, tip on its point;
+    `kiteCursor.ts`) shows what the model is doing, drawn inside the page (embedded in the driver
+    scripts) and over the browser's toolbar in the app's window (`agentCursor.ts`), and moving
+    between the two through the page's top edge. Before `browser_click`, `browser_type` and
+    `browser_select` act it glides on a critically damped spring to the point the action will use
+    (a ref's centre after it is scrolled into view, explicit `(x, y)`, or the focused element) and
+    presses (scales to 0.84) as the action fires; `browser_press_key` takes it to the focused element
+    (or leaves it where it is) and presses; `browser_scroll` keeps it where it is (or brings it to
+    the middle of the page). `browser_navigate` takes it up out of the page to the address bar,
+    which it presses and types the URL into (at most 450 ms) before loading, or to the back, forward
+    or reload button; `browser_tabs` takes it to the new-tab button, the tab, or the tab's close
+    button. It stays in the toolbar until the next page action brings it back down into the page.
+    Actions wait for each glide (at most 700 ms in the page, 600 ms in the toolbar) only while that
+    tab is the page on screen; off screen nothing waits and the toolbar part is skipped. A faint
+    glow follows the kite's outline: almost none at rest, more as it moves faster, and a short bloom
+    on each press; reduced motion makes it jump, with no glow and no typing. It takes no pointer
+    events, lives in a closed shadow root in the page, carries over to the same spot after a page
+    load, and is hidden while a screenshot is captured. It stays visible for the whole reply that
+    drives the browser and fades out when that reply settles (`ReplyLifecycleChanged`), when the
+    reader takes over, or when the reader uses the page or the app (a trusted pointer, key or wheel
+    event). A target that cannot be resolved never blocks the action, which reports the error itself.
 13. **Viewports** are per tab; the tab's zoom is the fit of its viewport into the stage.
 14. **Localhost access.** Stored under `chat-demo:browser-allow-localhost` (default off) and sent to
     the host when events are bound and whenever it changes.
@@ -118,15 +128,17 @@ panel, from `spine/design`), `KeyValueStore`.
   listing cap (12), `<select>` option preview cap (20, always retaining selected option(s) with
   overflow count), extracted page text cap (12,000 chars), and outer tool output cap (24,000 chars,
   truncated inside `<untrusted_webpage_content>`).
-- Agent cursor: spring stiffness 170 /s², longest wait for it to land 700 ms, press scale 0.84 for
-  120 ms, glow alpha 0.08 at rest rising to 0.42 at speed (900 px/s) plus up to 0.4 on a press
-  (fading over 450 ms, capped at 0.6), fade-out after 20 s idle.
+- Agent cursor: 22 px kite, spring stiffness 170 /s², longest wait for it to land 700 ms in the
+  page and 600 ms in the toolbar, address typing at most 450 ms, leaves the page 30 px above its
+  top edge, press scale 0.84 for 120 ms, glow alpha 0.08 at rest rising to 0.42 at speed (900 px/s)
+  plus up to 0.4 on a press (fading over 450 ms, capped at 0.6).
 - Delta reporting threshold: same-URL diff emits changed lines when at most half the page changed
   and the delta fits within a compact cap; larger rewrites emit full page text.
 
 ## Facts
 
-Consumes `ActiveSessionChanged`, `SessionDeleted`, `SessionHistoryReplaced`. Publishes
+Consumes `ActiveSessionChanged`, `SessionDeleted`, `SessionHistoryReplaced`,
+`ReplyLifecycleChanged` (hides the agent cursor when a reply settles). Publishes
 `BrowserControlTakenOver`.
 
 ## Ownership notes
