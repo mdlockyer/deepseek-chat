@@ -102,14 +102,12 @@ export type TranscriptReadingPosition = {
 
 /**
  * The chat transcript, as this panel sees it: where the reader is, and a way to bring a turn into
- * view there. The panel follows the reader, and the transcript follows the panel when the reader
- * scrolls the panel instead.
+ * view there when the reader picks one in the panel.
  */
 export type TranscriptPort = {
   getReadingPosition(sessionId: string): TranscriptReadingPosition | null
   subscribeToReading(listener: () => void): () => void
   revealTurn(sessionId: string, messageId: string): void
-  revealLatest(sessionId: string): void
 }
 
 export type ActivityInspectorDeps = {

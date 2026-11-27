@@ -102,9 +102,9 @@
     font-weight: 500;
   }
 
-  /* Jump to the latest turn: a round button floating over the bottom of the panel. It stays mounted
+  /* Scroll to the bottom of the panel: a round button floating over its bottom edge. It stays mounted
      so it can fade and slide in and out; while hidden it is inert. */
-  .latestButton {
+  .bottomButton {
     position: absolute;
     bottom: var(--ui-space-4);
     left: 50%;
@@ -144,7 +144,7 @@
     }
   }
 
-  .latestLiveDot {
+  .bottomLiveDot {
     position: absolute;
     top: 0;
     right: 0;

@@ -8,9 +8,11 @@ scrolls through every turn of the chat as chapters, each under a sticky header n
 its prompt, and stays in step with the transcript: in `follow_reading` mode it shows the turn the
 reader is on (from the optional `transcript` port; the latest turn without one), and in `pinned`
 mode it holds one turn (from `TurnInspectionRequested`, the header's previous / next buttons, or a
-chapter header) until the reader moves on to another turn in the transcript. Scrolling the drawer
-only moves its own highlight; it never scrolls the transcript. A header readout names the turn on show, and a round chevron button at the bottom of the panel returns to the
-newest one.
+chapter header) until the reader moves on to another turn in the transcript. The drawer scrolls
+itself only when it is first shown and when the reader pins a turn; the reader moving through the
+transcript never scrolls it, and scrolling the drawer never scrolls the transcript. A header readout
+names the turn at the drawer's reading line (or the turn just pinned), and a round chevron button at the bottom of the drawer
+scrolls the drawer to its bottom.
 
 Rather than duplicating the left chat pane's step list under stacked filter bars, the drawer keeps
 **one single 52px header** (with underline `Activity` | `Sources` tabs when sources exist), pins an
@@ -32,7 +34,6 @@ banners).
 | `HeaderToggle`                   | Session header toggle button (always visible peer alongside Browser and File Preview, with >= 3:1 active ring).     |
 | `togglePanel(sessionId)`         | Opens Activity in `follow_reading` mode (or restores the pinned turn on that session); toggles closed when open.    |
 | `selectTurn(sessionId, msgId)`   | Pins a turn in the open panel and asks the transcript (`revealTurn`) to show it too.                                |
-| `followLatest(sessionId)`        | Returns to `follow_reading` and asks the transcript (`revealLatest`) for its latest output.                         |
 | `useActiveTarget()`              | React hook returning the currently displayed `ActivityTarget \| null` in both `follow_reading` and `pinned` modes.  |
 | `getTarget()`                    | Imperative getter matching `useActiveTarget()` (`null` while hidden, displaced, or showing no active turn).         |
 | `getSelection()`                 | Current `ActivitySelection \| null` (`'follow_reading' \| 'pinned'`).                                               |
@@ -41,8 +42,8 @@ banners).
 
 Pure exports: `buildActivityTimeline`, `extractTurnSources`, `SiteLogo`, `SourceCard`.
 
-Optional port `transcript: TranscriptPort` (`getReadingPosition`, `subscribeToReading`, `revealTurn`,
-`revealLatest`), wired by the app to `slices/conversations`. Without it the drawer follows the latest
+Optional port `transcript: TranscriptPort` (`getReadingPosition`, `subscribeToReading`, `revealTurn`),
+wired by the app to `slices/conversations`. Without it the drawer follows the latest
 turn and scrolling it moves nothing else.
 
 ## Behavioural invariants
@@ -52,8 +53,10 @@ turn and scrolling it moves nothing else.
    `follow_reading` the displayed turn is the transcript's reading position when that turn is in
    the chat, else the streaming turn, else the latest turn; a brand-new chat shows a calm
    `EmptyState`. `useActiveTarget()` / `getTarget()` report the resolved `{ sessionId, messageId,
-tab }` in both modes while open, and `null` while closed or displaced. Whenever the displayed
-   turn is not the latest, a round chevron button floating at the bottom of the panel calls `followLatest` (a pulsing dot on it while the latest turn streams; a keyboard user who presses it lands on the latest turn's heading).
+tab }` in both modes while open, and `null` while closed or displaced. Whenever the visible tab
+   is more than 48px from its bottom, a round chevron button floats at the bottom of the panel and
+   glides that tab to its bottom; it never moves the transcript. A pulsing dot marks it while the
+   latest turn streams, and a keyboard user who presses it lands on the last turn's heading.
 2. **Turn pinning, chapters & persistent step targeting.** `TurnInspectionRequested` pins
    `(sessionId, messageId, tab)` and opens the panel slot. When `callId` is omitted, a request for
    the turn and tab the open panel already displays (pinned or followed) toggles it closed. When
@@ -64,9 +67,11 @@ tab }` in both modes while open, and `null` while closed or displaced. Whenever 
    with cause `'reader'`; positions with cause `'reveal'` never release it. Both tabs render every
    turn (Sources: every turn with sources) as a chapter under a sticky header with its number, prompt
    and a step count, source count or live marker, each keeping its own expanded steps. When the
-   displayed turn changes for any reason other than the reader scrolling the drawer, the visible
-   tab glides to that chapter (instantly when the tab is first shown, to the bottom while a live
-   latest turn streams); while the reader scrolls the drawer, the chapter under the reading line (`readingLineY`, which stays at the middle of the view through most of a scroll and eases to the top and bottom edges at the ends, so every chapter is reachable and the switch happens at the same place on screen) is marked current (its title turns from secondary to primary text) and named in the readout, and the transcript does not move; any other change to the shown turn takes over again. The header readout ("Turn 3 of 9") shows only while it fits beside the tabs, so it never runs under the header buttons in a narrow panel; screen readers always get the full readout. Previous / next header buttons and chapter headers pin
+   tab is first shown it jumps to the displayed turn's chapter (to the bottom while a live latest
+   turn streams), and when the reader pins a turn it glides there. The displayed turn changing
+   because the reader moved in the transcript (or let go of a pin) does not scroll the drawer. While
+   the visible tab sits at its bottom and the latest turn streams, new steps keep it at the bottom.
+   The chapter under the drawer's reading line (`readingLineY`, which stays at the middle of the view through most of a scroll and eases to the top and bottom edges at the ends, so every chapter is reachable and the switch happens at the same place on screen) is marked current (its title turns from secondary to primary text) and named in the readout, when the tab is first shown and as the reader scrolls it; a pinned turn is marked current until the reader scrolls the drawer, and stays marked when the pin is let go. The header readout ("Turn 3 of 9") shows only while it fits beside the tabs, so it never runs under the header buttons in a narrow panel; screen readers always get the full readout. Previous / next header buttons and chapter headers pin
    the turn and reveal it in the transcript.
 3. **Displacement isolation.** When another right-hand panel displaces Activity on the same
    session, `useActiveTarget()` / `getTarget()` reports `null` while hidden, and clicking

@@ -111,12 +111,6 @@ export const createActivityPanelState = (
     transcript?.revealTurn(sessionId, messageId)
   }
 
-  /** Follows the reader again and takes the transcript to its latest output. */
-  const followLatest = (sessionId: string) => {
-    useStore.setState({ selection: following(sessionId, currentTab()) })
-    transcript?.revealLatest(sessionId)
-  }
-
   const setTab = (tab: ActivityTab) => {
     useStore.setState((curr) => {
       if (!curr.selection || curr.selection.tab === tab) {
@@ -211,7 +205,6 @@ export const createActivityPanelState = (
     togglePanel,
     toggleTurn,
     selectTurn,
-    followLatest,
     setTab,
     close,
     getActiveTarget,

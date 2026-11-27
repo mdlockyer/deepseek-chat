@@ -160,7 +160,6 @@ export const createActivityInspectorSlice = (deps: ActivityInspectorDeps) => {
     HeaderToggle,
     togglePanel: state.togglePanel,
     selectTurn: state.selectTurn,
-    followLatest: state.followLatest,
     useActiveTarget,
     getSelection: (): ActivitySelection | null => state.useStore.getState().selection,
     getTarget,

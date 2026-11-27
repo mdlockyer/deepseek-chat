@@ -416,7 +416,6 @@ export const createAppRuntime = (config: AppRuntimeConfig = {}) => {
           getReadingPosition: conversations.getReadingPosition,
           subscribeToReading: conversations.subscribeToReading,
           revealTurn: conversations.revealTurn,
-          revealLatest: conversations.revealLatest,
         },
         getPresenter: toolRegistry.presenterFor,
         openInApp: browser?.available
