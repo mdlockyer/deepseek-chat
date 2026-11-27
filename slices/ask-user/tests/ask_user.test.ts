@@ -2,11 +2,7 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import type { SessionDeleted, SessionHistoryReplaced } from '@deepseek-chat/spine/facts/session'
 import { EventLog } from '@deepseek-chat/spine/runtime'
-import {
-  ASK_USER_TOOL_NAME,
-  createAskUserSlice,
-  parseAskUserInput,
-} from '@deepseek-chat/slice-ask-user'
+import { ASK_USER_TOOL_NAME, createAskUserSlice } from '@deepseek-chat/slice-ask-user'
 
 const sampleQuestion = {
   questions: [
@@ -19,23 +15,31 @@ const sampleQuestion = {
   ],
 }
 
-describe('slice-ask-user: parseAskUserInput', () => {
-  it('validates and clamps up to 4 questions and 4 options, deduplicating IDs', () => {
-    assert.equal(parseAskUserInput(null).ok, false)
-    assert.equal(parseAskUserInput({ questions: [] }).ok, false)
-    const parsed = parseAskUserInput({
-      questions: [
-        { id: 'q', header: 'One', question: 'First?' },
-        { id: 'q', header: 'Two', question: 'Second?' },
-      ],
+describe('slice-ask-user: input validation at boundary', () => {
+  it('rejects invalid input and deduplicates duplicate question IDs through slice.run', async () => {
+    const slice = createAskUserSlice({ log: new EventLog() })
+    const signal = new AbortController().signal
+
+    assert.equal((await slice.run(null, { sessionId: 's1', signal })).status, 'error')
+    assert.equal((await slice.run({ questions: [] }, { sessionId: 's1', signal })).status, 'error')
+
+    const pending = slice.run(
+      {
+        questions: [
+          { id: 'q', header: 'One', question: 'First?' },
+          { id: 'q', header: 'Two', question: 'Second?' },
+        ],
+      },
+      { sessionId: 's1', signal }
+    )
+    assert.equal(slice.submit('s1', { q: 'A', q_2: 'B' }), true)
+    const result = await pending
+    assert.equal(result.status, 'ok')
+    assert.deepEqual(JSON.parse(result.content), {
+      status: 'answered',
+      answers: { q: 'A', q_2: 'B' },
     })
-    assert.equal(parsed.ok, true)
-    if (parsed.ok) {
-      assert.deepEqual(
-        parsed.questions.map((q) => q.id),
-        ['q', 'q_2']
-      )
-    }
+    slice.dispose()
   })
 })
 

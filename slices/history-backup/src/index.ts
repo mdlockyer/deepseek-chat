@@ -4,44 +4,15 @@ import { BackupError } from './errors.js'
 import { exportArchive } from './exportArchive.js'
 import { checkArchiveFormat, importArchive } from './importArchive.js'
 import { historyBackupMessages } from './messages.js'
-import type {
-  BackupAssistantMessage,
-  BackupFileAttachment,
-  BackupMessage,
-  BackupReplyBlock,
-  BackupReplyStatus,
-  BackupSession,
-  BackupSessionSummary,
-  BackupToolCallPart,
-  BackupToolResultPart,
-  BackupUserMessage,
-  HistoryBackupDeps,
-  HistorySessionsPort,
-  ToolBlockSerializer,
-} from './types.js'
+import type { BackupSession, HistoryBackupDeps } from './types.js'
 
 export { BackupError } from './errors.js'
 export { readSessionFile } from './schema.js'
-export { toSessionFile, type ExportImage, type ToSessionFileOptions } from './toArchive.js'
-export { toLocalSession, type LocalSession } from './toLocal.js'
+export { toSessionFile } from './toArchive.js'
+export { toLocalSession } from './toLocal.js'
 export { ArchiveError, readArchive, readEntry } from './zipReader.js'
 export { writeArchive } from './zipWriter.js'
-export type {
-  BackupAssistantMessage,
-  BackupFileAttachment,
-  BackupMessage,
-  BackupReplyBlock,
-  BackupReplyStatus,
-  BackupSession,
-  BackupSessionSummary,
-  BackupToolCallPart,
-  BackupToolResultPart,
-  BackupUserMessage,
-  DataSettingsController,
-  HistoryBackupDeps,
-  HistorySessionsPort,
-  ToolBlockSerializer,
-}
+export type { BackupSession, DataSettingsController, HistoryBackupDeps }
 
 const formatDate = (date: Date) =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`

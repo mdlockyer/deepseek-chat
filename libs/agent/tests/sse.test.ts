@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { ServerSentEventDecoder, readServerSentEvents } from '@deepseek-chat/slice-conversations'
+import { ServerSentEventDecoder, readServerSentEvents } from '@deepseek-chat/lib-agent'
 
 describe('ServerSentEventDecoder', () => {
   it('joins multiline data fields and strips at most one leading space', () => {

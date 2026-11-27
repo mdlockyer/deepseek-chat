@@ -7,24 +7,10 @@
  */
 import type { ReactNode } from 'react'
 import {
-  SiteLogo,
-  SourceCard,
   buildActivityTimeline,
   extractTurnSources,
-  type ActivityFailedStep,
-  type ActivityFileItem,
-  type ActivityLanePhase,
   type ActivitySelection,
-  type ActivitySource,
-  type ActivityStepRecord,
-  type ActivityTab,
   type ActivityTarget,
-  type ActivityThinkingRound,
-  type ActivityTimeline,
-  type ActivityTimelinePhase,
-  type ActivityVisualItem,
-  type ExtractedTurnSources,
-  type SessionTurnSummary,
   type TurnSnapshot,
 } from '../cells/activity-inspector/index.js'
 import {
@@ -40,52 +26,24 @@ import {
 import { isHistoryReady, replyingSessionIds } from '../kernel/index.js'
 import { createConversationsRuntime, type ConversationsDeps } from './runtime.js'
 
+export type { ConversationsDeps, ConversationsParams } from './runtime.js'
 export {
-  DEFAULT_CONVERSATIONS_PARAMS,
-  type ConversationsDeps,
-  type ConversationsParams,
-} from './runtime.js'
-export { SiteLogo, SourceCard, buildActivityTimeline, extractTurnSources }
-export type {
-  ActivityFailedStep,
-  ActivityFileItem,
-  ActivityLanePhase,
-  ActivitySelection,
-  ActivitySource,
-  ActivityStepRecord,
-  ActivityTab,
-  ActivityTarget,
-  ActivityThinkingRound,
-  ActivityTimeline,
-  ActivityTimelinePhase,
-  ActivityVisualItem,
-  ExtractedTurnSources,
-  SessionTurnSummary,
-  TurnSnapshot,
+  buildActivityTimeline,
+  extractTurnSources,
+  type ActivitySelection,
+  type ActivityTarget,
+  type TurnSnapshot,
 }
 export { createIndexedDbSessionStore, type SessionStore } from '../cells/storage/index.js'
-export type { ReadingCause, ReadingPosition, RevealRequest } from '../kernel/index.js'
-export type { StreamTrace, StreamTraceBlock } from '../cells/turn-loop/index.js'
-export type {
-  ChatFile,
-  ConversationsViewDeps,
-  SettingsSection,
-  SiderMode,
-  VoiceViews,
-} from '../cells/views/index.js'
-export type { ClientTool } from '@deepseek-chat/lib-agent'
+export type { ReadingCause, RevealRequest } from '../kernel/index.js'
+export type { StreamTrace } from '../cells/turn-loop/index.js'
+export type { ChatFile, SettingsSection, SiderMode } from '../cells/views/index.js'
 export type {
   AssistantMessage,
   CompactionCheckpoint,
-  CompactionTrigger,
-  FileAttachment,
   Message,
-  ReplyBlock,
   Session,
   SessionSummary,
-  ThinkingPart,
-  ToolCallPart,
-  ToolResultPart,
   UserMessage,
 } from '../kernel/index.js'
 
@@ -210,17 +168,8 @@ export const createConversationsSlice = (deps: ConversationsDeps) => {
 
 export type ConversationsSlice = ReturnType<typeof createConversationsSlice>
 
-// ---------- Pure model functions (also the boundary tests' surface) ----------
+// ---------- Pure model functions (documented contract & boundary tests' surface) ----------
 
-export { ApiError, requestWith } from '../cells/turn-loop/index.js'
-export {
-  AUTO_TITLE_KEEP,
-  MAX_AUTO_TITLE_CHARS,
-  buildAutoTitlePrompt,
-  buildAutoTitleRequest,
-  parseAutoTitleResponse,
-} from '../kernel/index.js'
-export { ServerSentEventDecoder, readServerSentEvents } from '@deepseek-chat/lib-agent'
 export {
   appendBranch,
   getVisibleMessages,
@@ -234,62 +183,26 @@ export {
   findActiveCheckpoint,
   pickImageResults,
   settleReply,
-  toHistoryPrefixMessages,
   toRequestMessages,
-  type InlineAttachmentData,
-  type ToRequestMessagesOptions,
 } from '../kernel/index.js'
-export {
-  computeCompactionPolicy,
-  selectCompactionTrigger,
-  type CompactionPolicy,
-} from '../kernel/index.js'
+export { computeCompactionPolicy, selectCompactionTrigger } from '../kernel/index.js'
 export {
   CHECKPOINT_ACK,
-  buildChunkedCompactionPrompt,
-  buildCompactionInstruction,
   buildCompactionLedgerText,
   buildVerbatimSection,
-  estimateAttachmentTokens,
-  estimateMessagesTokens,
   estimateSessionContext,
   estimateTextTokens,
-  renderCheckpointWireText,
-  runCompaction,
   validateCompactionSummary,
-  type CompactionResult,
-  type RunCompactionParams,
-  type SessionContextEstimate,
-  type VerbatimSelection,
 } from '../cells/compaction/index.js'
+export { formatLegacyLatestReminder } from '../kernel/index.js'
 export {
-  collectCitedUrls,
-  createEnvironmentContext,
-  formatLegacyLatestReminder,
-  resolveEnvironmentContext,
-} from '../kernel/index.js'
-export {
-  INLINE_TRACE_PREVIEW_LIMIT,
-  NARRATION_HOLD_MS,
-  NARRATION_MAX_CHARS,
   buildInlineTrace,
   buildReplyView,
   buildTurnWorkStrip,
   getAreaTitle,
   getFrontStageNotes,
-  getTotalThinkingSeconds,
   holdsNarration,
   needsWorkingIndicator,
   selectInlineTracePreview,
-  showsRunning,
-  type FrontStageNoteEntry,
-  type InlineTrace,
   type InlineTraceItem,
-  type InlineTracePreview,
-  type InlineTracePreviewEntry,
-  type ReplyView,
-  type Source,
-  type Step,
-  type ToolStep,
-  type TurnWorkStripState,
 } from '../cells/views/index.js'

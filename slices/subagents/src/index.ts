@@ -1,15 +1,6 @@
 import type { ToolCapability } from '@deepseek-chat/lib-tools'
 import type { SessionDeleted, SessionHistoryReplaced } from '@deepseek-chat/spine/facts/session'
-import { createMessageBoard, formatBoardDigest } from './board.js'
-import { assignChildCitations } from './citations.js'
 import { serializeSubagentForArchive, subagentsPresenter } from './presenter.js'
-import {
-  runAgent,
-  type AgentOutcome,
-  type ExhaustedLimit,
-  type FinishOutput,
-  type RunAgentInput,
-} from './runAgent.js'
 import {
   createReplySubagentRuntime,
   settleHydratedSubagentsState,
@@ -20,61 +11,20 @@ import {
   POST_TOOL_NAME,
   WAIT_TOOL_NAME,
   buildLeadSubagentInstructions,
-  buildSubagentOrientation,
-  createChildPostTool,
   createLeadPostTool,
   createWaitTool,
 } from './tools.js'
 import {
   DEFAULT_SUBAGENTS_PARAMS,
   isSubagentsReplyState,
-  type AgentRun,
-  type AgentRunResult,
-  type AgentRunState,
-  type BoardPost,
-  type ChildBlock,
-  type PostAudience,
-  type PostAuthor,
   type SubagentsParams,
   type SubagentsReplyState,
   type SubagentsSliceDeps,
   type SubagentsToolHost,
 } from './types.js'
 
-export {
-  AUTO_WAIT_ID_PREFIX,
-  DEFAULT_SUBAGENTS_PARAMS,
-  POST_TOOL_NAME,
-  WAIT_TOOL_NAME,
-  assignChildCitations,
-  buildLeadSubagentInstructions,
-  buildSubagentOrientation,
-  createChildPostTool,
-  createLeadPostTool,
-  createMessageBoard,
-  createWaitTool,
-  formatBoardDigest,
-  isSubagentsReplyState,
-  runAgent,
-  settleHydratedSubagentsState,
-}
-export type {
-  AgentOutcome,
-  AgentRun,
-  AgentRunResult,
-  AgentRunState,
-  BoardPost,
-  ChildBlock,
-  ExhaustedLimit,
-  FinishOutput,
-  PostAudience,
-  PostAuthor,
-  RunAgentInput,
-  SubagentsParams,
-  SubagentsReplyState,
-  SubagentsSliceDeps,
-  SubagentsToolHost,
-}
+export { POST_TOOL_NAME, WAIT_TOOL_NAME }
+export type { SubagentsParams, SubagentsSliceDeps, SubagentsToolHost }
 
 const waitWithSignal = (ms: number, signal: AbortSignal): Promise<void> =>
   new Promise((resolve, reject) => {

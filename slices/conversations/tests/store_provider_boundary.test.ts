@@ -165,6 +165,7 @@ describe('conversations: provider-neutral boundary proof (synthetic inline-base6
       platform: 'web',
       getLocationLabel: () => 'Seattle',
       autoTitle: true,
+      params: { retryBaseDelayMs: 1 },
       ui: {
         voice: null,
         openSettings: () => {},
@@ -288,6 +289,22 @@ describe('conversations: provider-neutral boundary proof (synthetic inline-base6
     assert.equal(overflowReply.status, 'error')
     const notice = slice.describeReplyNotice(overflowReply)
     assert.ok(notice && /context|上下文/.test(notice), `unexpected overflow notice: ${notice}`)
+
+    // Turn 3: low-level LibApiError timeout wraps into a localized timeout notice (not raw provider text).
+    handler = () => new ApiError('network', 'raw socket timeout', undefined, { timedOut: true })
+    slice.commands.setDraft(sessionId, 'Trigger provider timeout')
+    assert.equal(slice.commands.send(sessionId), true)
+    await slice.commands.whenIdle()
+
+    const timeoutReply = slice.getChatMessages(sessionId).at(-1) as AssistantMessage
+    assert.equal(timeoutReply.status, 'error')
+    const timeoutNotice = slice.describeReplyNotice(timeoutReply)
+    assert.ok(
+      timeoutNotice &&
+        /timed out|超时/i.test(timeoutNotice) &&
+        timeoutNotice !== 'raw socket timeout',
+      `expected localized timeout notice, got: ${timeoutNotice}`
+    )
 
     // Verify ZERO requests ever contained proprietary wire fields or roles.
     for (const req of seenRequests) {

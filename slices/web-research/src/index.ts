@@ -40,24 +40,14 @@ import {
   type ResearchProfile,
 } from './researchProfile.js'
 
-export type { FirecrawlParams, KeyVerification, WebAudience, WebSearchSource } from './firecrawl.js'
-export type { FirecrawlKeyState } from './key.js'
-export type { KeyEditor } from './KeySettings.js'
-export {
-  FINISH_RESEARCH_TOOL_NAME,
-  RESEARCH_TOOL_NAME,
-  type ResearchProfile,
-  type ResearchSource,
-} from './researchProfile.js'
-
-export const WEB_SEARCH_TOOL_NAME = 'web_search'
-export const WEB_SCRAPE_TOOL_NAME = 'web_scrape'
+const WEB_SEARCH_TOOL_NAME = 'web_search'
+const WEB_SCRAPE_TOOL_NAME = 'web_scrape'
 
 /** Who invoked a web tool call: the lead reply or a child subagent. */
-export type WebCaller = { kind: 'reply' } | { kind: 'agent'; profile: string; runId: string }
+type WebCaller = { kind: 'reply' } | { kind: 'agent'; profile: string; runId: string }
 
 /** Model-visible client tool definition (client tools carry no `type` field). */
-export type WebToolDefinition = {
+type WebToolDefinition = {
   readonly name: string
   readonly description: string
   readonly input_schema: Record<string, unknown>
@@ -73,7 +63,7 @@ export type WebToolResult = {
   readonly scrapedPage?: { url: string; title: string | null }
 }
 
-export type WebRunOptions = {
+type WebRunOptions = {
   readonly signal: AbortSignal
   /** Raw JSON of the tool input, quoted back in invalid-input errors. */
   readonly inputJson?: string

@@ -22,7 +22,7 @@ import { createVoiceSetting } from './VoiceSetting.js'
 export type { AudioContextLike, VoiceAudio } from './audio.js'
 export type { ReadAloudState } from './readAloud.js'
 export type { TtsVoice } from './speechApi.js'
-export type { VoiceInput, VoiceInputStatus } from './voiceInput.js'
+export type { VoiceInputStatus } from './voiceInput.js'
 
 export type VoiceSliceDeps = {
   readonly log: EventLog

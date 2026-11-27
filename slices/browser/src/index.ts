@@ -37,28 +37,16 @@ import {
 } from '../kernel/index.js'
 
 export type {
-  BrowserActionMeta,
-  BrowserBlockedPayload,
   BrowserBounds,
   BrowserHost,
-  BrowserNewTabPayload,
-  BrowserSnapshotResult,
-  BrowserStateResult,
   BrowserTab,
   BrowserTabStatePayload,
   BrowserToolDefinition,
   BrowserToolRunResult,
   SessionBrowserState,
 } from '../kernel/index.js'
-export type { SomBadgeBox, SomBadgeElement, SomBadgeLayout } from '../cells/tools/index.js'
 export { computeSomBadgeBoxes } from '../cells/tools/index.js'
-export {
-  /** Tool names persisted in chat history; never rename. */
-  BROWSER_TOOL_NAMES,
-  isHttpUrl,
-  NO_HOST,
-  normalizeOmniboxInput,
-} from '../kernel/index.js'
+export { isHttpUrl, normalizeOmniboxInput } from '../kernel/index.js'
 
 const BROWSER_TOGGLE_KEY = 'chat-demo:browser'
 

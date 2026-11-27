@@ -3,8 +3,6 @@ import { createElement, useCallback, useRef, useSyncExternalStore, type Componen
 import { createActivityPanel } from './ActivityPanel.js'
 import headerToggleStyles from './HeaderToggle.module.css'
 import { activityInspectorMessages } from './messages.js'
-import { SiteLogo } from './SiteLogo.js'
-import { SourceCard } from './SourceCard.js'
 import { extractTurnSources, type ExtractedTurnSources } from './sources.js'
 import { createActivityPanelState } from './state.js'
 import {
@@ -30,7 +28,7 @@ import type {
   TurnSnapshotSource,
 } from './types.js'
 
-export { SiteLogo, SourceCard, buildActivityTimeline, extractTurnSources }
+export { buildActivityTimeline, extractTurnSources }
 export type {
   ActivityFailedStep,
   ActivityFileItem,

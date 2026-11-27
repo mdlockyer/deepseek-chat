@@ -605,6 +605,23 @@ for (const [name, dir] of sliceDirs) {
         `slice "${name}" factory ${factoryMatch[1]} in ${rel(entryPath)} must return a dispose() method`
       )
     }
+    const strippedEntry = entrySource.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')
+    for (const match of strippedEntry.matchAll(
+      /\bexport\s+\*\s+(?:as\s+\w+\s+)?from\s+['"]([^'"]+)['"]/g
+    )) {
+      fail(
+        'ENTRY-HYGIENE',
+        `slice "${name}" entrypoint ${rel(entryPath)} uses wildcard re-export from "${match[1]}"; export an explicit narrow public surface`
+      )
+    }
+    for (const match of strippedEntry.matchAll(
+      /\bexport\s+(?:type\s+)?(?:\*|\{[^}]*\})\s+from\s+['"](@deepseek-chat\/[^'"]+)['"]/g
+    )) {
+      fail(
+        'ENTRY-HYGIENE',
+        `slice "${name}" entrypoint ${rel(entryPath)} re-exports foreign workspace package "${match[1]}"; callers must import it directly`
+      )
+    }
   }
   if (!fs.existsSync(path.join(dir, 'tests'))) {
     fail('ANATOMY', `slice "${name}" is missing tests/`)

@@ -7,28 +7,11 @@ import {
   ASK_USER_TOOL,
   ASK_USER_TOOL_NAME,
   createAskUserState,
-  parseAskUserInput,
-  type AskActionItem,
   type AskActionMeta,
-  type AskUserOption,
-  type AskUserQuestion,
-  type ParseAskUserResult,
-  type PendingAskUser,
 } from './askUser.js'
 import { askUserPresenter, serializeAskForArchive } from './presenter.js'
 
-export {
-  ASK_USER_INSTRUCTIONS,
-  ASK_USER_TOOL,
-  ASK_USER_TOOL_NAME,
-  parseAskUserInput,
-  type AskActionItem,
-  type AskActionMeta,
-  type AskUserOption,
-  type AskUserQuestion,
-  type ParseAskUserResult,
-  type PendingAskUser,
-}
+export { ASK_USER_TOOL_NAME, type AskActionMeta }
 
 export type AskUserSliceDeps = {
   readonly log: EventLog

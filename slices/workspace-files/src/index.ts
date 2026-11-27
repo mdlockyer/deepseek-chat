@@ -43,17 +43,10 @@ import {
   type FileRecord,
 } from './workspace.js'
 
-export type { PreviewBounds, PreviewHost, WorkspaceViews } from './context.js'
+export type { PreviewHost, WorkspaceViews } from './context.js'
 export type { PreviewViewMode, SessionPreviewState } from './state.js'
 export type { FileToolDefinition, PreviewToolRunResult } from './tools.js'
-export type {
-  FileRecord,
-  FileVersionEntry,
-  PresentedFile,
-  WorkspaceArtifact,
-  WorkspaceFileSource,
-} from './workspace.js'
-export { EMPTY_SESSION_PREVIEW_STATE } from './state.js'
+export type { FileRecord } from './workspace.js'
 /** File-format rules (pure): MIME inference, preview kind, highlight language, CSV/TSV parsing. */
 export {
   classifyPreviewKind,
@@ -61,7 +54,6 @@ export {
   inferMimeType,
   parseDelimitedText,
   supportsPreviewToggle,
-  type PreviewKind,
 } from './fileKinds.js'
 export {
   collectWorkspaceArtifacts,
@@ -69,13 +61,6 @@ export {
   makeUploadPreviewKey,
   normalizeWorkspacePath,
 } from './workspace.js'
-/** Tool names persisted in chat history; never rename. */
-export {
-  EDIT_FILE_TOOL_NAME,
-  PREVIEW_TOOL_NAMES as FILE_TOOL_NAMES,
-  PRESENT_FILE_TOOL_NAME,
-  READ_FILE_TOOL_NAME,
-} from './tools.js'
 
 export type WorkspaceFilesDeps = {
   readonly log: EventLog

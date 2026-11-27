@@ -1,4 +1,4 @@
-export { ApiError, localizeProvider, requestWith } from './apiClient.js'
+export { ApiError, localizeProvider } from './apiClient.js'
 export { createUploadsController, type UploadsController } from './attachments.js'
 export {
   createAutoTitleRunner,

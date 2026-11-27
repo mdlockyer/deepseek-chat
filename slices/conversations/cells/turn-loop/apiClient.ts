@@ -2,12 +2,10 @@ import {
   ApiError as LibApiError,
   DEFAULT_REST_TIMEOUT_MS,
   UPLOAD_TIMEOUT_MS,
-  request as libRequest,
   type ApiErrorKind,
   type ModelProvider,
 } from '@deepseek-chat/lib-agent'
 import { DEFAULT_LOCALE } from '@deepseek-chat/spine/i18n'
-import type { HttpFetch } from '@deepseek-chat/spine/ports'
 import { translate, type TranslationMessage } from '../../kernel/index.js'
 
 export { DEFAULT_REST_TIMEOUT_MS, UPLOAD_TIMEOUT_MS, type ApiErrorKind }
@@ -38,19 +36,6 @@ export const wrapApiError = (error: unknown): never => {
     throw new ApiError(error.kind, error.message, error.status)
   }
   throw error
-}
-
-export const requestWith = async (
-  fetchFn: HttpFetch,
-  url: string,
-  init: RequestInit,
-  timeoutMs?: number
-): Promise<Response> => {
-  try {
-    return await libRequest(fetchFn, url, init, timeoutMs)
-  } catch (error) {
-    return wrapApiError(error)
-  }
 }
 
 /** Wraps a `ModelProvider` so low-level timeout errors surface localized `ApiError` messages. */

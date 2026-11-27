@@ -1,11 +1,7 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { memoryStore } from '@deepseek-chat/test-support'
-import {
-  FINISH_RESEARCH_TOOL_NAME,
-  RESEARCH_TOOL_NAME,
-  createWebResearchSlice,
-} from '@deepseek-chat/slice-web-research'
+import { createWebResearchSlice } from '@deepseek-chat/slice-web-research'
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
@@ -30,9 +26,9 @@ describe('web-research: research profile task validation & quote verification', 
       params: { researchMaxToolCalls: 14, researchMaxRounds: 9 },
     })
 
-    assert.equal(web.toolNames.research, RESEARCH_TOOL_NAME)
+    assert.equal(web.toolNames.research, 'research')
     assert.equal(web.researchProfile.context, 'clean')
-    assert.equal(web.researchProfile.finish.name, FINISH_RESEARCH_TOOL_NAME)
+    assert.equal(web.researchProfile.finish.name, 'finish_research')
     assert.deepEqual(web.researchProfile.tools, ['web_search', 'web_scrape'])
     assert.deepEqual(web.researchProfile.limits, { maxRounds: 9, maxToolCalls: 14 })
 

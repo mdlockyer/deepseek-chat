@@ -11,10 +11,7 @@ import { EventLog } from '@deepseek-chat/spine/runtime'
 import {
   POST_TOOL_NAME,
   WAIT_TOOL_NAME,
-  assignChildCitations,
   createSubagentsSlice,
-  isSubagentsReplyState,
-  settleHydratedSubagentsState,
 } from '@deepseek-chat/slice-subagents'
 
 const sse = (events: unknown[]) =>
@@ -224,8 +221,12 @@ describe('slice-subagents: spawn, read-only guard, board, wait, citations, and t
     assert.match(waited.content, /Found key metric/)
     assert.equal(waited.sources?.[0]?.url, 'https://example.com/a')
     assert.equal(forbiddenCalls.length, 0, 'non-read tool was never invoked')
-    assert.ok(isSubagentsReplyState(persistedState))
-    assert.equal(persistedState.agents[0]?.state.status, 'finished')
+    const saved = persistedState as {
+      agents: { state: { status: string } }[]
+      board: unknown[]
+    }
+    assert.ok(Array.isArray(saved?.agents) && Array.isArray(saved?.board))
+    assert.equal(saved.agents[0]?.state.status, 'finished')
 
     // Child inherited provider.defaultModel and sent environmentContext inside a standard user message.
     const firstChildReq = childRequests[0] as {
@@ -238,8 +239,8 @@ describe('slice-subagents: spawn, read-only guard, board, wait, citations, and t
     assert.match(firstChildReq.messages[0]?.content ?? '', /^<environment_context>/)
     assert.match(firstChildReq.messages[0]?.content ?? '', /Investigate SSA/)
 
-    // Hydration settles any persisted running child to stopped (interrupted)
-    const settled = settleHydratedSubagentsState({
+    // Hydration settles any persisted running child to stopped (interrupted) through turnHooks.onReplyHydrated.
+    const settled = subagents.capability.turnHooks?.onReplyHydrated?.({
       agents: [
         {
           runId: 'a1',
@@ -250,16 +251,8 @@ describe('slice-subagents: spawn, read-only guard, board, wait, citations, and t
         },
       ],
       board: [],
-    })
+    }) as { agents: { state: unknown }[] }
     assert.deepEqual(settled.agents[0]?.state, { status: 'stopped', reason: 'interrupted' })
-
-    // Pure citation numbering works standalone
-    const numbered = assignChildCitations(
-      'See [1].',
-      [{ n: 1, url: 'https://b.test', title: 'B', verification: 'verified' }],
-      new Map([['https://a.test', 1]])
-    )
-    assert.match(numbered.content, /See \[ref:2\]\./)
 
     subagents.dispose()
   })

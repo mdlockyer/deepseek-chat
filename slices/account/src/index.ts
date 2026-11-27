@@ -2,8 +2,7 @@ import { useSyncExternalStore } from 'react'
 import { createAccount, type AccountDeps, type AccountState } from './account.js'
 import { createKeySettings, createUseKeyEditor } from './KeySettings.js'
 
-export type { AccountDeps, AccountParams, AccountState, KeyCheck } from './account.js'
-export type { KeyEditor } from './KeySettings.js'
+export type { AccountDeps, AccountState, KeyCheck } from './account.js'
 
 export const createAccountSlice = (deps: AccountDeps) => {
   const account = createAccount(deps)

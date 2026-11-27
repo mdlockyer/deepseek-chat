@@ -30,7 +30,12 @@ export const describeReply = (reply: ArchiveAssistantMessage, locale?: Locale): 
       return { text: message || translate(locale, 'uploadFileStatusFailed') }
     }
     if (kind === 'network') {
-      return { text: translate(locale, 'commonNetworkErrorToast') }
+      return {
+        text:
+          localMessage && isTranslationKey(localMessage.key)
+            ? message
+            : translate(locale, 'commonNetworkErrorToast'),
+      }
     }
     switch (classifyApiError(new LibApiError(kind, reply.error.message, status))) {
       case 'unauthorized':

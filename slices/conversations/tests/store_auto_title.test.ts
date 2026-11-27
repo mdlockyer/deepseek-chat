@@ -1,11 +1,5 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import {
-  AUTO_TITLE_KEEP,
-  MAX_AUTO_TITLE_CHARS,
-  buildAutoTitlePrompt,
-  parseAutoTitleResponse,
-} from '@deepseek-chat/slice-conversations'
 import { createStoreEnv, say, type ApiReply, type ApiRequest } from './store_harness.js'
 
 const env = createStoreEnv({
@@ -34,23 +28,52 @@ const isAutoTitleRequest = (req: ApiRequest) => {
   )
 }
 
-describe('autoTitle: pure prompt and response parser', () => {
-  it('cleans quotes, markdown, and trailing punctuation; respects KEEP and length cap', () => {
-    assert.equal(parseAutoTitleResponse('KEEP', 'Old Title'), null)
-    assert.equal(parseAutoTitleResponse('  "keep."  ', 'Old Title'), null)
-    assert.equal(parseAutoTitleResponse('Old Title', 'Old Title'), null)
-    assert.equal(parseAutoTitleResponse('   \n  ', 'Old Title'), null)
-    assert.equal(parseAutoTitleResponse('# "Q4 Revenue Analysis."', 'Old'), 'Q4 Revenue Analysis')
-    assert.equal(parseAutoTitleResponse('- 「深度思考缓存设计」：', ''), '深度思考缓存设计')
-    assert.equal(parseAutoTitleResponse('First Line\nIgnored Second', ''), 'First Line')
-    const long = parseAutoTitleResponse('A'.repeat(120), '')
-    assert.equal(long?.length, MAX_AUTO_TITLE_CHARS)
-    assert.ok(buildAutoTitlePrompt('Initial').includes(AUTO_TITLE_KEEP))
-    assert.ok(!buildAutoTitlePrompt('').includes(AUTO_TITLE_KEEP))
-  })
-})
-
 describe('conversations store: cache-riding turn-end auto-title hook (SPEC invariant 10)', () => {
+  it('cleans quotes, markdown, CJK punctuation, multi-line text, KEEP variants, and oversized titles at the boundary', async () => {
+    await env.slice.commands.init()
+    const cases: { forkText: string; expectedTitle: string }[] = [
+      { forkText: '# "Q4 Revenue Analysis."', expectedTitle: 'Q4 Revenue Analysis' },
+      { forkText: '  "keep."  ', expectedTitle: 'Q4 Revenue Analysis' },
+      { forkText: '   \n  ', expectedTitle: 'Q4 Revenue Analysis' },
+      { forkText: '- 「深度思考缓存设计」：', expectedTitle: '深度思考缓存设计' },
+      { forkText: 'First Line\nIgnored Second', expectedTitle: 'First Line' },
+    ]
+    let step = 0
+    env.respondWith((req): ApiReply => {
+      if (isAutoTitleRequest(req)) {
+        const next = cases[step]
+        step += 1
+        return { text: next ? next.forkText : 'A'.repeat(120) }
+      }
+      return { text: 'ok' }
+    })
+
+    env.slice.commands.newChat()
+    await say(env, null, 'Turn 0')
+    await flushAsync()
+    const sessionId = env.slice.getState().activeId
+    assert.ok(sessionId)
+    assert.equal(
+      env.slice.getState().sessions.find((s) => s.id === sessionId)?.title,
+      cases[0]?.expectedTitle
+    )
+
+    for (let i = 1; i < cases.length; i += 1) {
+      await say(env, sessionId, `Turn ${i}`)
+      await flushAsync()
+      assert.equal(
+        env.slice.getState().sessions.find((s) => s.id === sessionId)?.title,
+        cases[i]?.expectedTitle,
+        `case ${i} (${JSON.stringify(cases[i]?.forkText)})`
+      )
+    }
+
+    // Oversized title is capped cleanly below raw 120-character input.
+    await say(env, sessionId, 'Turn overflow')
+    await flushAsync()
+    const capped = env.slice.getState().sessions.find((s) => s.id === sessionId)?.title ?? ''
+    assert.ok(capped.length > 0 && capped.length < 120 && /^A+$/.test(capped), `got "${capped}"`)
+  })
   it('names the chat via the cache-riding fork on turn 1 and refreshes on turn 2 with an identical prefix', async () => {
     await env.slice.commands.init()
     env.slice.commands.newChat()

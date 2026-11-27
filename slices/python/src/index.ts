@@ -36,19 +36,7 @@ import {
   type PythonToolDefinition,
 } from './tool.js'
 
-export type {
-  NativePythonHost,
-  NativeRunResponse,
-  NativeRuntimeStatus,
-  PresentedFile,
-  PythonParams,
-  PythonPhase,
-  PythonRunResult,
-  PythonUpload,
-  RunOptions,
-  WorkerLike,
-} from './kernel.js'
-export type { PythonToolDefinition } from './tool.js'
+export type { NativePythonHost, NativeRunResponse, PythonPhase } from './kernel.js'
 
 const PYTHON_TOGGLE_KEY = 'chat-demo:python'
 
