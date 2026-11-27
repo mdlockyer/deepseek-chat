@@ -4,5 +4,13 @@
 <dict>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>DeepSeek uses the microphone to transcribe voice input into text.</string>
+	<key>SUFeedURL</key>
+	<string>https://github.com/mdlockyer/deepseek-chat/releases/latest/download/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>WkSC/s+Up/kL5/jHSI4vNzsL6e6wZsKUA/hoEsaRo84=</string>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
+	<key>SUScheduledCheckInterval</key>
+	<integer>86400</integer>
 </dict>
 </plist>

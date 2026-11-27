@@ -1,6 +1,6 @@
 [package]
 name = "deepseek-chat"
-version = "0.3.0"
+version = "0.3.1"
 description = "DeepSeek desktop app"
 authors = ["mlockyer"]
 license = "MIT"
@@ -59,6 +59,7 @@ objc2-app-kit = { version = "0.3.2", default-features = false, features = [
 objc2-foundation = { version = "0.3.2", default-features = false, features = [
   "std",
   "block2",
+  "NSBundle",
   "NSData",
   "NSDictionary",
   "NSError",

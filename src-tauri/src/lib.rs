@@ -25,6 +25,8 @@ mod python;
 mod python_runtime;
 mod python_sandbox;
 mod scraper;
+#[cfg(target_os = "macos")]
+mod updater;
 
 use std::path::{Path, PathBuf};
 
@@ -40,6 +42,8 @@ const KEYCHAIN_SERVICE: &str = "com.mlockyer.deepseekchat";
 const API_KEY_ACCOUNT: &str = "deepseek-api-key";
 const API_KEY_FILE_NAME: &str = "api-key";
 const FIRECRAWL_API_KEY_FILE_NAME: &str = "firecrawl-api-key";
+#[cfg(target_os = "macos")]
+const CHECK_FOR_UPDATES_MENU_ID: &str = "check-for-updates";
 #[cfg(target_os = "macos")]
 const SETTINGS_MENU_ID: &str = "open-settings";
 #[cfg(target_os = "macos")]
@@ -238,6 +242,15 @@ fn build_macos_menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<t
 
     let menu = Menu::default(app)?;
     if let Some(MenuItemKind::Submenu(app_submenu)) = menu.items()?.into_iter().next() {
+        let check_updates_item = MenuItem::with_id(
+            app,
+            CHECK_FOR_UPDATES_MENU_ID,
+            "Check for Updates...",
+            updater::is_available(),
+            None::<&str>,
+        )?;
+        app_submenu.insert(&check_updates_item, 1)?;
+
         let settings_item = MenuItem::with_id(
             app,
             SETTINGS_MENU_ID,
@@ -246,7 +259,7 @@ fn build_macos_menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<t
             Some("CmdOrCtrl+,"),
         )?;
         let separator = PredefinedMenuItem::separator(app)?;
-        app_submenu.insert_items(&[&settings_item, &separator], 2)?;
+        app_submenu.insert_items(&[&settings_item, &separator], 3)?;
     }
     Ok(menu)
 }
@@ -302,6 +315,8 @@ pub fn run() {
     let builder = builder.menu(build_macos_menu).on_menu_event(|app, event| {
         if event.id() == SETTINGS_MENU_ID {
             let _ = app.emit(OPEN_SETTINGS_EVENT, ());
+        } else if event.id() == CHECK_FOR_UPDATES_MENU_ID {
+            updater::check_for_updates(app);
         }
     });
 
@@ -314,6 +329,8 @@ pub fn run() {
                         .build(),
                 )?;
             }
+            #[cfg(target_os = "macos")]
+            updater::start(app.handle());
             Ok(())
         })
         .run(tauri::generate_context!())

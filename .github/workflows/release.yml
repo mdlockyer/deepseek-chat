@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Optional tag name (e.g. v0.3.0) to create a GitHub Release; leave empty for artifact-only build'
+        description: 'Optional tag name (e.g. v0.3.1) to create a GitHub Release; leave empty for artifact-only build'
         required: false
         type: string
 
@@ -68,16 +68,34 @@ jobs:
           cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
           cargo test --manifest-path src-tauri/Cargo.toml --lib --bins
 
-      - name: Prepare Apple signing and notarization credentials
+      - name: Prepare signing, notarization, and Sparkle credentials
         id: apple-creds
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+          RELEASE_TAG: ${{ inputs.tag != '' && inputs.tag || (startsWith(github.ref, 'refs/tags/v') && github.ref_name || '') }}
           IS_RELEASE: ${{ startsWith(github.ref, 'refs/tags/v') || inputs.tag != '' }}
         run: |
+          app_version="$(node -p "JSON.parse(require('fs').readFileSync('package.json','utf8')).version")"
+          echo "APP_VERSION=$app_version" >> "$GITHUB_ENV"
+
+          if [ "$IS_RELEASE" = "true" ]; then
+            expected_tag="v$app_version"
+            if [ "$RELEASE_TAG" != "$expected_tag" ]; then
+              echo "::error::Release tag '$RELEASE_TAG' does not match package.json version '$app_version' (expected '$expected_tag')."
+              exit 1
+            fi
+            if [ -z "$SPARKLE_PRIVATE_KEY" ]; then
+              echo "::error::Missing SPARKLE_PRIVATE_KEY secret required for signing Sparkle updates."
+              exit 1
+            fi
+          fi
+
           can_notarize=false
           if [ -n "$APPLE_CERTIFICATE" ] && [ -n "$APPLE_CERTIFICATE_PASSWORD" ] && \
              [ -n "$APPLE_API_KEY_P8" ] && [ -n "$APPLE_API_KEY" ] && [ -n "$APPLE_API_ISSUER" ]; then
@@ -85,6 +103,37 @@ jobs:
             printf '%s\n' "$APPLE_API_KEY_P8" > "$key_path"
             chmod 600 "$key_path"
             echo "APPLE_API_KEY_PATH=$key_path" >> "$GITHUB_ENV"
+
+            keychain_path="$RUNNER_TEMP/app-signing.keychain-db"
+            keychain_password="$(openssl rand -base64 32)"
+            cert_path="$RUNNER_TEMP/cert.p12"
+            printf '%s' "$APPLE_CERTIFICATE" | base64 --decode > "$cert_path"
+            chmod 600 "$cert_path"
+
+            security create-keychain -p "$keychain_password" "$keychain_path"
+            security set-keychain-settings -lut 21600 "$keychain_path"
+            security unlock-keychain -p "$keychain_password" "$keychain_path"
+            security import "$cert_path" -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$keychain_path"
+            rm -f "$cert_path"
+            security set-key-partition-list -S apple-tool:,apple: -k "$keychain_password" "$keychain_path"
+            existing_keychains=()
+            while IFS= read -r kc; do
+              kc="${kc#"${kc%%[![:space:]]*}"}"
+              kc="${kc%\"}"
+              kc="${kc#\"}"
+              [ -n "$kc" ] && existing_keychains+=("$kc")
+            done < <(security list-keychains -d user)
+            security list-keychains -d user -s "$keychain_path" "${existing_keychains[@]}"
+
+            signing_identity="$APPLE_SIGNING_IDENTITY"
+            if [ -z "$signing_identity" ]; then
+              signing_identity="$(security find-identity -v -p codesigning "$keychain_path" | sed -n 's/.*"\(Developer ID Application:[^"]*\)".*/\1/p' | head -n 1)"
+            fi
+            if [ -z "$signing_identity" ]; then
+              echo "::error::Could not resolve Developer ID Application signing identity from imported certificate."
+              exit 1
+            fi
+            echo "RESOLVED_SIGNING_IDENTITY=$signing_identity" >> "$GITHUB_ENV"
             can_notarize=true
           elif [ "$IS_RELEASE" = "true" ]; then
             echo "::error::Missing Apple signing or notarization secrets required for a release build."
@@ -92,22 +141,39 @@ jobs:
           fi
           echo "can_notarize=$can_notarize" >> "$GITHUB_OUTPUT"
 
+      - name: Fetch and pre-sign Sparkle.framework
+        run: |
+          node scripts/fetch-sparkle.mjs
+          if [ "${{ steps.apple-creds.outputs.can_notarize }}" = "true" ]; then
+            framework="vendor/sparkle/Sparkle.framework"
+            codesign --force --options runtime --timestamp --sign "$RESOLVED_SIGNING_IDENTITY" \
+              "$framework/Versions/B/XPCServices/Downloader.xpc"
+            codesign --force --options runtime --timestamp --sign "$RESOLVED_SIGNING_IDENTITY" \
+              "$framework/Versions/B/XPCServices/Installer.xpc"
+            codesign --force --options runtime --timestamp --sign "$RESOLVED_SIGNING_IDENTITY" \
+              "$framework/Versions/B/Autoupdate"
+            codesign --force --options runtime --timestamp --sign "$RESOLVED_SIGNING_IDENTITY" \
+              "$framework/Versions/B/Updater.app"
+            codesign --force --options runtime --timestamp --sign "$RESOLVED_SIGNING_IDENTITY" \
+              "$framework"
+          fi
+
       - name: Build, sign, and notarize macOS app
         env:
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_SIGNING_IDENTITY: ${{ env.RESOLVED_SIGNING_IDENTITY }}
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
         run: |
           rm -rf src-tauri/target/universal-apple-darwin/release/bundle
           pnpm desktop:build --target universal-apple-darwin
 
-      - name: Notarize, staple, and verify DMG
+      - name: Verify app, package Sparkle ZIP/appcast, and notarize DMG
         if: steps.apple-creds.outputs.can_notarize == 'true'
         env:
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+          RELEASE_TAG: ${{ inputs.tag != '' && inputs.tag || (startsWith(github.ref, 'refs/tags/v') && github.ref_name || '') }}
         run: |
           shopt -s nullglob
           dmg_files=(src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg)
@@ -116,8 +182,37 @@ jobs:
             exit 1
           fi
           app_path="src-tauri/target/universal-apple-darwin/release/bundle/macos/DeepSeek.app"
+          sparkle_path="$app_path/Contents/Frameworks/Sparkle.framework"
           dmg_path="${dmg_files[0]}"
 
+          # Verify app bundle and all nested Sparkle binaries before packaging update ZIP
+          codesign --verify --deep --strict --verbose=2 "$app_path"
+          codesign --verify --strict --verbose=2 "$sparkle_path/Versions/B/XPCServices/Downloader.xpc"
+          codesign --verify --strict --verbose=2 "$sparkle_path/Versions/B/XPCServices/Installer.xpc"
+          codesign --verify --strict --verbose=2 "$sparkle_path/Versions/B/Autoupdate"
+          codesign --verify --strict --verbose=2 "$sparkle_path/Versions/B/Updater.app"
+          xcrun stapler validate "$app_path"
+          spctl --assess --type execute --verbose=4 "$app_path"
+
+          # Package notarized & stapled .app into Sparkle update archive
+          sparkle_out="src-tauri/target/universal-apple-darwin/release/bundle/sparkle"
+          mkdir -p "$sparkle_out"
+          zip_name="DeepSeek_${APP_VERSION}_universal.zip"
+          zip_path="$sparkle_out/$zip_name"
+          ditto -c -k --sequesterRsrc --keepParent "$app_path" "$zip_path"
+
+          if [ -n "$RELEASE_TAG" ] && [ -n "$SPARKLE_PRIVATE_KEY" ]; then
+            ed_signature="$(printf '%s' "$SPARKLE_PRIVATE_KEY" | vendor/sparkle/bin/sign_update --ed-key-file - -p "$zip_path")"
+            printf '%s' "$SPARKLE_PRIVATE_KEY" | vendor/sparkle/bin/sign_update --ed-key-file - --verify "$zip_path" "$ed_signature"
+            node scripts/generate-appcast.mjs \
+              --archive "$zip_path" \
+              --url "https://github.com/${{ github.repository }}/releases/download/${RELEASE_TAG}/${zip_name}" \
+              --signature "$ed_signature" \
+              --full-notes-url "https://github.com/${{ github.repository }}/releases/tag/${RELEASE_TAG}" \
+              --output "$sparkle_out/appcast.xml"
+          fi
+
+          # Notarize, staple, and verify DMG for first-time manual installs
           xcrun notarytool submit "$dmg_path" \
             --key "$APPLE_API_KEY_PATH" \
             --key-id "$APPLE_API_KEY" \
@@ -125,19 +220,17 @@ jobs:
             --wait
           xcrun stapler staple "$dmg_path"
 
-          codesign --verify --deep --strict --verbose=2 "$app_path"
-          xcrun stapler validate "$app_path"
-          spctl --assess --type execute --verbose=4 "$app_path"
-
           codesign --verify --verbose=2 "$dmg_path"
           xcrun stapler validate "$dmg_path"
           spctl --assess --type open --context context:primary-signature --verbose=4 "$dmg_path"
 
-      - name: Upload macOS DMG artifact
+      - name: Upload macOS release artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: macos-universal-dmg
-          path: src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
+          name: macos-universal-release
+          path: |
+            src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
+            src-tauri/target/universal-apple-darwin/release/bundle/sparkle/*
           retention-days: 14
 
       - name: Publish GitHub Release
@@ -154,25 +247,39 @@ jobs:
             exit 1
           fi
           dmg_path="${dmg_files[0]}"
+          sparkle_out="src-tauri/target/universal-apple-darwin/release/bundle/sparkle"
+          zip_path="$sparkle_out/DeepSeek_${APP_VERSION}_universal.zip"
+          appcast_path="$sparkle_out/appcast.xml"
+          for asset in "$dmg_path" "$zip_path" "$appcast_path"; do
+            if [ ! -f "$asset" ]; then
+              echo "::error::Missing expected release asset: $asset"
+              exit 1
+            fi
+          done
+
           prerelease_flag=()
           if [[ "$RELEASE_TAG" == *-* ]]; then
             prerelease_flag=(--prerelease)
           fi
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release upload "$RELEASE_TAG" "$dmg_path" --clobber
+            gh release upload "$RELEASE_TAG" "$dmg_path" "$zip_path" "$appcast_path" --clobber
           elif [ "$IS_TAG_PUSH" = "true" ]; then
-            gh release create "$RELEASE_TAG" "$dmg_path" \
+            gh release create "$RELEASE_TAG" "$dmg_path" "$zip_path" "$appcast_path" \
               "${prerelease_flag[@]}" \
               --title "DeepSeek $RELEASE_TAG" \
               --generate-notes
           else
-            gh release create "$RELEASE_TAG" "$dmg_path" \
+            gh release create "$RELEASE_TAG" "$dmg_path" "$zip_path" "$appcast_path" \
               "${prerelease_flag[@]}" \
               --target "${{ github.sha }}" \
               --title "DeepSeek $RELEASE_TAG" \
               --generate-notes
           fi
 
-      - name: Clean up temporary signing key
+      - name: Clean up temporary credentials
         if: always()
-        run: rm -f "$RUNNER_TEMP/AuthKey.p8"
+        run: |
+          rm -f "$RUNNER_TEMP/AuthKey.p8" "$RUNNER_TEMP/cert.p12"
+          if [ -f "$RUNNER_TEMP/app-signing.keychain-db" ]; then
+            security delete-keychain "$RUNNER_TEMP/app-signing.keychain-db" || true
+          fi
