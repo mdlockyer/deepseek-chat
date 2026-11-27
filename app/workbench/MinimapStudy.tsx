@@ -1,15 +1,11 @@
 import { SegmentedControl } from '@deepseek-chat/lib-ui'
 import { memoryStore, type HttpFetch } from '@deepseek-chat/spine/ports'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { App } from '../App.js'
 import { createAppRuntime } from '../runtime.js'
 import { AppRuntimeProvider } from '../RuntimeContext.js'
-import { mountAdaptiveMinimap } from './minimapAdaptive.js'
-import { mountMinimapRail, type MinimapStyle } from './minimapRail.js'
 import styles from './MinimapStudy.module.css'
 import { MINIMAP_STUDY_TURNS } from './minimapStudyScript.js'
-
-type Choice = 'today' | MinimapStyle | 'adaptive' | 'lens'
 
 const LENGTHS = ['8', '40', '150'] as const
 type Length = (typeof LENGTHS)[number]
@@ -87,8 +83,9 @@ const studyFetch: HttpFetch = async (url, init) => {
 const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 /**
- * Prototype: the real app, replaying a scripted eight-turn chat, with the transcript's chapter
- * rail swapped for one of the minimap options. Open with `/?workbench=1&study=minimap`.
+ * The real app replaying a scripted chat of 8, 40 or 150 turns, to try the transcript's minimap
+ * on short and long chats without an API key. Open with `/?workbench=1&study=minimap`
+ * (add `&turns=40` or `&turns=150`).
  */
 export const MinimapStudy = () => {
   const runtime = useMemo(
@@ -101,12 +98,8 @@ export const MinimapStudy = () => {
       }),
     []
   )
-  const [choice, setChoice] = useState<Choice>(
-    () => (params.get('style') as Choice | null) ?? 'adaptive'
-  )
   const [ready, setReady] = useState(false)
   const [replayed, setReplayed] = useState(0)
-  const appRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => () => runtime.dispose(), [runtime])
 
@@ -137,38 +130,9 @@ export const MinimapStudy = () => {
     }
   }, [runtime])
 
-  useEffect(() => {
-    const root = appRef.current
-    if (!ready || !root || choice === 'today') {
-      return
-    }
-    const scroll = root.querySelector<HTMLElement>('[data-message-scroll]')
-    const area = scroll?.parentElement
-    const column = scroll?.firstElementChild as HTMLElement | null
-    if (!scroll || !area || !column) {
-      return
-    }
-    return choice === 'adaptive' || choice === 'lens'
-      ? mountAdaptiveMinimap(area, scroll, column, { lens: choice === 'lens' })
-      : mountMinimapRail(area, scroll, column, choice)
-  }, [ready, choice])
-
   return (
     <div className={styles.root}>
       <div className={styles.bar}>
-        <SegmentedControl<Choice>
-          size="sm"
-          ariaLabel="Rail style"
-          value={choice}
-          onChange={setChoice}
-          options={[
-            { value: 'today', label: 'Today' },
-            { value: 'text', label: 'B · Text minimap' },
-            { value: 'stems', label: 'D · Ticks on stems' },
-            { value: 'adaptive', label: 'Adaptive' },
-            { value: 'lens', label: 'Adaptive + magnifier' },
-          ]}
-        />
         <SegmentedControl<Length>
           size="sm"
           ariaLabel="Chat length"
@@ -176,18 +140,17 @@ export const MinimapStudy = () => {
           onChange={(next) => {
             const url = new URL(window.location.href)
             url.searchParams.set('turns', next)
-            url.searchParams.set('style', choice)
             window.location.assign(url)
           }}
           options={LENGTHS.map((value) => ({ value, label: `${value} turns` }))}
         />
         <span className={styles.barHint}>
           {ready
-            ? 'Scroll, drag the window, or click the rail.'
+            ? 'Scroll, drag the window, or click the minimap.'
             : `Replaying turn ${replayed + 1} of ${LENGTH}…`}
         </span>
       </div>
-      <div ref={appRef} className={styles.app}>
+      <div className={styles.app}>
         <AppRuntimeProvider runtime={runtime}>
           <App embedded />
         </AppRuntimeProvider>
