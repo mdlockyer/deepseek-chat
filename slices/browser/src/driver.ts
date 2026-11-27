@@ -151,48 +151,6 @@ const __resolveTarget = (ref, x, y) => {
   throw new Error('Either ref or (x, y) coordinates must be provided.');
 };
 
-// The agent cursor (see kiteCursor.ts), kept on the top document across driver calls. A page that
-// removed it gets a new one in the same place. Hidden (not removed) while a screenshot is taken.
-const __cursorPoint = (el, x, y) => {
-  let px = x;
-  let py = y;
-  let W = __ownerWin(el);
-  for (let d = 0; d < 6 && W && W !== window; d++) {
-    let frame = null;
-    try { frame = W.frameElement; } catch { frame = null; }
-    if (!frame) break;
-    const r = frame.getBoundingClientRect();
-    px += r.left + (frame.clientLeft || 0);
-    py += r.top + (frame.clientTop || 0);
-    W = __ownerWin(frame);
-  }
-  return { x: px, y: py };
-};
-const __dsCursor = () => {
-  const prev = __dsStore.cursor;
-  if (prev && prev.isConnected()) return prev;
-  const c = (${KITE_SOURCE})(document, window);
-  const at = prev && prev.position();
-  if (at) c.place(at.x, at.y);
-  __dsStore.cursor = c;
-  return c;
-};
-const __pressTopLevel = (x, y) => {
-  try { __dsCursor().press(x, y); } catch {}
-};
-const __pressAt = (el, x, y) => {
-  try {
-    const p = __cursorPoint(el, x, y);
-    __dsCursor().press(p.x, p.y);
-  } catch {}
-};
-const __pressOn = (el) => {
-  try {
-    const rect = el.getBoundingClientRect();
-    __pressAt(el, rect.left + rect.width / 2, rect.top + rect.height / 2);
-  } catch {}
-};
-
 const __querySelectorDeep = (selector) => {
   const stack = [{ root: document, depth: 0 }];
   while (stack.length) {
@@ -237,6 +195,54 @@ const __collectSameOriginFrameBodies = (rootNode, depth = 0, out = []) => {
 `
 
 /**
+ * The agent cursor's page side, for the scripts that move or press it (not every driver script:
+ * the kite's source is a few kilobytes, and page reads and wait probes run often).
+ */
+const CURSOR_HELPERS = `
+// The agent cursor (see kiteCursor.ts), kept on the top document across driver calls. A page that
+// removed it gets a new one in the same place. Hidden (not removed) while a screenshot is taken.
+const __cursorPoint = (el, x, y) => {
+  let px = x;
+  let py = y;
+  let W = __ownerWin(el);
+  for (let d = 0; d < 6 && W && W !== window; d++) {
+    let frame = null;
+    try { frame = W.frameElement; } catch { frame = null; }
+    if (!frame) break;
+    const r = frame.getBoundingClientRect();
+    px += r.left + (frame.clientLeft || 0);
+    py += r.top + (frame.clientTop || 0);
+    W = __ownerWin(frame);
+  }
+  return { x: px, y: py };
+};
+const __dsCursor = () => {
+  const prev = __dsStore.cursor;
+  if (prev && prev.isConnected()) return prev;
+  const c = (${KITE_SOURCE})(document, window);
+  const at = prev && prev.position();
+  if (at) c.place(at.x, at.y);
+  __dsStore.cursor = c;
+  return c;
+};
+const __pressTopLevel = (x, y) => {
+  try { __dsCursor().press(x, y); } catch {}
+};
+const __pressAt = (el, x, y) => {
+  try {
+    const p = __cursorPoint(el, x, y);
+    __dsCursor().press(p.x, p.y);
+  } catch {}
+};
+const __pressOn = (el) => {
+  try {
+    const rect = el.getBoundingClientRect();
+    __pressAt(el, rect.left + rect.width / 2, rect.top + rect.height / 2);
+  } catch {}
+};
+`
+
+/**
  * Glides the agent cursor and reports where it lands, roughly how long that takes, and the page's
  * viewport size. Targets, in order: `ref` (scrolled into view first, as the action will) or `x`/`y`
  * through the element there; `point`, a bare viewport point; `stay`, where the cursor already is if
@@ -266,6 +272,7 @@ export const buildCursorMoveScript = (params: {
   return `
 try {
   ${SHARED_HELPERS}
+  ${CURSOR_HELPERS}
   const p = ${args};
   const vw = window.innerWidth || document.documentElement.clientWidth || 0;
   const vh = window.innerHeight || document.documentElement.clientHeight || 0;
@@ -707,6 +714,7 @@ export const buildClickScript = (params: {
   return `
 try {
   ${SHARED_HELPERS}
+  ${CURSOR_HELPERS}
   const p = ${args};
   const el = __resolveTarget(p.ref, p.x, p.y);
   if (p.ref && el.scrollIntoView) {
@@ -823,6 +831,7 @@ export const buildTypeScript = (params: {
   return `
 try {
   ${SHARED_HELPERS}
+  ${CURSOR_HELPERS}
   const p = ${args};
   let el;
   if (p.ref || (typeof p.x === 'number' && typeof p.y === 'number')) {
@@ -1191,6 +1200,7 @@ export const buildSelectScript = (params: { ref: string; values: string[] }): st
   return `
 try {
   ${SHARED_HELPERS}
+  ${CURSOR_HELPERS}
   const p = ${args};
   const el = __resolveTarget(p.ref);
   if (__tag(el) !== 'select') {
