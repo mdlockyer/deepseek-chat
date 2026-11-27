@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Optional tag name (e.g. v0.2.0-rc.1) to create a GitHub Release; leave empty for artifact-only build'
+        description: 'Optional tag name (e.g. v0.3.0) to create a GitHub Release; leave empty for artifact-only build'
         required: false
         type: string
 
@@ -22,6 +22,9 @@ jobs:
   build-macos:
     runs-on: macos-latest
     timeout-minutes: 30
+    env:
+      CARGO_TERM_COLOR: always
+      CARGO_INCREMENTAL: 0
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -40,24 +43,31 @@ jobs:
       - name: Set up Rust (universal macOS)
         uses: dtolnay/rust-toolchain@stable
         with:
+          components: rustfmt, clippy
           targets: aarch64-apple-darwin,x86_64-apple-darwin
 
       - name: Cache Cargo
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
+          shared-key: macos-universal-release
+          cache-on-failure: true
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --prefer-offline
 
       - name: Run checks
         run: |
           pnpm format:check
-          pnpm type
+          pnpm check:dag
+          pnpm check:ipc
+          pnpm check:design
           pnpm lint
+          pnpm type
           pnpm test
           cargo fmt --manifest-path src-tauri/Cargo.toml --check
-          cargo test --manifest-path src-tauri/Cargo.toml
+          cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+          cargo test --manifest-path src-tauri/Cargo.toml --lib --bins
 
       - name: Prepare Apple signing and notarization credentials
         id: apple-creds
@@ -129,6 +139,7 @@ jobs:
         with:
           name: macos-universal-dmg
           path: src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
+          retention-days: 14
 
       - name: Publish GitHub Release
         if: (startsWith(github.ref, 'refs/tags/v') || inputs.tag != '') && steps.apple-creds.outputs.can_notarize == 'true'

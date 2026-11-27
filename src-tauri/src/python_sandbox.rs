@@ -560,8 +560,13 @@ fn create_pipe() -> Result<(i32, i32), String> {
     Ok((fds[0], fds[1]))
 }
 
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+type RlimitResource = libc::__rlimit_resource_t;
+#[cfg(all(unix, not(all(target_os = "linux", target_env = "gnu"))))]
+type RlimitResource = libc::c_int;
+
 #[cfg(unix)]
-unsafe fn set_rlimit(resource: libc::c_int, limit: u64) -> std::io::Result<()> {
+unsafe fn set_rlimit(resource: RlimitResource, limit: u64) -> std::io::Result<()> {
     let mut current = libc::rlimit {
         rlim_cur: 0,
         rlim_max: 0,

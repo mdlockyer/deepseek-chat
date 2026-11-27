@@ -29,8 +29,10 @@ mod scraper;
 use std::path::{Path, PathBuf};
 
 use percent_encoding::percent_decode_str;
+#[cfg(target_os = "macos")]
+use tauri::Emitter;
+use tauri::Manager;
 use tauri::ipc::{InvokeBody, Request};
-use tauri::{Emitter, Manager};
 use tauri_plugin_dialog::DialogExt;
 
 /// Keychain service and account under which legacy API keys may be stored.

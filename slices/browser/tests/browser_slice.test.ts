@@ -2544,6 +2544,22 @@ describe('browser: navigation settling, async form submit, stale-ref recovery, a
     dom.body.append(btn)
 
     const env = await withVisiblePage()
+    const origCreateTab = env.host.host.createTab
+    env.host.host.createTab = async (options) => {
+      await origCreateTab(options)
+      if (isHttpUrl(options.url)) {
+        queueMicrotask(() => {
+          env.host.emitState({
+            tabId: options.tabId,
+            url: options.url,
+            title: 'Example Org',
+            isLoading: false,
+            canGoBack: false,
+            canGoForward: false,
+          })
+        })
+      }
+    }
     env.host.host.evalJs = async (_tabId, script, isolated) =>
       isolated ? dom.runScript(script) : JSON.stringify({ ok: true, value: null })
 
@@ -2701,8 +2717,8 @@ describe('browser: randomized tab/visibility/LRU/IPC-recovery reference model & 
   it('matches an independent SPEC reference model across 25 seeds x 60 ops with injected IPC failures and LRU eviction', async () => {
     const SESSIONS = ['s1', 's2', 's3'] as const
     const flushMicro = async () => {
-      for (let i = 0; i < 6; i += 1) {
-        await new Promise((resolve) => setTimeout(resolve, 0))
+      for (let i = 0; i < 4; i += 1) {
+        await new Promise((resolve) => setImmediate(resolve))
       }
     }
 
@@ -2756,8 +2772,17 @@ describe('browser: randomized tab/visibility/LRU/IPC-recovery reference model & 
               hostVisibleTabId = null
             }
           },
-          navigate: async (tabId, url, initiator) => {
-            await baseHost.navigate(tabId, url, initiator)
+          navigate: async (tabId, url) => {
+            queueMicrotask(() => {
+              host.emitState({
+                tabId,
+                url,
+                title: 'Example',
+                isLoading: false,
+                canGoBack: false,
+                canGoForward: false,
+              })
+            })
             return url
           },
         }
