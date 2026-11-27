@@ -2685,3 +2685,417 @@ describe('browser: navigation settling, async form submit, stale-ref recovery, a
     env.browser.dispose()
   })
 })
+
+const seededBrowser = (seed: number) => {
+  let a = seed >>> 0
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0
+    let t = a
+    t = Math.imul(t ^ (t >>> 15), t | 1)
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
+
+describe('browser: randomized tab/visibility/LRU/IPC-recovery reference model & omnibox idempotence (SPEC 3-9, 13)', () => {
+  it('matches an independent SPEC reference model across 25 seeds x 60 ops with injected IPC failures and LRU eviction', async () => {
+    const SESSIONS = ['s1', 's2', 's3'] as const
+    const flushMicro = async () => {
+      for (let i = 0; i < 6; i += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 0))
+      }
+    }
+
+    // eslint-disable-next-line no-console
+    const origError = console.error
+    // eslint-disable-next-line no-console
+    console.error = () => {}
+    try {
+      for (let seed = 1; seed <= 25; seed += 1) {
+        const rand = seededBrowser(seed * 827 + 13)
+        const nextInt = (max: number) => Math.floor(rand() * max)
+
+        const liveNativeTabs = new Set<string>()
+        let hostVisibleTabId: string | null = null
+        let failSync = false
+        let tabSeq = 0
+        const host = fakeHost()
+        const baseHost = host.host
+        const wrappedHost: BrowserHost = {
+          ...baseHost,
+          createTab: async (options) => {
+            await baseHost.createTab(options)
+            liveNativeTabs.add(options.tabId)
+          },
+          closeTab: async (tabId) => {
+            await baseHost.closeTab(tabId)
+            liveNativeTabs.delete(tabId)
+            if (hostVisibleTabId === tabId) {
+              hostVisibleTabId = null
+            }
+          },
+          setActiveTab: async (tabId, bounds, visible, zoom) => {
+            if (failSync) {
+              throw new Error('simulated IPC setActiveTab failure')
+            }
+            await baseHost.setActiveTab(tabId, bounds, visible, zoom)
+            hostVisibleTabId = visible ? tabId : null
+          },
+          setBounds: async (bounds, zoom) => {
+            if (failSync) {
+              throw new Error('simulated IPC setBounds failure')
+            }
+            await baseHost.setBounds(bounds, zoom)
+          },
+          setVisible: async (visible) => {
+            if (failSync) {
+              throw new Error('simulated IPC setVisible failure')
+            }
+            await baseHost.setVisible(visible)
+            if (!visible) {
+              hostVisibleTabId = null
+            }
+          },
+          navigate: async (tabId, url, initiator) => {
+            await baseHost.navigate(tabId, url, initiator)
+            return url
+          },
+        }
+
+        const panel = fakePanel()
+        const log = new EventLog()
+        const openedExternal: string[] = []
+        const browser = createBrowserSlice({
+          log,
+          host: wrappedHost,
+          panel: panel.slot,
+          store: memoryStore(),
+          openExternal: async (url) => {
+            openedExternal.push(url)
+          },
+          newId: () => `s${seed}-t${++tabSeq}`,
+        })
+        const stopEvents = browser.start()
+        browser.setPanelBounds({ x: 0, y: 0, width: 800, height: 600 })
+
+        // Independent SPEC reference model
+        let refActiveSession: string | null = null
+        const refTabs = new Map<string, { id: string; url: string }[]>()
+        const refActiveTab = new Map<string, string | null>()
+        const getRefTabs = (sid: string) => {
+          let list = refTabs.get(sid)
+          if (!list) {
+            list = []
+            refTabs.set(sid, list)
+          }
+          return list
+        }
+
+        const verifyState = (where: string) => {
+          for (const sid of SESSIONS) {
+            const actual = browser.getSession(sid)
+            const expectedTabs = refTabs.get(sid) ?? []
+            const expectedActiveTabId = refActiveTab.get(sid) ?? null
+            // Single-owner panelOpen: always equals PanelSlot.isOpen(sid)
+            assert.equal(
+              actual.panelOpen,
+              panel.slot.isOpen(sid),
+              `${where}: panelOpen drift for ${sid}`
+            )
+            assert.deepEqual(
+              actual.tabs.map((t) => t.id),
+              expectedTabs.map((t) => t.id),
+              `${where}: tab IDs mismatch for ${sid}`
+            )
+            assert.equal(
+              actual.activeTabId,
+              expectedActiveTabId,
+              `${where}: activeTabId mismatch for ${sid}`
+            )
+          }
+
+          // Native visibility truth table (SPEC invariant 5)
+          const layout = panel.slot.getLayout()
+          let expectedVisible: string | null = null
+          if (
+            refActiveSession !== null &&
+            panel.slot.isOpen(refActiveSession) &&
+            !layout.animating &&
+            !layout.resizing &&
+            !layout.overlayLocked
+          ) {
+            const activeId = refActiveTab.get(refActiveSession) ?? null
+            const activeTab = (refTabs.get(refActiveSession) ?? []).find((t) => t.id === activeId)
+            if (activeTab && isHttpUrl(activeTab.url) && liveNativeTabs.has(activeTab.id)) {
+              expectedVisible = activeTab.id
+            }
+          }
+          assert.equal(
+            hostVisibleTabId,
+            expectedVisible,
+            `${where}: host visibility mismatch (activeSession=${refActiveSession}, layout=${JSON.stringify(layout)})`
+          )
+        }
+
+        for (let step = 0; step < 60; step += 1) {
+          const where = `seed ${seed} step ${step}`
+          const op = nextInt(12)
+          const pickSession = () => SESSIONS[nextInt(SESSIONS.length)] ?? 's1'
+          const injectFailure = rand() < 0.15
+          failSync = injectFailure
+
+          if (op === 0) {
+            // Switch active session (or null = new-chat screen)
+            const next = rand() < 0.2 ? null : pickSession()
+            panel.setActive(next)
+            log.publishSticky<ActiveSessionChanged>('unit', {
+              type: 'ActiveSessionChanged',
+              sessionId: next,
+            })
+            refActiveSession = next
+          } else if (op === 1) {
+            // Open panel for active session
+            const opened = await browser.openPanel()
+            if (refActiveSession !== null) {
+              assert.equal(opened, true, `${where}: openPanel on active chat must return true`)
+              const list = getRefTabs(refActiveSession)
+              if (list.length === 0) {
+                const actualTabs = browser.getSession(refActiveSession).tabs
+                const created = actualTabs[0]
+                assert.ok(created, `${where}: opening empty panel must create blank tab`)
+                list.push({ id: created.id, url: 'about:blank' })
+                refActiveTab.set(refActiveSession, created.id)
+              }
+            } else {
+              // New-chat screen cannot open panel or create tabs (SPEC invariant 3)
+              assert.equal(
+                opened,
+                false,
+                `${where}: openPanel on new-chat screen must return false`
+              )
+              assert.equal(panel.slot.isOpen(null), false)
+            }
+          } else if (op === 2) {
+            browser.closePanel()
+          } else if (op === 3) {
+            // Toggle panel
+            const wasOpen = refActiveSession !== null && panel.slot.isOpen(refActiveSession)
+            await browser.togglePanel()
+            if (!wasOpen && refActiveSession !== null) {
+              const list = getRefTabs(refActiveSession)
+              if (list.length === 0) {
+                const created = browser.getSession(refActiveSession).tabs[0]
+                assert.ok(created, `${where}: toggle-open empty panel must create blank tab`)
+                list.push({ id: created.id, url: 'about:blank' })
+                refActiveTab.set(refActiveSession, created.id)
+              }
+            }
+          } else if (op === 4) {
+            // Displace browser panel with another panel kind (SPEC invariant 7)
+            const sid = pickSession()
+            panel.showOther(sid)
+          } else if (op === 5) {
+            // Create tab (blank or http(s))
+            const withUrl = rand() < 0.65 ? `https://example-${step}.test/p` : undefined
+            if (refActiveSession === null) {
+              await assert.rejects(
+                () => browser.tabs.create(withUrl),
+                `${where}: new-chat screen must reject tab creation`
+              )
+            } else {
+              const created = await browser.tabs.create(withUrl)
+              const list = getRefTabs(refActiveSession)
+              list.push({ id: created.id, url: withUrl ?? 'about:blank' })
+              refActiveTab.set(refActiveSession, created.id)
+            }
+          } else if (op === 6) {
+            // Close a random tab in active session (SPEC invariant 4)
+            if (refActiveSession !== null) {
+              const list = getRefTabs(refActiveSession)
+              if (list.length > 0) {
+                const idx = nextInt(list.length)
+                const victim = list[idx]
+                if (victim) {
+                  await browser.tabs.close(victim.id)
+                  list.splice(idx, 1)
+                  if (refActiveTab.get(refActiveSession) === victim.id) {
+                    const nextIdx = Math.min(idx, list.length - 1)
+                    refActiveTab.set(
+                      refActiveSession,
+                      nextIdx >= 0 ? (list[nextIdx]?.id ?? null) : null
+                    )
+                  }
+                }
+              }
+            }
+          } else if (op === 7) {
+            // Switch tab in active session
+            if (refActiveSession !== null) {
+              const list = getRefTabs(refActiveSession)
+              if (list.length > 0) {
+                const target = list[nextInt(list.length)]
+                if (target) {
+                  browser.tabs.switch(target.id)
+                  refActiveTab.set(refActiveSession, target.id)
+                }
+              }
+            }
+          } else if (op === 8) {
+            // Navigate active tab to http(s) URL or about:blank
+            if (refActiveSession !== null) {
+              const activeId = refActiveTab.get(refActiveSession)
+              const list = getRefTabs(refActiveSession)
+              const tab = list.find((t) => t.id === activeId)
+              if (tab) {
+                const nextUrl = rand() < 0.8 ? `https://nav-${seed}-${step}.test/` : 'about:blank'
+                await browser.tabs.navigate(tab.id, nextUrl)
+                tab.url = nextUrl
+              }
+            }
+          } else if (op === 9) {
+            // Layout transitions (animating, resizing, overlayLocked, bounds)
+            const sub = nextInt(4)
+            if (sub === 0) {
+              panel.finishAnimation()
+            } else if (sub === 1) {
+              panel.slot.setResizing(rand() < 0.5)
+            } else if (sub === 2) {
+              panel.setOverlayLocked(rand() < 0.5)
+            } else {
+              browser.setPanelBounds({
+                x: 0,
+                y: 0,
+                width: 700 + nextInt(200),
+                height: 500 + nextInt(200),
+              })
+            }
+          } else if (op === 10) {
+            // SessionDeleted removes that chat's tabs and closes its native tabs (SPEC invariant 8)
+            const sid = pickSession()
+            const tabsToClose = [...(refTabs.get(sid) ?? [])].map((t) => t.id)
+            log.publish<SessionDeleted>({ type: 'SessionDeleted', sessionId: sid })
+            refTabs.delete(sid)
+            refActiveTab.delete(sid)
+            if (refActiveSession === sid) {
+              refActiveSession = null
+              panel.setActive(null)
+            }
+            await flushMicro()
+            for (const tid of tabsToClose) {
+              assert.equal(
+                liveNativeTabs.has(tid),
+                false,
+                `${where}: SessionDeleted must close native tab ${tid}`
+              )
+            }
+          } else {
+            // SessionHistoryReplaced drops all chats and closes every native tab (SPEC invariant 8)
+            log.publish<SessionHistoryReplaced>({ type: 'SessionHistoryReplaced' })
+            refTabs.clear()
+            refActiveTab.clear()
+            refActiveSession = null
+            panel.setActive(null)
+            await flushMicro()
+            assert.equal(
+              liveNativeTabs.size,
+              0,
+              `${where}: SessionHistoryReplaced must close all native tabs`
+            )
+          }
+
+          await flushMicro()
+          if (injectFailure) {
+            // Clear injected failure and trigger a clean follow-up sync; host must recover with zero stale cache.
+            failSync = false
+            browser.setPanelBounds({ x: 0, y: 0, width: 800 + (step % 7), height: 600 })
+            await flushMicro()
+          }
+          verifyState(where)
+        }
+
+        // LRU eviction check: opening many http(s) tabs across inactive sessions bounds live native
+        // webviews by evicting inactive tabs while keeping active-session tabs pinned.
+        panel.setActive('s1')
+        log.publishSticky<ActiveSessionChanged>('unit', {
+          type: 'ActiveSessionChanged',
+          sessionId: 's1',
+        })
+        panel.finishAnimation()
+        panel.slot.setResizing(false)
+        panel.setOverlayLocked(false)
+        for (let k = 0; k < 16; k += 1) {
+          await browser.tabs.create(`https://inactive-s1-${k}.test/`)
+        }
+        panel.setActive('s2')
+        log.publishSticky<ActiveSessionChanged>('unit', {
+          type: 'ActiveSessionChanged',
+          sessionId: 's2',
+        })
+        panel.finishAnimation()
+        const pinnedS2Ids: string[] = []
+        for (let k = 0; k < 5; k += 1) {
+          const t = await browser.tabs.create(`https://active-s2-${k}.test/`)
+          pinnedS2Ids.push(t.id)
+        }
+        await flushMicro()
+        assert.ok(
+          liveNativeTabs.size < 20,
+          `seed ${seed}: expected LRU eviction to bound live native tabs below 20 (got ${liveNativeTabs.size})`
+        )
+        for (const id of pinnedS2Ids) {
+          assert.ok(
+            liveNativeTabs.has(id),
+            `seed ${seed}: active session tab ${id} must not be evicted`
+          )
+        }
+
+        stopEvents()
+        browser.dispose()
+      }
+    } finally {
+      // eslint-disable-next-line no-console
+      console.error = origError
+    }
+  })
+
+  it('normalizes arbitrary omnibox inputs idempotently into about:blank or http(s) URLs only', () => {
+    const rand = seededBrowser(20261127)
+    const nextInt = (max: number) => Math.floor(rand() * max)
+    const samples = [
+      '',
+      '   ',
+      'about:blank',
+      'example.com',
+      'sub.domain.org/path?q=1#hash',
+      'localhost',
+      'localhost:3000/api',
+      '127.0.0.1:8080/test',
+      '[::1]:5173/app',
+      'http://plain.test/a',
+      'https://secure.test/b?x=1',
+      'javascript:alert(1)',
+      'file:///etc/passwd',
+      'data:text/html,<h1>hi</h1>',
+      'ftp://files.test/a',
+      'how to build clean slate architecture',
+      '中文 搜索 测试',
+    ]
+
+    for (let i = 0; i < 100; i += 1) {
+      const base = samples[nextInt(samples.length)] ?? ''
+      const padL = ' '.repeat(nextInt(3))
+      const padR = ' '.repeat(nextInt(3))
+      const raw = i < samples.length ? (samples[i] ?? '') : `${padL}${base}${padR}`
+      const out = normalizeOmniboxInput(raw)
+      assert.ok(
+        out === 'about:blank' || isHttpUrl(out),
+        `case ${i} (${JSON.stringify(raw)}): output ${JSON.stringify(out)} must be about:blank or http(s)`
+      )
+      assert.equal(
+        normalizeOmniboxInput(out),
+        out,
+        `case ${i} (${JSON.stringify(raw)}): normalizeOmniboxInput must be idempotent`
+      )
+    }
+  })
+})

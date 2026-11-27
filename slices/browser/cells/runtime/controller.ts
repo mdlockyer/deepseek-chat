@@ -279,9 +279,10 @@ export const createBrowserController = (deps: BrowserControllerDeps): BrowserCon
 
   const clearAllSessionBrowsers = async (): Promise<void> => {
     const state = get()
-    const allTabIds = Object.values(state.sessions).flatMap((session) =>
-      session.tabs.map((tab) => tab.id)
-    )
+    const allTabIds = new Set([
+      ...Object.values(state.sessions).flatMap((session) => session.tabs.map((tab) => tab.id)),
+      ...nativeCreated,
+    ])
     dispatch({ type: 'clearAllSessions' })
     for (const tabId of allTabIds) {
       navWait.clearTab(tabId)
@@ -348,6 +349,13 @@ export const createBrowserController = (deps: BrowserControllerDeps): BrowserCon
         zoom: tab.zoom,
         initiator,
       })
+      // If the tab or its session was disposed while native.createTab was in flight, close the orphan.
+      if (!findTabOwner(get(), tabId)) {
+        await native.closeTab(tabId).catch((error) => {
+          reportHostError(`close orphaned native tab ${tabId}`, error)
+        })
+        return
+      }
       nativeCreated.add(tabId)
     })().finally(() => {
       pendingCreates.delete(tabId)

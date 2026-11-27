@@ -620,3 +620,484 @@ describe('python slice: managed runtime and tool', () => {
     python.dispose()
   })
 })
+
+const seeded = (seed: number) => {
+  let a = seed >>> 0
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0
+    let t = a
+    t = Math.imul(t ^ (t >>> 15), t | 1)
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
+
+describe('python slice: randomized kernel queue, ownership, restart notice, staging, & truncation (SPEC 1-9)', () => {
+  it('matches an independent SPEC reference model on the native engine across randomized runs, aborts, uploads, and lifecycle facts', async () => {
+    const LIMIT = 32
+    const SESSIONS = ['s1', 's2', 's3'] as const
+
+    for (let seed = 1; seed <= 20; seed += 1) {
+      const rand = seeded(seed * 733 + 11)
+      const nextInt = (max: number) => Math.floor(rand() * max)
+
+      let inFlight = 0
+      let maxInFlight = 0
+      const executedOrder: string[] = []
+      const stagedLog: string[] = []
+      const repliesByCode = new Map<string, () => Promise<NativeRunResponse>>()
+
+      const host: NativePythonHost = {
+        run: async (code) => {
+          inFlight += 1
+          maxInFlight = Math.max(maxInFlight, inFlight)
+          executedOrder.push(code)
+          try {
+            const fn = repliesByCode.get(code)
+            return fn ? await fn() : response()
+          } finally {
+            inFlight -= 1
+          }
+        },
+        interrupt: async () => undefined,
+        reset: async () => undefined,
+        stageUpload: async (sessionId, fileId) => {
+          stagedLog.push(`${sessionId ?? ''}:${fileId}`)
+        },
+        onPhase: () => () => undefined,
+        runtimeStatus: async () => ({
+          ready: true,
+          version: '3.12',
+          venvPython: null,
+          packages: [],
+        }),
+        resetRuntime: async () => undefined,
+      }
+
+      const events = new EventLog()
+      const blobs = memoryBlobStore([
+        { id: 'u1', blob: new Blob(['csv1']) },
+        { id: 'u2', blob: new Blob(['csv2']) },
+        { id: 'd1', blob: new Blob(['doc1']) },
+        { id: 'py1', blob: new Blob(['pyout']) },
+      ])
+      const python = createPythonSlice({
+        log: events,
+        native: host,
+        pyodideIndexURL: 'unused://',
+        store: memoryStore(),
+        blobs,
+        now: () => 0,
+        params: { outputLimit: LIMIT },
+      })
+
+      // Independent SPEC reference model
+      let refOwner: string | null = null
+      let refNotice = false
+      const refStaged = new Set<string>()
+      let opCounter = 0
+
+      const expectedRunCodes: string[] = []
+
+      for (let step = 0; step < 30; step += 1) {
+        const where = `seed ${seed} step ${step}`
+        const action = nextInt(10)
+
+        if (action === 0) {
+          const sid = SESSIONS[nextInt(SESSIONS.length)] ?? 's1'
+          events.publish<SessionDeleted>({ type: 'SessionDeleted', sessionId: sid })
+          if (refOwner === sid) {
+            refOwner = null
+            refNotice = false
+            refStaged.clear()
+          }
+          continue
+        }
+        if (action === 1) {
+          events.publish<SessionHistoryReplaced>({ type: 'SessionHistoryReplaced' })
+          refOwner = null
+          refNotice = false
+          refStaged.clear()
+          continue
+        }
+        if (action === 2 && python.runtime) {
+          await python.runtime.reset()
+          refOwner = null
+          refNotice = false
+          refStaged.clear()
+          continue
+        }
+
+        // Launch 1..3 concurrent calls (mixing pre-aborted, queued-aborted, and normal runs).
+        const batchSize = 1 + nextInt(3)
+        const gate = deferred<undefined>()
+        const calls: {
+          code: string
+          sid: string
+          mode: 'pre-abort' | 'queued-abort' | 'run'
+          restarted: boolean
+          stdoutLen: number
+          hasError: boolean
+          uploadIds: string[]
+          promise: Promise<Awaited<ReturnType<typeof python.run>>>
+        }[] = []
+
+        for (let b = 0; b < batchSize; b += 1) {
+          const code = `op-${++opCounter}`
+          const sid = SESSIONS[nextInt(SESSIONS.length)] ?? 's1'
+          const modeRoll = rand()
+          const mode: 'pre-abort' | 'queued-abort' | 'run' =
+            modeRoll < 0.15 ? 'pre-abort' : b > 0 && modeRoll < 0.45 ? 'queued-abort' : 'run'
+          const restarted = mode === 'run' && rand() < 0.25
+          const lenChoices = [0, LIMIT - 1, LIMIT, LIMIT + 1, LIMIT + 25]
+          const stdoutLen = lenChoices[nextInt(lenChoices.length)] ?? 0
+          const hasError = mode === 'run' && !restarted && rand() < 0.25
+
+          const uploadIds: string[] = []
+          if (rand() < 0.6) {
+            uploadIds.push('u1')
+          }
+          if (rand() < 0.5) {
+            uploadIds.push('u2')
+          }
+
+          // Also exercise SessionFilesChanged filtering on the last item occasionally.
+          if (b === 0 && rand() < 0.35) {
+            events.publishSticky<SessionFilesChanged>(sid, {
+              type: 'SessionFilesChanged',
+              sessionId: sid,
+              files: [
+                {
+                  kind: 'upload',
+                  fileId: 'u1',
+                  name: 'u1.csv',
+                  size: 4,
+                  mimeType: 'text/csv',
+                  messageId: 'm1',
+                  createdAt: 1,
+                },
+                {
+                  kind: 'delivered',
+                  fileId: 'd1',
+                  name: 'doc.md',
+                  path: 'doc.md',
+                  size: 4,
+                  mimeType: 'text/markdown',
+                  producer: 'workspace-files',
+                  messageId: 'm2',
+                  createdAt: 2,
+                },
+                {
+                  kind: 'delivered',
+                  fileId: 'py1',
+                  name: 'gen.png',
+                  path: 'gen.png',
+                  size: 5,
+                  mimeType: 'image/png',
+                  producer: 'python',
+                  messageId: 'm3',
+                  createdAt: 3,
+                },
+              ],
+            })
+          }
+
+          repliesByCode.set(code, async () => {
+            if (b === 0) {
+              await gate.promise
+            }
+            return response({
+              stdout: 'a'.repeat(stdoutLen),
+              error: hasError ? 'E' : null,
+              restarted,
+            })
+          })
+
+          const ac = new AbortController()
+          if (mode === 'pre-abort') {
+            ac.abort()
+          }
+          const promise = python.run(code, {
+            signal: ac.signal,
+            sessionId: sid,
+            uploads: uploadIds.map((id) => ({
+              id,
+              name: `${id}.csv`,
+              loadBlob: async () => new Blob(['x']),
+            })),
+          })
+          if (mode === 'queued-abort') {
+            ac.abort()
+          }
+          calls.push({ code, sid, mode, restarted, stdoutLen, hasError, uploadIds, promise })
+        }
+
+        gate.resolve(undefined)
+        const outcomes = await Promise.all(calls.map((c) => c.promise))
+
+        for (let i = 0; i < calls.length; i += 1) {
+          const call = calls[i]
+          const res = outcomes[i]
+          if (!call || !res) {
+            continue
+          }
+          if (call.mode !== 'run') {
+            assert.equal(
+              res.status,
+              'aborted',
+              `${where} (${call.code}): aborted call must resolve aborted`
+            )
+            assert.ok(
+              !executedOrder.includes(call.code),
+              `${where} (${call.code}): aborted call must not reach host`
+            )
+            continue
+          }
+
+          expectedRunCodes.push(call.code)
+          if (refOwner !== null && refOwner !== call.sid) {
+            refNotice = false
+            refStaged.clear()
+          }
+          refOwner = call.sid
+          const expectNotice: boolean = refNotice
+          refNotice = false
+
+          for (const uid of call.uploadIds) {
+            refStaged.add(`${call.sid}:${uid}`)
+          }
+
+          assert.equal(
+            res.text.startsWith(RESTART_NOTICE_TAG),
+            expectNotice,
+            `${where} (${call.code}): restart notice mismatch (expected ${expectNotice}, text=${JSON.stringify(res.text)})`
+          )
+
+          if (call.restarted) {
+            assert.equal(
+              res.status,
+              'error',
+              `${where} (${call.code}): restarted run reports error`
+            )
+            refNotice = true
+          } else {
+            assert.equal(
+              res.status,
+              call.hasError ? 'error' : 'ok',
+              `${where} (${call.code}): status mismatch`
+            )
+            const body = expectNotice ? res.text.slice(res.text.indexOf('\n\n') + 2) : res.text
+            const rawParts = [
+              call.stdoutLen > 0 ? 'a'.repeat(call.stdoutLen) : '',
+              call.hasError ? 'E' : '',
+            ].filter(Boolean)
+            const rawText = rawParts.join('\n') || '(no output)'
+            if (rawText.length <= LIMIT) {
+              assert.equal(body, rawText, `${where} (${call.code}): exact non-truncated output`)
+            } else {
+              assert.equal(
+                body,
+                `${rawText.slice(0, LIMIT)}\n… [output truncated: ${rawText.length - LIMIT} more characters]`,
+                `${where} (${call.code}): exact truncation boundary`
+              )
+            }
+          }
+        }
+      }
+
+      assert.equal(maxInFlight, 1, `seed ${seed}: native engine must execute strictly serially`)
+      assert.deepEqual(
+        executedOrder,
+        expectedRunCodes,
+        `seed ${seed}: FIFO execution order mismatch`
+      )
+      assert.ok(
+        stagedLog.every((entry) => !entry.endsWith(':py1')),
+        `seed ${seed}: python-produced files must never be staged back into uploads/`
+      )
+      python.dispose()
+    }
+  })
+
+  it('matches an independent SPEC reference model on the web worker engine across session switches, crashes, aborts, and lifecycle facts', async () => {
+    const SESSIONS = ['s1', 's2', 's3'] as const
+
+    for (let seed = 1; seed <= 15; seed += 1) {
+      const rand = seeded(seed * 509 + 3)
+      const nextInt = (max: number) => Math.floor(rand() * max)
+
+      let workerCount = 0
+      let terminations = 0
+      let activeWorkerAlive = false
+      const plannedMode = new Map<string, 'ok' | 'crash' | 'abort'>()
+
+      const events = new EventLog()
+      const python = createPythonSlice({
+        log: events,
+        native: null,
+        pyodideIndexURL: 'unused://',
+        store: memoryStore(),
+        now: () => 0,
+        params: { runTimeoutMs: 50, startupTimeoutMs: 50 },
+        spawnWorker: () => {
+          workerCount += 1
+          activeWorkerAlive = true
+          const listeners = {
+            message: new Set<(ev: MessageEvent) => void>(),
+            error: new Set<(ev: ErrorEvent) => void>(),
+          }
+          return {
+            postMessage: (msg: unknown) => {
+              const data = msg as { type?: string; id?: number; code?: string }
+              if (data.type === 'init' || !data.code) {
+                return
+              }
+              const mode = plannedMode.get(data.code) ?? 'ok'
+              queueMicrotask(() => {
+                if (mode === 'crash') {
+                  for (const fn of [...listeners.error]) {
+                    fn({ message: 'oom' } as ErrorEvent)
+                  }
+                  return
+                }
+                if (mode === 'abort') {
+                  for (const fn of [...listeners.message]) {
+                    fn({ data: { id: data.id, phase: 'running' } } as MessageEvent)
+                  }
+                  return
+                }
+                for (const fn of [...listeners.message]) {
+                  fn({ data: { id: data.id, phase: 'running' } } as MessageEvent)
+                }
+                for (const fn of [...listeners.message]) {
+                  fn({
+                    data: {
+                      id: data.id,
+                      ok: true,
+                      stdout: `ok:${data.code}\n`,
+                      result: null,
+                      error: null,
+                      images: [],
+                      dropped: 0,
+                      files: [],
+                    },
+                  } as MessageEvent)
+                }
+              })
+            },
+            terminate: () => {
+              terminations += 1
+              activeWorkerAlive = false
+            },
+            addEventListener: (type: string, fn: EventListenerOrEventListenerObject) => {
+              if (type === 'message') {
+                listeners.message.add(fn as (ev: MessageEvent) => void)
+              } else if (type === 'error') {
+                listeners.error.add(fn as (ev: ErrorEvent) => void)
+              }
+            },
+            removeEventListener: (type: string, fn: EventListenerOrEventListenerObject) => {
+              if (type === 'message') {
+                listeners.message.delete(fn as (ev: MessageEvent) => void)
+              } else if (type === 'error') {
+                listeners.error.delete(fn as (ev: ErrorEvent) => void)
+              }
+            },
+          }
+        },
+      })
+
+      let refOwner: string | null = null
+      let refNotice = false
+      let refWorkerAlive = false
+      let opCounter = 0
+
+      for (let step = 0; step < 25; step += 1) {
+        const where = `web seed ${seed} step ${step}`
+        const roll = nextInt(10)
+
+        if (roll === 0) {
+          const sid = SESSIONS[nextInt(SESSIONS.length)] ?? 's1'
+          events.publish<SessionDeleted>({ type: 'SessionDeleted', sessionId: sid })
+          if (refOwner === sid) {
+            refOwner = null
+            refNotice = false
+            refWorkerAlive = false
+          }
+          assert.equal(
+            activeWorkerAlive,
+            refWorkerAlive,
+            `${where}: worker alive after SessionDeleted(${sid})`
+          )
+          continue
+        }
+        if (roll === 1) {
+          events.publish<SessionHistoryReplaced>({ type: 'SessionHistoryReplaced' })
+          refOwner = null
+          refNotice = false
+          refWorkerAlive = false
+          assert.equal(
+            activeWorkerAlive,
+            false,
+            `${where}: worker terminated on SessionHistoryReplaced`
+          )
+          continue
+        }
+
+        const code = `w-${++opCounter}`
+        const sid = SESSIONS[nextInt(SESSIONS.length)] ?? 's1'
+        const modeRoll = rand()
+        const mode: 'ok' | 'crash' | 'abort' =
+          modeRoll < 0.25 ? 'crash' : modeRoll < 0.45 ? 'abort' : 'ok'
+        plannedMode.set(code, mode)
+
+        if (refOwner !== null && refOwner !== sid) {
+          // Cross-session switch silently resets web worker with NO notice.
+          refWorkerAlive = false
+          refNotice = false
+        }
+        refOwner = sid
+        const expectNotice: boolean = refNotice
+        refNotice = false
+
+        const ac = new AbortController()
+        const prevTerms = terminations
+        const runPromise = python.run(code, {
+          signal: ac.signal,
+          sessionId: sid,
+          onPhase: (phase) => {
+            if (mode === 'abort' && phase === 'running') {
+              ac.abort()
+            }
+          },
+        })
+        const res = await runPromise
+
+        if (mode === 'ok') {
+          refWorkerAlive = true
+          assert.equal(res.status, 'ok', `${where}: ok run`)
+          assert.equal(
+            res.text.startsWith(RESTART_NOTICE_TAG),
+            expectNotice,
+            `${where}: web restart notice mismatch (expected ${expectNotice}, got ${JSON.stringify(res.text)})`
+          )
+        } else if (mode === 'crash') {
+          refWorkerAlive = false
+          refOwner = null
+          refNotice = true
+          assert.equal(res.status, 'error', `${where}: crash run`)
+          assert.ok(terminations > prevTerms, `${where}: crashed worker must be terminated`)
+        } else {
+          refWorkerAlive = false
+          refOwner = null
+          refNotice = true
+          assert.equal(res.status, 'aborted', `${where}: aborted run`)
+          assert.ok(terminations > prevTerms, `${where}: aborted web worker must be terminated`)
+        }
+      }
+
+      assert.ok(workerCount >= 1)
+      python.dispose()
+    }
+  })
+})

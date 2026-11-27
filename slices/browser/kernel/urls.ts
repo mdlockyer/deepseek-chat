@@ -25,7 +25,7 @@ export const isHttpUrl = (value: string): boolean => {
  */
 export const normalizeOmniboxInput = (raw: string): string => {
   const trimmed = raw.trim()
-  if (!trimmed) {
+  if (!trimmed || /^about:blank$/i.test(trimmed)) {
     return 'about:blank'
   }
   if (/^https?:\/\//i.test(trimmed)) {
