@@ -1,0 +1,23 @@
+{
+  "extends": "../../tsconfig.prod.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": ".tsbuild/src",
+    "tsBuildInfoFile": ".tsbuild/src.tsbuildinfo"
+  },
+  "include": ["src"],
+  "references": [
+    {
+      "path": "../../libs/agent"
+    },
+    {
+      "path": "../../libs/tools"
+    },
+    {
+      "path": "../../libs/ui"
+    },
+    {
+      "path": "../../spine"
+    }
+  ]
+}

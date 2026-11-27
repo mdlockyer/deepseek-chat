@@ -46,6 +46,11 @@ export type {
   UserMessage,
 } from './types.js'
 
+export type AttachRefusal = {
+  readonly key: string
+  readonly params?: Record<string, string | number>
+}
+
 export const createConversationsSlice = (deps: ConversationsDeps) => {
   const runtime = createConversationsRuntime(deps)
   const { useChatLifecycle, useActiveSessionId } = createChatHooks(runtime)
@@ -78,7 +83,7 @@ export const createConversationsSlice = (deps: ConversationsDeps) => {
        * reason the batch was refused (count, size, type), or `null`. Until every upload has finished,
        * `send` sends nothing and returns `false`.
        */
-      attach: (sessionId: string | null, files: File[]) =>
+      attach: (sessionId: string | null, files: File[]): AttachRefusal | null =>
         runtime.drafts.addDraftFiles(sessionId, files),
       /** Sends the chat's draft; `false` when nothing was sent. */
       send: runtime.sendMessage,

@@ -12,7 +12,6 @@ import type {
   FrontStageNote,
   ToolProgress,
 } from '@deepseek-chat/lib-tools'
-import type { TranslationMessage } from './messages.js'
 
 /**
  * User file attachment. `id` is the neutral local key in `BlobStore`; `serverId` is an optional
@@ -115,7 +114,7 @@ export type AssistantMessage = MessageBranch & {
     kind: ApiErrorKind | 'upload'
     message: string
     status?: number
-    localMessage?: TranslationMessage
+    localMessage?: { key: string; params?: Record<string, string | number> }
     retryable?: boolean
   }
 }

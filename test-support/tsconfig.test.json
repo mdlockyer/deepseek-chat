@@ -1,0 +1,17 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "tests",
+    "outDir": ".tsbuild/tests",
+    "tsBuildInfoFile": ".tsbuild/tests.tsbuildinfo"
+  },
+  "include": ["tests"],
+  "references": [
+    {
+      "path": "."
+    },
+    {
+      "path": "../spine"
+    }
+  ]
+}

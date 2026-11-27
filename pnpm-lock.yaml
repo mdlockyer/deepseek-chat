@@ -7,95 +7,7 @@ settings:
 importers:
 
   .:
-    dependencies:
-      '@deepseek-chat/lib-agent':
-        specifier: workspace:*
-        version: link:libs/agent
-      '@deepseek-chat/lib-markdown':
-        specifier: workspace:*
-        version: link:libs/markdown
-      '@deepseek-chat/lib-stage':
-        specifier: workspace:*
-        version: link:libs/stage
-      '@deepseek-chat/lib-tools':
-        specifier: workspace:*
-        version: link:libs/tools
-      '@deepseek-chat/lib-ui':
-        specifier: workspace:*
-        version: link:libs/ui
-      '@deepseek-chat/slice-account':
-        specifier: workspace:*
-        version: link:slices/account
-      '@deepseek-chat/slice-activity-inspector':
-        specifier: workspace:*
-        version: link:slices/activity-inspector
-      '@deepseek-chat/slice-ask-user':
-        specifier: workspace:*
-        version: link:slices/ask-user
-      '@deepseek-chat/slice-browser':
-        specifier: workspace:*
-        version: link:slices/browser
-      '@deepseek-chat/slice-conversations':
-        specifier: workspace:*
-        version: link:slices/conversations
-      '@deepseek-chat/slice-history-backup':
-        specifier: workspace:*
-        version: link:slices/history-backup
-      '@deepseek-chat/slice-preferences':
-        specifier: workspace:*
-        version: link:slices/preferences
-      '@deepseek-chat/slice-python':
-        specifier: workspace:*
-        version: link:slices/python
-      '@deepseek-chat/slice-subagents':
-        specifier: workspace:*
-        version: link:slices/subagents
-      '@deepseek-chat/slice-voice':
-        specifier: workspace:*
-        version: link:slices/voice
-      '@deepseek-chat/slice-web-research':
-        specifier: workspace:*
-        version: link:slices/web-research
-      '@deepseek-chat/slice-workspace-files':
-        specifier: workspace:*
-        version: link:slices/workspace-files
-      '@deepseek-chat/spine':
-        specifier: workspace:*
-        version: link:spine
-      '@fontsource-variable/google-sans-flex':
-        specifier: ^5.3.2
-        version: 5.3.2
-      '@tauri-apps/api':
-        specifier: ^2.12.4
-        version: 2.12.4
-      '@tauri-apps/plugin-http':
-        specifier: ^2.9.0
-        version: 2.9.0
-      '@tauri-apps/plugin-opener':
-        specifier: ^2.7.3
-        version: 2.7.3
-      '@types/react':
-        specifier: ~18.3.1
-        version: 18.3.31
-      '@types/react-dom':
-        specifier: ~18.3.0
-        version: 18.3.0
-      clsx:
-        specifier: 2.1.1
-        version: 2.1.1
-      react:
-        specifier: 18.3.1
-        version: 18.3.1
-      react-dom:
-        specifier: 18.3.1
-        version: 18.3.1(react@18.3.1)
-      zustand:
-        specifier: 4.4.7
-        version: 4.4.7(@types/react@18.3.31)(react@18.3.1)
     devDependencies:
-      '@deepseek-chat/test-support':
-        specifier: workspace:*
-        version: link:test-support
       '@rspack/cli':
         specifier: 2.0.2
         version: 2.0.2(@rspack/core@2.0.2(@swc/helpers@0.5.23))(@rspack/dev-server@2.0.1(@rspack/core@2.0.2(@swc/helpers@0.5.23)))
@@ -114,6 +26,12 @@ importers:
       '@types/node':
         specifier: ~20.9.2
         version: 20.9.2
+      '@types/react':
+        specifier: ~18.3.1
+        version: 18.3.31
+      '@types/react-dom':
+        specifier: ~18.3.0
+        version: 18.3.0
       oxfmt:
         specifier: 0.48.0
         version: 0.48.0
@@ -123,9 +41,106 @@ importers:
       pyodide:
         specifier: 314.0.8
         version: 314.0.8
+      react:
+        specifier: 18.3.1
+        version: 18.3.1
+      react-dom:
+        specifier: 18.3.1
+        version: 18.3.1(react@18.3.1)
       typescript:
         specifier: 7.0.2
         version: 7.0.2
+
+  app:
+    dependencies:
+      '@deepseek-chat/lib-agent':
+        specifier: workspace:*
+        version: link:../libs/agent
+      '@deepseek-chat/lib-markdown':
+        specifier: workspace:*
+        version: link:../libs/markdown
+      '@deepseek-chat/lib-stage':
+        specifier: workspace:*
+        version: link:../libs/stage
+      '@deepseek-chat/lib-tools':
+        specifier: workspace:*
+        version: link:../libs/tools
+      '@deepseek-chat/lib-ui':
+        specifier: workspace:*
+        version: link:../libs/ui
+      '@deepseek-chat/slice-account':
+        specifier: workspace:*
+        version: link:../slices/account
+      '@deepseek-chat/slice-activity-inspector':
+        specifier: workspace:*
+        version: link:../slices/activity-inspector
+      '@deepseek-chat/slice-ask-user':
+        specifier: workspace:*
+        version: link:../slices/ask-user
+      '@deepseek-chat/slice-browser':
+        specifier: workspace:*
+        version: link:../slices/browser
+      '@deepseek-chat/slice-conversations':
+        specifier: workspace:*
+        version: link:../slices/conversations
+      '@deepseek-chat/slice-history-backup':
+        specifier: workspace:*
+        version: link:../slices/history-backup
+      '@deepseek-chat/slice-preferences':
+        specifier: workspace:*
+        version: link:../slices/preferences
+      '@deepseek-chat/slice-python':
+        specifier: workspace:*
+        version: link:../slices/python
+      '@deepseek-chat/slice-subagents':
+        specifier: workspace:*
+        version: link:../slices/subagents
+      '@deepseek-chat/slice-voice':
+        specifier: workspace:*
+        version: link:../slices/voice
+      '@deepseek-chat/slice-web-research':
+        specifier: workspace:*
+        version: link:../slices/web-research
+      '@deepseek-chat/slice-workspace-files':
+        specifier: workspace:*
+        version: link:../slices/workspace-files
+      '@deepseek-chat/spine':
+        specifier: workspace:*
+        version: link:../spine
+      '@fontsource-variable/google-sans-flex':
+        specifier: ^5.3.2
+        version: 5.3.2
+      '@tauri-apps/api':
+        specifier: ^2.12.4
+        version: 2.12.4
+      '@tauri-apps/plugin-http':
+        specifier: ^2.9.0
+        version: 2.9.0
+      '@tauri-apps/plugin-opener':
+        specifier: ^2.7.3
+        version: 2.7.3
+      clsx:
+        specifier: 2.1.1
+        version: 2.1.1
+      react:
+        specifier: 18.3.1
+        version: 18.3.1
+      react-dom:
+        specifier: 18.3.1
+        version: 18.3.1(react@18.3.1)
+      zustand:
+        specifier: 4.4.7
+        version: 4.4.7(@types/react@18.3.31)(react@18.3.1)
+    devDependencies:
+      '@deepseek-chat/test-support':
+        specifier: workspace:*
+        version: link:../test-support
+      '@types/react':
+        specifier: ~18.3.1
+        version: 18.3.31
+      '@types/react-dom':
+        specifier: ~18.3.0
+        version: 18.3.0
 
   libs/agent:
     dependencies:
@@ -326,6 +341,9 @@ importers:
       '@deepseek-chat/lib-agent':
         specifier: workspace:*
         version: link:../../libs/agent
+      '@deepseek-chat/lib-markdown':
+        specifier: workspace:*
+        version: link:../../libs/markdown
       '@deepseek-chat/lib-tools':
         specifier: workspace:*
         version: link:../../libs/tools
@@ -335,6 +353,9 @@ importers:
       '@deepseek-chat/spine':
         specifier: workspace:*
         version: link:../../spine
+      clsx:
+        specifier: 2.1.1
+        version: 2.1.1
       idb:
         specifier: 8.0.3
         version: 8.0.3

@@ -1,0 +1,74 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "../.tsbuild/tests",
+    "tsBuildInfoFile": "../.tsbuild/tests.tsbuildinfo"
+  },
+  "include": ["**/*.ts", "**/*.tsx"],
+  "references": [
+    {
+      "path": "../tsconfig.core.json"
+    },
+    {
+      "path": "../../tsconfig.node.json"
+    },
+    {
+      "path": "../../test-support"
+    },
+    {
+      "path": "../../spine"
+    },
+    {
+      "path": "../../libs/agent"
+    },
+    {
+      "path": "../../libs/markdown"
+    },
+    {
+      "path": "../../libs/stage"
+    },
+    {
+      "path": "../../libs/tools"
+    },
+    {
+      "path": "../../libs/ui"
+    },
+    {
+      "path": "../../slices/account"
+    },
+    {
+      "path": "../../slices/activity-inspector"
+    },
+    {
+      "path": "../../slices/ask-user"
+    },
+    {
+      "path": "../../slices/browser"
+    },
+    {
+      "path": "../../slices/conversations"
+    },
+    {
+      "path": "../../slices/history-backup"
+    },
+    {
+      "path": "../../slices/preferences"
+    },
+    {
+      "path": "../../slices/python"
+    },
+    {
+      "path": "../../slices/subagents"
+    },
+    {
+      "path": "../../slices/voice"
+    },
+    {
+      "path": "../../slices/web-research"
+    },
+    {
+      "path": "../../slices/workspace-files"
+    }
+  ]
+}

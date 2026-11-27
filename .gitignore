@@ -10,3 +10,5 @@ build/
 !.env.example
 tmp/
 vendor/
+.tsbuild/
+*.tsbuildinfo

@@ -1,22 +1,134 @@
 {
-  "compilerOptions": {
-    "strict": true,
-    "target": "ESNext",
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
-    "jsx": "react-jsx",
-    "noEmit": true,
-    "isolatedModules": true,
-    "lib": ["DOM", "DOM.Iterable", "ESNext"],
-    "types": ["node"],
-    "allowSyntheticDefaultImports": true,
-    "skipLibCheck": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "noImplicitAny": true,
-    "noImplicitOverride": true,
-    "noImplicitReturns": true,
-    "useUnknownInCatchVariables": true
-  },
-  "include": ["app", "spine", "test-support", "libs", "slices", "rspack.config.ts"]
+  "files": [],
+  "references": [
+    {
+      "path": "./spine"
+    },
+    {
+      "path": "./spine/tsconfig.test.json"
+    },
+    {
+      "path": "./test-support"
+    },
+    {
+      "path": "./test-support/tsconfig.test.json"
+    },
+    {
+      "path": "./libs/agent"
+    },
+    {
+      "path": "./libs/agent/tsconfig.test.json"
+    },
+    {
+      "path": "./libs/markdown"
+    },
+    {
+      "path": "./libs/markdown/tsconfig.test.json"
+    },
+    {
+      "path": "./libs/stage"
+    },
+    {
+      "path": "./libs/stage/tsconfig.test.json"
+    },
+    {
+      "path": "./libs/tools"
+    },
+    {
+      "path": "./libs/tools/tsconfig.test.json"
+    },
+    {
+      "path": "./libs/ui"
+    },
+    {
+      "path": "./libs/ui/tsconfig.test.json"
+    },
+    {
+      "path": "./slices/account"
+    },
+    {
+      "path": "./slices/account/tsconfig.test.json"
+    },
+    {
+      "path": "./slices/activity-inspector"
+    },
+    {
+      "path": "./slices/activity-inspector/tsconfig.test.json"
+    },
+    {
+      "path": "./slices/ask-user"
+    },
+    {
+      "path": "./slices/ask-user/tsconfig.test.json"
+    },
+    {
+      "path": "./slices/browser"
+    },
+    {
+      "path": "./slices/browser/tsconfig.test.json"
+    },
+    {
+      "path": "./slices/conversations"
+    },
+    {
+      "path": "./slices/conversations/tsconfig.test.json"
+    },
+    {
+      "path": "./slices/history-backup"
+    },
+    {
+      "path": "./slices/history-backup/tsconfig.test.json"
+    },
+    {
+      "path": "./slices/preferences"
+    },
+    {
+      "path": "./slices/preferences/tsconfig.test.json"
+    },
+    {
+      "path": "./slices/python"
+    },
+    {
+      "path": "./slices/python/tsconfig.test.json"
+    },
+    {
+      "path": "./slices/subagents"
+    },
+    {
+      "path": "./slices/subagents/tsconfig.test.json"
+    },
+    {
+      "path": "./slices/voice"
+    },
+    {
+      "path": "./slices/voice/tsconfig.test.json"
+    },
+    {
+      "path": "./slices/web-research"
+    },
+    {
+      "path": "./slices/web-research/tsconfig.test.json"
+    },
+    {
+      "path": "./slices/workspace-files"
+    },
+    {
+      "path": "./slices/workspace-files/tsconfig.test.json"
+    },
+    {
+      "path": "./tsconfig.node.json"
+    },
+    {
+      "path": "./app/tsconfig.core.json"
+    },
+    {
+      "path": "./app/workbench"
+    },
+    {
+      "path": "./app"
+    },
+    {
+      "path": "./app/tests"
+    }
+  ]
 }

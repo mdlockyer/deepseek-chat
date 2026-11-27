@@ -8,9 +8,11 @@
   },
   "dependencies": {
     "@deepseek-chat/lib-agent": "workspace:*",
+    "@deepseek-chat/lib-markdown": "workspace:*",
     "@deepseek-chat/lib-tools": "workspace:*",
     "@deepseek-chat/lib-ui": "workspace:*",
     "@deepseek-chat/spine": "workspace:*",
+    "clsx": "2.1.1",
     "idb": "8.0.3",
     "zustand": "4.4.7"
   },

@@ -1,0 +1,66 @@
+{
+  "extends": "../tsconfig.prod.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": ".tsbuild/core",
+    "tsBuildInfoFile": ".tsbuild/core.tsbuildinfo"
+  },
+  "include": ["**/*.ts", "**/*.tsx"],
+  "exclude": ["main.tsx", "tests", "workbench", ".tsbuild"],
+  "references": [
+    {
+      "path": "../spine"
+    },
+    {
+      "path": "../libs/agent"
+    },
+    {
+      "path": "../libs/markdown"
+    },
+    {
+      "path": "../libs/stage"
+    },
+    {
+      "path": "../libs/tools"
+    },
+    {
+      "path": "../libs/ui"
+    },
+    {
+      "path": "../slices/account"
+    },
+    {
+      "path": "../slices/activity-inspector"
+    },
+    {
+      "path": "../slices/ask-user"
+    },
+    {
+      "path": "../slices/browser"
+    },
+    {
+      "path": "../slices/conversations"
+    },
+    {
+      "path": "../slices/history-backup"
+    },
+    {
+      "path": "../slices/preferences"
+    },
+    {
+      "path": "../slices/python"
+    },
+    {
+      "path": "../slices/subagents"
+    },
+    {
+      "path": "../slices/voice"
+    },
+    {
+      "path": "../slices/web-research"
+    },
+    {
+      "path": "../slices/workspace-files"
+    }
+  ]
+}

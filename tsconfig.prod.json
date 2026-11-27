@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "paths": {
+      "@deepseek-chat/test-support": ["./types/test-support-forbidden.d.ts"],
+      "@deepseek-chat/test-support/*": ["./types/test-support-forbidden.d.ts"]
+    }
+  }
+}
