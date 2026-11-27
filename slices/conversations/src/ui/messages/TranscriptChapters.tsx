@@ -278,11 +278,10 @@ export const TranscriptChapters = ({
       publish(index, cause, true)
       glideRef.current?.to(target, {
         instant,
-        fade: contentRef.current,
         ...(landing ? { onDone: () => land(turn.messageId) } : {}),
       })
     },
-    [scrollRef, contentRef, measure, follow, publish, land]
+    [scrollRef, measure, follow, publish, land]
   )
 
   const goLatest = useCallback(
@@ -294,12 +293,9 @@ export const TranscriptChapters = ({
       lockRef.current = null
       returnRef.current = null
       publish(turnsRef.current.length - 1, cause, true)
-      glideRef.current?.to(scroll.scrollHeight, {
-        fade: contentRef.current,
-        onDone: () => follow.sync(),
-      })
+      glideRef.current?.to(scroll.scrollHeight, { onDone: () => follow.sync() })
     },
-    [scrollRef, contentRef, publish, follow]
+    [scrollRef, publish, follow]
   )
 
   const returnBack = useCallback(() => {
@@ -386,9 +382,9 @@ export const TranscriptChapters = ({
       if (Math.abs(top - scroll.scrollTop) > scroll.clientHeight * RETURN_THRESHOLD) {
         returnRef.current = currentRef.current
       }
-      glideRef.current?.to(top, { fade: contentRef.current })
+      glideRef.current?.to(top)
     },
-    [scrollRef, contentRef, follow]
+    [scrollRef, follow]
   )
 
   const dragEnded = useCallback(

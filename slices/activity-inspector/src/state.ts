@@ -103,11 +103,16 @@ export const createActivityPanelState = (
     useStore.setState({ selection: next, panelOpen: panel.isOpen(sessionId) })
   }
 
-  /** Pins a turn in the open panel and brings it into view in the transcript too. */
-  const selectTurn = (sessionId: string, messageId: string) => {
+  /** Pins a turn in the open panel, leaving the transcript where it is. */
+  const pinTurn = (sessionId: string, messageId: string) => {
     useStore.setState({
       selection: { kind: 'pinned', sessionId, messageId, tab: currentTab() },
     })
+  }
+
+  /** Pins a turn in the open panel and brings it into view in the transcript too. */
+  const selectTurn = (sessionId: string, messageId: string) => {
+    pinTurn(sessionId, messageId)
     transcript?.revealTurn(sessionId, messageId)
   }
 
@@ -204,6 +209,7 @@ export const createActivityPanelState = (
     useStore,
     togglePanel,
     toggleTurn,
+    pinTurn,
     selectTurn,
     setTab,
     close,

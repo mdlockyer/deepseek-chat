@@ -596,7 +596,7 @@ const useChapterScroller = ({
       positionedRef.current = true
       report(el)
     } else {
-      glideFor(el).to(goal, { fade: el.firstElementChild as HTMLElement | null })
+      glideFor(el).to(goal)
     }
     noteBottom(el)
   }, [visible, targetId, request, containerRef])
@@ -624,10 +624,7 @@ const useChapterScroller = ({
     if (!el) {
       return
     }
-    glideFor(el).to(el.scrollHeight, {
-      fade: el.firstElementChild as HTMLElement | null,
-      onDone: () => report(el),
-    })
+    glideFor(el).to(el.scrollHeight, { onDone: () => report(el) })
   }, [containerRef])
 
   return { reveal, toBottom, atBottom }
@@ -1132,10 +1129,11 @@ export const createActivityPanel = (
     const focusedCallId = pinned?.focusedCallId ?? null
     const focusNonce = pinned?.focusNonce ?? 0
     const total = chapters.length
+    // Previous / next move through the panel only; the transcript stays where the reader left it.
     const stepTo = (index: number) => {
       const target = chapters[index]
-      if (target) {
-        pin(target.summary.messageId)
+      if (target && sessionId) {
+        state.pinTurn(sessionId, target.summary.messageId)
       }
     }
 

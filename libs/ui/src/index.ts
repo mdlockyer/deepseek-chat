@@ -172,12 +172,9 @@ export {
 export { READING_LINE_AT, readingLineY, sectionAt } from './readingLine.js'
 export { RollingNumber, type RollingNumberProps } from './RollingNumber.js'
 export {
-  SCROLL_GLIDE_LEAD_IN,
-  SCROLL_GLIDE_LONG_JUMP,
   SCROLL_GLIDE_STIFFNESS,
   createScrollGlide,
   onScrollIntent,
-  planScrollGlide,
   readMotionEasing,
   readMotionMs,
   scrollSpringSettled,

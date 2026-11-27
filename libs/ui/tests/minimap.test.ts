@@ -9,7 +9,6 @@ import {
   minimapBlockDetail,
   minimapLineDetail,
   mixRect,
-  planScrollGlide,
   READING_LINE_AT,
   readingLineY,
   scrollSpringSettled,
@@ -78,13 +77,6 @@ describe('Scroll glide', () => {
       assert.ok(elapsed < 1, 'did not settle within a second')
     }
     assert.ok(elapsed > 0.5, `settled implausibly fast (${elapsed}s)`)
-  })
-
-  it('scrolls the whole way for short jumps and cuts long ones short of the target', () => {
-    // Viewport 800: 1.4 viewports is 1120px; the lead-in is 0.42 x 800 = 336px.
-    assert.deepEqual(planScrollGlide(0, 1000, 800), { cut: false, start: 0 })
-    assert.deepEqual(planScrollGlide(0, 2000, 800), { cut: true, start: 1664 })
-    assert.deepEqual(planScrollGlide(5000, 0, 800), { cut: true, start: 336 })
   })
 })
 
