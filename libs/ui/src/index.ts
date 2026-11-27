@@ -146,29 +146,30 @@ export {
   type HoverGlideState,
   type HoverGlideTransition,
 } from './hoverGlideState.js'
+export { Minimap, type MinimapProps, type MinimapReturn, type MinimapSection } from './Minimap.js'
 export {
-  ChapterRail,
-  type ChapterRailHandle,
-  type ChapterRailItem,
-  type ChapterRailProps,
-  type ChapterRailReturn,
-} from './ChapterRail.js'
-export {
-  CHAPTER_CARD_INSET,
-  CHAPTER_CARD_PADDING,
-  CHAPTER_DIVIDER_GAP,
-  CHAPTER_DIVIDER_ROW,
-  CHAPTER_ROW_HEIGHT,
-  CHAPTER_ROW_MIN_HEIGHT,
-  CHAPTER_TICK_GAP,
-  CHAPTER_TICK_MIN_GAP,
-  chapterPositionY,
-  layoutChapterRail,
-  nearestChapter,
-  readingLineY,
-  revealChapterRow,
-  type ChapterRailLayout,
-} from './chapterRailLayout.js'
+  MINIMAP_FOCUS_SLACK,
+  MINIMAP_FOCUS_STIFFNESS,
+  MINIMAP_FULL_SCALE,
+  MINIMAP_LENS_CORE,
+  MINIMAP_LENS_FALLOFF,
+  MINIMAP_LENS_MAX_SHARE,
+  layoutMinimapMap,
+  minimapBlockDetail,
+  minimapLineDetail,
+  mixRect,
+  shapeMinimapSection,
+  stepMinimapFocus,
+  type MinimapBlock,
+  type MinimapDecoration,
+  type MinimapMap,
+  type MinimapMarker,
+  type MinimapRect,
+  type MinimapRun,
+  type MinimapSectionContent,
+  type MinimapSectionShape,
+} from './minimapGeometry.js'
+export { readingLineY, sectionAt } from './readingLine.js'
 export { RollingNumber, type RollingNumberProps } from './RollingNumber.js'
 export {
   SCROLL_GLIDE_LEAD_IN,

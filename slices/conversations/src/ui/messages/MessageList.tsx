@@ -173,8 +173,8 @@ export const MessageList = ({
 
   const isMobile = useIsMobile()
   const turns = useMemo(
-    () => buildTranscriptTurns(getVisibleMessages(session), session.checkpoints ?? [], streaming),
-    [session, streaming]
+    () => buildTranscriptTurns(getVisibleMessages(session), session.checkpoints ?? []),
+    [session]
   )
   const turnStarts = useMemo(() => turnStartIds(getVisibleMessages(session)), [session])
 

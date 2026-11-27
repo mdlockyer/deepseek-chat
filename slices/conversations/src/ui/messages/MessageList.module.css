@@ -7,7 +7,7 @@
     overflow: hidden;
   }
 
-  /* The scroll area and the chapter rail drawn over its left gutter. */
+  /* The scroll area and the minimap drawn over its left gutter. */
   .scrollArea {
     position: relative;
     display: flex;

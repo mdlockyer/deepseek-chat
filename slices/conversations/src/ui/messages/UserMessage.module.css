@@ -49,7 +49,7 @@
     word-break: break-word;
   }
 
-  /* Arriving at this turn from the chapter rail, a shortcut or the Activity panel: a soft accent
+  /* Arriving at this turn from the minimap, a shortcut or the Activity panel: a soft accent
      ring swells and fades so the eye finds where the jump landed. */
   .bubble[data-landing] {
     animation: turn-landing calc(var(--ui-duration-slow) * 3) var(--ui-ease-fade);

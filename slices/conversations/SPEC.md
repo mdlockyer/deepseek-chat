@@ -144,16 +144,16 @@ factories (`createIndexedDbSessionStore`, `memorySessionStore`).
     `ToolRegistry.buildCompactionLedger`. Reactive `overflow` compaction retries at most once per
     turn on `contextOverflow` or `payloadTooLarge` errors.
 
-13. **Chapter rail & reading position.** Chats with two or more turns show a `ChapterRail` in the
-    transcript's left gutter (desktop widths, and only while the gutter is at least 48 px wide so it never covers the messages), one chapter per reply labelled by the prompt before it, with a divider after each compaction checkpoint; a streaming reply's number takes the accent colour in the open card. The reading turn is the one whose start (its prompt, or the reply when it has none) is last above the reading line (`readingLineY`), which travels with scroll progress from the top of the view to its bottom, so every turn, however short, is current somewhere and the latest turn is current at the bottom; it is
+13. **Transcript minimap & reading position.** Chats with two or more turns show a `Minimap` in the
+    transcript's left gutter (desktop widths, and only while the gutter is at least 48 px wide so it never covers the messages), one section per turn (from each `data-turn-anchor`, its prompt bubble the marker) labelled by the prompt, with a divider after each compaction checkpoint. The reading turn is the one whose start (its prompt, or the reply when it has none) is last above the reading line (`readingLineY`), which travels with scroll progress from the top of the view to its bottom, so every turn, however short, is current somewhere and the latest turn is current at the bottom; it is
     published through `getReadingPosition` after scrolling rests on it, and at once for navigation.
-    Clicking a chapter, `⌥↑` / `⌥↓` (outside text fields), or a reveal glides the transcript so the
+    Choosing a turn from the minimap's list, `⌥↑` / `⌥↓` (outside text fields), or a reveal glides the transcript so the
     turn starts 24 px below the top, holds that turn as the reading turn until the reader scrolls,
-    and pulses the turn's prompt bubble on arrival; scrubbing the rail jumps without animating.
-    Jumps longer than 1.2 viewports offer a return (button and `⌥←`) to the turn left behind, which
+    and pulses the turn's prompt bubble on arrival. Clicking the map glides to that point; dragging its
+    window scrolls directly.
+    Jumps and drags longer than 1.2 viewports offer a return (button and `⌥←`) to the turn left behind, which
     clears once the reader is back there. Reveals publish with cause `'reveal'` and never offer a
-    return; everything else is `'reader'`. When `useActiveInspectionTarget` is provided, chapters
-    with reasoning or tool steps carry an Activity button that publishes `TurnInspectionRequested`.
+    return; everything else is `'reader'`.
 
 ## Parameters
 

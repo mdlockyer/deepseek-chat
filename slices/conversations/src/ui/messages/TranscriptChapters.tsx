@@ -1,12 +1,10 @@
 import {
-  ChapterRail,
-  IconActivityOutline16,
-  Tooltip,
+  Minimap,
   createScrollGlide,
   onScrollIntent,
   readingLineY,
-  type ChapterRailHandle,
-  type ChapterRailItem,
+  sectionAt,
+  type MinimapSection,
   type ScrollGlide,
 } from '@deepseek-chat/lib-ui'
 import {
@@ -21,7 +19,7 @@ import {
 import { useConversations } from '../../context.js'
 import { useTranslate } from '../../messages.js'
 import type { ReadingCause } from '../../reading.js'
-import { countToolCalls, excerptOfPrompt, hasTurnActivity } from '../../turns.js'
+import { excerptOfPrompt } from '../../turns.js'
 import type { CompactionCheckpoint, Message } from '../../types.js'
 import { useScrollFollow } from './scrollContext.js'
 import styles from './TranscriptChapters.module.css'
@@ -30,9 +28,6 @@ import styles from './TranscriptChapters.module.css'
 export type TranscriptTurn = {
   readonly messageId: string
   readonly label: string
-  readonly live: boolean
-  readonly activity: boolean
-  readonly toolCalls: number
   /** A compaction checkpoint sits between this turn and the one before it. */
   readonly afterCheckpoint: boolean
 }
@@ -47,23 +42,19 @@ const RETURN_THRESHOLD = 1.2
 /** Turns of the visible branch in order; a reply's label is the prompt before it. */
 export const buildTranscriptTurns = (
   messages: readonly Message[],
-  checkpoints: readonly CompactionCheckpoint[],
-  streaming: boolean
+  checkpoints: readonly CompactionCheckpoint[]
 ): TranscriptTurn[] => {
   const checkpointAnchors = new Set(checkpoints.map((checkpoint) => checkpoint.anchorMessageId))
   const turns: TranscriptTurn[] = []
   let label = ''
   let pendingCheckpoint = false
-  messages.forEach((message, index) => {
+  messages.forEach((message) => {
     if (message.role === 'user') {
       label = excerptOfPrompt(message.content)
     } else {
       turns.push({
         messageId: message.id,
         label,
-        live: streaming && index === messages.length - 1,
-        activity: hasTurnActivity(message),
-        toolCalls: countToolCalls(message),
         afterCheckpoint: pendingCheckpoint && turns.length > 0,
       })
       pendingCheckpoint = false
@@ -93,10 +84,10 @@ const isEditable = (target: EventTarget | null) =>
   (target.isContentEditable || Boolean(target.closest('input, textarea, select')))
 
 /**
- * The transcript's chapter rail and everything that ties it to scrolling: which turn is being
- * read, jumping and scrubbing between turns, returning to where the reader was, ⌥↑ / ⌥↓ / ⌥←,
- * and reveals requested by the Activity panel. Reports the reading turn to `reading` so sibling
- * views can follow; never scrolls on its own except when asked.
+ * The transcript's minimap and everything that ties it to scrolling: which turn is being read,
+ * clicking and dragging on the map, returning to where the reader was, ⌥↑ / ⌥↓ / ⌥←, and reveals
+ * requested by the Activity panel. Reports the reading turn to `reading` so sibling views can
+ * follow; never scrolls on its own except when asked.
  */
 export const TranscriptChapters = ({
   sessionId,
@@ -110,10 +101,8 @@ export const TranscriptChapters = ({
   contentRef: RefObject<HTMLDivElement | null>
 }) => {
   const t = useTranslate()
-  const { reading, deps, requestTurnInspection } = useConversations()
+  const { reading } = useConversations()
   const follow = useScrollFollow()
-  const inspectable = deps.ui.useActiveInspectionTarget !== undefined
-  const railRef = useRef<ChapterRailHandle>(null)
   const glideRef = useRef<ScrollGlide | null>(null)
   const topsRef = useRef<number[]>([])
   const lockRef = useRef<number | null>(null)
@@ -143,15 +132,7 @@ export const TranscriptChapters = ({
     topsRef.current = turnsRef.current.map((turn) => starts.get(turn.messageId) ?? 0)
   }, [scrollRef, contentRef])
 
-  const indexAt = (y: number) => {
-    let index = 0
-    topsRef.current.forEach((top, i) => {
-      if (top <= y) {
-        index = i
-      }
-    })
-    return index
-  }
+  const indexAt = (y: number) => sectionAt(topsRef.current, y)
 
   const publish = useCallback(
     (index: number, cause: ReadingCause, immediate: boolean) => {
@@ -182,17 +163,6 @@ export const TranscriptChapters = ({
     if (!scroll) {
       return
     }
-    const tops = topsRef.current
-    const position = (y: number) => {
-      const index = indexAt(y)
-      const start = tops[index] ?? 0
-      const end = tops[index + 1] ?? scroll.scrollHeight
-      return index + Math.min(1, Math.max(0, (y - start) / Math.max(1, end - start)))
-    }
-    railRef.current?.setViewport(
-      position(scroll.scrollTop),
-      position(scroll.scrollTop + scroll.clientHeight)
-    )
     if (lockRef.current !== null) {
       return
     }
@@ -208,7 +178,7 @@ export const TranscriptChapters = ({
   const paintRef = useRef(paint)
   paintRef.current = paint
 
-  // Scroll frames repaint the rail; the reader's own input releases a navigation lock.
+  // Scroll frames update the reading turn; the reader's own input releases a navigation lock.
   useEffect(() => {
     const scroll = scrollRef.current
     const content = contentRef.current
@@ -399,47 +369,75 @@ export const TranscriptChapters = ({
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [scrollRef, navigate, goLatest, returnBack])
 
-  const items = useMemo(
-    (): ChapterRailItem[] =>
+  // A click on the map glides there (offering a way back from far away); dragging the window
+  // scrolls directly, and offers the way back once it's let go.
+  const seek = useCallback(
+    (top: number, how: 'glide' | 'drag') => {
+      const scroll = scrollRef.current
+      if (!scroll) {
+        return
+      }
+      lockRef.current = null
+      follow.stop()
+      if (how === 'drag') {
+        glideRef.current?.cancel()
+        scroll.scrollTop = top
+        return
+      }
+      if (Math.abs(top - scroll.scrollTop) > scroll.clientHeight * RETURN_THRESHOLD) {
+        setReturnTo(currentRef.current)
+      }
+      glideRef.current?.to(top, { fade: contentRef.current })
+    },
+    [scrollRef, contentRef, follow]
+  )
+
+  const dragEnded = useCallback(
+    (fromTop: number) => {
+      const scroll = scrollRef.current
+      if (
+        !scroll ||
+        Math.abs(scroll.scrollTop - fromTop) <= scroll.clientHeight * RETURN_THRESHOLD
+      ) {
+        return
+      }
+      const line = readingLineY(fromTop, scroll.clientHeight, scroll.scrollHeight)
+      const from = sectionAt(topsRef.current, line)
+      if (from !== currentRef.current) {
+        setReturnTo(from)
+      }
+    },
+    [scrollRef]
+  )
+
+  const sections = useMemo(
+    (): MinimapSection[] =>
       turns.map((turn, index) => {
-        const number = index + 1
         const label = turn.label || t('chapterContinued')
         return {
           key: turn.messageId,
           label,
-          accessibleLabel: t('chapterLabel', { number, prompt: label }),
-          live: turn.live,
-          ...(turn.afterCheckpoint ? { dividerBefore: t('chapterContextSummarized') } : {}),
-          ...(inspectable && turn.activity
-            ? {
-                action: (
-                  <Tooltip content={t('activityOpenInPanel')} placement="top">
-                    <button
-                      type="button"
-                      className={styles.activityChip}
-                      aria-label={t('chapterOpenActivity', { number })}
-                      onClick={() => requestTurnInspection(sessionId, turn.messageId, 'activity')}
-                    >
-                      <IconActivityOutline16 />
-                      {turn.toolCalls > 0 ? <span>{turn.toolCalls}</span> : null}
-                    </button>
-                  </Tooltip>
-                ),
-              }
-            : {}),
+          accessibleLabel: t('chapterLabel', { number: index + 1, prompt: label }),
+          ...(turn.afterCheckpoint ? { dividerBefore: true } : {}),
         }
       }),
-    [turns, inspectable, sessionId, requestTurnInspection, t]
+    [turns, t]
   )
 
   return (
     <div className={styles.gutter}>
-      <ChapterRail
-        ref={railRef}
+      <Minimap
         className={styles.rail}
-        items={items}
+        sections={sections}
         current={Math.min(current, Math.max(0, turns.length - 1))}
         ariaLabel={t('chapterRailLabel')}
+        scrollRef={scrollRef}
+        contentRef={contentRef}
+        sectionSelector="[data-turn-anchor]"
+        markerSelector="[data-turn-bubble]"
+        onSeek={seek}
+        onDragEnd={dragEnded}
+        onNavigate={(index) => navigate(index)}
         returnTo={
           returnTo === null || returnTo >= turns.length
             ? null
@@ -449,29 +447,6 @@ export const TranscriptChapters = ({
                 onReturn: returnBack,
               }
         }
-        onNavigate={(index, how) =>
-          navigate(index, {
-            instant: how === 'scrub',
-            landing: how === 'jump',
-            offerReturn: how === 'jump',
-          })
-        }
-        onScrubEnd={(index, from) => {
-          const scroll = scrollRef.current
-          const start = topsRef.current[from] ?? 0
-          const end = topsRef.current[index] ?? 0
-          if (
-            scroll &&
-            index !== from &&
-            Math.abs(end - start) > scroll.clientHeight * RETURN_THRESHOLD
-          ) {
-            setReturnTo(from)
-          }
-          const turn = turnsRef.current[index]
-          if (turn) {
-            land(turn.messageId)
-          }
-        }}
       />
     </div>
   )

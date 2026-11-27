@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 
 /**
- * Who moved the transcript to a turn: the reader (scrolling, the chapter rail, shortcuts, a new
+ * Who moved the transcript to a turn: the reader (scrolling, the minimap, shortcuts, a new
  * reply arriving at the bottom) or a reveal another view asked for (the Activity panel). Views
  * that follow the transcript follow the reader and ignore reveals they caused themselves.
  */
