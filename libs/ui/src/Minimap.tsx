@@ -74,7 +74,7 @@ const PALETTE_TOKENS = {
   veil: '--ui-surface-canvas',
   focusRing: '--ui-focus-ring',
   divider: '--ui-text-muted',
-  marker: '--ui-minimap-marker',
+  marker: '--ui-marker-solid',
 } as const
 
 const resolvePalette = (host: HTMLElement): MinimapPalette => {

@@ -45,7 +45,7 @@
     line-height: var(--ui-leading-md);
     color: var(--ui-text-primary);
     /* Tinted with the minimap's marker colour, so the coral marks on the map are these bubbles. */
-    background-color: var(--ui-surface-marker);
+    background-color: var(--ui-marker-subtle);
     white-space: pre-wrap;
     word-break: break-word;
   }
@@ -61,7 +61,7 @@
       box-shadow: 0 0 0 0 transparent;
     }
     18% {
-      box-shadow: 0 0 0 3px color-mix(in oklch, var(--ui-minimap-marker) 32%, transparent);
+      box-shadow: 0 0 0 3px color-mix(in oklch, var(--ui-marker-solid) 32%, transparent);
     }
     100% {
       box-shadow: 0 0 0 10px transparent;

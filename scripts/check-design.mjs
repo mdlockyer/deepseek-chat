@@ -211,7 +211,7 @@ const TEXT_CONTRAST_PAIRS = [
   ['--ui-text-primary', '--ui-surface-overlay'],
   ['--ui-text-primary', '--ui-surface-sunken'],
   ['--ui-text-primary', '--ui-surface-raised-2'],
-  ['--ui-text-primary', '--ui-surface-marker'],
+  ['--ui-text-primary', '--ui-marker-subtle'],
   ['--ui-text-secondary', '--ui-surface-canvas'],
   ['--ui-text-secondary', '--ui-surface-overlay'],
   ['--ui-text-secondary', '--ui-surface-sunken'],
@@ -249,7 +249,7 @@ const UI_CONTRAST_PAIRS = [
   ['--ui-danger-border', '--ui-surface-canvas'],
   ['--ui-handle-fill', '--ui-surface-sunken'],
   ['--ui-surface-switch-off', '--ui-surface-canvas'],
-  ['--ui-minimap-marker', '--ui-surface-canvas'],
+  ['--ui-marker-solid', '--ui-surface-canvas'],
 ]
 
 for (const [themeName, themeMap] of [
