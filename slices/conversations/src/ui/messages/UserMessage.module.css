@@ -44,13 +44,14 @@
     font-size: var(--ui-font-size-lg);
     line-height: var(--ui-leading-md);
     color: var(--ui-text-primary);
-    background-color: var(--ui-surface-raised-1);
+    /* Tinted with the minimap's marker colour, so the coral marks on the map are these bubbles. */
+    background-color: var(--ui-surface-marker);
     white-space: pre-wrap;
     word-break: break-word;
   }
 
-  /* Arriving at this turn from the minimap, a shortcut or the Activity panel: a soft accent
-     ring swells and fades so the eye finds where the jump landed. */
+  /* Arriving at this turn from the minimap, a shortcut or the Activity panel: a soft ring in the
+     bubble's own coral swells and fades so the eye finds where the jump landed. */
   .bubble[data-landing] {
     animation: turn-landing calc(var(--ui-duration-slow) * 3) var(--ui-ease-fade);
   }
@@ -60,8 +61,7 @@
       box-shadow: 0 0 0 0 transparent;
     }
     18% {
-      background-color: var(--ui-accent-subtle);
-      box-shadow: 0 0 0 3px color-mix(in oklch, var(--ui-accent-solid) 32%, transparent);
+      box-shadow: 0 0 0 3px color-mix(in oklch, var(--ui-minimap-marker) 32%, transparent);
     }
     100% {
       box-shadow: 0 0 0 10px transparent;

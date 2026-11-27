@@ -211,6 +211,7 @@ const TEXT_CONTRAST_PAIRS = [
   ['--ui-text-primary', '--ui-surface-overlay'],
   ['--ui-text-primary', '--ui-surface-sunken'],
   ['--ui-text-primary', '--ui-surface-raised-2'],
+  ['--ui-text-primary', '--ui-surface-marker'],
   ['--ui-text-secondary', '--ui-surface-canvas'],
   ['--ui-text-secondary', '--ui-surface-overlay'],
   ['--ui-text-secondary', '--ui-surface-sunken'],
