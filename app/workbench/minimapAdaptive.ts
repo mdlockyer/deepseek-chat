@@ -1,5 +1,5 @@
 import { createScrollGlide, readingLineY } from '@deepseek-chat/lib-ui'
-import { measure, type Measure } from './minimapRail.js'
+import { measure, type Block, type Box, type Measure, type Seg } from './minimapRail.js'
 import styles from './MinimapStudy.module.css'
 
 /**
@@ -135,18 +135,145 @@ const TOKENS = [
   'interactive-hover',
   'interactive-active',
 ] as const
-type Palette = Record<(typeof TOKENS)[number], string>
+type Rgba = readonly [number, number, number, number]
+type Palette = Record<(typeof TOKENS)[number], Rgba>
 
+/** Resolves each token to sRGB so colours can be blended frame by frame. */
 const resolvePalette = (host: HTMLElement): Palette => {
   const probe = document.createElement('span')
   host.appendChild(probe)
-  const palette = {} as Palette
+  const pixel = document.createElement('canvas')
+  pixel.width = 1
+  pixel.height = 1
+  const pctx = pixel.getContext('2d', { willReadFrequently: true })
+  const palette = {} as Record<(typeof TOKENS)[number], Rgba>
   for (const token of TOKENS) {
     probe.style.color = `var(--ui-${token})`
-    palette[token] = getComputedStyle(probe).color
+    const css = getComputedStyle(probe).color
+    if (!pctx) {
+      palette[token] = [128, 128, 128, 1]
+      continue
+    }
+    pctx.clearRect(0, 0, 1, 1)
+    pctx.fillStyle = css
+    pctx.fillRect(0, 0, 1, 1)
+    const [r = 0, g = 0, b = 0, a = 255] = pctx.getImageData(0, 0, 1, 1).data
+    palette[token] = [r, g, b, a / 255]
   }
   probe.remove()
   return palette
+}
+
+const lerp = (a: number, b: number, t: number) => a + (b - a) * t
+/** A token colour at an opacity, as an RGBA tuple that can be blended. */
+const tint = (c: Rgba, alpha: number): Rgba => [c[0], c[1], c[2], c[3] * alpha]
+const blend = (a: Rgba, b: Rgba, t: number): Rgba => [
+  lerp(a[0], b[0], t),
+  lerp(a[1], b[1], t),
+  lerp(a[2], b[2], t),
+  lerp(a[3], b[3], t),
+]
+const css = (c: Rgba, alpha = 1) =>
+  `rgba(${Math.round(c[0])},${Math.round(c[1])},${Math.round(c[2])},${c[3] * alpha})`
+
+type Rect = { x: number; w: number; y0: number; y1: number }
+const mixRect = (a: Rect, b: Rect, t: number): Rect =>
+  t <= 0
+    ? a
+    : t >= 1
+      ? b
+      : {
+          x: lerp(a.x, b.x, t),
+          w: lerp(a.w, b.w, t),
+          y0: lerp(a.y0, b.y0, t),
+          y1: lerp(a.y1, b.y1, t),
+        }
+
+/**
+ * One text line, with where it goes at each level of detail: its own stroke, its tile of the
+ * paragraph bar (from its top to the next line's), and its tile of the answer slab. Drawing a
+ * blend of the three is what lets a paragraph's lines thicken into its bar, and bars stretch into
+ * the slab, as one shape instead of two drawings fading over each other.
+ */
+type LineShape = {
+  readonly seg: Seg
+  /** Several cells on one table row share a tile; only the first grows into it. */
+  readonly leads: boolean
+  readonly tileBottom: number
+  readonly slabTop: number
+  readonly slabBottom: number
+}
+type BlockShape = {
+  readonly block: Block
+  readonly lines: readonly LineShape[]
+  readonly slabTop: number
+  readonly slabBottom: number
+}
+type TurnShape = {
+  readonly blocks: readonly BlockShape[]
+  readonly answerStart: number
+  readonly answerEnd: number
+  readonly bubble: Box | undefined
+  readonly bubbleLines: readonly Seg[]
+}
+
+const shapeTurns = (m: Measure): TurnShape[] => {
+  const linesByBlock = m.blocks.map((): Seg[] => [])
+  const bubbleLines = m.anchors.map((): Seg[] => [])
+  for (const seg of m.segs) {
+    if (seg.block >= 0) {
+      linesByBlock[seg.block]?.push(seg)
+    } else {
+      bubbleLines[seg.turn]?.push(seg)
+    }
+  }
+  const blocksByTurn = m.anchors.map((): number[] => [])
+  m.blocks.forEach((block, i) => blocksByTurn[block.turn]?.push(i))
+
+  return m.anchors.map((anchor, turn) => {
+    const bubble = m.boxes.find((b) => b.kind === 'bubble' && b.turn === turn)
+    const answerStart = bubble ? bubble.y + bubble.h + 12 : anchor
+    const answerEnd = Math.max(answerStart + 1, (m.anchors[turn + 1] ?? m.height) - 6)
+    const order = (blocksByTurn[turn] ?? []).sort(
+      (a, b) => (m.blocks[a]?.y ?? 0) - (m.blocks[b]?.y ?? 0)
+    )
+    let cursor = answerStart
+    const blocks = order.map((index, k): BlockShape => {
+      const block = m.blocks[index] as Block
+      const next = m.blocks[order[k + 1] ?? -1]
+      const slabTop = Math.min(cursor, block.y)
+      const slabBottom = next
+        ? Math.max(block.y + block.h, next.y)
+        : Math.max(answerEnd, block.y + block.h)
+      cursor = slabBottom
+      const segs = (linesByBlock[index] ?? []).slice().sort((a, b) => a.y - b.y || a.x - b.x)
+      const rows: Seg[][] = []
+      for (const seg of segs) {
+        const row = rows.at(-1)
+        if (row && Math.abs((row[0]?.y ?? 0) - seg.y) < 3) {
+          row.push(seg)
+        } else {
+          rows.push([seg])
+        }
+      }
+      const lines = rows.flatMap((row, r) => {
+        const y = row[0]?.y ?? block.y
+        const nextY = rows[r + 1]?.[0]?.y
+        const tileBottom = nextY ?? block.y + block.h
+        return row.map(
+          (seg, c): LineShape => ({
+            seg,
+            leads: c === 0,
+            tileBottom,
+            slabTop: r === 0 ? slabTop : y,
+            slabBottom: nextY ?? slabBottom,
+          })
+        )
+      })
+      return { block, lines, slabTop, slabBottom }
+    })
+    return { blocks, answerStart, answerEnd, bubble, bubbleLines: bubbleLines[turn] ?? [] }
+  })
 }
 
 export const mountAdaptiveMinimap = (
@@ -175,7 +302,10 @@ export const mountAdaptiveMinimap = (
   const glide = createScrollGlide(scroll)
   let m: Measure | null = null
   let palette = resolvePalette(host)
-  let answerStarts: number[] = []
+  let shapes: TurnShape[] = []
+  /** How highlighted each turn is, 0–1; eases toward 1 for the turn being read and the one hovered. */
+  let emphasis = new Float32Array(0)
+  let current = -1
   let geo = { x: 0, w: 0, gutter: 0, height: 0 }
   let layout: MapLayout | null = null
   let hovered = -1
@@ -216,46 +346,87 @@ export const mountAdaptiveMinimap = (
     const dpr = window.devicePixelRatio || 1
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
     ctx.clearRect(0, 0, geo.gutter, geo.height)
-    const { scrollTop, clientHeight, scrollHeight } = scroll
-    const current = turnAt(readingLineY(scrollTop, clientHeight, scrollHeight))
-    const lit = (turn: number) => turn === current || turn === hovered
-    const { x, w } = geo
-    const box = (left: number, y0: number, y1: number, width: number, radius: number) => {
-      const h = Math.max(0.75, y1 - y0)
+    const { scrollTop, clientHeight } = scroll
+    const { x: X, w: W } = geo
+    const p = palette
+    const fill = (r: Rect, colour: Rgba, radius = 0) => {
+      const h = Math.max(0.75, r.y1 - r.y0)
+      const width = Math.max(0.75, r.w)
+      ctx.fillStyle = css(colour)
+      if (radius <= 0.05) {
+        ctx.fillRect(r.x, r.y0, width, h)
+        return
+      }
       ctx.beginPath()
-      ctx.roundRect(left, y0, Math.max(0.75, width), h, Math.min(radius, h / 2, width / 2))
+      ctx.roundRect(r.x, r.y0, width, h, Math.min(radius, h / 2, width / 2))
       ctx.fill()
     }
+    const span = (x: number, w: number, a: number, b: number): Rect => ({
+      x: X + x * W,
+      w: w * W,
+      y0: L.top(a),
+      y1: L.top(b),
+    })
+    const SLAB_X = 0
+    const SLAB_W = 0.86
+    // Rest and highlighted colours for each level; a turn's highlight eases between them.
+    const blockRest = tint(p['text-disabled'], 0.3)
+    const blockLit = tint(p['text-muted'], 0.55)
 
-    // Answers as slabs, where paragraphs would be too dense to tell apart.
-    m.anchors.forEach((anchor, turn) => {
-      const start = answerStarts[turn] ?? anchor
-      const end = (m?.anchors[turn + 1] ?? m?.height ?? 0) - 6
-      ctx.fillStyle = lit(turn) ? palette['text-muted'] : palette['text-disabled']
-      for (let y = start; y < end; y += 64) {
-        const y2 = Math.min(end, y + 64)
-        const alpha = 1 - blockAlpha(L.scaleAt((y + y2) / 2))
-        if (alpha < 0.01) {
+    shapes.forEach((turn, t) => {
+      const e = emphasis[t] ?? 0
+      const blockColour = blend(blockRest, blockLit, e)
+      const mid = (turn.answerStart + turn.answerEnd) / 2
+      const merged =
+        turn.blocks.length === 0
+          ? blockAlpha(L.scaleAt(mid)) <= 0
+          : turn.blocks.every((b) => blockAlpha(L.scaleAt(b.block.y + b.block.h / 2)) <= 0)
+      if (merged) {
+        // The whole answer is one slab.
+        fill(span(SLAB_X, SLAB_W, turn.answerStart, turn.answerEnd), blockColour)
+        return
+      }
+      for (const shape of turn.blocks) {
+        const { block } = shape
+        const scale = L.scaleAt(block.y + block.h / 2)
+        const toBar = 1 - lineAlpha(scale)
+        const toSlab = 1 - blockAlpha(scale)
+        const slabTile = span(SLAB_X, SLAB_W, shape.slabTop, shape.slabBottom)
+        if (toBar >= 1) {
+          // The paragraph is one bar, stretching toward its share of the slab.
+          fill(
+            mixRect(span(block.x, block.w, block.y, block.y + block.h), slabTile, toSlab),
+            blockColour
+          )
           continue
         }
-        ctx.globalAlpha = alpha * (lit(turn) ? 0.5 : 0.32)
-        ctx.fillRect(x, L.top(y), w * 0.86, L.top(y2) - L.top(y))
+        for (const line of shape.lines) {
+          const { seg } = line
+          const heading = seg.kind === 'heading'
+          const lineColour = heading
+            ? blend(tint(p['text-muted'], 0.75), tint(p['text-primary'], 0.75), e)
+            : blend(tint(p['text-disabled'], 0.55), tint(p['text-secondary'], 0.75), e)
+          const stroke = clamp(seg.h * scale * 0.6, 0.8, heading ? 2.4 : 1.6)
+          const centre = (L.top(seg.y) + L.top(seg.y + seg.h)) / 2
+          const own: Rect = {
+            x: X + seg.x * W,
+            w: seg.w * W,
+            y0: centre - stroke / 2,
+            y1: centre + stroke / 2,
+          }
+          if (!line.leads) {
+            // Extra cells on a table row fade out as the row's first cell grows into the tile.
+            fill(own, tint(lineColour, 1 - toBar), stroke / 2)
+            continue
+          }
+          const tile = mixRect(own, span(block.x, block.w, seg.y, line.tileBottom), toBar)
+          const rect = mixRect(tile, span(SLAB_X, SLAB_W, line.slabTop, line.slabBottom), toSlab)
+          fill(rect, blend(lineColour, blockColour, toBar), (stroke / 2) * (1 - toBar))
+        }
       }
     })
 
-    // Paragraphs, tables and code blocks as bars, where lines would be too dense.
-    for (const block of m.blocks) {
-      const scale = L.scaleAt(block.y + block.h / 2)
-      const alpha = (1 - lineAlpha(scale)) * blockAlpha(scale)
-      if (alpha < 0.01) {
-        continue
-      }
-      ctx.globalAlpha = alpha * (lit(block.turn) ? 0.55 : 0.3)
-      ctx.fillStyle = lit(block.turn) ? palette['text-muted'] : palette['text-disabled']
-      box(x + block.x * w, L.top(block.y), L.top(block.y + block.h), block.w * w, 1)
-    }
-
-    // Full detail: code backgrounds, table outlines, quote bars, then every line of text.
+    // Code backgrounds, table outlines and quote bars belong to full detail and fade with it.
     for (const b of m.boxes) {
       if (b.kind === 'bubble') {
         continue
@@ -264,94 +435,58 @@ export const mountAdaptiveMinimap = (
       if (alpha < 0.01) {
         continue
       }
-      ctx.globalAlpha = alpha
-      const y0 = L.top(b.y)
-      const y1 = L.top(b.y + b.h)
+      const r = span(b.x, b.w, b.y, b.y + b.h)
       if (b.kind === 'table') {
-        ctx.strokeStyle = palette['border-default']
+        ctx.strokeStyle = css(p['border-default'], alpha)
         ctx.lineWidth = 0.75
         ctx.beginPath()
-        ctx.roundRect(x + b.x * w, y0, b.w * w, y1 - y0, 1.5)
+        ctx.roundRect(r.x, r.y0, r.w, r.y1 - r.y0, 1.5)
         ctx.stroke()
+      } else if (b.kind === 'code') {
+        fill(r, tint(p['border-subtle'], alpha), 1.5)
       } else {
-        ctx.fillStyle = b.kind === 'code' ? palette['border-subtle'] : palette['border-strong']
-        box(x + b.x * w, y0, y1, b.kind === 'quote' ? 1.5 : b.w * w, 1.5)
+        fill({ ...r, w: 1.5 }, tint(p['border-strong'], alpha), 0.75)
       }
-    }
-    for (const seg of m.segs) {
-      if (seg.kind === 'bubble') {
-        continue
-      }
-      const scale = L.scaleAt(seg.y)
-      const alpha = lineAlpha(scale)
-      if (alpha < 0.01) {
-        continue
-      }
-      const on = lit(seg.turn)
-      ctx.globalAlpha = alpha * (seg.kind === 'heading' ? 0.75 : on ? 0.75 : 0.55)
-      ctx.fillStyle =
-        seg.kind === 'heading'
-          ? on
-            ? palette['text-primary']
-            : palette['text-muted']
-          : on
-            ? palette['text-secondary']
-            : palette['text-disabled']
-      const stroke = clamp(seg.h * scale * 0.6, 0.8, seg.kind === 'heading' ? 2.4 : 1.6)
-      const mid = (L.top(seg.y) + L.top(seg.y + seg.h)) / 2
-      box(x + seg.x * w, mid - stroke / 2, mid + stroke / 2, seg.w * w, stroke / 2)
     }
 
-    // Prompts at every level of detail: they're how you find a turn.
-    for (const b of m.boxes) {
-      if (b.kind !== 'bubble') {
-        continue
+    // Prompts, at every level of detail: one pill whose colour follows its size, dark enough to
+    // find when it's a sliver, light with its text line showing when there's room.
+    shapes.forEach((turn, t) => {
+      const b = turn.bubble
+      if (!b) {
+        return
       }
-      const on = lit(b.turn)
+      const e = emphasis[t] ?? 0
       const y0 = L.top(b.y)
       const h = Math.max(1.5, L.top(b.y + b.h) - y0)
-      const width = Math.max(4, b.w * w)
-      // Where turns are only a few px apart, their markers would stripe the rail; they fade
-      // and the answers read as one continuous slab (the current and hovered turns stay marked).
-      const pitch = L.top(m.anchors[b.turn + 1] ?? m.height) - L.top(m.anchors[b.turn] ?? b.y)
-      ctx.globalAlpha = on ? 1 : smooth(2.5, 7, pitch)
-      ctx.fillStyle = on ? palette['text-primary'] : palette['text-disabled']
-      if (h < 3) {
-        box(x + w - width, y0, y0 + h, width, h / 2)
-      } else {
-        ctx.fillStyle = on ? palette['border-strong'] : palette['border-default']
-        box(x + b.x * w - 1, y0, y0 + h, width + 2, 3)
+      const roomy = smooth(2, 5, h)
+      const pitch = L.top(m?.anchors[t + 1] ?? m?.height ?? 0) - L.top(m?.anchors[t] ?? b.y)
+      // Where turns are only a few px apart, markers fade so they don't stripe the rail.
+      const presence = lerp(smooth(2.5, 7, pitch), 1, e)
+      const rest = blend(p['text-disabled'], p['border-default'], roomy)
+      const lit = blend(p['text-primary'], p['border-strong'], roomy)
+      const width = Math.max(4, b.w * W) + 2
+      fill({ x: X + b.x * W - 1, w: width, y0, y1: y0 + h }, tint(blend(rest, lit, e), presence), 3)
+      if (roomy > 0.01) {
+        const ink = tint(blend(tint(p['text-muted'], 0.8), p['text-primary'], e), roomy * presence)
+        for (const seg of turn.bubbleLines) {
+          const centre = (L.top(seg.y) + L.top(seg.y + seg.h)) / 2
+          fill({ x: X + seg.x * W, w: seg.w * W, y0: centre - 0.7, y1: centre + 0.7 }, ink, 0.7)
+        }
       }
-    }
-    for (const seg of m.segs) {
-      if (seg.kind !== 'bubble') {
-        continue
-      }
-      const scale = L.scaleAt(seg.y)
-      if (seg.h * scale < 1.6) {
-        continue
-      }
-      ctx.globalAlpha = lit(seg.turn) ? 1 : 0.8
-      ctx.fillStyle = lit(seg.turn) ? palette['text-primary'] : palette['text-muted']
-      const mid = (L.top(seg.y) + L.top(seg.y + seg.h)) / 2
-      box(x + seg.x * w, mid - 0.7, mid + 0.7, seg.w * w, 0.7)
-    }
+    })
 
-    // The window: what's on screen.
-    // In a long chat at one scale the window would shrink to a sliver; keep it grabbable.
+    // The window: what's on screen. In a long chat at one scale it would shrink to a sliver, so
+    // it keeps at least 16px to stay grabbable.
     const middle = (L.top(scrollTop) + L.top(scrollTop + clientHeight)) / 2
     const half = Math.max(8, (L.top(scrollTop + clientHeight) - L.top(scrollTop)) / 2)
-    const y0 = middle - half
-    const y1 = middle + half
-    ctx.globalAlpha = 1
-    ctx.fillStyle = dragging ? palette['interactive-active'] : palette['interactive-hover']
-    ctx.strokeStyle = palette['border-default']
+    ctx.fillStyle = css(dragging ? p['interactive-active'] : p['interactive-hover'])
+    ctx.strokeStyle = css(p['border-default'])
     ctx.lineWidth = 1
     ctx.beginPath()
-    ctx.roundRect(x - 4.5, y0 + 0.5, w + 9, Math.max(4, y1 - y0) - 1, 4)
+    ctx.roundRect(X - 4.5, middle - half + 0.5, W + 9, Math.max(4, half * 2) - 1, 4)
     ctx.fill()
     ctx.stroke()
-    ctx.globalAlpha = 1
   }
 
   const draw = () => {
@@ -366,11 +501,14 @@ export const mountAdaptiveMinimap = (
     const dpr = window.devicePixelRatio || 1
     canvas.width = Math.round(gutter * dpr)
     canvas.height = Math.round(geo.height * dpr)
-    const bubbles = m.boxes.filter((b) => b.kind === 'bubble')
-    answerStarts = m.anchors.map((anchor, turn) => {
-      const bubble = bubbles.find((b) => b.turn === turn)
-      return bubble ? bubble.y + bubble.h + 12 : anchor
-    })
+    shapes = shapeTurns(m)
+    const previous = emphasis
+    emphasis = new Float32Array(m.anchors.length)
+    emphasis.set(previous.subarray(0, emphasis.length))
+    if (current < 0) {
+      current = turnAt(readingLineY(scroll.scrollTop, scroll.clientHeight, scroll.scrollHeight))
+      emphasis[current] = 1
+    }
     paint()
   }
 
@@ -399,8 +537,19 @@ export const mountAdaptiveMinimap = (
         lensVelocity = 0
       }
     }
+    // Highlights ease in and out (about 120ms) rather than switching in one frame.
+    current = turnAt(readingLineY(scroll.scrollTop, scroll.clientHeight, scroll.scrollHeight))
+    const ease = reducedMotion.matches ? 1 : 1 - Math.exp(-dt / 0.12)
+    let highlighting = false
+    for (let i = 0; i < emphasis.length; i += 1) {
+      const goal = i === current || i === hovered ? 1 : 0
+      const value = emphasis[i] ?? 0
+      const next = Math.abs(goal - value) < 0.01 ? goal : value + (goal - value) * ease
+      emphasis[i] = next
+      highlighting ||= next !== goal
+    }
     paint()
-    if (lensCentre !== desired || lensVelocity !== 0) {
+    if (lensCentre !== desired || lensVelocity !== 0 || highlighting) {
       frame = requestAnimationFrame(tick)
     } else {
       lastTick = 0

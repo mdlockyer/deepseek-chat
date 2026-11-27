@@ -20,6 +20,8 @@ const TEXT_MAX_WIDTH = 44
 export type Seg = {
   readonly turn: number
   readonly kind: 'text' | 'heading' | 'bubble' | 'code'
+  /** Index into `blocks` of the paragraph, table, code block or quote this line belongs to; -1 in a prompt. */
+  readonly block: number
   readonly x: number
   readonly w: number
   readonly y: number
@@ -139,18 +141,6 @@ export const measure = (scroll: HTMLElement, column: HTMLElement): Measure => {
       }
     }
   }
-  const segs = [...lines.values()].map((line) => {
-    const y = toY(line.top)
-    return {
-      turn: turnOf(y),
-      kind: line.kind,
-      x: toX(line.x0),
-      w: (line.x1 - line.x0) / colRect.width,
-      y,
-      h: line.h,
-    }
-  })
-
   const boxes: Box[] = []
   const addBoxes = (selector: string, kind: Box['kind']) => {
     for (const node of column.querySelectorAll(selector)) {
@@ -207,6 +197,23 @@ export const measure = (scroll: HTMLElement, column: HTMLElement): Measure => {
       w: (block.x1 - block.x0) / colRect.width,
       y,
       h: block.bottom - block.top,
+    }
+  })
+
+  const blockIndex = new Map([...grouped.keys()].map((key, i) => [key, i]))
+  const segs = [...lines.values()].map((line) => {
+    const y = toY(line.top)
+    return {
+      turn: turnOf(y),
+      kind: line.kind,
+      block:
+        line.kind === 'bubble'
+          ? -1
+          : (blockIndex.get(line.block.closest('table,pre,blockquote') ?? line.block) ?? -1),
+      x: toX(line.x0),
+      w: (line.x1 - line.x0) / colRect.width,
+      y,
+      h: line.h,
     }
   })
 
