@@ -161,7 +161,6 @@ const toAssistant = (message: ChatMessage): BackupAssistantMessage => {
     createdAt: time(message.inserted_at),
     model: null,
     thinking: message.thinking_enabled,
-    search: message.search_enabled,
     enabledCapabilities: message.search_enabled ? { 'web-research': true } : {},
     status: replyStatus[message.status],
     ...(refused ? { stopReason: 'refusal' as const } : {}),

@@ -33,7 +33,6 @@ import {
 } from '@deepseek-chat/slice-conversations'
 import {
   createHistoryBackupSlice,
-  type BackupSession,
   type HistoryBackupSlice,
 } from '@deepseek-chat/slice-history-backup'
 import { createPreferencesSlice, type PreferencesSlice } from '@deepseek-chat/slice-preferences'
@@ -425,22 +424,10 @@ export const createAppRuntime = (config: AppRuntimeConfig) => {
     ? createHistoryBackupSlice({
         blobs,
         sessions: {
-          snapshotForExport: () => {
-            const snap = conversations.snapshotForExport()
-            return {
-              summaries: snap.summaries,
-              loadSession: (id) => snap.loadSession(id) as Promise<BackupSession | undefined>,
-            }
-          },
-          replaceHistory: (prepare) =>
-            conversations.replaceSessions(
-              prepare as unknown as Parameters<ConversationsSlice['replaceSessions']>[0]
-            ),
+          snapshotForExport: conversations.snapshotForExport,
+          replaceHistory: conversations.replaceSessions,
           useState: conversations.useHistoryState,
-          describeReplyNotice: (message) =>
-            conversations.describeReplyNotice(
-              message as Parameters<ConversationsSlice['describeReplyNotice']>[0]
-            ),
+          describeReplyNotice: conversations.describeReplyNotice,
         },
         serializeToolBlock: toolRegistry.serializeForArchive,
         notify: notices,

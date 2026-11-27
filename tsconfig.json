@@ -20,6 +20,12 @@
       "path": "./libs/agent/tsconfig.test.json"
     },
     {
+      "path": "./libs/chat-archive-contract"
+    },
+    {
+      "path": "./libs/chat-archive-contract/tsconfig.test.json"
+    },
+    {
       "path": "./libs/markdown"
     },
     {

@@ -1,0 +1,14 @@
+{
+  "name": "@deepseek-chat/lib-chat-archive-contract",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@deepseek-chat/lib-agent": "workspace:*",
+    "@deepseek-chat/lib-tools": "workspace:*",
+    "@deepseek-chat/spine": "workspace:*"
+  }
+}

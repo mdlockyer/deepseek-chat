@@ -11,6 +11,9 @@
       "path": "../../libs/agent"
     },
     {
+      "path": "../../libs/chat-archive-contract"
+    },
+    {
       "path": "../../libs/markdown"
     },
     {

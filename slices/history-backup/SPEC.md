@@ -5,8 +5,9 @@
 Owns DeepSeek `export_format_version: 3` ZIP archive serialization/deserialization, the serialized
 backup queue (import, export, clear), and the Settings dialog's **Data** tab (import/export/delete
 rows and confirmation modals). Has zero imports from `slices/conversations` or any tool slice:
-reads/writes sessions through `HistorySessionsPort`, reads image blobs through Spine `BlobStore`,
-and delegates client tool-block serialization through `serializeToolBlock`.
+reads/writes sessions through `ChatArchiveSessionsPort` (via Tier-`1c`
+`@deepseek-chat/lib-chat-archive-contract`), reads image blobs through Spine `BlobStore`, and
+delegates client tool-block serialization through `serializeToolBlock`.
 
 ## Public entrypoint
 

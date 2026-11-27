@@ -41,7 +41,21 @@ const FACTS_DIR = path.join(spineDir, 'facts')
 const SPINE_DESIGN_DIR = path.join(spineDir, 'design')
 const SOURCE_EXT = /\.(?:[cm]?[jt]sx?|css)$/
 const CODE_EXT = /\.(?:[cm]?[jt]sx?)$/
-const LIBS_REQUIRING_SPEC = new Set(['ui', 'stage', 'tools'])
+const LIBS_REQUIRING_SPEC = new Set(['ui', 'stage', 'tools', 'chat-archive-contract'])
+
+/**
+ * CSA Tier-1c opt-in contract libraries: pure shared schemas/ports scoped strictly to a declared
+ * set of consumer slices (preventing contract libraries from becoming global dumping grounds).
+ */
+const CONTRACT_LIBS = new Map([
+  [
+    'chat-archive-contract',
+    {
+      allowedLibDeps: new Set([`${LIB_PKG_PREFIX}agent`, `${LIB_PKG_PREFIX}tools`]),
+      allowedConsumers: new Set(['conversations', 'history-backup']),
+    },
+  ],
+])
 
 const S4_BANNED_IN_CONVERSATIONS = [
   'pyodide',
@@ -302,24 +316,40 @@ const checkManifest = (kind, name, dir, expectedPkg) => {
     ...pkg.optionalDependencies,
   })
   const devDeps = Object.keys({ ...pkg.devDependencies })
-  for (const dep of prodDeps) {
+  const contractMeta = kind === 'library' ? CONTRACT_LIBS.get(name) : undefined
+  const checkDep = (dep, isDev) => {
+    if (!dep.startsWith(SCOPE)) {
+      return
+    }
+    if (kind === 'slice' && dep.startsWith(LIB_PKG_PREFIX)) {
+      const libName = dep.slice(LIB_PKG_PREFIX.length)
+      const targetContract = CONTRACT_LIBS.get(libName)
+      if (targetContract && !targetContract.allowedConsumers.has(name)) {
+        fail(
+          'CONTRACT-SCOPE',
+          `slice "${name}" ${isDev ? 'devDepends' : 'depends'} on Tier-1c contract "${dep}" (allowed consumers: ${[...targetContract.allowedConsumers].join(', ')})`
+        )
+        return
+      }
+    }
     const allowed =
       dep === SPINE_PKG ||
+      (isDev && dep === TEST_SUPPORT_PKG) ||
       (kind === 'slice' && dep.startsWith(LIB_PKG_PREFIX)) ||
-      (kind === 'library' && name !== 'ui' && dep === LIB_UI_PKG)
-    if (dep.startsWith(SCOPE) && !allowed) {
-      fail('DAG', `${kind} "${name}" depends on workspace package "${dep}"`)
+      (kind === 'library' &&
+        (contractMeta ? contractMeta.allowedLibDeps.has(dep) : name !== 'ui' && dep === LIB_UI_PKG))
+    if (!allowed) {
+      fail(
+        'DAG',
+        `${kind} "${name}" ${isDev ? 'devDepends' : 'depends'} on workspace package "${dep}"`
+      )
     }
   }
+  for (const dep of prodDeps) {
+    checkDep(dep, false)
+  }
   for (const dep of devDeps) {
-    const allowed =
-      dep === SPINE_PKG ||
-      dep === TEST_SUPPORT_PKG ||
-      (kind === 'slice' && dep.startsWith(LIB_PKG_PREFIX)) ||
-      (kind === 'library' && name !== 'ui' && dep === LIB_UI_PKG)
-    if (dep.startsWith(SCOPE) && !allowed) {
-      fail('DAG', `${kind} "${name}" devDepends on workspace package "${dep}"`)
-    }
+    checkDep(dep, true)
   }
   return prodDeps.filter((dep) => dep.startsWith(SCOPE))
 }

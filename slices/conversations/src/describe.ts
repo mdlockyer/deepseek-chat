@@ -1,7 +1,7 @@
 import { ApiError as LibApiError, classifyApiError } from '@deepseek-chat/lib-agent'
+import type { ArchiveAssistantMessage } from '@deepseek-chat/lib-chat-archive-contract'
 import type { Locale } from '@deepseek-chat/spine/i18n'
 import { isTranslationKey, translate } from './messages.js'
-import type { AssistantMessage } from './types.js'
 
 export type Notice = {
   text: string
@@ -11,13 +11,13 @@ export type Notice = {
   action?: 'apiKey' | 'topUp'
 }
 
-const getTemplateText = (reply: AssistantMessage) =>
+const getTemplateText = (reply: ArchiveAssistantMessage) =>
   reply.blocks
     .map((block) => (block.type === 'text' && block.isTemplate ? block.text : ''))
     .join('')
 
 /** 回复出错或未正常结束时展示的提示 */
-export const describeReply = (reply: AssistantMessage, locale?: Locale): Notice | null => {
+export const describeReply = (reply: ArchiveAssistantMessage, locale?: Locale): Notice | null => {
   if (reply.status === 'error' && reply.error) {
     const { kind, status, localMessage } = reply.error
     // 导入的历史可能来自不同版本；不识别的文案沿用保存时的原文。

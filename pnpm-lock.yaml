@@ -148,6 +148,18 @@ importers:
         specifier: workspace:*
         version: link:../../spine
 
+  libs/chat-archive-contract:
+    dependencies:
+      '@deepseek-chat/lib-agent':
+        specifier: workspace:*
+        version: link:../agent
+      '@deepseek-chat/lib-tools':
+        specifier: workspace:*
+        version: link:../tools
+      '@deepseek-chat/spine':
+        specifier: workspace:*
+        version: link:../../spine
+
   libs/markdown:
     dependencies:
       '@deepseek-chat/lib-ui':
@@ -341,6 +353,9 @@ importers:
       '@deepseek-chat/lib-agent':
         specifier: workspace:*
         version: link:../../libs/agent
+      '@deepseek-chat/lib-chat-archive-contract':
+        specifier: workspace:*
+        version: link:../../libs/chat-archive-contract
       '@deepseek-chat/lib-markdown':
         specifier: workspace:*
         version: link:../../libs/markdown
@@ -378,6 +393,9 @@ importers:
       '@deepseek-chat/lib-agent':
         specifier: workspace:*
         version: link:../../libs/agent
+      '@deepseek-chat/lib-chat-archive-contract':
+        specifier: workspace:*
+        version: link:../../libs/chat-archive-contract
       '@deepseek-chat/lib-tools':
         specifier: workspace:*
         version: link:../../libs/tools
