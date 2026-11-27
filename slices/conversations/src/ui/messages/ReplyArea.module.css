@@ -59,7 +59,21 @@
     }
   }
 
-  .settledButton {
+  /* A finished reply's summary is DeepSeek's mark in the transcript: the whale, the label and
+     the chevron all take the accent blue (the reader's own prompts are coral). A reply that was
+     stopped keeps the grey row. */
+  .settledButton:not([data-stopped]) {
+    --whale-color: var(--ui-accent-text);
+    color: var(--ui-accent-text);
+
+    .chevron,
+    &:hover,
+    &:hover .chevron {
+      color: var(--ui-accent-text);
+    }
+  }
+
+  .settledButton[data-stopped] {
     color: var(--ui-text-secondary);
   }
 

@@ -255,6 +255,7 @@ export const ReplyArea = memo(function ReplyArea({
               expanded && styles.stripButtonActive
             )}
             aria-expanded={expanded}
+            data-stopped={strip.stopped ? '' : undefined}
             onClick={toggleExpanded}
           >
             <span className={clsx(styles.iconSlot, strip.stopped && styles.stoppedIcon)}>
