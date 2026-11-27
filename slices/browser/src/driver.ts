@@ -272,6 +272,12 @@ export const buildCursorMoveScript = (params: {
   enter?: boolean
   /** How wide the page's viewport is on screen, in window pixels, so the cursor keeps its size. */
   screenWidth?: number | null
+  /** With `enter`: the speed it arrives at, in page px/s, so the glide carries on from the toolbar. */
+  launch?: { vx: number; vy: number } | null
+  /** Also report when and how fast the glide crosses this line (page px; the top edge is 0). */
+  crossY?: number | null
+  /** Only report where the target is (scrolling a ref into view as usual); do not move. */
+  peek?: boolean
 }): string => {
   const args = JSON.stringify(params)
   return `
@@ -310,19 +316,25 @@ try {
   if (!at) {
     return JSON.stringify({ ok: true, moved: false, vw, vh });
   }
+  if (p.peek) {
+    return JSON.stringify({ ok: true, moved: false, x: at.x, y: at.y, vw, vh });
+  }
   const c = __dsCursor();
   if (typeof p.screenWidth === 'number' && p.screenWidth > 0 && vw > 0) {
     c.setUnit(vw / p.screenWidth);
   }
   if (!c.position() || (p.enter && p.from)) {
-    if (p.from) {
+    if (p.from && p.enter && p.launch) {
+      c.launch(p.from.x, p.from.y, p.launch.vx, p.launch.vy);
+    } else if (p.from) {
       c.place(p.from.x, p.from.y);
     } else {
       c.place(Math.min(Math.max(0, vw - 4), at.x + 28), Math.min(Math.max(0, vh - 4), at.y + 36));
     }
   }
   const ms = c.moveTo(at.x, at.y);
-  return JSON.stringify({ ok: true, moved: true, x: at.x, y: at.y, ms, vw, vh });
+  const cross = typeof p.crossY === 'number' ? c.crossing(p.crossY) : null;
+  return JSON.stringify({ ok: true, moved: true, x: at.x, y: at.y, ms, vw, vh, cross });
 } catch (err) {
   return JSON.stringify({ ok: false, error: err instanceof Error ? err.message : String(err) });
 }

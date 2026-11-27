@@ -17,6 +17,19 @@ export type KiteCursor = {
   readonly moveTo: (x: number, y: number) => number
   /** Puts the cursor at (x, y) at once. */
   readonly place: (x: number, y: number) => void
+  /** Puts the cursor at (x, y) already moving at (vx, vy) px/s, for the next glide to carry on. */
+  readonly launch: (x: number, y: number, vx: number, vy: number) => void
+  /**
+   * When the current glide's tip first crosses the line `y` (in either direction), and how fast it
+   * is moving then; `null` if it does not cross within 0.9 s. Lets a second cursor in another layer
+   * take over at the same place, time and speed.
+   */
+  readonly crossing: (y: number) => {
+    readonly ms: number
+    readonly x: number
+    readonly vx: number
+    readonly vy: number
+  } | null
   /** Presses at (x, y), first jumping there if the cursor is elsewhere. */
   readonly press: (x: number, y: number) => void
   readonly show: () => void
@@ -256,6 +269,46 @@ export function createKiteCursor(doc: Document, win: Window & typeof globalThis)
     paint()
   }
 
+  const launch = (px: number, py: number, ux: number, uy: number) => {
+    place(px, py)
+    vx = Number.isFinite(ux) ? ux : 0
+    vy = Number.isFinite(uy) ? uy : 0
+    // It takes over from a cursor in another layer mid-move: appear at once, not fade in.
+    const fade = wrap.style.transition
+    wrap.style.transition = 'none'
+    shown = true
+    wrap.style.opacity = captured ? '0' : '1'
+    void wrap.offsetWidth
+    wrap.style.transition = fade
+  }
+
+  const crossing = (line: number) => {
+    if (s >= 1 || !Number.isFinite(x) || !Number.isFinite(y)) {
+      return null
+    }
+    let ps = s
+    let pv = sv
+    let ms = 0
+    let before = along(ps)
+    const h = 1 / 240
+    while (ms < 900) {
+      pv += (-SPRING * (ps - 1) - damping * pv) * h
+      ps += pv * h
+      ms += 1000 * h
+      const after = along(ps)
+      if ((before.py - line) * (after.py - line) <= 0) {
+        return {
+          ms: Math.round(ms),
+          x: after.px,
+          vx: (after.px - before.px) / h,
+          vy: (after.py - before.py) / h,
+        }
+      }
+      before = after
+    }
+    return null
+  }
+
   const moveTo = (px: number, py: number) => {
     if (!Number.isFinite(x) || !Number.isFinite(y)) {
       place(px, py)
@@ -329,6 +382,8 @@ export function createKiteCursor(doc: Document, win: Window & typeof globalThis)
   return {
     moveTo,
     place,
+    launch,
+    crossing,
     press,
     show,
     hide,

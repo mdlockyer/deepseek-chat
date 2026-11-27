@@ -12,10 +12,15 @@ const PAGE_GLIDE_MAX_MS = 700
 const CHROME_GLIDE_MAX_MS = 600
 /** The longest the cursor takes to type a URL into the address bar. */
 const ADDRESS_TYPING_MAX_MS = 450
-/** How far above a page's top edge the cursor goes to leave it, in page pixels. */
-const PAGE_EXIT_PX = 30
 
 type PagePoint = { readonly x: number; readonly y: number; readonly vw: number }
+
+type Crossing = {
+  readonly ms: number
+  readonly x: number
+  readonly vx: number
+  readonly vy: number
+}
 
 type MoveResult = {
   readonly ok: boolean
@@ -24,6 +29,7 @@ type MoveResult = {
   readonly y?: number
   readonly ms?: number
   readonly vw?: number
+  readonly cross?: Crossing | null
 }
 
 /** A browser toolbar control the cursor can press, by its `data-agent-target` name. */
@@ -109,22 +115,39 @@ export const createAgentCursor = (deps: AgentCursorDeps) => {
   }
 
   /**
-   * Brings a toolbar cursor down to the page's top edge and returns where its page counterpart
-   * enters: just above that edge, under it. `null` when the toolbar cursor is not showing.
+   * Sends the toolbar cursor down towards the action's target in the page and, at the moment its
+   * tip crosses the page's top edge, returns where and how fast its page counterpart takes over:
+   * the same spot, the same speed and heading, so the two read as one kite passing through the
+   * edge. `null` when the toolbar cursor is not showing.
    */
-  const enterFromChrome = async (tabId: string, signal: AbortSignal) => {
+  const enterFromChrome = async (
+    tabId: string,
+    target: Parameters<typeof buildCursorMoveScript>[0],
+    signal: AbortSignal
+  ) => {
     const c = chrome
     const at = c && c.isShown() ? c.position() : null
     const rect = viewportRect()
     if (!at || !rect || !c) {
       return null
     }
-    const x = Math.min(rect.right - 4, Math.max(rect.left + 4, at.x))
-    await wait(c.moveTo(x, rect.top + 2), CHROME_GLIDE_MAX_MS, signal)
-    c.hide()
-    const vw = pageAt.get(tabId)?.vw ?? 0
+    // Where the target is on screen, so the toolbar cursor heads straight for it.
+    const peek = await movePage(tabId, { ...target, peek: true })
+    const vw = peek?.vw ?? pageAt.get(tabId)?.vw ?? 0
     const zoom = vw > 0 ? rect.width / vw : 1
-    return { x: (x - rect.left) / zoom, y: -PAGE_EXIT_PX }
+    const goal =
+      peek && typeof peek.x === 'number' && typeof peek.y === 'number'
+        ? toWindow({ x: peek.x, y: peek.y, vw }, rect)
+        : { x: Math.min(rect.right - 4, Math.max(rect.left + 4, at.x)), y: rect.top + 60 }
+    const ms = c.moveTo(goal.x, Math.max(goal.y, rect.top + 8))
+    const cross = c.crossing(rect.top)
+    await wait(cross?.ms ?? ms, CHROME_GLIDE_MAX_MS, signal)
+    // Past the edge the toolbar cursor is behind the page; it stops being drawn shortly after.
+    c.hide()
+    return {
+      from: { x: ((cross?.x ?? goal.x) - rect.left) / zoom, y: 0 },
+      launch: cross ? { vx: cross.vx / zoom, vy: cross.vy / zoom } : null,
+    }
   }
 
   /**
@@ -138,9 +161,14 @@ export const createAgentCursor = (deps: AgentCursorDeps) => {
     signal: AbortSignal
   ) => {
     const onScreen = deps.isTabOnScreen(tabId)
-    const entry = onScreen ? await enterFromChrome(tabId, signal) : null
-    const from = entry ?? pageAt.get(tabId) ?? null
-    const landed = await movePage(tabId, { ...target, from, enter: entry !== null })
+    const entry = onScreen ? await enterFromChrome(tabId, target, signal) : null
+    const from = entry?.from ?? pageAt.get(tabId) ?? null
+    const landed = await movePage(tabId, {
+      ...target,
+      from,
+      enter: entry !== null,
+      launch: entry?.launch ?? null,
+    })
     if (landed?.moved && onScreen) {
       await wait(landed.ms, PAGE_GLIDE_MAX_MS, signal)
     }
@@ -179,11 +207,22 @@ export const createAgentCursor = (deps: AgentCursorDeps) => {
     if (!c.isShown()) {
       const inPage = pageAt.get(tabId)
       if (inPage && rect) {
-        // Leave through the top edge, then come up into the toolbar from the same place.
-        const left = await movePage(tabId, { point: { x: inPage.x, y: -PAGE_EXIT_PX } })
-        await wait(left?.ms, CHROME_GLIDE_MAX_MS, signal)
-        pageAt.set(tabId, { ...inPage, y: 0 })
-        c.place(toWindow(inPage, rect).x, rect.top + 2)
+        // Head up out of the page; the moment the tip crosses the top edge, the toolbar cursor
+        // takes over at the same spot and speed, so it reads as one kite passing through the edge.
+        // The page cursor heads for the control itself (above the page, so off its top edge).
+        const zoom = inPage.vw > 0 ? rect.width / inPage.vw : 1
+        const left = await movePage(tabId, {
+          point: { x: (goal.x - rect.left) / zoom, y: (goal.y - rect.top) / zoom },
+          crossY: 0,
+        })
+        await wait(left?.cross?.ms ?? left?.ms, CHROME_GLIDE_MAX_MS, signal)
+        const edgeX = left?.cross ? rect.left + left.cross.x * zoom : toWindow(inPage, rect).x
+        pageAt.set(tabId, { ...inPage, x: (edgeX - rect.left) / zoom, y: 0 })
+        if (left?.cross) {
+          c.launch(edgeX, rect.top, left.cross.vx * zoom, left.cross.vy * zoom)
+        } else {
+          c.place(edgeX, rect.top)
+        }
       } else {
         c.place(goal.x + 24, goal.y + 30)
       }

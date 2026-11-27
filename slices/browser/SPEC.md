@@ -96,7 +96,9 @@ panel, from `spine/design`), `KeyValueStore`.
 12. **Agent cursor.** One small solid kite in the app's accent blue (white edge, tip on its point;
     `kiteCursor.ts`) shows what the model is doing, drawn inside the page (embedded in the driver
     scripts) and over the browser's toolbar in the app's window (`agentCursor.ts`), and moving
-    between the two through the page's top edge. Before `browser_click`, `browser_type` and
+    between the two through the page's top edge: it heads for its destination in the other layer,
+    and the moment its tip crosses the edge the other layer's kite takes over at the same spot,
+    speed and heading, so it reads as one kite passing through. Before `browser_click`, `browser_type` and
     `browser_select` act it glides on a critically damped spring to the point the action will use
     (a ref's centre after it is scrolled into view, explicit `(x, y)`, or the focused element) and
     presses (scales to 0.84) as the action fires; `browser_press_key` takes it to the focused element
@@ -136,8 +138,7 @@ panel, from `spine/design`), `KeyValueStore`.
 - Agent cursor: 22 px kite (50° tip, widest 60% of the way back), idle drift about 1.5 px and
   2.5° on 1.9–5.1 s cycles, arc bulge 7% (at most 32 px), lean 0.011°/(px/s) up to 10°, overshoot
   2% (at most 2.5 px), spring stiffness 170 /s², longest wait for it to land 700 ms in the
-  page and 600 ms in the toolbar, address typing at most 450 ms, leaves the page 30 px above its
-  top edge, press scale 0.84 for 120 ms, glow alpha 0.08 at rest rising to 0.42 at speed (900 px/s)
+  page and 600 ms in the toolbar, address typing at most 450 ms, press scale 0.84 for 120 ms, glow alpha 0.08 at rest rising to 0.42 at speed (900 px/s)
   plus up to 0.4 on a press (fading over 450 ms, capped at 0.6).
 - Delta reporting threshold: same-URL diff emits changed lines when at most half the page changed
   and the delta fits within a compact cap; larger rewrites emit full page text.
