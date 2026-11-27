@@ -1,6 +1,6 @@
 {
   "name": "deepseek-chat",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "DeepSeek chat desktop app with a Python tool, based on deepseek-ai/chat-demo.",
   "license": "MIT",
   "private": true,
