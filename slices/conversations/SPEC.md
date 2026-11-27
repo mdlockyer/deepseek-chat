@@ -2,207 +2,141 @@
 
 ## Purpose
 
-Core chat domain: sessions and their message trees (branches from edits and regenerations), sending
-a question and streaming the reply, the domain-blind client-tool loop, attachments and drafts, the
-DeepThink composer toggle, factory-scoped local session persistence, the chat views, and the
-built-in right-hand Activity & Sources inspector.
+Core chat domain: sessions and branching message trees, streaming replies, the domain-blind
+client-tool loop, attachments and drafts, the DeepThink composer toggle, factory-scoped session
+persistence, chat views, and the built-in Activity & Sources inspector.
 
-Depth-2 layout: pure domain kernel (`kernel/`: types, pure session lifecycle & LRU eviction state
-machine, branch tree, reply wire assembly, compaction policy, attachments/drafts rules, environment
-context, auto-title, reading contracts, messages) plus five isolated cells (`cells/storage/`,
-`cells/compaction/`, `cells/turn-loop/`, `cells/views/`, `cells/activity-inspector/`) wired by thin
-`src/runtime.ts` and `src/index.ts`.
-
-Sibling capabilities (web research, Python, built-in browser, workspace files, clarifying questions,
-subagents, history backup, voice) are sealed slices outside `conversations`. They plug in through
-the open `ToolRegistry` contract (`@deepseek-chat/lib-tools`), Spine facts on the `EventLog`,
-Tier-`1c` `@deepseek-chat/lib-chat-archive-contract`, and optional view ports.
+Depth-2 layout: pure `kernel/` (types, session lifecycle & LRU eviction reducer, branch tree, reply
+wire assembly, compaction policy, attachments/drafts rules, environment context, auto-title,
+reading contracts, messages) ← five isolated cells (`cells/storage/`, `cells/compaction/`,
+`cells/turn-loop/`, `cells/views/`, `cells/activity-inspector/`) ← thin `src/runtime.ts` and
+`src/index.ts`. Sibling capabilities plug in through `@deepseek-chat/lib-tools`, Spine `EventLog`
+facts, Tier-`1c` `@deepseek-chat/lib-chat-archive-contract`, and optional view ports.
 
 ## Public entrypoint
 
-`createConversationsSlice(deps)` creates an isolated slice instance (multiple independent instances
-may coexist in the same process) and returns:
+`createConversationsSlice(deps)` creates an isolated multi-instance slice and returns:
 
-| Member                                                                 | Meaning                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| :--------------------------------------------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `stopReply(sessionId)`                                                 | Stops that chat's reply or manual compaction in progress.                                                                                                                                                                                                                                                                                                                                                                                                             |
-| `commands`                                                             | Headless operations: `init`, `newChat`, `selectSession`, `renameSession`, `removeSession`, `setDraft`, `attach`, `send`, `regenerate`, `continueReply`, `edit`, `selectVersion`, `compact`, `whenIdle`.                                                                                                                                                                                                                                                               |
-| `getState()`, `subscribe(listener)`                                    | Session summaries (newest first), `activeId`, `ready`, `replying` session IDs, and change subscription.                                                                                                                                                                                                                                                                                                                                                               |
-| `getThinking()`, `setThinking(enabled)`                                | Instance-scoped DeepThink toggle (`chat-demo:thinking`).                                                                                                                                                                                                                                                                                                                                                                                                              |
-| `getChatMessages(id)`, `getChatCheckpoints(id)`, `useChatMessages(id)` | A loaded chat's visible branch and stored compaction checkpoints (empty while not loaded).                                                                                                                                                                                                                                                                                                                                                                            |
-| `getTurnSnapshot(sid, mid)`                                            | Referentially stable read-only live turn snapshot for a loaded assistant reply.                                                                                                                                                                                                                                                                                                                                                                                       |
-| `activity`, `ActivityPanel({ topActions? })`                           | Built-in Activity & Sources inspector cell (non-null when `activityPanel` is provided): `togglePanel`, `inspectTurn`, `selectTurn`, `useActiveTarget`, `getSelection`, `getTarget`, `close`, plus the single-header right-hand drawer.                                                                                                                                                                                                                                |
-| `snapshotForExport()`, `replaceSessions(fn)`                           | Atomic storage ports consumed by `slices/history-backup`.                                                                                                                                                                                                                                                                                                                                                                                                             |
-| `useHistoryState()`, `describeReplyNotice(msg)`                        | History replacement/empty state and plain reply error/template text.                                                                                                                                                                                                                                                                                                                                                                                                  |
-| `useChatLifecycle()`, `useActiveSessionId()`                           | Lifecycle hooks for upload notices, persistence flush, mobile drawer, and init.                                                                                                                                                                                                                                                                                                                                                                                       |
-| `Sider`, `MobileSider`, `SiderToolbar`                                 | Bound session-list views. `SiderToolbar({ siderMode: 'collapsed' \| 'expanded', exiting?, onSetCollapsed? })` is the desktop sidebar toggle: one open/close button (label and `aria-expanded` follow the mode) plus a "+" that is shown only while collapsed. It is one element that travels with the sidebar: at the sidebar's right edge while expanded, beside the traffic lights in a pill while collapsed. The in-panel toggle exists only in the mobile drawer. |
-| `ChatMain({ siderMode })`, `ChatSaveBanner`                            | Bound chat/welcome main area (`siderMode`: `'absent' \| 'collapsed' \| 'expanded'`), top-right Settings trigger, and save-failure banner.                                                                                                                                                                                                                                                                                                                             |
-| `dispose()`                                                            | Aborts active streams, cancels timers, unsubscribes from `EventLog`, closes DB.                                                                                                                                                                                                                                                                                                                                                                                       |
+| Member                                                                 | Meaning                                                                                                                                                                                                                                     |
+| :--------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `stopReply(sessionId)`                                                 | Stops that chat's in-flight reply or manual compaction.                                                                                                                                                                                     |
+| `commands`                                                             | Headless commands: `init`, `newChat`, `selectSession`, `renameSession`, `removeSession`, `setDraft`, `attach`, `send`, `regenerate`, `continueReply`, `edit`, `selectVersion`, `compact`, `whenIdle`.                                       |
+| `getState()`, `subscribe(listener)`                                    | Session summaries (newest first), `activeId`, `ready`, `replying` session IDs, and change subscription.                                                                                                                                     |
+| `getThinking()`, `setThinking(enabled)`                                | Instance-scoped DeepThink toggle (`chat-demo:thinking`).                                                                                                                                                                                    |
+| `getChatMessages(id)`, `getChatCheckpoints(id)`, `useChatMessages(id)` | Loaded chat's visible branch and stored compaction checkpoints (empty while unloaded).                                                                                                                                                      |
+| `getTurnSnapshot(sid, mid)`                                            | Referentially stable read-only live turn snapshot for a loaded assistant reply.                                                                                                                                                             |
+| `activity`, `ActivityPanel({ topActions? })`                           | Built-in Activity & Sources inspector cell (non-null when `activityPanel` is provided): `togglePanel`, `inspectTurn`, `selectTurn`, `useActiveTarget`, `getSelection`, `getTarget`, `close`, reading position hooks, and right-hand drawer. |
+| `snapshotForExport()`, `replaceSessions(fn)`                           | Atomic storage ports consumed by `slices/history-backup` via Tier-`1c` contract.                                                                                                                                                            |
+| `useHistoryState()`, `describeReplyNotice(msg)`                        | History replacement/empty state and localized reply error/template text.                                                                                                                                                                    |
+| `useChatLifecycle()`, `useActiveSessionId()`                           | Lifecycle hooks for upload notices, persistence flush, mobile drawer, and init.                                                                                                                                                             |
+| `Sider`, `MobileSider`, `SiderToolbar`                                 | Session-list views. `SiderToolbar` is one element traveling with the desktop sidebar (`collapsed` \| `expanded`, showing `+` only while collapsed); the mobile drawer keeps its own toggle.                                                 |
+| `ChatMain({ siderMode })`, `ChatSaveBanner`                            | Main chat/welcome view (`siderMode`: `'absent' \| 'collapsed' \| 'expanded'`), top-right Settings trigger, and save-failure banner.                                                                                                         |
+| `dispose()`                                                            | Aborts active streams, cancels timers, unsubscribes from `EventLog`, closes owned DB handle.                                                                                                                                                |
 
-The package also exports pure model functions (`branches`, `reply`, `environmentContext`, `view`,
-`workStrip`, `citations`, `autoTitle`, `requestWith`, `ServerSentEventDecoder`) and the IndexedDB
-session store factory (`createIndexedDbSessionStore`).
+Documented pure-model exports: branch tree (`appendBranch`, `getVisibleMessages`, `normalizeSession`,
+`selectVersion`), reply/wire helpers (`CONTINUE_PROMPT`, `applyEvent`, `canContinueReply`,
+`findActiveCheckpoint`, `pickImageResults`, `settleReply`, `toRequestMessages`,
+`formatLegacyLatestReminder`), compaction policy & validation (`CHECKPOINT_ACK`,
+`computeCompactionPolicy`, `selectCompactionTrigger`, `buildCompactionLedgerText`,
+`buildVerbatimSection`, `estimateSessionContext`, `estimateTextTokens`,
+`validateCompactionSummary`), view/activity projections (`buildReplyView`, `buildTurnWorkStrip`,
+`buildInlineTrace`, `selectInlineTracePreview`, `buildActivityTimeline`, `extractTurnSources`,
+`getAreaTitle`, `getFrontStageNotes`, `holdsNarration`, `needsWorkingIndicator`), and
+`createIndexedDbSessionStore`.
 
 ## Ports (`ConversationsDeps`)
 
-| Port                        | Meaning                                                                                                                                |
-| :-------------------------- | :------------------------------------------------------------------------------------------------------------------------------------- |
-| `log`                       | Spine `EventLog` for session facts published and browser facts consumed.                                                               |
-| `provider: ModelProvider`   | Provider-neutral streaming Messages transport + model metadata + optional remote attachment upload port (`attachments`).               |
-| `store`                     | Key-value store for `chat-demo:thinking`.                                                                                              |
-| `blobs: BlobStore`          | Domain-blind blob store for user uploads and delivered files.                                                                          |
-| `sessions?: SessionStore`   | Optional session store (defaults to IndexedDB `deepseek-sessions`).                                                                    |
-| `tools?: ToolRegistry`      | Aggregated `ToolCapability` registry (defaults to empty for bare chat).                                                                |
-| `activityPanel?: PanelSlot` | Optional right-hand `PanelSlot` hosting the built-in Activity & Sources inspector cell.                                                |
-| `platform`                  | `'desktop' \| 'web'` for `<environment_context>`.                                                                                      |
-| `getLocationLabel(loc)`     | User location label for `<environment_context>` (`''` when unset).                                                                     |
-| `onStreamTrace`             | Optional diagnostics hook reporting request timings without content.                                                                   |
-| `autoTitle`                 | Enables detached cache-riding auto-title refresh on every completed turn (default `true`).                                             |
-| `notify`                    | Optional `NoticePort` for upload/copy/delete toasts.                                                                                   |
-| `ui`                        | Optional view slots (`voice`, `headerActions`, `composerDock`, `openFile`, `useNeedsApiKey`, `openInApp`, `saveFile`, `openSettings`). |
+`log` (`EventLog`), `provider` (`ModelProvider`), `store` (`KeyValueStore` for
+`chat-demo:thinking`), `blobs` (`BlobStore`), optional `sessions` (`SessionStore`, defaults to
+IndexedDB `deepseek-sessions`), optional `tools` (`ToolRegistry`), optional `activityPanel`
+(`PanelSlot`), `platform` (`'desktop' | 'web'`), `getLocationLabel`, optional `onStreamTrace`,
+`autoTitle` (default `true`), optional `notify` (`NoticePort`), and optional `ui` view slots.
 
 ## Spine facts
 
-- **Publishes (sticky):** `ActiveSessionChanged` (key `'unit'`), `SessionFilesChanged` (key `sessionId`, tombstoned on delete/history replace).
+- **Publishes (sticky):** `ActiveSessionChanged` (key `'unit'`), `SessionFilesChanged` (key `sessionId`, tombstoned on delete/replace).
 - **Publishes (discrete):** `ReplyLifecycleChanged`, `ToolFileDelivered`, `SessionDeleted`, `SessionHistoryReplaced`.
-- **Subscribes:** `BrowserControlTakenOver` (aborts the active reply for that session).
+- **Subscribes:** `BrowserControlTakenOver` (aborts active reply for that session).
 
 ## Behavioural invariants
 
-1. **Multi-instance isolation.** Every store, draft map, upload queue, auto-title controller, and
-   session store handle is scoped to the `createConversationsSlice` instance. Actions in instance A
-   never mutate state or receive facts from instance B. Calling `dispose()` stops all streams and
-   releases all `EventLog` listeners.
-2. **Facts.** After deleting a session from storage, the slice tombstones its `SessionFilesChanged`
-   entry, publishes `SessionDeleted` once, and removes it without affecting other chats. After
-   replacing all history, it tombstones all `SessionFilesChanged` entries and publishes
-   `SessionHistoryReplaced` once. Failed deletes or replacements publish nothing and leave state
-   intact.
-3. **Domain-blind tool loop.** Every tool call executes through `tools.run` exactly once, starting
-   in call order, scheduled strictly by `tools.effectOf(name)`:
-   - Consecutive `read` calls execute concurrently up to `maxParallelReadCalls`.
-   - `spawn` calls return immediately without waiting.
-   - All other effects (`session`, `artifact`, `interactive`) execute serially after prior calls finish.
-     While running, a `tool_result` block holds `status: 'running'` and optional `progress` seeded by
-     `tools.initialProgressOf(name)` and updated via `ctx.onProgress`. Results are written in call
-     order; concurrent `read` batches reconcile citations in call order via
-     `result.formatContentWithCitations`. Abort stops queued calls and makes no further requests.
-4. **Turn lifecycle hooks.** When a model round finishes with zero tool calls, registered
-   `turnHooks.onTurnEndWithoutToolCalls` may inject a synthetic tool call to continue the loop
-   (bounded by `toolRoundLimit`). When the turn settles (`done`, `user`, `interrupted`,
-   `roundLimit`), `turnHooks.onTurnSettled` runs for every registered capability. When hydrating
-   persisted replies from storage, `turnHooks.onReplyHydrated` normalizes persisted
-   `capabilityState[id]`.
-5. **Prompt.** Each turn's static `system` prompt is the core assistant identity followed by
-   `tools.instructions(declaredNames, 'reply')`. It contains no em dashes and stays identical across
-   turns with the same declared tools for KV-cache reuse.
-6. **DeepThink toggle.** Persisted under `chat-demo:thinking` as `'true'` / `'false'` via `deps.store`.
-   All other composer toggles come dynamically from `tools.toggles`.
-   The composer box holds only the draft (attachments, text, send / stop). Under it, `+` offers
-   file upload and conversation compaction, and the tools pill shows one icon per toggle that is
-   on (a neutral sliders icon when none is), with no model name and no chevron; it opens the menu
-   with DeepThink and every tool toggle. Both open as `MorphMenu`s that grow out of their button:
-   the `+` menu shares its bottom-left corner with `+`, the tools menu its bottom-right corner with
-   the pill. The
-   composer shows no context meter; compaction stays automatic and reachable from `+`.
-7. **Branches.** A chat is a tree. Sending appends below the visible leaf; editing adds a sibling
-   user node and reply; regenerating adds a sibling assistant node; switching versions updates
-   `selectedChildId` and re-publishes `SessionFilesChanged`.
-8. **Requests, attachments, & retries.** REST requests time out after 15 s, uploads after 60 s.
-   All requests emit standard `user` / `assistant` Messages API roles with change-only
-   `<environment_context>` blocks (converting legacy persisted `latestReminder` CSVs on replay),
-   strip historical `thinking` across completed turns (replaying in-progress `thinking` only when
-   active provider and model match), and continue stopped / `max_tokens` prose replies via a
-   standard hidden `user` continuation prompt (`CONTINUE_PROMPT`) rather than assistant prefill.
-   When `provider.attachments` is present, attachments and tool screenshots upload remotely (with
-   provider-owned invalidation re-uploads up to `fileReuploadLimit`); when absent, they travel
-   inline as base64 blocks read from `blobs`. Pre-content network failures retry up to
-   `networkRetryLimit` per turn with exponential backoff. Post-content failures do not retry and
-   keep partial text. Streams ending after `message_delta` stop reason without `message_stop` count
-   as complete.
-9. **Deliverables & Front Stage.** Delivered files (`result.files`) deduplicate by `path ?? name`
-   at latest version in first-seen order and appear once streaming ends. Tool `images` without
-   `previewImages` promote to Front Stage (`view.images`); tools that supply clean `previewImages`
-   keep their screenshots backstage in the Activity Inspector. `buildTurnWorkStrip` is driven solely
-   by `ToolStepPresenter.summarize` and `result.frontStageNote`, emitting middot-free natural-language
-   summaries (never appending thinking duration onto tool counts and never escalating recovered
-   mid-turn tool errors into transcript-level warnings). While a reply that has used tools streams,
-   text after its latest tool call is held back (the strip stays live) until it reaches 280
-   characters, has a paragraph break, or has streamed for 1.2 s with no tool call after it, so a
-   line of narration before the next call never flashes in as the answer. `buildInlineTrace` and
-   `selectInlineTracePreview` project domain-blind plain-prose steps (with optional `callId`,
-   `lane`, and presenter-supplied `icon`, and without step numbers or per-step durations); bounded
-   previews always retain currently running steps in chronological order, and clicking an inline
-   trace row opens the built-in Activity inspector cell focused on that step's `callId`.
-10. **Living session titles.** After every completed reply (including Turn 1), if the title is
-    unlocked, a detached cache-riding fork reuses the exact turn prefix (`model`, `system`, `tools`,
-    `messages`) to name or refresh the session without altering `session.messages` or `updatedAt`.
-    Any user mutation cancels an in-flight fork.
-11. **Stream traces.** When `onStreamTrace` is provided, every request reports sizes and timings
-    without message, tool input, or reply text.
-12. **Branch-anchored conversation compaction.** Five triggers (`turnStart`, `betweenRounds`,
-    `manual`, `fit`, `overflow`) funnel through one `runCompaction` pipeline governed by a
-    window-adaptive policy derived from `ModelSpec` (interpolating smoothly from 70% line / 20K
-    verbatim keep at <=200K windows to 50% line / 40K verbatim keep at >=1M windows, with output
-    reserve capped at 10% of the window and strictly monotonic line scaling). Normal compactions
-    ride the active `(model, system, tools, messages)` KV-cache prefix with thinking disabled;
-    oversized spans fall back to bounded plain-text chunked folding (preserving prior checkpoint
-    summaries). Summaries must validate (`Goal` + `Next Steps`, no tool calls, not truncated or
-    refused); failed or aborted compactions leave existing context intact. Validated checkpoints
-    store immutable `renderedWireText` anchored to `(anchorMessageId, afterBlockIndex?)` on
-    `Session.checkpoints`, isolating branches completely while preserving original messages and
-    attachments in storage. Capability-specific factual ledgers flow domain-blindly through
-    `ToolRegistry.buildCompactionLedger`. Reactive `overflow` compaction retries at most once per
-    turn on `contextOverflow` or `payloadTooLarge` errors.
-
-13. **Transcript minimap & reading position.** Chats with two or more turns show a `Minimap` in a 64 px column at the
-    transcript's right edge. The column is kept in every chat on desktop while the chat area is at least 640 px wide (so nothing moves when the minimap appears); the messages, the composer and the new-chat greeting centre in the space beside it, and in a narrower window or the mobile layout the column and the minimap go and everything centres in the full width. The minimap draws one section per turn (from each `data-turn-anchor`, its prompt bubble the marker, drawn in coral so the reader's own prompts stand out; the prompt bubbles in the transcript carry the same coral as a light tint, `--ui-marker-subtle`) named by its prompt for keyboard and screen-reader users, with a divider after each compaction checkpoint. While the minimap is on screen the transcript's scrollbar is hidden (the map shows the reading position); when it hides, the scrollbar returns. The reading turn is the one whose start (its prompt, or the reply when it has none) is last above the reading line (`readingLineY`), which stays at the middle of the view through most of a scroll and eases to the top of the view at the very top and to its bottom at the very end, so every turn, however short, is current somewhere, the switch happens at the same place on screen, and the latest turn is current at the bottom; it is
-    published through `getReadingPosition` after scrolling rests on it, and at once for navigation.
-    Choosing a turn from the minimap's list, `⌥↑` / `⌥↓` (outside text fields), or a reveal glides the transcript so the
-    turn starts 24 px below the top, holds that turn as the reading turn until the reader scrolls,
-    and pulses the turn's prompt bubble on arrival. Clicking the map glides to that point; dragging its
-    window scrolls directly.
-    Jumps and drags longer than 1.2 viewports let `⌥←` return to the turn left behind, which
-    clears once the reader is back there. Reveals publish with cause `'reveal'` and never offer a
-    return; everything else is `'reader'`.
-14. **Activity & Sources inspector cell (`cells/activity-inspector/`).** When `activityPanel` is
-    wired, the session header includes an Activity toggle button that opens the drawer in
-    `follow_reading` mode (tracking the transcript's reading turn, falling back to the streaming or
-    latest turn) and closes it when already open. Open/closed state is owned exclusively by
-    `PanelSlot` (zero shadow `panelOpen`). Explicit inspection (`inspectTurn`, header prev/next, or
-    chapter header) pins `(sessionId, messageId, tab)` until the reader scrolls to another turn
-    (`cause: 'reader'`; `'reveal'` never releases a pin); untargeted inspection of the currently
-    displayed turn and tab toggles closed, while `callId`-targeted inspection stays open, bumps
-    `focusNonce`, expands the step, and marks it selected. Displacement by another right panel
-    makes `getTarget()` / `useActiveTarget()` report `null` while hidden and resumes the session's
-    selection (stripping stale `focusedCallId`) on re-open. `buildActivityTimeline` coalesces
-    capability lanes via `ToolStepPresenter.summarize`, prefers `call.input.summary`, folds
-    `hiddenInTimeline` steps and inter-tool narration (`precedingNote`), links multi-round thinking
-    to following steps, promotes delivered files and visuals to an `Outputs (N)` strip (with a
-    native `Dialog` lightbox), keeps failed steps quiet (danger icon + `(Failed)` SR text, no top
-    error banner), keeps `Activity` and `Sources` mounted via `hidden`, and orders cited sources
-    ahead of uncited sources.
+1. **Multi-instance isolation.** Every store, draft map, upload queue, auto-title controller, and DB
+   handle is scoped to the slice instance; `dispose()` aborts streams and detaches all listeners.
+2. **Storage & lifecycle facts.** Deleting a session removes it from storage, tombstones its
+   `SessionFilesChanged`, and publishes `SessionDeleted` once. Replacing history tombstones all
+   `SessionFilesChanged` entries and publishes `SessionHistoryReplaced` once. Failed deletes or
+   replacements publish nothing and leave state intact.
+3. **Domain-blind tool loop.** Tool calls run once via `tools.run` in call order, scheduled by
+   `tools.effectOf(name)`: consecutive `read` calls run concurrently up to `maxParallelReadCalls`,
+   `spawn` returns immediately, and `session`/`artifact`/`interactive` run serially. Running blocks
+   carry `status: 'running'` and optional `progress`; concurrent `read` batches reconcile citations
+   in call order via `formatContentWithCitations`. Abort cancels queued calls cleanly.
+4. **Turn lifecycle hooks.** `onTurnEndWithoutToolCalls` may inject a synthetic tool call (bounded
+   by `toolRoundLimit`); `onTurnSettled` runs on `done`/`user`/`interrupted`/`roundLimit`;
+   `onReplyHydrated` normalizes persisted `capabilityState[id]`.
+5. **Static prompt.** `system` is the core assistant identity plus `tools.instructions(names, 'reply')`,
+   free of em dashes and identical across turns with the same declared tools for KV-cache reuse.
+6. **Composer & DeepThink.** DeepThink persists under `chat-demo:thinking`; sibling toggles come
+   from `tools.toggles`. The composer holds only draft/attachments/send-stop; `+` (upload &
+   compaction) and the tools pill open as corner-anchored `MorphMenu`s with no context meter.
+7. **Branches.** Messages form a tree: send appends to the visible leaf; edit/regenerate create
+   sibling branches; switching versions updates `selectedChildId` and re-publishes
+   `SessionFilesChanged`.
+8. **Requests, attachments, & retries.** All requests use standard `user`/`assistant` roles with
+   change-only `<environment_context>`, strip historical `thinking` across completed turns, and
+   continue stopped/`max_tokens` prose via hidden `user` `CONTINUE_PROMPT`. Attachments and tool
+   screenshots upload remotely when `provider.attachments` exists (re-uploading invalidated IDs up
+   to `fileReuploadLimit`) or travel inline as base64 otherwise. Pre-content network failures retry
+   with exponential backoff up to `networkRetryLimit`; post-content failures keep partial text.
+   Localized network errors (such as `requestTimedOut`) surface via `describeReplyNotice`.
+9. **Front Stage & inline trace.** Delivered files deduplicate by `path ?? name` at latest version
+   in first-seen order once streaming ends. Tool `images` promote to Front Stage only when no
+   `previewImages` exist. `buildTurnWorkStrip` produces middot-free summaries from
+   `ToolStepPresenter.summarize` and `frontStageNote` without escalating recovered mid-turn errors.
+   Post-tool streaming text is held briefly (`holdsNarration`) so mid-turn narration does not flash as
+   the final answer. Bounded inline traces retain running steps chronologically and open the
+   Activity inspector focused on the clicked `callId`.
+10. **Living session titles.** After each completed reply on an unlocked title, a detached
+    cache-riding fork reuses `(model, system, tools, messages)` without mutating messages or
+    `updatedAt`; any user mutation aborts an in-flight fork.
+11. **Stream traces.** `onStreamTrace` reports sizes and timings without prompt or reply text.
+12. **Branch-anchored compaction.** Five triggers (`turnStart`, `betweenRounds`, `manual`, `fit`,
+    `overflow`) share one pipeline governed by a monotonic `ModelSpec` window policy. Normal
+    compactions ride the active KV-cache prefix with thinking off; oversized spans chunk-fold while
+    preserving prior checkpoints. Summaries must validate (`Goal` + `Next Steps`, no tool calls, no
+    truncation/refusal); failed/aborted runs leave context intact. Checkpoints anchor to
+    `(anchorMessageId, afterBlockIndex?)` on `Session.checkpoints`, isolating branches and pulling
+    factual ledgers via `ToolRegistry.buildCompactionLedger`. Reactive `overflow` retries at most
+    once per turn.
+13. **Transcript minimap & reading position.** Desktop chats with `>= 2` turns and `>= 640 px` width
+    show a 64 px `Minimap` gutter (reserving the column so content never shifts, hiding the native
+    scrollbar while visible, collapsing on narrow/mobile layouts) with one section per turn, coral
+    prompt markers, and checkpoint dividers. `readingLineY` eases top → middle → bottom across
+    scroll progress so every turn becomes current somewhere; `getReadingPosition` publishes after
+    scroll settles and immediately on navigation. Minimap/keyboard (`⌥↑`/`⌥↓`)/reveal jumps glide to
+    24 px below top, pulse the prompt, and offer `⌥←` return on reader jumps longer than 1.2
+    viewports (`cause: 'reveal'` never offers a return).
+14. **Activity & Sources inspector (`cells/activity-inspector/`).** `PanelSlot` is the sole owner of
+    open/closed state (zero shadow `panelOpen`). Header toggle opens in `follow_reading` mode;
+    explicit inspection pins `(sessionId, messageId, tab)` until a reader scroll changes turn
+    (`'reveal'` never releases a pin). Untargeted clicks on the displayed turn/tab toggle closed;
+    `callId`-targeted clicks stay open, bump `focusNonce`, and expand/select the step. Displacement
+    makes `getTarget()` report `null` while hidden and resumes without stale `focusedCallId` on
+    re-open. `buildActivityTimeline` coalesces lanes, links multi-round thinking, promotes outputs
+    to an `Outputs (N)` strip + lightbox, keeps failed steps quiet, keeps tabs mounted via `hidden`,
+    and orders cited sources ahead of uncited ones.
 
 ## Parameters
 
-| Name                                        | Value                                             |
-| :------------------------------------------ | :------------------------------------------------ |
-| Loaded chat details kept in memory          | 5 (plus active, streaming and unsaved ones)       |
-| Tool rounds per turn                        | 50 (`toolRoundLimit`)                             |
-| Concurrent `read` calls per batch           | 6 (`maxParallelReadCalls`)                        |
-| Network retries per turn                    | 2 (`networkRetryLimit`)                           |
-| Re-uploads per request after a dropped file | 2 (`fileReuploadLimit`)                           |
-| Backoff before retry n (from 0)             | 1 s × 2ⁿ (`retryBaseDelayMs`)                     |
-| Attachments per message                     | 50                                                |
-| Attachment size                             | 64 MB                                             |
-| Concurrent uploads                          | 3                                                 |
-| Compaction line scaling                     | 70% at <=200K -> 50% at >=1M (`ModelSpec`)        |
-| Verbatim dialogue retention budget          | 20K at <=200K -> 40K at >=1M (<=25% window)       |
-| Stall delay before "Working…"               | 1.5 s                                             |
-| Inline trace preview cap                    | 6 steps (`INLINE_TRACE_PREVIEW_LIMIT`)            |
-| Reading line                                | moves with scroll progress, top of view to bottom |
-| Reading position settle delay               | 100 ms                                            |
-| Return offered after a jump of              | 1.2 viewports                                     |
-| Space above a turn after jumping to it      | 24 px                                             |
-| Activity reader-scroll window after input   | 250 ms                                            |
-| Live turn keeps Activity drawer at bottom   | 48 px                                             |
+| Name                                             | Default                                           |
+| :----------------------------------------------- | :------------------------------------------------ |
+| Loaded chat details in memory (LRU)              | `5` (plus active, streaming, and unsaved)         |
+| Tool rounds per turn (`toolRoundLimit`)          | `50`                                              |
+| Concurrent `read` calls (`maxParallelReadCalls`) | `6`                                               |
+| Network retries / file re-uploads per turn       | `2` / `2` (`retryBaseDelayMs`: 1 s × 2ⁿ)          |
+| Attachments per message / size / concurrency     | `50` / `64 MB` / `3`                              |
+| Compaction line / verbatim retention             | `70%` / `20K` (`<=200K`) → `50%` / `40K` (`>=1M`) |
+| Narration hold / stall "Working…" delay          | `280 chars` or `1.2 s` / `1.5 s`                  |
+| Inline trace preview cap                         | `6` steps                                         |
+| Reading settle / jump offset / return span       | `100 ms` / `24 px` / `1.2` viewports              |
+| Activity scroll window / live bottom lock        | `250 ms` / `48 px`                                |

@@ -2,170 +2,90 @@
 
 ## Purpose
 
-A zero-dependency, domain-blind React component kit implementing the visual system defined by
+Zero-dependency, domain-blind React component kit implementing the semantic token system in
 `spine/design/tokens.css`. Every slice, UI library, and the App Shell consumes `@deepseek-chat/lib-ui`
-through its single `.` entrypoint. No domain nouns, no slice imports, and no global mutable UI
-singletons belong here.
-
-This package is designed for **clean-slate regeneration**: deleting `libs/ui/src/*` and regenerating
-it from this `SPEC.md`, `spine/design/tokens.css`, `spine/ports`, and `libs/ui/tests/` must restore
-every slice's UI and pass the full gate with zero slice edits.
+through its single `.` export. Zero domain nouns, zero slice imports, and zero global mutable UI
+singletons; designed for clean-slate regeneration from this `SPEC.md`, `spine/`, and `libs/ui/tests/`.
 
 ## Public Entrypoint (`@deepseek-chat/lib-ui`)
 
-| Category                | Exports                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| :---------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Runtime & Provider**  | `UiProvider`, `createOverlayCoordinator`, `createNoticeBus`, `useOverlayPort`, `useOverlayLock`, `useUiNotice`, `useIsMobile`, `usePresence`, `copyText`, `computeAnchoredPosition`, `useAnchoredPosition`, `useDismiss`, `useDelayedOpen`, `VIEWPORT_PADDING`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| **Actions**             | `Button`, `LinkButton`, `IconButton`, `Chip`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| **Inputs & Selection**  | `TextField`, `PasswordField`, `Select`, `Switch`, `SegmentedControl`, `RadioCardGroup`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| **Overlays & Floating** | `Dialog`, `Popover`, `MorphMenu` (with `morph.ts` geometry: `triggerShape`, `menuShape`, `contentClip`, `sampleMorph`, `spring`, `MORPH_OPEN`, `MORPH_CLOSE`, `MORPH_CLOSE_MS`), `Menu`, `PanelTitleMenu`, `Tooltip`, `HoverCard`, `ToastViewport`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| **Navigation & Motion** | `Minimap` (with `minimapGeometry.ts`: `layoutMinimapMap`, `stepMinimapFocus`, `shapeMinimapSection`, `minimapLineDetail`, `minimapBlockDetail`, `mixRect`, `MINIMAP_*`; `minimapMeasure.ts` reads the document, `minimapPaint.ts` draws it), `readingLineY`, `sectionAt`, `measureSectionTops`, `sectionAtReadingLine`, `createReaderScroll`, `createScrollGlide`, `onScrollIntent` (with `scrollGlide.ts` maths: `stepScrollSpring`, `scrollSpringSettled`, `SCROLL_GLIDE_*`), `Tabs`, `TabList`, `Tab`, `TabPanel`, `HoverGlide`, `useHoverGlide`, `HoverGlideIndicator`, `hoverGlideItem`, `HOVER_GLIDE_ITEM_ATTR`, `HOVER_GLIDE_SURFACE_ATTR`, `INITIAL_HOVER_GLIDE_STATE`, `enterGlideTarget`, `leaveGlideTarget`, `expireGlideCooldown`, `syncGlideRect`, `measureGlideRect`, `normalizeGlideRadius`, `glideRectsEqual` |
-| **Feedback & Layout**   | `Badge`, `Banner`, `EmptyState`, `Spinner`, `SettingGroup`, `SettingRow`, `SettingInlineConfirm`, `PanelHeader`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| **Icons & Glyphs**      | Domain-blind `Icon*` SVG components and `FileGlyph` (`kind: 'document' \| 'pdf' \| 'spreadsheet' \| 'presentation' \| 'image'`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| Category                | Exports                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| :---------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Runtime & Provider**  | `UiProvider`, `createOverlayCoordinator`, `createNoticeBus`, `useOverlayPort`, `useOverlayLock`, `useUiNotice`, `useIsMobile`, `usePresence`, `copyText`, `computeAnchoredPosition`, `useAnchoredPosition`, `useDismiss`, `useDelayedOpen`, `VIEWPORT_PADDING`                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| **Actions**             | `Button`, `LinkButton`, `IconButton`, `Chip`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| **Inputs & Selection**  | `TextField`, `PasswordField`, `Select`, `Switch`, `SegmentedControl`, `RadioCardGroup`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| **Overlays & Floating** | `Dialog`, `Popover`, `MorphMenu` (and morph geometry helpers `triggerShape`, `menuShape`, `contentClip`, `sampleMorph`, `spring`, `MORPH_*`), `Menu`, `PanelTitleMenu`, `Tooltip`, `HoverCard`, `ToastViewport`                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| **Navigation & Motion** | `Minimap` (and layout helpers `layoutMinimapMap`, `stepMinimapFocus`, `shapeMinimapSection`, `minimapLineDetail`, `minimapBlockDetail`, `mixRect`, `MINIMAP_*`), `readingLineY`, `sectionAt`, `measureSectionTops`, `sectionAtReadingLine`, `createReaderScroll`, `createScrollGlide` (`stepScrollSpring`, `scrollSpringSettled`, `SCROLL_GLIDE_*`), `onScrollIntent`, `Tabs`, `TabList`, `Tab`, `TabPanel`, `HoverGlide`, `useHoverGlide`, `HoverGlideIndicator`, `hoverGlideItem`, `HOVER_GLIDE_*`, `INITIAL_HOVER_GLIDE_STATE`, `enterGlideTarget`, `leaveGlideTarget`, `expireGlideCooldown`, `syncGlideRect`, `measureGlideRect`, `normalizeGlideRadius`, `glideRectsEqual` |
+| **Feedback & Layout**   | `Badge`, `Banner`, `EmptyState`, `Spinner`, `SettingGroup`, `SettingRow`, `SettingInlineConfirm`, `PanelHeader`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| **Icons & Glyphs**      | Domain-blind `Icon*` SVG components and `FileGlyph` (`document \| pdf \| spreadsheet \| presentation \| image`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 
 ## Behavioural & Accessibility Invariants
 
-1. **Strict token consumption.** Every colour, border, shadow, radius, spacing step, z-index layer,
-   typography style, and motion duration comes from semantic `--ui-*` tokens in
-   `spine/design/tokens.css` (inside `@layer components`). Components never reference private
-   `--_p-*` primitives, raw colour literals, or theme-attribute selectors (`[data-theme="dark"]`).
-2. **WCAG 2.2 AA contrast & targets.** All semantic text/surface token pairs meet `>= 4.5:1`
-   luminance contrast and UI/border/focus pairs meet `>= 3:1` in both light and dark themes.
-   Interactive icon buttons and controls maintain `>= 24 × 24 CSS px` minimum hit targets on fine
-   pointers and `>= 44 × 44 CSS px` on `@media (pointer: coarse)`.
-3. **Focus visibility.** Every interactive control styles `:focus-visible` with a visible `outline`
-   and `outline-offset` (plus Forced Colors Mode compatibility). Never suppress outlines without a
-   replacement focus indicator.
-4. **Native modal dialogs (`Dialog`).** Renders a native `<dialog>` element opened with
-   `showModal()` without redundant `role="dialog"` or `aria-modal`. Exposes its heading as `<h1>`
-   linked via `aria-labelledby`, acquires an `OverlayPort` lock while mounted, intercepts `cancel`
-   (`Escape`) and outside-pointer clicks only when `dismissible` is true, and requires both
-   `pointerdown` and `pointerup` outside the dialog bounding box so padding clicks or text-selection
-   drags never dismiss it.
-5. **Anchored overlays (`Popover`, `Menu`, `Select`, `Tooltip`, `HoverCard`).**
-   - `computeAnchoredPosition` always returns coordinates clamped inside the viewport with at least
-     `VIEWPORT_PADDING` clearance when the floating box fits within the viewport, and flips sides
-     when the preferred side lacks space.
-   - `Menu` and `Select` render native `<button type="button">` items (never `<div>` click targets),
-     support `ArrowDown`/`ArrowUp`/`Home`/`End`/`Escape`, use `<hr>` for separators, and acquire an
-     `OverlayPort` lock while open.
-   - `Tooltip` satisfies WCAG 1.4.13: opens on both hover and focus, stays open while hovered, and
-     dismisses on `Escape` without moving the pointer.
-   - `MorphMenu` is a `Popover` that grows out of its trigger. It opens over the trigger with one
-     corner shared (`side` `top` or `bottom`, `align` `start` or `end`); its background starts on
-     the trigger's box and corner radius and unfolds to the menu, the content is clipped to the
-     background, and the trigger's own contents fade out while open and back in on close. A run
-     starts from the previous run's current shape, so reopening mid-close does not jump. Under
-     `prefers-reduced-motion` the background appears at full size and only fades. Triggers must
-     not scale on press, because placement uses the trigger's measured box.
-   - `PanelTitleMenu` is a panel header's title that switches what the panel shows: the label and a
-     chevron open a `Menu` of the alternatives (radio options may carry a quiet `detail`, such as a
-     count). With fewer than two options it renders the same label as plain text in the same box
-     and type, so the header does not shift when a second option appears.
-6. **Form fields (`TextField`, `PasswordField`, `Switch`, `SegmentedControl`, `RadioCardGroup`).**
-   - `TextField` and `PasswordField` programmatically associate visible `<label htmlFor>`, place
-     hints above the input linked via `aria-describedby`, set `aria-invalid="true"` only when an
-     error message is present, and never block paste or password managers (WCAG 3.3.8).
-   - `Switch` renders a native `<button type="button" role="switch" aria-checked={checked}>`.
-   - `SegmentedControl` renders a `role="group"` of native buttons with `aria-pressed`.
-   - `RadioCardGroup` renders `role="radiogroup"` with native `<button role="radio" aria-checked>`.
-   - `Tabs` renders `role="tablist"`, `<button role="tab" aria-selected>`, and `role="tabpanel"`
-     with roving arrow-key navigation.
-7. **Hermetic overlay & notice coordinators (zero global singletons).**
-   - `createOverlayCoordinator()` emits `true` only on `0 -> 1` and `false` only on `1 -> 0`;
-     calling a release function more than once is a no-op.
-   - `createNoticeBus()` holds at most one active notice (new notices replace old ones and cancel
-     stale timers), renders `text()` in the current locale at render time, and expires after its
-     duration (longer when a link is present).
-8. **Hover glide.** `<HoverGlide>` and `useHoverGlide` provide a single-surface gliding hover
-   container that isolates its stacking context, elevates `[data-hover-glide-item]` targets above
-   the indicator, and suppresses duplicate native `:hover` backgrounds on unmuted `Button` /
-   `IconButton` items while active. `enterGlideTarget` snaps on cold entry and glides on warm
-   transitions; `leaveGlideTarget` enters `cooling` so crossing small gaps keeps gliding until
-   `expireGlideCooldown` resets cold; muted items track invisibly and update immediately on
-   attribute change; disabled items are ignored; `measureGlideRect` round-trips cleanly between
-   viewport and scroll-content coordinates; `normalizeGlideRadius` clamps per-item corner radii to
-   half the smaller box dimension so mixed shapes (such as rounded rows and capsule pills) morph
-   smoothly; ancestor scroll and layout resizes re-target the stationary pointer.
-9. **Buttons & loading states.** `Button` defaults to `type="button"`, preserves label visibility
-   and width under `loading` (`aria-busy="true"`), and never omits accessible text on `IconButton`.
-10. **Presence lifecycle (`usePresence`).** Mounts synchronously (`mounted: true`, `exiting: false`)
-    on the render where `open` becomes `true` without performing render-phase state updates (so
-    sibling `useSyncExternalStore` hooks stay in sync across repeated cycles returning to prior
-    snapshots). When `open` becomes `false`, stays `mounted: true, exiting: true` for `durationMs`
-    before unmounting, cancels pending exit timers if reopened mid-exit, and unmounts immediately
-    when `durationMs <= 0` or `(prefers-reduced-motion: reduce)` matches.
-
-11. **Minimap (`Minimap`).** A canvas in the consumer's box (usually a page gutter) drawing the
-    scrolled document: the consumer's content column is split into sections at each direct child
-    matching `sectionSelector`, and every line of text is drawn at its position, length and
-    computed colour, with code backgrounds, table rules and quote bars in their own colours, and
-    each section's `markerSelector` element in `--ui-marker-solid` (a light pill with its text showing, solid
-    as it shrinks to a sliver), so sections' openers stand out from everything else. Text a container clips on screen (a disclosure
-    while it animates, a scroll box) is left out, so the map reveals and hides lines with the page.
-    Each section is measured relative to its own top and measured again only when one of its
-    children resizes or changes; resizes repaint on the same frame, so the map moves with the
-    content while it animates. As the document outgrows the rail, detail steps down by scale: text
-    lines while a line gets about 2 px of rail, then one bar per paragraph, table or code block, then
-    one slab per section; lines thicken into their bar and bars stretch into the slab as one shape,
-    and at no scale do lines and slabs show together. When the document is taller than the rail at
-    full detail, a lens keeps full detail within a viewport of the reader and eases off over three
-    more, so the window keeps one height at any length; the lens holds still while the reader moves
-    within half a viewport of it, follows larger moves on a critically damped spring, and holds
-    still while the window is dragged. The map always fills the rail exactly. The section being
-    read (`current`), the one under the pointer and the one focused are highlighted, easing over about 120 ms.
-    A section with `dividerBefore` gets a dashed rule across the window's width above it, in
-    muted text colour and drawn over the veil, so a break is visible anywhere on the map. Outside the window the map is thinly veiled in the surface colour (more while the pointer is
-    on the rail or dragging, easing back after), so what's on screen reads at full strength. A click outside the window asks
-    the consumer to glide there (`onSeek(top, 'glide')`); dragging the window asks for each new
-    position (`onSeek(top, 'drag')`) and reports where it started (`onDragEnd`). Keyboard and
-    assistive technology reach the sections through a `<nav aria-label>` holding an ordered list of
-    native buttons, named by `accessibleLabel`, with `aria-current="location"` and the only
-    `tabindex="0"` on the current section (roving: `ArrowUp`/`ArrowDown`/`Home`/`End`; `Enter`
-    calls `onNavigate`); the focused section gets a focus ring on the canvas. The
-    canvas is `aria-hidden`. `side: 'right'` puts the rail
-    beside the content's right edge, clear of the scroller's scrollbar (the space it reserves, or
-    12 px for an overlay scrollbar); only the rail's column takes
-    the pointer, so the scrollbar beside it keeps working. `onShownChange` reports when the rail
-    appears or hides (its box narrower than 48 px), and `false` when it unmounts. Colours follow the
-    theme. Under
-    reduced motion the lens and highlights change in place.
-12. **Reading line (`readingLineY`, `sectionAt`).** The line that decides which section is
-    current stays `READING_LINE_AT` (the middle) of the view below its top through most of a scroll, so the
-    current section changes at the same place on screen; it eases from the top of the view at the
-    very top and to its bottom at the very end, and only ever moves forward as the reader scrolls
-    down, so every section, however short, is current somewhere. Content that doesn't scroll reads
-    at its end. `measureSectionTops` gives where sections start in a scroll container's content
-    (from the elements that start them) and `sectionAtReadingLine` the section under its reading
-    line. `createReaderScroll` tells the reader's own scrolling from programmatic scrolling: a
-    scroll is the reader's while they drag, or within `READER_SCROLL_WINDOW_MS` (250 ms) of their
-    wheel, touch, pointer or key input or of the previous such scroll.
-13. **Scroll glide (`createScrollGlide`).** Drives `scrollTop` with a critically damped spring that
-    never overshoots, clamps targets to the scroll range, retargets in flight without resetting
-    velocity, and calls `onDone` only when it lands. It scrolls the whole distance however far the
-    target is, with no fade or cut. Under reduced motion it jumps. `onScrollIntent` reports
-    the reader's own wheel, touch, pointer and key input so consumers can cancel glides and tell the
-    reader's scrolling from programmatic scrolling.
+1. **Strict token consumption.** All colours, borders, shadows, radii, spacing, z-index, typography,
+   and motion come from semantic `--ui-*` tokens inside `@layer components` — never private `--_p-*`
+   primitives, raw colour literals, or `[data-theme="dark"]` selectors.
+2. **WCAG 2.2 AA contrast & targets.** Text/surface token pairs meet `>= 4.5:1` and UI/border/focus
+   pairs meet `>= 3:1` in light and dark themes. Interactive targets maintain `>= 24 × 24 CSS px`
+   (fine pointer) and `>= 44 × 44 CSS px` (`pointer: coarse`).
+3. **Focus visibility.** Every interactive control styles `:focus-visible` with visible `outline` +
+   `outline-offset` (Forced Colors Mode compatible); outlines are never stripped without replacement.
+4. **Native modal dialogs (`Dialog`).** Native `<dialog>` opened via `showModal()` (no redundant
+   `role="dialog"` / `aria-modal`), `<h1>` linked via `aria-labelledby`, acquires `OverlayPort`
+   while mounted, dismisses on `Escape` or outside click only when `dismissible`, and requires both
+   `pointerdown` and `pointerup` outside the box so selection drags never dismiss.
+5. **Anchored overlays (`Popover`, `Menu`, `Select`, `Tooltip`, `HoverCard`, `MorphMenu`, `PanelTitleMenu`).**
+   - `computeAnchoredPosition` clamps inside the viewport with `VIEWPORT_PADDING` clearance and flips
+     sides when preferred space is insufficient.
+   - `Menu`/`Select` use native `<button type="button">` items, `ArrowUp`/`ArrowDown`/`Home`/`End`/
+     `Escape`, `<hr>` separators, and `OverlayPort` locks.
+   - `Tooltip` satisfies WCAG 1.4.13 (hover + focus, hoverable content, `Escape` dismissal).
+   - `MorphMenu` unfolds from a shared corner of its trigger box/radius with clipped content, fades
+     trigger contents while open, continues seamlessly from in-flight close shapes, fades at full
+     size under reduced motion, and requires triggers not to scale on press.
+   - `PanelTitleMenu` renders a chevron `Menu` for `>= 2` options and identical-box plain text for
+     `< 2` options so headers never shift.
+6. **Form controls.** `TextField`/`PasswordField` link visible `<label htmlFor>` and above-input
+   hints (`aria-describedby`), set `aria-invalid="true"` only on error, and never block paste or
+   password managers (WCAG 3.3.8). `Switch` (`role="switch"`), `SegmentedControl` (`aria-pressed`),
+   `RadioCardGroup` (`role="radiogroup"`), and `Tabs` (`tablist`/roving arrows) use native buttons.
+7. **Hermetic coordinators.** `createOverlayCoordinator()` emits `true` only on `0 -> 1` and `false`
+   only on `1 -> 0` with idempotent release; `createNoticeBus()` holds at most one active notice,
+   translates lazily in the current locale, cancels stale timers, and extends duration for links.
+8. **Hover glide.** Isolates stacking context, elevates `[data-hover-glide-item]` above the
+   indicator, suppresses duplicate `:hover` backgrounds while active, snaps cold / glides warm,
+   holds `cooling` across small gaps, tracks muted items invisibly, ignores disabled items, clamps
+   radii via `normalizeGlideRadius`, and re-targets on ancestor scroll/resize.
+9. **Buttons & presence (`usePresence`).** `Button` defaults to `type="button"`, keeps label width
+   during `loading` (`aria-busy="true"`), and `IconButton` always carries accessible text.
+   `usePresence` mounts synchronously without render-phase state updates, holds `exiting: true` for
+   `durationMs` on close, cancels exit timers on reopen, and unmounts immediately when
+   `durationMs <= 0` or reduced motion matches.
+10. **Minimap (`Minimap`).** Draws a theme-aware `aria-hidden` canvas of `[sectionSelector]`
+    children with `[markerSelector]` highlights, clipped-container culling, per-section incremental
+    remeasurement, progressive LOD (lines → blocks → slabs, never mixing lines and slabs), a
+    spring-following focus lens that keeps the window sized and fills the rail exactly, dashed
+    `dividerBefore` rules, and a surface veil outside the viewport window. Clicks emit
+    `onSeek(top, 'glide')`; window drags emit `onSeek(top, 'drag')` + `onDragEnd`. A sibling
+    `<nav aria-label>` exposes roving-tabindex native buttons (`aria-current="location"`,
+    `ArrowUp`/`ArrowDown`/`Home`/`End`/`Enter`). Keeps clear of scrollbars, hides below its gutter
+    threshold via `onShownChange`, and jumps in place under reduced motion.
+11. **Reading line & scroll glide.** `readingLineY` moves monotonically top → middle → bottom across
+    scroll progress so every section is current somewhere (non-scrolling content reads at end).
+    `createReaderScroll` distinguishes reader scrolling (drag or within `READER_SCROLL_WINDOW_MS` of
+    input/prior reader scroll) from programmatic glides. `createScrollGlide` drives `scrollTop` via
+    critically damped spring (zero overshoot, clamped, retargetable without velocity reset, fires
+    `onDone` only on landing, jumps under reduced motion).
 
 ## Tunable Parameters
 
-| Parameter                    | Default        | Meaning                                                                                       |
-| :--------------------------- | :------------- | :-------------------------------------------------------------------------------------------- |
-| `VIEWPORT_PADDING`           | `8` px         | Minimum clearance between an anchored floating surface and viewport edges                     |
-| Tooltip enter delay          | `100` ms       | Pointer hover delay before showing a tooltip                                                  |
-| Popover exit duration        | `140` ms       | Fade/scale exit animation duration                                                            |
-| MorphMenu open               | `250` ms       | Height on a spring (~1.5% overshoot); width on a firmer one in `170` ms                       |
-| MorphMenu close              | `180` ms       | Height folds in `130` ms, width in `160` ms; exit duration `180` ms                           |
-| Dialog / Toast exit duration | `160` ms       | Fade/scale exit animation duration                                                            |
-| Notice default duration      | `3000` ms      | Auto-dismiss timeout for plain notices                                                        |
-| Notice link duration         | `5000` ms      | Auto-dismiss timeout for notices containing a link                                            |
-| Hover glide cooldown         | `120` ms       | Window to glide across inter-item gaps before snapping cold                                   |
-| Minimap full detail          | `0.1`          | Rail px per content px where text lines show (`MINIMAP_FULL_SCALE`)                           |
-| Minimap lens                 | `1` / `3`      | Viewports at full detail each side of the focus / viewports over which detail eases off       |
-| Minimap lens share           | `0.6`          | Most of the rail the lens may take                                                            |
-| Minimap lens follow          | `0.5` / `90`   | Viewports the reader moves before the lens follows / spring stiffness (about 0.6 s to settle) |
-| Minimap highlight            | `120` ms       | Time constant of a section's highlight easing in or out                                       |
-| Minimap window               | `16` px        | Shortest the window gets in a long document                                                   |
-| Minimap veil                 | `0.35` / `0.5` | Strength of the veil outside the window, at rest / with the pointer on the rail               |
-| Minimap gutter               | `48` px        | Narrower than this the minimap hides                                                          |
-| Scroll glide stiffness       | `210` /s²      | Critically damped (about 0.7 s to land a 1000 px jump)                                        |
+| Parameter                                   | Default                               | Meaning                                                        |
+| :------------------------------------------ | :------------------------------------ | :------------------------------------------------------------- |
+| `VIEWPORT_PADDING`                          | `8` px                                | Minimum clearance between floating overlays and viewport edges |
+| Tooltip / Popover / Dialog-Toast            | `100` / `140` / `160` ms              | Hover delay and exit durations                                 |
+| `MorphMenu` open / close                    | `250` / `180` ms                      | Spring open (~1.5% overshoot, width `170 ms`) and fold close   |
+| Notice plain / link duration                | `3000` / `5000` ms                    | Auto-dismiss timeouts                                          |
+| Hover glide cooldown                        | `120` ms                              | Cooling window across inter-item gaps                          |
+| Minimap full scale / lens                   | `0.1` / `1` & `3` vp (cap `0.6` rail) | Text-line scale threshold and focus-lens span                  |
+| Minimap lens follow / highlight             | `0.5` vp / `90` / `120` ms            | Deadband, spring stiffness, highlight easing                   |
+| Minimap window / veil / gutter              | `16` px / `0.35`–`0.5` / `48` px      | Min window height, veil strength, hide width                   |
+| `READER_SCROLL_WINDOW_MS` / glide stiffness | `250` ms / `210` /s²                  | Reader-input attribution window and critically damped glide    |

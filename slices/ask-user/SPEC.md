@@ -21,7 +21,7 @@ Inspector card.
 | `run(input, { sessionId, signal })`              | Runs one `ask_user` invocation; always resolves.                                   |
 | `dispose()`                                      | Aborts any pending prompts and unsubscribes all Spine `EventLog` listeners.        |
 
-Pure exports: `ASK_USER_TOOL_NAME`, `ASK_USER_TOOL`, `ASK_USER_INSTRUCTIONS`, `parseAskUserInput`.
+Pure exports: `ASK_USER_TOOL_NAME`.
 
 ## Behavioural invariants
 

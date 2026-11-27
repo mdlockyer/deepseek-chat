@@ -2,107 +2,64 @@
 
 ## Purpose
 
-Gives the model two client tools — `web_search` (ranked results with snippets, backed by Firecrawl
-v2) and `web_scrape` (one page as markdown, run through an injected local scraper on desktop or
-Firecrawl v2 on web) — plus the `research` deep-research subagent profile. Firecrawl calls work
-keyless (Firecrawl's free tier, limited per IP per day) or with the user's Firecrawl API key, with
-one shared rate limiter and per-reply credit budget.
+Provides `web_search` (Firecrawl v2), `web_scrape` (injected local desktop scraper or Firecrawl v2),
+and the `research` subagent profile. Supports keyless Firecrawl or a user-provided API key behind
+one shared rate limiter, concurrency cap, and per-reply credit budget.
 
 ## Public entrypoint
 
 `createWebResearchSlice({ fetch, store, secret, localScrape?, params? })` returns:
 
-| Member                                                                     | Meaning                                                                                                                                                   |
-| :------------------------------------------------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `toolNames`                                                                | `{ search: 'web_search', scrape: 'web_scrape', research: 'research' }`. Persisted in history; never rename.                                               |
-| `declareTools({ searchEnabled, questionText })`                            | Tools to declare for a turn (see invariant 1).                                                                                                            |
-| `instructions` / `instructionsFor(audience, declaredNames?)`               | System-prompt section worded for `reply` or `agent` callers, interpolating configured parameters.                                                         |
-| `researchProfile`                                                          | Clean-context subagent profile (uses active provider's default model unless overridden, thinking on, `web_search` + `web_scrape`, `finish_research`).     |
-| `capability`                                                               | Open `ToolCapability` (`id: 'web-research'`, owns `chat-demo:search` toggle, race-free `formatContentWithCitations`, `presenter`, `serializeForArchive`). |
-| `handles(name)`                                                            | Whether a direct tool call belongs to this slice (`web_search`, `web_scrape`).                                                                            |
-| `run(name, input, { signal, inputJson?, citedUrls?, caller?, replyKey? })` | Run one call through the shared rate limiter and credit budget. Always resolves to a `WebToolResult`.                                                     |
-| `verifyKey(key, signal?)`                                                  | `{ kind: 'valid' } \| { kind: 'invalid' } \| { kind: 'unreachable' } \| { kind: 'failed', message }`.                                                     |
-| `getApiKey()`                                                              | The saved key, or `null` (keyless, or still loading on desktop).                                                                                          |
-| `getKeyState()` / `useKeyState()`                                          | `{ status: 'loading' }` or `{ status: 'ready', apiKey: string \| null }`.                                                                                 |
-| `hydrate()`                                                                | Desktop: read the key from the secret slot (migrating a legacy web-storage key). Web: no-op. Never rejects.                                               |
-| `setApiKey(key \| null)`                                                   | Save (trimmed) or remove. Rejects if the desktop secret cannot be written; state unchanged then.                                                          |
-| `useKeyEditor()` + `KeySettings({ editor })`                               | Settings view; the editor hook keeps typed input across section switches.                                                                                 |
-| `dispose()`                                                                | Clears in-memory scrape caches and toggle subscribers.                                                                                                    |
-
-The key is read on every call, so a key change applies to the next call.
+| Member                                                                         | Meaning                                                                                                                   |
+| :----------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------ |
+| `toolNames`                                                                    | `{ search: 'web_search', scrape: 'web_scrape', research: 'research' }`. Persisted in history; never rename.               |
+| `declareTools({ searchEnabled, questionText })`, `handles(name)`               | Tool declaration (invariant 1) and direct-call ownership (`web_search`, `web_scrape`).                                    |
+| `instructions`, `instructionsFor(audience, declaredNames?)`                    | Static prompt section worded for `reply` or `agent` callers, interpolating configured parameters and scrape mode.         |
+| `researchProfile`, `capability`                                                | Clean-context `research` profile (`finish_research`) and `ToolCapability` (`chat-demo:search`, presenter, archive codec). |
+| `run(name, input, { signal, inputJson?, citedUrls?, caller?, replyKey? })`     | Runs one call through limiter and credit budget; always resolves to `WebToolResult`.                                      |
+| `verifyKey`, `getApiKey`, `getKeyState`, `useKeyState`, `hydrate`, `setApiKey` | Keyless/keyed state, desktop secret hydration & legacy migration, credit-free verification.                               |
+| `useKeyEditor()`, `KeySettings({ editor })`, `dispose()`                       | Settings UI (verifies before saving) and cache/listener teardown.                                                         |
 
 ## Behavioural invariants
 
-1. **Declaration.** Search enabled → `web_search`, `web_scrape`, and `research`. Search disabled
-   but the question contains an `http(s)://` URL → `web_scrape` only. Otherwise → none.
-2. **Auth.** With a non-blank key every request carries `Authorization: Bearer <trimmed key>`;
-   without one, no `Authorization` header is sent.
-3. **Run never throws.** Every outcome is a `WebToolResult` with `status` `ok | error | aborted`:
-   - invalid input (`query` missing/blank, `url` missing/blank) → `error`, content starts with
-     `Invalid input:` and quotes the raw input;
-   - a non-http(s) scrape URL → `error` (`Invalid URL: …`) without any request;
-   - the caller's signal aborts → `aborted`, content `Aborted by user.`;
-   - any other failure → `error` with a message the model can act on.
-4. **Rate limits are explained by mode.** HTTP 429 without a key says the keyless daily limit was
-   reached and suggests adding a key; with a key it says the rate/credit limit was reached. HTTP 401
-   says the key is invalid.
-5. **Search results.** Only `http(s)` URLs, deduplicated by URL, in API order (web then news). A
-   missing title falls back to the URL; the snippet is `description`, else `snippet`, else joined
-   `highlights`. `siteName` is the hostname without `www.`.
-6. **Citation numbering continues within a reply.** Results are numbered `[n]` for the model. A URL
-   already in `citedUrls` keeps its number; new URLs continue from `citedUrls.size + 1`. The text
-   tells the model to cite as `[ref:n]`.
-7. **Search limit** is clamped to 1–10 (default `defaultSearchLimit`). No results → `ok` with a
-   "No search results found" message and no sources.
-8. **Scrape.** When `localScrape` is provided, `web_scrape` calls `localScrape(url, { signal, timeoutMs })`
-   (gated only by `maxLocalScrapeConcurrency`, spending zero Firecrawl credits and bypassing the
-   Firecrawl rate limiter) and formats the returned `url`, `title`, and `markdown` (supporting
-   `source` kinds `'markdown-negotiated' | 'http' | 'pdf' | 'webview'`). When `localScrape` is
-   omitted or `null`, `web_scrape` calls Firecrawl `/v2/scrape` through the shared Firecrawl
-   limiter and returns the final URL (`metadata.sourceURL` when it is http(s), else the requested
-   URL) and title; a page with no markdown and `statusCode >= 400` is an `error`. In both modes,
-   an empty markdown body renders `[No readable text content extracted from this page.]`.
-9. **Text limit.** Tool text longer than `maxToolTextChars` is cut and ends with
-   `[Truncated after N characters]` (N formatted `en-US`, e.g. `24,000`).
-10. **Key verification** uses an endpoint that spends no credits. 401 → `invalid`; no response
-    (network, timeout) → `unreachable`; any other failure → `failed` with the server's message.
-11. **Key storage.** Web: under `chat-demo:firecrawl-api-key` in `KeyValueStore`, `ready` at once.
-    Desktop (`secret` given): `loading` (keyless) until `hydrate()` settles. If the slot is empty a
-    legacy web key is copied into it; any legacy web copy is then removed. If that fails, or the
-    slot cannot be read, the state becomes `ready` with no key and the legacy copy stays for the
-    next launch. A key saved during hydration wins over the one being read, in the state and in
-    the slot: no legacy key is copied over it, and the legacy copy stays until the next launch reads
-    the saved key (the save may have failed). Saving writes storage first, then updates the state.
-12. **Settings view** verifies before saving and never saves an unverified key.
-13. **Research profile (`research`, `finish_research`).** Uses the active provider's default model
-    (unless `model` is explicitly set), thinking on, `context: 'clean'`, and read-only tools
-    `web_search` and `web_scrape`. `task(input)` rejects inputs without a non-blank `objective` and
-    interpolates the configured tool-call budget.
-14. **Deterministic quote verification and page cache.** When `web_scrape` succeeds for an `agent`
-    caller (including hits served from the per-reply scrape cache), the page's title and markdown
-    are cached under that caller's `runId`. `complete` marks each source `verified` if and only if
-    its non-empty `quote` appears verbatim in that cached page—either after whitespace normalization
-    or after stripping inline Markdown formatting (links, images, code ticks, bold/italic), and when
-    joined with `...`/`…` ellipses, with every non-empty span appearing in order—and `unverified`
-    otherwise. The `runId`'s page cache is dropped when `complete` finishes.
-15. **Shared rate limiter, concurrency cap, retries, credit budget, and per-reply scrape cache.**
-    Every Firecrawl call (`web_search` at 2 credits per 10 results, and `web_scrape` at 1 credit
-    when `localScrape` is not provided) passes through one limiter enforcing the per-minute
-    sliding-window rate for the current key mode, capping simultaneous in-flight requests at
-    `maxConcurrentRequests`, and refusing calls once `maxCreditsPerReply` is reached for a reply
-    without sending a request. In keyed mode, transient HTTP 429 responses (excluding permanent
-    credit/quota exhaustion messages) are automatically retried up to `max429Retries` times using
-    `Retry-After` or exponential backoff from `backoff429Ms` while pausing queued siblings; keyless
-    HTTP 429s fail immediately. Reserved credits are refunded if a call fails or is aborted. When
-    `localScrape` is provided, scrapes use their own concurrency cap (`maxLocalScrapeConcurrency`)
-    and spend 0 Firecrawl credits. Within a given `replyKey`, successful scrapes are cached and
-    concurrent identical-URL scrapes coalesce onto one in-flight request (recording into each
-    waiting agent's quote cache).
-16. **Audience-aware wording.** For `agent` callers, `instructionsFor('agent')` interpolates the
-    slice's live parameters (`defaultSearchLimit`, `maxToolTextChars`, `scrapeTimeoutMs`), search
-    results omit the `[ref:n]` UI footer, and 401/429 errors do not ask the agent to open
-    Settings. Both `reply` and `agent` instructions reflect at slice creation time whether
-    `web_scrape` runs locally or through Firecrawl, keeping the system prompt static.
+1. **Declaration.** Search on → `web_search`, `web_scrape`, `research`. Search off + `http(s)://`
+   URL in question → `web_scrape` only. Otherwise → none.
+2. **Auth.** Non-blank key sends `Authorization: Bearer <trimmed key>` (read live per call); blank
+   sends no `Authorization` header.
+3. **Run never throws.** Returns `{ status: 'ok' | 'error' | 'aborted', content, ... }`: blank
+   query/url → `Invalid input:` quoting raw input; non-http(s) URL → `Invalid URL:` without network
+   I/O; caller abort → `aborted` (`Aborted by user.`).
+4. **Mode-aware HTTP errors.** 429 distinguishes keyless daily limit from keyed rate/credit limit;
+   401 reports invalid key.
+5. **Search normalization & citations.** Keeps only `http(s)` URLs deduplicated in API order (web
+   then news), title falls back to URL, snippet falls back `description -> snippet -> highlights`,
+   `siteName` strips `www.`. `limit` clamps to `1–10`; empty results return `ok` with no sources.
+   Reply citations reuse existing URL numbers in `citedUrls` and assign new URLs from `size + 1`.
+6. **Scrape routing & truncation.** With `localScrape`, `web_scrape` runs locally under
+   `maxLocalScrapeConcurrency` (0 Firecrawl credits, supporting `markdown-negotiated | http | pdf |
+webview`); without it, uses Firecrawl `/v2/scrape` (empty body + HTTP `>= 400` is an error).
+   Empty readable markdown renders `[No readable text content extracted from this page.]`. Text over
+   `maxToolTextChars` cuts with `[Truncated after N characters]`.
+7. **Key verification & storage.** Verification spends zero credits (`valid | invalid | unreachable
+| failed`). Web uses `chat-demo:firecrawl-api-key` immediately; desktop starts `loading` until
+   `hydrate()`, migrating an empty slot from web storage and deleting the legacy copy unless slot
+   read/write fails or a concurrent save wins. Saving writes storage before updating state; Settings
+   never saves an unverified key.
+8. **Research profile & deterministic quote verification.** Uses active provider's default model
+   unless overridden, thinking on, `context: 'clean'`, read-only `web_search` + `web_scrape`, and
+   rejects blank `objective`. Agent scrapes cache `(title, markdown)` under `runId`; `complete`
+   marks a source `verified` iff its non-empty quote matches verbatim (after whitespace normalization
+   or inline Markdown stripping, with `...`/`…` spans appearing in order), then drops `runId`'s
+   cache.
+9. **Shared limiter, retries, credits, & scrape coalescing.** Firecrawl calls (2 credits/10 search
+   results, 1/scrape) enforce sliding-window rate, `maxConcurrentRequests`, and `maxCreditsPerReply`
+   before hitting the network. Keyed transient 429s (excluding permanent quota messages) retry up to
+   `max429Retries` via `Retry-After` or exponential backoff while pausing queued siblings; keyless
+   429s fail immediately; failed/aborted calls refund credits. Within a `replyKey`, completed
+   scrapes are cached and concurrent identical-URL scrapes coalesce onto one request.
+10. **Audience-aware wording.** Agent instructions interpolate live parameters, omit `[ref:n]` UI
+    footers, and avoid Settings prompts on 401/429. Prompt wording reflects local vs Firecrawl
+    scrape mode statically at creation.
 
 ## Facts
 
@@ -110,28 +67,11 @@ None consumed or published.
 
 ## Tunable parameters
 
-| Parameter                   | Default | Meaning                                                 |
-| :-------------------------- | :------ | :------------------------------------------------------ |
-| `searchTimeoutMs`           | `30000` | Timeout for `/search`.                                  |
-| `scrapeTimeoutMs`           | `45000` | Timeout for `/scrape`.                                  |
-| `verifyTimeoutMs`           | `15000` | Timeout for key verification.                           |
-| `maxToolTextChars`          | `24000` | Characters of tool text returned to the model.          |
-| `defaultSearchLimit`        | `8`     | Results when the model gives no `limit`.                |
-| `rateWindowMs`              | `60000` | Sliding rate-limiter window length (ms).                |
-| `keylessRatePerMinute`      | `10`    | Max requests per window without a Firecrawl API key.    |
-| `keyedRatePerMinute`        | `20`    | Max requests per window with a Firecrawl API key.       |
-| `maxConcurrentRequests`     | `3`     | Max simultaneous in-flight Firecrawl HTTP requests.     |
-| `maxLocalScrapeConcurrency` | `6`     | Max simultaneous in-flight local `web_scrape` calls.    |
-| `backoff429Ms`              | `2000`  | Base pause after HTTP 429 (doubles per retry, ms).      |
-| `max429Retries`             | `3`     | Max automatic retries for transient keyed HTTP 429s.    |
-| `maxCreditsPerReply`        | `120`   | Firecrawl credit budget per reply (2/search, 1/scrape). |
-| `researchMaxRounds`         | `12`    | Max model rounds per `research` subagent run.           |
-| `researchMaxToolCalls`      | `16`    | Max tool calls per `research` subagent run.             |
-
-The `research` task message also names a typical workload per `effort` (`EFFORT_GUIDANCE` in
-`researchProfile.ts`): `quick` 2 searches and 2 page reads, `standard` 4 and 4, `thorough` 6 and 6.
-
-## Ownership notes
-
-- Key storage deliberately duplicates `slices/account`'s rules rather than sharing them through
-  the spine.
+| Parameter                                                      | Default                     | Meaning                                                                                      |
+| :------------------------------------------------------------- | :-------------------------- | :------------------------------------------------------------------------------------------- |
+| `searchTimeoutMs` / `scrapeTimeoutMs` / `verifyTimeoutMs`      | `30000` / `45000` / `15000` | Request timeouts (ms).                                                                       |
+| `maxToolTextChars` / `defaultSearchLimit`                      | `24000` / `8`               | Output char cap and default result count.                                                    |
+| `rateWindowMs` / `keylessRatePerMinute` / `keyedRatePerMinute` | `60000` / `10` / `20`       | Sliding window rate limits.                                                                  |
+| `maxConcurrentRequests` / `maxLocalScrapeConcurrency`          | `3` / `6`                   | In-flight Firecrawl / local scrape caps.                                                     |
+| `backoff429Ms` / `max429Retries` / `maxCreditsPerReply`        | `2000` / `3` / `120`        | Keyed 429 retry backoff and per-reply budget.                                                |
+| `researchMaxRounds` / `researchMaxToolCalls`                   | `12` / `16`                 | Default `research` subagent limits (effort guidance: quick 2/2, standard 4/4, thorough 6/6). |

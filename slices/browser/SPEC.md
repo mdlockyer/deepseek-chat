@@ -1,159 +1,91 @@
-# SPEC: `slices/browser` (built-in browser the user and the model share)
+# SPEC: `slices/browser` (built-in browser shared by user and model)
 
 ## Purpose
 
-A real browser inside the desktop app: per-chat tabs shown in the right-hand panel, driven by the
-user (address bar, tabs, history) and by the model through `browser_*` tools. Pages render in
-native child webviews that the desktop host draws above the page; this slice decides when they are
-visible and where. On the web build there is no host and the browser is unavailable.
+A desktop-only per-chat multi-tab browser hosted in the right-hand panel, driven by both the user
+and the model via `browser_*` tools. Pages render in native child webviews positioned by the desktop
+host; this slice owns tab state, visibility rules, tool execution, and the panel UI. On web builds
+(`host === null`), the browser is unavailable.
+
+Depth-2 layout: pure `kernel/` (types, URL normalization, state reducer, native IPC sync planner,
+tool metadata, messages) ← three isolated cells (`cells/runtime/`, `cells/tools/`, `cells/panel/`) ←
+thin `src/index.ts`.
 
 ## Public entrypoint
 
 `createBrowserSlice({ log, host, panel, store, openExternal, notify?, newId? })` returns:
 
-| Member                                                                             | Meaning                                                                                                                  |
-| :--------------------------------------------------------------------------------- | :----------------------------------------------------------------------------------------------------------------------- |
-| `available`                                                                        | `true` when a desktop host was given.                                                                                    |
-| `capability`                                                                       | Open `ToolCapability` (`id: 'browser'`, owns `chat-demo:browser` toggle on desktop, `presenter`, `serializeForArchive`). |
-| `declareTools({ enabled })`, `instructions`, `handles(name)`, `toolNames`          | Tool declaration for a turn (invariant 2). `toolNames` are persisted in chat history; never rename.                      |
-| `HeaderToggle`                                                                     | Session header toggle button (renders only on desktop).                                                                  |
-| `run(name, input, { signal, sessionId? })`                                         | Run one tool call. Always resolves to `{ status, text, images, meta, durationMs }`.                                      |
-| `setActiveSession(id \| null)`                                                     | The chat on screen (`null`: the new-chat screen); also updated reactively by `ActiveSessionChanged`.                     |
-| `start()`                                                                          | Bind host events; returns the unbinding function.                                                                        |
-| `getSession(id)`                                                                   | `{ panelOpen, tabs, activeTabId }` for a chat.                                                                           |
-| `openPanel(id?)`, `closePanel(id?)`, `togglePanel(id?)`                            | The browser panel of a chat (default: the active one).                                                                   |
-| `openUrl(url, { sessionId?, newTab?, initiator? })`                                | Show a URL in the panel.                                                                                                 |
-| `takeOver(sessionId)`                                                              | Publishes `BrowserControlTakenOver` so any controlling agent stops.                                                      |
-| `tabs.create/close/switch/navigate/setViewport`, `setStageSize`, `setPanelBounds`  | Tab and layout operations (also used by the slice's own view).                                                           |
-| `refreshSnapshot()`                                                                | Refresh the still image shown while the webview is hidden.                                                               |
-| `BrowserPanel({ topActions? })`, `LocalhostSetting`                                | Views.                                                                                                                   |
-| `isHttpUrl`, `normalizeOmniboxInput`, `computeSomBadgeBoxes`, `BROWSER_TOOL_NAMES` | Pure helpers, exported by the package.                                                                                   |
-| `dispose()`                                                                        | Unsubscribes all Spine `EventLog` listeners.                                                                             |
+| Member                                                                                                 | Meaning                                                                                                                         |
+| :----------------------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------ |
+| `available`                                                                                            | `true` when a desktop `BrowserHost` was injected.                                                                               |
+| `capability`                                                                                           | Open `ToolCapability` (`id: 'browser'`, owns `chat-demo:browser` toggle on desktop, `presenter`, `serializeForArchive`).        |
+| `declareTools({ enabled })`, `instructions`, `handles(name)`, `toolNames`                              | Tool declaration (invariant 2). `toolNames` are persisted in chat history; never rename.                                        |
+| `run(name, input, { signal, sessionId? })`                                                             | Runs one tool call sequentially; always resolves to `{ status, text, images, meta, durationMs }`.                               |
+| `setActiveSession(id \| null)`, `start()`                                                              | Active chat (`null` = new-chat screen; also driven by `ActiveSessionChanged`) and host-event binding returning unbind.          |
+| `getSession(id)`, `openPanel`, `closePanel`, `togglePanel`, `openUrl`, `takeOver`                      | Per-chat panel & navigation commands (`panelOpen` projected live from `PanelSlot`; `takeOver` emits `BrowserControlTakenOver`). |
+| `tabs.{create,close,switch,navigate,setViewport}`, `setStageSize`, `setPanelBounds`, `refreshSnapshot` | Tab, viewport-fit, bounds-sync, and snapshot operations.                                                                        |
+| `HeaderToggle`, `BrowserPanel({ topActions? })`, `LocalhostSetting`, `dispose()`                       | Views and full subscription/timer teardown.                                                                                     |
 
-Ports: `BrowserHost` (desktop IPC, `null` on web), `PanelSlot` (this slice's slot in the app's right
-panel, from `spine/design`), `KeyValueStore`.
+Pure package exports: `isHttpUrl`, `normalizeOmniboxInput`, `computeSomBadgeBoxes`.
+Ports: `BrowserHost` (desktop IPC, `null` on web), `PanelSlot` (`spine/ports`), `KeyValueStore`.
 
 ## Behavioural invariants
 
-1. **Web build.** Without a host: `available` is false, no tools are declared, any `run` resolves to
-   an error saying the browser is desktop-only, and the panel renders nothing.
-2. **Declaration.** With a host and `enabled`, all eleven `browser_*` tools are declared; otherwise
-   none.
-3. **Per-chat ownership.** Tabs, the open/closed state and the active tab belong to one chat and
-   never leak to another. On the new-chat screen the panel cannot open and tabs cannot be created.
-4. **Tabs.** Opening a panel with no tabs creates a blank tab. Closing the active tab activates the
-   tab that takes its place (or the previous one at the end). Closing the last tab closes the panel.
-5. **Native visibility.** The active tab's webview is shown only when all hold: a chat is active,
-   the panel slot shows the browser for that chat, the chat's browser panel is open, the panel is
-   not animating or resizing, no overlay lock is held, and the tab shows an `http(s)` page whose
-   webview exists. Otherwise the host is told to hide it.
-6. **Overlay lock.** While `panel.getLayout().overlayLocked` is true the webview is hidden (capturing
-   a still snapshot on the rising edge); clearing `overlayLocked` lets it show again.
-7. **Panel replaced.** When the panel slot stops showing the browser for a chat, that chat's
-   browser panel counts as closed.
-8. **Lifecycle facts.** `ActiveSessionChanged` switches the active chat; `SessionDeleted` removes
-   that chat's browser state and closes its native webviews; `SessionHistoryReplaced` does this for
-   every chat. `takeOver(sessionId)` publishes `BrowserControlTakenOver`.
-9. **URLs.** Only `http:`/`https:` are web pages. Address-bar input: explicit `http(s)://` kept;
-   `localhost`/`127.0.0.1`/`[::1]` (with port/path) get `http://`; `name.tld` gets `https://`;
-   anything else becomes a Google search; blank is `about:blank`.
-10. **Tool runs & action settling.** Calls execute one at a time in call order. A call's step is described in words (its `summary`, or until that has streamed in, a short description such as "Running page script"), never by the tool's internal name. Tool calls politely
-    reveal the browser panel (`panel.reveal`) rather than forcing it over another open workspace
-    panel or a user dismissal, while still executing against the tab's webview in the background. A
-    call aborted before it starts resolves `aborted` without touching the browser; a failure
-    resolves `error` with the message; while a call runs the chat is marked as controlled by the
-    model, and the mark is cleared afterwards. Actions that initiate a document navigation (`browser_navigate`,
-    navigating `browser_click`, `browser_type` with `submit: true`, and form-submitting or
-    link-activating `browser_press_key`) wait for the navigation to start and finish loading before
-    snapshotting. `browser_type` with `submit: true` yields after input before dispatching `Enter`
-    to the live active element (without a premature `change` event). `browser_click` and
-    `browser_type` only `scrollIntoView` when targeting by `ref` (never shifting elements under
-    explicit viewport `(x, y)` coordinates). `browser_press_key` executes standard keyboard default
-    actions (`Tab`/`Shift+Tab` focus traversal, `Enter`/`Space` control activation, `Home`/`End`
-    and page scrolling) when `keydown` is not prevented by the page. Detached element refs fail with
-    `status: 'error'` (never silently retargeting another node) and include refreshed interactive
-    refs (and matching replacement hints) wrapped in `<untrusted_webpage_content …>`.
-11. **Untrusted content, iframes & snapshot verbosity.** Page text, refreshed stale-ref listings,
-    cross-origin iframe listings, and `browser_eval` results reach the model wrapped in
-    `<untrusted_webpage_content …>…</untrusted_webpage_content>`; truncation always occurs inside
-    the wrapper so the closing tag is never dropped. Interactive element listings and `Page text:`
-    are budgeted separately so link-dense pages never starve page text, truncated page text reports
-    shown vs. total character counts with `selector`/`browser_eval` guidance, and capped element
-    lists note that existing `[eN]` refs stay valid. Snapshot headers report CSS viewport pixels
-    and, when a screenshot is attached, its encoded pixel dimensions and scale vs. the CSS viewport
-    so coordinate clicks stay unambiguous on HiDPI displays and scaled viewports. Snapshots never
-    include password field values, traverse accessible same-origin iframes into `[eN]` refs and
-    page text, list visible cross-origin iframes (title and `src`) when present, index visible
-    scrollable containers for `browser_scroll({ ref })` (excluded from screenshot SoM badges), and
-    hide the agent cursor before capturing screenshots. Layout/chrome actions
-    (`browser_scroll`, `browser_set_viewport`, `browser_tabs` switch) omit page text unless
-    requested (`browser_scroll` with `ref` reports the container's updated scroll position);
-    same-URL content-mutating actions (`browser_click`, `browser_type`, `browser_press_key`,
-    `browser_select`) deduplicate unchanged page text across hash-only URL changes and report only
-    changed lines (or full text when the page mostly changed); `browser_observe` and navigations
-    return full page text unless `text: false`. `browser_tabs` `close` reports the newly active tab
-    (or notes when no tabs remain).
-12. **Agent cursor.** One small solid kite in the app's accent blue (white edge, tip on its point;
-    `kiteCursor.ts`) shows what the model is doing, drawn inside the page (embedded in the driver
-    scripts) and over the browser's toolbar in the app's window (`agentCursor.ts`), and moving
-    between the two through the page's top edge: it heads for its destination in the other layer,
-    and the moment its tip crosses the edge the other layer's kite takes over at the same spot,
-    speed and heading, so it reads as one kite passing through. Before `browser_click`, `browser_type` and
-    `browser_select` act it glides on a critically damped spring to the point the action will use
-    (a ref's centre after it is scrolled into view, explicit `(x, y)`, or the focused element) and
-    presses (scales to 0.84) as the action fires; `browser_press_key` takes it to the focused element
-    (or leaves it where it is) and presses; `browser_scroll` keeps it where it is (or brings it to
-    the middle of the page). Each glide follows a gentle arc (bulging to one side by 7% of the
-    distance, at most 32 px), leans up to 10° into sideways movement, and arrives slightly past its
-    target before settling back (2% of the distance, at most 2.5 px). `browser_navigate` takes it up out of the page to the address bar,
-    which it presses and types the URL into (at most 450 ms) before loading, or to the back, forward
-    or reload button; `browser_tabs` takes it to the new-tab button, the tab, or the tab's close
-    button. It stays in the toolbar until the next page action brings it back down into the page.
-    Actions wait for each glide (at most 700 ms in the page, 600 ms in the toolbar) only while that
-    tab is the page on screen; off screen nothing waits and the toolbar part is skipped. A faint
-    glow follows the kite's outline: almost none at rest, more as it moves faster, and a short bloom
-    on each press. While it waits it drifts about a pixel and tilts about 2.5°, easing in over a
-    second or so and dropping out as soon as it moves. Reduced motion makes it jump, with no glow,
-    no drift and no typing. It takes no pointer
-    events, keeps its size on screen when the page is shown scaled down (a wide viewport fitted
-    into the panel), lives in a closed shadow root in the page, carries over to the same spot after a page
-    load, and is hidden while a screenshot is captured. It stays visible for the whole reply that
-    drives the browser and fades out when that reply settles (`ReplyLifecycleChanged`), when the
-    reader takes over, or when the reader uses the page or the app (a trusted pointer, key or wheel
-    event). A target that cannot be resolved never blocks the action, which reports the error itself.
-13. **Viewports** are per tab; the tab's zoom is the fit of its viewport into the stage.
-14. **Localhost access.** Stored under `chat-demo:browser-allow-localhost` (default off) and sent to
-    the host when events are bound and whenever it changes.
-15. **New-chat screen links.** `openUrl` with no chat opens the URL externally.
-
-## Tunable parameters
-
-- Navigation settle delays: post-load SPA settle (~180 ms), post-type submit yield (~150 ms),
-  non-navigating action settle (~180–250 ms), expected-navigation start window (~2,000 ms), and
-  load timeout (~10,000–15,000 ms).
-- Snapshot budgets: interactive element cap (140), scrollable container cap (8), cross-origin iframe
-  listing cap (12), `<select>` option preview cap (20, always retaining selected option(s) with
-  overflow count), extracted page text cap (12,000 chars), and outer tool output cap (24,000 chars,
-  truncated inside `<untrusted_webpage_content>`).
-- Agent cursor: 22 px kite (50° tip, widest 60% of the way back), idle drift about 1.5 px and
-  2.5° on 1.9–5.1 s cycles, arc bulge 7% (at most 32 px), lean 0.011°/(px/s) up to 10°, overshoot
-  2% (at most 2.5 px), spring stiffness 170 /s², longest wait for it to land 700 ms in the
-  page and 600 ms in the toolbar, address typing at most 450 ms, press scale 0.84 for 120 ms, glow alpha 0.08 at rest rising to 0.42 at speed (900 px/s)
-  plus up to 0.4 on a press (fading over 450 ms, capped at 0.6).
-- Delta reporting threshold: same-URL diff emits changed lines when at most half the page changed
-  and the delta fits within a compact cap; larger rewrites emit full page text.
+1. **Web build.** Without a host: `available` is false, no tools are declared, every `run` resolves
+   to a desktop-only error, and the panel renders nothing.
+2. **Declaration.** With a host and `enabled`, all eleven `browser_*` tools are declared; else none.
+3. **Per-chat ownership.** Tabs, active tab, and open state never leak across chats. On the new-chat
+   screen (`null`), `openPanel` returns `false` and `tabs.create` rejects.
+4. **Tabs.** Opening an empty panel creates an `about:blank` tab. Closing the active tab activates
+   the neighbor taking its slot (or the previous tab at the end); closing the last tab closes the
+   panel.
+5. **Native visibility & IPC sync recovery.** The active tab's native webview is shown iff: desktop
+   host exists, a chat is active, `PanelSlot` shows the browser for that chat, layout is neither
+   animating nor resizing nor overlay-locked, and the tab holds a created `http(s)` webview.
+   Otherwise the host hides it. Native sync caches advance only after IPC succeeds; rejected IPC
+   calls invalidate the cache so the next sync retries and recovers cleanly. Disposing a tab or
+   session while `createTab` is in flight immediately closes the orphaned native webview.
+6. **Overlay lock & panel displacement.** Rising `overlayLocked` captures a still snapshot and hides
+   the webview until unlocked. Displacing the browser in `PanelSlot` closes the browser panel
+   (`panelOpen` is never duplicated outside `PanelSlot`).
+7. **Lifecycle facts.** `ActiveSessionChanged` switches active chat; `SessionDeleted` disposes that
+   chat and closes its native tabs; `SessionHistoryReplaced` disposes every chat and closes all
+   native tabs; `ReplyLifecycleChanged` (`settled`) hides the agent cursor.
+8. **URLs (idempotent).** Only `http:`/`https:` are web pages. `normalizeOmniboxInput` keeps
+   `http(s)://`, maps `localhost`/`127.0.0.1`/`[::1]` to `http://`, maps `name.tld` to `https://`,
+   maps blank or `about:blank` to `'about:blank'`, and turns other text into a Google search. Output
+   is always `'about:blank'` or an `isHttpUrl` URL and is idempotent.
+9. **Tool runs & action settling.** Calls run serially in call order, politely reveal the panel via
+   `panel.reveal`, mark the chat model-controlled while running, and resolve pre-start aborts as
+   `aborted` without touching the browser. Navigating actions wait for load + SPA settle;
+   `browser_type(submit: true)` yields before `Enter`; only ref-targeted actions scroll into view
+   (never coordinate clicks); `browser_press_key` performs default keyboard actions unless prevented;
+   detached refs fail loudly with refreshed interactive refs and hints inside the untrusted wrapper.
+10. **Untrusted content, iframes, & snapshot framing.** Page text, stale-ref lists, cross-origin
+    iframe lists, and `browser_eval` values wrap in `<untrusted_webpage_content …>…</untrusted_webpage_content>`
+    with truncation inside the wrapper so the closing tag is never dropped. Interactive elements and
+    page text use separate budgets; passwords are redacted; accessible same-origin iframes are
+    traversed; visible cross-origin iframes and scrollable containers are listed; screenshot headers
+    report CSS viewport pixels plus Retina scale. Layout actions omit page text unless requested;
+    same-URL mutations deduplicate unchanged text and emit compact line diffs; `browser_observe` and
+    navigations return full text unless `text: false`.
+11. **Agent cursor.** One accent-blue kite cursor spans page and toolbar seamlessly across the
+    page's top edge, glides on a spring with arc/lean/overshoot and press feedback for page and
+    toolbar actions when visible on screen (skipped off-screen; reduced motion jumps with no drift
+    or glow), stays hidden during screenshots, ignores pointer events, preserves visual size under
+    zoom, and fades out on reply settle, user takeover, or trusted user input.
+12. **Viewports, localhost, & new-chat links.** Viewports fit per tab into stage bounds;
+    `chat-demo:browser-allow-localhost` (default off) syncs to host on `start()` and change;
+    `openUrl` with no active chat opens externally.
 
 ## Facts
 
-Consumes `ActiveSessionChanged`, `SessionDeleted`, `SessionHistoryReplaced`,
-`ReplyLifecycleChanged` (hides the agent cursor when a reply settles). Publishes
-`BrowserControlTakenOver`.
+- **Consumes:** `ActiveSessionChanged`, `SessionDeleted`, `SessionHistoryReplaced`, `ReplyLifecycleChanged`.
+- **Publishes:** `BrowserControlTakenOver`.
 
-## Ownership notes
+## Tunable parameters
 
-- Depth-2 layout: pure domain kernel (`kernel/`: types, URL normalization, state machine, native sync planner, tool metadata, messages) + three isolated cells (`cells/runtime/`, `cells/tools/`, `cells/panel/`) wired by thin `src/index.ts`.
-- The right-hand panel (which kind is shown per chat, width, animation, stage size) belongs to the
-  app; this slice reads `panelOpen` live from `PanelSlot` rather than duplicating it.
-- Native sync cache advances only after host IPC succeeds; a failed sync invalidates the cache so
-  subsequent syncs retry instead of stalling.
-- The page-driver scripts (`cells/tools/driver.ts`) run inside web pages and are tested through `run`.
+- **Live native tab LRU cap:** `14` (`MAX_LIVE_NATIVE_TABS`, synced with Rust via `check:ipc`; active and model-controlled sessions are pinned).
+- **Navigation delays:** SPA settle `~180 ms`, submit yield `~150 ms`, non-nav settle `~180–250 ms`, nav start window `~2,000 ms`, load timeout `~10–15 s`.
+- **Snapshot budgets:** `140` interactive elements, `8` scroll containers, `12` cross-origin iframes, `20` `<select>` options (retaining selected), `12,000` page-text chars, `24,000` total output chars.
+- **Agent cursor:** `22 px` kite, `7%` arc (cap `32 px`), `10°` max lean, `2%` overshoot (cap `2.5 px`), stiffness `170 /s²`, max waits `700 ms` (page) / `600 ms` (toolbar) / `450 ms` (typing), press scale `0.84` (`120 ms`), idle drift `1.5 px` / `2.5°`, glow alpha `0.08–0.42` (+`0.4` press, cap `0.6`).

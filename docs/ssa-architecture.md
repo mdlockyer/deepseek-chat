@@ -105,6 +105,7 @@ boundaries mechanically:
 | :-------------------------------- | :-------------------------- | :------------------------------------------------------------------------------------------------------------ |
 | **Compiler Walls (`tsc -b`)**     | `tsconfig.prod.json` + refs | Workspace-enforced package boundaries and dev-only `@deepseek-chat/test-support` ban in production            |
 | **DAG, Tier-`1c`, & `TSCONFIG`**  | `scripts/check-dag.mjs`     | Strict tier DAG, `[CONTRACT-SCOPE]` allowlists, single `.` export, synced `tsconfig` refs, Depth-2 `include`  |
+| **Entrypoint Hygiene**            | `scripts/check-dag.mjs`     | `[ENTRY-HYGIENE]`: bans wildcard `export *` and foreign `@deepseek-chat/*` re-exports in slice entrypoints    |
 | **Depth-2 `KERNEL-PURITY`**       | `scripts/check-dag.mjs`     | `kernel/` bans `.tsx`, `.css`, React/Zustand/IDB/`lib-ui`/`lib-markdown`, `src/`, `cells/`; single `index.js` |
 | **Strict `CELL-ISOLATION`**       | `scripts/check-dag.mjs`     | Cells never cross-import siblings or import `src/`; external code imports only `cells/<name>/index.js`        |
 | **Zero Orphan Spine Facts**       | `scripts/check-dag.mjs`     | Every fact in `spine/facts/` is referenced by >= 2 distinct production packages (`[ORPHAN-FACT]`)             |

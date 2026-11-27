@@ -16,8 +16,7 @@ reply-wide child citation renumbering, Activity Inspector rendering, and v3 arch
 | `capability` | `ToolCapability` declaring `wait` + `post` when any spawn profile is active, running spawn/wait/post, providing `turnHooks`, `presenter`, and `serializeForArchive`. |
 | `dispose()`  | Aborts every live child across all active replies and clears runtime state.                                                                                          |
 
-Pure exports: `POST_TOOL_NAME`, `WAIT_TOOL_NAME`, `AUTO_WAIT_ID_PREFIX`, `DEFAULT_SUBAGENTS_PARAMS`,
-`assignChildCitations`, `createMessageBoard`, `formatBoardDigest`, `runAgent`.
+Pure exports: `POST_TOOL_NAME`, `WAIT_TOOL_NAME`.
 
 ## Behavioural invariants
 
