@@ -22,6 +22,7 @@ import {
   BROWSER_NAVIGATE_TOOL_NAME,
   BROWSER_OBSERVE_TOOL_NAME,
   BROWSER_SET_VIEWPORT_TOOL_NAME,
+  describeAction,
   type BrowserActionMeta,
 } from './tools.js'
 
@@ -83,13 +84,17 @@ const readMeta = (
     return payload
   }
   const input =
-    call.input && typeof call.input === 'object'
-      ? (call.input as { summary?: unknown; url?: unknown })
+    call.input && typeof call.input === 'object' && !Array.isArray(call.input)
+      ? (call.input as Record<string, unknown> & { summary?: unknown; url?: unknown })
       : null
   return {
     tool: call.name,
+    // Until the model's own summary has streamed in, describe the action in words, never by the
+    // tool's internal name.
     summary:
-      typeof input?.summary === 'string' && input.summary.trim() ? input.summary.trim() : call.name,
+      typeof input?.summary === 'string' && input.summary.trim()
+        ? input.summary.trim()
+        : describeAction(call.name, input ?? {}),
     ...(typeof input?.url === 'string' ? { url: input.url } : {}),
   }
 }

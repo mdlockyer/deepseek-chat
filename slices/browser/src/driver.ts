@@ -270,6 +270,8 @@ export const buildCursorMoveScript = (params: {
   from?: { x: number; y: number } | null
   /** Start from `from` even if this document's cursor is elsewhere (it comes from the toolbar). */
   enter?: boolean
+  /** How wide the page's viewport is on screen, in window pixels, so the cursor keeps its size. */
+  screenWidth?: number | null
 }): string => {
   const args = JSON.stringify(params)
   return `
@@ -309,6 +311,9 @@ try {
     return JSON.stringify({ ok: true, moved: false, vw, vh });
   }
   const c = __dsCursor();
+  if (typeof p.screenWidth === 'number' && p.screenWidth > 0 && vw > 0) {
+    c.setUnit(vw / p.screenWidth);
+  }
   if (!c.position() || (p.enter && p.from)) {
     if (p.from) {
       c.place(p.from.x, p.from.y);

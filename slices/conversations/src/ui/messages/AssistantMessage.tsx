@@ -12,7 +12,7 @@ import { describeReply } from '../../describe.js'
 import { useTranslate } from '../../messages.js'
 import { canContinueReply } from '../../reply.js'
 import { type AssistantMessage as AssistantMessageType } from '../../types.js'
-import { needsWorkingIndicator } from '../../view.js'
+import { needsWorkingIndicator, type ReplyView } from '../../view.js'
 import styles from './AssistantMessage.module.css'
 import {
   BranchSwitcher,
@@ -28,6 +28,46 @@ import { WhaleLoader } from './WhaleLoader.js'
 const TOP_UP_URL = 'https://platform.deepseek.com/top_up'
 const STALL_DELAY_MS = 1500
 const useNoInspection = () => null
+/** How long text after a tool call streams before it counts as the answer. */
+const NARRATION_HOLD_MS = 1200
+/** Text this long, or with a paragraph break, is the answer at once. */
+const NARRATION_MAX_CHARS = 280
+
+/**
+ * In a reply that has used tools, text after the latest tool call is usually a line of narration
+ * ("That didn't work. Let me check…") that folds into the steps as soon as the next call starts.
+ * Shown as the answer, it flashes in and out and makes the transcript jump. So while the reply
+ * streams, hold such text back (the work strip stays live) until it is long, has a paragraph break,
+ * or has streamed for `NARRATION_HOLD_MS` with no tool call after it.
+ */
+const useHeldAnswer = (
+  messageId: string,
+  answer: ReplyView['answer'],
+  streaming: boolean,
+  steps: ReplyView['steps']
+): ReplyView['answer'] => {
+  const afterTools = steps.some((step) => step.type === 'tool')
+  const key = `${messageId}:${steps.length}`
+  const candidate = streaming && afterTools && answer !== null
+  const [since, setSince] = useState<{ readonly key: string; readonly at: number } | null>(null)
+  const [, setTick] = useState(0)
+  if (candidate && since?.key !== key) {
+    setSince({ key, at: Date.now() })
+  }
+  const elapsed = candidate && since?.key === key ? Date.now() - since.at : 0
+  const decided =
+    answer !== null &&
+    (answer.text.length >= NARRATION_MAX_CHARS || /\n\s*\n/.test(answer.text.trim()))
+  const held = candidate && !decided && elapsed < NARRATION_HOLD_MS
+  useEffect(() => {
+    if (!held) {
+      return
+    }
+    const timer = setTimeout(() => setTick((n) => n + 1), NARRATION_HOLD_MS - elapsed + 16)
+    return () => clearTimeout(timer)
+  }, [held, key, elapsed])
+  return held ? null : answer
+}
 
 const useStalled = (message: object, streaming: boolean, delay: number) => {
   const [stalledAt, setStalledAt] = useState<object | null>(null)
@@ -68,7 +108,8 @@ export const AssistantMessage = memo(function AssistantMessage({
   const panelTarget = useActiveInspection()
   const notice = streaming ? null : describeReply(message)
   const refused = message.stopReason === 'refusal'
-  const answer = refused ? null : view.answer
+  const shownAnswer = useHeldAnswer(message.id, view.answer, streaming, view.steps)
+  const answer = refused ? null : shownAnswer
   const responseText = [answer?.text, notice?.presentation === 'response' ? notice.text : null]
     .filter(Boolean)
     .join('\n\n')

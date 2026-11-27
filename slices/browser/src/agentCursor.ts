@@ -94,7 +94,11 @@ export const createAgentCursor = (deps: AgentCursorDeps) => {
     target: Parameters<typeof buildCursorMoveScript>[0]
   ): Promise<MoveResult | null> => {
     try {
-      const result = await deps.evalJson<MoveResult>(tabId, buildCursorMoveScript(target), 3_000)
+      const result = await deps.evalJson<MoveResult>(
+        tabId,
+        buildCursorMoveScript({ ...target, screenWidth: viewportRect()?.width ?? null }),
+        3_000
+      )
       if (result.moved && typeof result.x === 'number' && typeof result.y === 'number') {
         pageAt.set(tabId, { x: result.x, y: result.y, vw: result.vw ?? 0 })
       }

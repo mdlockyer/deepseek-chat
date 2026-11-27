@@ -57,7 +57,7 @@ panel, from `spine/design`), `KeyValueStore`.
 9. **URLs.** Only `http:`/`https:` are web pages. Address-bar input: explicit `http(s)://` kept;
    `localhost`/`127.0.0.1`/`[::1]` (with port/path) get `http://`; `name.tld` gets `https://`;
    anything else becomes a Google search; blank is `about:blank`.
-10. **Tool runs & action settling.** Calls execute one at a time in call order. Tool calls politely
+10. **Tool runs & action settling.** Calls execute one at a time in call order. A call's step is described in words (its `summary`, or until that has streamed in, a short description such as "Running page script"), never by the tool's internal name. Tool calls politely
     reveal the browser panel (`panel.reveal`) rather than forcing it over another open workspace
     panel or a user dismissal, while still executing against the tab's webview in the background. A
     call aborted before it starts resolves `aborted` without touching the browser; a failure
@@ -113,7 +113,8 @@ panel, from `spine/design`), `KeyValueStore`.
     on each press. While it waits it drifts about a pixel and tilts about 2.5°, easing in over a
     second or so and dropping out as soon as it moves. Reduced motion makes it jump, with no glow,
     no drift and no typing. It takes no pointer
-    events, lives in a closed shadow root in the page, carries over to the same spot after a page
+    events, keeps its size on screen when the page is shown scaled down (a wide viewport fitted
+    into the panel), lives in a closed shadow root in the page, carries over to the same spot after a page
     load, and is hidden while a screenshot is captured. It stays visible for the whole reply that
     drives the browser and fades out when that reply settles (`ReplyLifecycleChanged`), when the
     reader takes over, or when the reader uses the page or the app (a trusted pointer, key or wheel

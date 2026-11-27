@@ -706,7 +706,8 @@ const formatSnapshot = (
   return `${header}\n\n${wrapped}`
 }
 
-const describeAction = (toolName: string, input: Record<string, unknown>): string => {
+/** A short, human description of a browser tool call ("Running page script"). */
+export const describeAction = (toolName: string, input: Record<string, unknown>): string => {
   switch (toolName) {
     case BROWSER_NAVIGATE_TOOL_NAME: {
       const action = typeof input.action === 'string' ? input.action : 'goto'

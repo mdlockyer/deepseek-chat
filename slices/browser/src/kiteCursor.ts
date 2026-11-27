@@ -23,6 +23,12 @@ export type KiteCursor = {
   readonly hide: () => void
   /** Hides it while a screenshot is taken, without forgetting whether it was shown. */
   readonly setCaptured: (captured: boolean) => void
+  /**
+   * How many of this document's pixels make one pixel on screen. A page shown scaled down (a wide
+   * viewport fitted into the panel) passes more than 1, so the kite, its drift and its arcs keep
+   * the same size on screen.
+   */
+  readonly setUnit: (unit: number) => void
   /** Where it is heading, or `null` before it has been anywhere. */
   readonly position: () => { readonly x: number; readonly y: number } | null
   readonly isShown: () => boolean
@@ -81,13 +87,15 @@ export function createKiteCursor(doc: Document, win: Window & typeof globalThis)
   // bulges to one side by 7% of the distance, at most 32 px (its control point sits twice as far). A slightly underdamped spring drives progress
   // along it, so the cursor arrives a little past the target and settles back: 2% of the distance
   // on short moves, never more than 2.5 px.
+  // Document pixels per screen pixel (see `setUnit`).
+  let unit = 1
   const BOW = 0.14
   const MAX_BOW = 64
   const OVERSHOOT = 0.02
   const MAX_OVERSHOOT_PX = 2.5
   /** Spring damping for a glide of `distance` px that overshoots by the allowed amount. */
   const dampingFor = (distance: number) => {
-    const fraction = Math.min(OVERSHOOT, MAX_OVERSHOOT_PX / Math.max(1, distance))
+    const fraction = Math.min(OVERSHOOT, (MAX_OVERSHOOT_PX * unit) / Math.max(1, distance))
     const log = Math.log(fraction)
     const ratio = -log / Math.sqrt(Math.PI * Math.PI + log * log)
     return 2 * ratio * Math.sqrt(SPRING)
@@ -136,13 +144,14 @@ export function createKiteCursor(doc: Document, win: Window & typeof globalThis)
     if (!Number.isFinite(x) || !Number.isFinite(y)) {
       return
     }
-    const speed = Math.min(1, Math.hypot(vx, vy) / 900)
+    const speed = Math.min(1, Math.hypot(vx, vy) / unit / 900)
     const radius = 2.5 + 3 * speed + 3 * pulse
     const turn = Math.PI * 2
+    const sway = idle * unit
     const dx =
-      idle * (1.1 * Math.sin((turn * clock) / 3.7) + 0.5 * Math.sin((turn * clock) / 1.9 + 1))
+      sway * (1.1 * Math.sin((turn * clock) / 3.7) + 0.5 * Math.sin((turn * clock) / 1.9 + 1))
     const dy =
-      idle * (0.9 * Math.sin((turn * clock) / 4.3 + 2) + 0.4 * Math.sin((turn * clock) / 2.3))
+      sway * (0.9 * Math.sin((turn * clock) / 4.3 + 2) + 0.4 * Math.sin((turn * clock) / 2.3))
     const tilt = lean + idle * 2.5 * Math.sin((turn * clock) / 5.1 + 0.5)
     wrap.style.transform =
       'translate(' +
@@ -152,7 +161,7 @@ export function createKiteCursor(doc: Document, win: Window & typeof globalThis)
       'px) rotate(' +
       tilt.toFixed(2) +
       'deg) scale(' +
-      scale.toFixed(3) +
+      (scale * unit).toFixed(3) +
       ')'
     wrap.style.filter =
       glow > 0.01
@@ -188,10 +197,10 @@ export function createKiteCursor(doc: Document, win: Window & typeof globalThis)
     x = at.px
     y = at.py
     // Lean up to 10° into sideways movement, and straighten as it slows.
-    const leanGoal = reduce ? 0 : Math.max(-10, Math.min(10, vx * 0.011))
+    const leanGoal = reduce ? 0 : Math.max(-10, Math.min(10, (vx / unit) * 0.011))
     lean += (leanGoal - lean) * Math.min(1, dt * 9)
     pulse = Math.max(0, pulse - dt / 0.45)
-    const speed = Math.min(1, Math.hypot(vx, vy) / 900)
+    const speed = Math.min(1, Math.hypot(vx, vy) / unit / 900)
     const glowGoal = reduce ? 0 : Math.min(0.6, 0.08 + 0.34 * speed + 0.4 * pulse)
     glow += (glowGoal - glow) * Math.min(1, dt * 12)
     scale += ((now < pressUntil ? 0.84 : 1) - scale) * Math.min(1, dt * 30)
@@ -262,7 +271,7 @@ export function createKiteCursor(doc: Document, win: Window & typeof globalThis)
     }
     // Bow to the same side for the same direction of travel, so paths look deliberate.
     const side = dx * 0.3 + dy > 0 ? 1 : -1
-    const bow = Math.min(MAX_BOW, distance * BOW) * side
+    const bow = Math.min(MAX_BOW * unit, distance * BOW) * side
     fx = x
     fy = y
     tx = px
@@ -285,7 +294,10 @@ export function createKiteCursor(doc: Document, win: Window & typeof globalThis)
     let pv = sv
     let ms = 0
     const h = 1 / 240
-    while (ms < 900 && (Math.abs(1 - ps) * distance > 1.5 || Math.abs(pv) * distance > 30)) {
+    while (
+      ms < 900 &&
+      (Math.abs(1 - ps) * distance > 1.5 * unit || Math.abs(pv) * distance > 30 * unit)
+    ) {
       pv += (-SPRING * (ps - 1) - damping * pv) * h
       ps += pv * h
       ms += 1000 * h
@@ -320,6 +332,12 @@ export function createKiteCursor(doc: Document, win: Window & typeof globalThis)
     press,
     show,
     hide,
+    setUnit: (next: number) => {
+      if (Number.isFinite(next) && next > 0 && Math.abs(next - unit) > 0.001) {
+        unit = next
+        paint()
+      }
+    },
     setCaptured: (next: boolean) => {
       captured = next
       wrap.style.visibility = next ? 'hidden' : 'visible'

@@ -118,7 +118,10 @@ factories (`createIndexedDbSessionStore`, `memorySessionStore`).
    keep their screenshots backstage in the Activity Inspector. `buildTurnWorkStrip` is driven solely
    by `ToolStepPresenter.summarize` and `result.frontStageNote`, emitting middot-free natural-language
    summaries (never appending thinking duration onto tool counts and never escalating recovered
-   mid-turn tool errors into transcript-level warnings). `buildInlineTrace` and
+   mid-turn tool errors into transcript-level warnings). While a reply that has used tools streams,
+   text after its latest tool call is held back (the strip stays live) until it reaches 280
+   characters, has a paragraph break, or has streamed for 1.2 s with no tool call after it, so a
+   line of narration before the next call never flashes in as the answer. `buildInlineTrace` and
    `selectInlineTracePreview` project domain-blind plain-prose steps (with optional `callId`,
    `lane`, and presenter-supplied `icon`, and without step numbers or per-step durations); bounded
    previews always retain currently running steps in chronological order, and clicking an inline
