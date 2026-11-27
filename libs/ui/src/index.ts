@@ -146,7 +146,7 @@ export {
   type HoverGlideState,
   type HoverGlideTransition,
 } from './hoverGlideState.js'
-export { Minimap, type MinimapProps, type MinimapReturn, type MinimapSection } from './Minimap.js'
+export { Minimap, type MinimapProps, type MinimapSection } from './Minimap.js'
 export {
   MINIMAP_FOCUS_SLACK,
   MINIMAP_FOCUS_STIFFNESS,

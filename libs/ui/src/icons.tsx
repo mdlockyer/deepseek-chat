@@ -1199,30 +1199,3 @@ export const IconChevronUpOutline14 = () => (
     />
   </svg>
 )
-
-/** Arrow that bends back on itself: "return to where you were". */
-export const IconReturnOutline14 = () => (
-  <svg
-    aria-hidden="true"
-    focusable="false"
-    width={14}
-    height={14}
-    viewBox="0 0 14 14"
-    fill="none"
-    xmlns="http://www.w3.org/2000/svg"
-  >
-    <path
-      d="M5 2.75L2.25 5.5L5 8.25"
-      stroke="currentColor"
-      strokeWidth="1.25"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-    <path
-      d="M2.5 5.5H8.25C10.0449 5.5 11.5 6.95507 11.5 8.75C11.5 10.5449 10.0449 12 8.25 12H6.5"
-      stroke="currentColor"
-      strokeWidth="1.25"
-      strokeLinecap="round"
-    />
-  </svg>
-)

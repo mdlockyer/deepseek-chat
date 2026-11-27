@@ -111,9 +111,8 @@ export const TranscriptChapters = ({
   turnsRef.current = turns
   const [current, setCurrent] = useState(Math.max(0, turns.length - 1))
   const currentRef = useRef(current)
-  const [returnTo, setReturnTo] = useState<number | null>(null)
-  const returnRef = useRef(returnTo)
-  returnRef.current = returnTo
+  /** The turn ⌥← goes back to after a long jump, until the reader is there again. */
+  const returnRef = useRef<number | null>(null)
 
   const measure = useCallback(() => {
     const scroll = scrollRef.current
@@ -172,7 +171,7 @@ export const TranscriptChapters = ({
       publish(index, 'reader', false)
     }
     if (returnRef.current === index) {
-      setReturnTo(null)
+      returnRef.current = null
     }
   }
   const paintRef = useRef(paint)
@@ -219,7 +218,7 @@ export const TranscriptChapters = ({
   // A different chat starts fresh: no lock, nowhere to return to.
   useLayoutEffect(() => {
     lockRef.current = null
-    setReturnTo(null)
+    returnRef.current = null
   }, [sessionId])
 
   const turnKey = turns.map((turn) => turn.messageId).join(' ')
@@ -271,7 +270,7 @@ export const TranscriptChapters = ({
         index !== from &&
         Math.abs(target - scroll.scrollTop) > scroll.clientHeight * RETURN_THRESHOLD
       ) {
-        setReturnTo(from)
+        returnRef.current = from
       }
       follow.stop()
       lockRef.current = index
@@ -293,7 +292,7 @@ export const TranscriptChapters = ({
         return
       }
       lockRef.current = null
-      setReturnTo(null)
+      returnRef.current = null
       publish(turnsRef.current.length - 1, cause, true)
       glideRef.current?.to(scroll.scrollHeight, {
         fade: contentRef.current,
@@ -308,7 +307,7 @@ export const TranscriptChapters = ({
     if (target === null) {
       return
     }
-    setReturnTo(null)
+    returnRef.current = null
     navigate(target, { offerReturn: false })
   }, [navigate])
 
@@ -385,7 +384,7 @@ export const TranscriptChapters = ({
         return
       }
       if (Math.abs(top - scroll.scrollTop) > scroll.clientHeight * RETURN_THRESHOLD) {
-        setReturnTo(currentRef.current)
+        returnRef.current = currentRef.current
       }
       glideRef.current?.to(top, { fade: contentRef.current })
     },
@@ -404,7 +403,7 @@ export const TranscriptChapters = ({
       const line = readingLineY(fromTop, scroll.clientHeight, scroll.scrollHeight)
       const from = sectionAt(topsRef.current, line)
       if (from !== currentRef.current) {
-        setReturnTo(from)
+        returnRef.current = from
       }
     },
     [scrollRef]
@@ -446,15 +445,6 @@ export const TranscriptChapters = ({
         onSeek={seek}
         onDragEnd={dragEnded}
         onNavigate={(index) => navigate(index)}
-        returnTo={
-          returnTo === null || returnTo >= turns.length
-            ? null
-            : {
-                index: returnTo,
-                label: t('chapterReturn', { number: returnTo + 1 }),
-                onReturn: returnBack,
-              }
-        }
       />
     </div>
   )

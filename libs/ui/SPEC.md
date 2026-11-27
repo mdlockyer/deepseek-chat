@@ -116,8 +116,7 @@ every slice's UI and pass the full gate with zero slice edits.
     native buttons, named by `accessibleLabel`, with `aria-current="location"` and the only
     `tabindex="0"` on the current section (roving: `ArrowUp`/`ArrowDown`/`Home`/`End`; `Enter`
     calls `onNavigate`); the focused section gets a focus ring on the canvas and its label. The
-    canvas is `aria-hidden`. `returnTo` shows a compact return button (an icon and the section's
-    number, named by `label`) at that section's place on the rail. `side: 'right'` puts the rail
+    canvas is `aria-hidden`. `side: 'right'` puts the rail
     beside the content's right edge, clear of the scroller's scrollbar (the space it reserves, or
     12 px for an overlay scrollbar), with the label opening to its left; only the rail's column takes
     the pointer, so the scrollbar beside it keeps working. `onShownChange` reports when the rail

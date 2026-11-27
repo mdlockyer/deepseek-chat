@@ -303,24 +303,5 @@ describe('Minimap markup', () => {
       /<canvas[^>]*aria-hidden="true"/,
       'the drawing is hidden from assistive technology'
     )
-    assert.match(
-      html,
-      /tabindex="-1"[^>]*aria-hidden="true"[^>]*data-minimap-return/,
-      'the return button is hidden and unfocusable without a return target'
-    )
-  })
-
-  it('offers a named way back to the section the reader jumped from', () => {
-    const html = renderToStaticMarkup(
-      createElement(Minimap, {
-        ...props,
-        current: 0,
-        returnTo: { index: 2, label: 'Back to turn 3', onReturn: () => undefined },
-      })
-    )
-    const button = /<button[^>]*data-minimap-return[^>]*>[\s\S]*?<\/button>/.exec(html)?.[0] ?? ''
-    assert.match(button, /tabindex="0"/, 'reachable by keyboard while offered')
-    assert.match(button, /aria-label="Back to turn 3"/, 'named by its label')
-    assert.match(button, />3<\/span><\/button>$/, 'shows the section number')
   })
 })

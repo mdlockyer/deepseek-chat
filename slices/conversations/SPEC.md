@@ -151,7 +151,7 @@ factories (`createIndexedDbSessionStore`, `memorySessionStore`).
     turn starts 24 px below the top, holds that turn as the reading turn until the reader scrolls,
     and pulses the turn's prompt bubble on arrival. Clicking the map glides to that point; dragging its
     window scrolls directly.
-    Jumps and drags longer than 1.2 viewports offer a return (button and `⌥←`) to the turn left behind, which
+    Jumps and drags longer than 1.2 viewports let `⌥←` return to the turn left behind, which
     clears once the reader is back there. Reveals publish with cause `'reveal'` and never offer a
     return; everything else is `'reader'`.
 

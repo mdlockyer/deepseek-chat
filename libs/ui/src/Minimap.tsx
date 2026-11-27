@@ -1,6 +1,5 @@
 import clsx from 'clsx'
 import { useEffect, useRef, useState, type KeyboardEvent, type RefObject } from 'react'
-import { IconReturnOutline14 } from './icons.js'
 import { useBrowserLayoutEffect } from './layoutEffect.js'
 import {
   layoutMinimapMap,
@@ -24,13 +23,6 @@ export type MinimapSection = {
   readonly dividerBefore?: boolean
 }
 
-/** A place the reader jumped away from, offered as a way back. */
-export type MinimapReturn = {
-  readonly index: number
-  readonly label: string
-  readonly onReturn: () => void
-}
-
 export type MinimapProps = {
   readonly sections: readonly MinimapSection[]
   /** The section being read; it is drawn highlighted. */
@@ -52,7 +44,6 @@ export type MinimapProps = {
   readonly onDragEnd?: (fromTop: number) => void
   /** Enter (or a click without a pointer) on a section's button. */
   readonly onNavigate: (index: number) => void
-  readonly returnTo?: MinimapReturn | null
   /**
    * Which edge of the content the rail sits beside. On the right it keeps clear of the scroller's
    * scrollbar, and the section label opens toward the content, to its left.
@@ -106,7 +97,6 @@ type Live = {
   sections: readonly MinimapSection[]
   current: number
   focused: number | null
-  returnIndex: number | null
   onSeek: MinimapProps['onSeek']
   onDragEnd: MinimapProps['onDragEnd']
   onShownChange: MinimapProps['onShownChange']
@@ -135,7 +125,6 @@ export const Minimap = ({
   onSeek,
   onDragEnd,
   onNavigate,
-  returnTo = null,
   side = 'left',
   onShownChange,
   className,
@@ -144,7 +133,6 @@ export const Minimap = ({
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const hitRef = useRef<HTMLDivElement>(null)
   const peekRef = useRef<HTMLDivElement>(null)
-  const returnRef = useRef<HTMLButtonElement>(null)
   const buttonRefs = useRef<(HTMLButtonElement | null)[]>([])
   const repaintRef = useRef<() => void>(() => undefined)
   const [focusIndex, setFocusIndex] = useState<number | null>(null)
@@ -154,7 +142,6 @@ export const Minimap = ({
     sections,
     current,
     focused: null,
-    returnIndex: null,
     onSeek,
     onDragEnd,
     onShownChange,
@@ -163,7 +150,6 @@ export const Minimap = ({
     sections,
     current,
     focused: focusIndex,
-    returnIndex: returnTo?.index ?? null,
     onSeek,
     onDragEnd,
     onShownChange,
@@ -241,11 +227,6 @@ export const Minimap = ({
         palette,
         toRgba: cssToRgba,
       })
-      const back = returnRef.current
-      const returnIndex = live.current.returnIndex
-      if (back && returnIndex !== null) {
-        back.style.transform = `translateY(${Math.round(map.top(doc.tops[returnIndex] ?? 0) - 14)}px)`
-      }
     }
 
     // One frame of motion: the lens follows the reader, highlights ease, then everything paints.
@@ -326,10 +307,6 @@ export const Minimap = ({
       const hitLeft = Math.max(0, x - HIT_SLOP)
       hit.style.left = `${hitLeft}px`
       hit.style.width = `${Math.max(0, hitRight - hitLeft)}px`
-      const back = returnRef.current
-      if (back) {
-        back.style.left = `${Math.max(0, x - 4)}px`
-      }
       const hidden = width < MIN_GUTTER || w < 24
       if (hidden !== root.hasAttribute('data-hidden') || shown === null) {
         root.toggleAttribute('data-hidden', hidden)
@@ -513,10 +490,6 @@ export const Minimap = ({
     buttonRefs.current[target]?.focus()
   }
 
-  const lastReturn = useRef({ index: 0, label: '' })
-  if (returnTo) {
-    lastReturn.current = { index: returnTo.index, label: returnTo.label }
-  }
   const rovingIndex = focusIndex ?? current
 
   return (
@@ -561,20 +534,6 @@ export const Minimap = ({
           </li>
         ))}
       </ol>
-      <button
-        ref={returnRef}
-        type="button"
-        className={clsx(styles.returnButton, returnTo && styles.returnShown)}
-        tabIndex={returnTo ? 0 : -1}
-        aria-hidden={returnTo ? undefined : true}
-        aria-label={lastReturn.current.label}
-        title={lastReturn.current.label}
-        data-minimap-return=""
-        onClick={() => returnTo?.onReturn()}
-      >
-        <IconReturnOutline14 />
-        <span aria-hidden="true">{lastReturn.current.index + 1}</span>
-      </button>
     </nav>
   )
 }
