@@ -13,6 +13,7 @@ import sys
 import traceback
 
 os.environ.setdefault("MPLBACKEND", "Agg")
+mimetypes.init([])
 
 REQ_FD = 3
 RESP_FD = 4
