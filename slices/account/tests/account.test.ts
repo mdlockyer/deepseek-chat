@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { memoryStore, type SecretSlot } from '@deepseek-chat/spine/ports'
+import type { SecretSlot } from '@deepseek-chat/spine/ports'
+import { memoryStore } from '@deepseek-chat/test-support'
 import { createAccountSlice, type AccountDeps } from '@deepseek-chat/slice-account'
 
 const KEY = 'chat-demo:api-key'

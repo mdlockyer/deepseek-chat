@@ -184,68 +184,6 @@ export const createIndexedDbSessionStore = (dbName = 'deepseek-sessions'): Sessi
   }
 }
 
-/** Hermetic in-memory `SessionStore` for unit tests and isolated multi-instance demos. */
-export const memorySessionStore = (initial: readonly Session[] = []): SessionStore => {
-  const sessions = new Map<string, Session>()
-  const summaries = new Map<string, StoredSessionSummary>()
-  for (const session of initial) {
-    const copy = structuredClone(session)
-    sessions.set(copy.id, copy)
-    summaries.set(copy.id, storedSummary(copy))
-  }
-
-  return {
-    loadSummaries: async () => [...summaries.values()].map(toSessionSummary),
-    loadSession: async (id) => {
-      const found = sessions.get(id)
-      return found ? structuredClone(found) : undefined
-    },
-    saveSession: async (session) => {
-      const copy = structuredClone(session)
-      sessions.set(copy.id, copy)
-      summaries.set(copy.id, storedSummary(copy))
-    },
-    renameSession: async (id, title, titleLocked) => {
-      const existing = sessions.get(id)
-      if (!existing) {
-        return
-      }
-      const next: Session = {
-        ...existing,
-        title,
-        ...(titleLocked !== undefined ? { titleLocked } : {}),
-      }
-      sessions.set(id, next)
-      summaries.set(id, storedSummary(next))
-    },
-    deleteSession: async (id) => {
-      const summary = summaries.get(id)
-      sessions.delete(id)
-      summaries.delete(id)
-      const remaining = new Set<string>()
-      for (const item of summaries.values()) {
-        for (const fileId of item.fileIds) {
-          remaining.add(fileId)
-        }
-      }
-      return (summary?.fileIds ?? []).filter((fileId) => !remaining.has(fileId))
-    },
-    replaceAll: async (nextSessions) => {
-      sessions.clear()
-      summaries.clear()
-      const list: SessionSummary[] = []
-      for (const session of nextSessions) {
-        const copy = structuredClone(session)
-        const summary = storedSummary(copy)
-        sessions.set(copy.id, copy)
-        summaries.set(copy.id, summary)
-        list.push(toSessionSummary(summary))
-      }
-      return list
-    },
-  }
-}
-
 export const reportStorageError = (action: string) => (error: unknown) => {
   // eslint-disable-next-line no-console
   console.error(`[storage] ${action} failed`, error)

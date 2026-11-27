@@ -11,7 +11,7 @@ import type {
   SessionFilesChanged,
   SessionHistoryReplaced,
 } from '@deepseek-chat/spine/facts/session'
-import { memoryStore, type BlobStore, type KeyValueStore } from '@deepseek-chat/spine/ports'
+import type { BlobStore, KeyValueStore } from '@deepseek-chat/spine/ports'
 import type { EventLog } from '@deepseek-chat/spine/runtime'
 import { createElement, type ReactElement } from 'react'
 import {
@@ -111,8 +111,8 @@ export type PythonSliceDeps = {
   readonly native: NativePythonHost | null
   /** Web engine: base URL Pyodide loads from. */
   readonly pyodideIndexURL: string
-  /** Optional key-value store persisting the `chat-demo:python` composer toggle. */
-  readonly store?: KeyValueStore
+  /** Key-value store persisting the `chat-demo:python` composer toggle. */
+  readonly store: KeyValueStore
   /** Optional blob store for mounting session uploads and persisting generated files. */
   readonly blobs?: BlobStore
   /** Web engine: starts the Pyodide worker. Defaults to the bundled worker. */
@@ -141,8 +141,7 @@ export type PythonSlice = {
 }
 
 export const createPythonSlice = (deps: PythonSliceDeps): PythonSlice => {
-  const { log, native } = deps
-  const store = deps.store ?? memoryStore()
+  const { log, native, store } = deps
   const blobs = deps.blobs
   const newId = deps.newId ?? (() => crypto.randomUUID())
 

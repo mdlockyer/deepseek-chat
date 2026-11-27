@@ -10,12 +10,14 @@ import {
   TabPanel,
   Tabs,
 } from '@deepseek-chat/lib-ui'
-import { memoryStore, type HttpFetch } from '@deepseek-chat/spine/ports'
+import type { HttpFetch } from '@deepseek-chat/spine/ports'
 import type { CausalEnvelope } from '@deepseek-chat/spine/runtime'
+import { memoryStore } from '@deepseek-chat/test-support'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { App } from '../App.js'
-import { createAppRuntime, type AppRuntime, type EnabledSlices } from '../runtime.js'
+import type { AppRuntime, EnabledSlices } from '../runtime.js'
 import { AppRuntimeProvider } from '../RuntimeContext.js'
+import { createOfflineRuntime } from './offlineRuntime.js'
 import styles from './SsaDemo.module.css'
 
 type DemoView = 'composer' | 'dual'
@@ -349,7 +351,7 @@ const useManagedRuntime = (
   const runtimeRef = useRef<AppRuntime | null>(null)
 
   const runtime = useMemo(() => {
-    const next = createAppRuntime({
+    const next = createOfflineRuntime({
       store: memoryStore({ 'chat-demo:api-key': 'sk-demo-offline' }),
       fetch: createDemoScriptedFetch(label),
       enabledSlices,

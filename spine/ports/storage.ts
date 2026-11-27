@@ -11,18 +11,3 @@ export type SecretSlot = {
   /** `null` deletes the secret. */
   save(value: string | null): Promise<void>
 }
-
-/** In-memory KeyValueStore, for tests and hosts without persistent storage. */
-export const memoryStore = (initial: Record<string, string> = {}): KeyValueStore => {
-  const values = new Map(Object.entries(initial))
-  return {
-    get: (key) => values.get(key) ?? null,
-    set: (key, value) => {
-      if (value === null) {
-        values.delete(key)
-      } else {
-        values.set(key, value)
-      }
-    },
-  }
-}

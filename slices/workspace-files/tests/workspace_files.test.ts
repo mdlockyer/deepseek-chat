@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { memoryBlobStore, type PanelLayout, type PanelSlot } from '@deepseek-chat/spine/ports'
+import type { PanelLayout, PanelSlot } from '@deepseek-chat/spine/ports'
+import { memoryBlobStore } from '@deepseek-chat/test-support'
 import type {
   SessionDeleted,
   SessionFilesChanged,

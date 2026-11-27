@@ -25,7 +25,6 @@ import {
 } from '@deepseek-chat/slice-browser'
 import {
   createConversationsSlice,
-  memorySessionStore,
   type ChatFile,
   type ConversationsSlice,
   type SessionStore,
@@ -56,14 +55,7 @@ import {
   type WorkspaceFilesSlice,
 } from '@deepseek-chat/slice-workspace-files'
 import { createLocaleStore, type LocaleStore } from '@deepseek-chat/spine/i18n'
-import {
-  memoryBlobStore,
-  memoryStore,
-  type BlobStore,
-  type HttpFetch,
-  type KeyValueStore,
-  type SecretSlot,
-} from '@deepseek-chat/spine/ports'
+import type { BlobStore, HttpFetch, KeyValueStore, SecretSlot } from '@deepseek-chat/spine/ports'
 import { EventLog } from '@deepseek-chat/spine/runtime'
 import { createElement, type ComponentType } from 'react'
 import { create } from 'zustand'
@@ -99,9 +91,9 @@ export type DesktopHostAdapters = {
 }
 
 export type AppRuntimeConfig = {
-  readonly store?: KeyValueStore
-  readonly blobs?: BlobStore & { close?: () => void }
-  readonly sessions?: SessionStore
+  readonly store: KeyValueStore
+  readonly blobs: BlobStore & { close?: () => void }
+  readonly sessions: SessionStore
   readonly fetch?: HttpFetch
   readonly apiOrigin?: string
   /** Optional model provider override (defaults to DeepSeek Messages API over `fetch`/`apiOrigin`). */
@@ -162,7 +154,7 @@ const defaultPyodideUrl = () => {
 const defaultApiOrigin = () =>
   typeof __API_ORIGIN__ === 'string' ? __API_ORIGIN__ : 'https://api.deepseek.com'
 
-export const createAppRuntime = (config: AppRuntimeConfig = {}) => {
+export const createAppRuntime = (config: AppRuntimeConfig) => {
   const enabled: Required<EnabledSlices> = {
     preferences: config.enabledSlices?.preferences ?? true,
     voice: config.enabledSlices?.voice ?? true,
@@ -176,10 +168,7 @@ export const createAppRuntime = (config: AppRuntimeConfig = {}) => {
     historyBackup: config.enabledSlices?.historyBackup ?? true,
   }
 
-  const store = config.store ?? memoryStore()
-  const blobs: BlobStore & { close?: () => void } = config.blobs ?? memoryBlobStore()
-  const ownsBlobs = config.blobs === undefined
-  const sessions = config.sessions ?? memorySessionStore()
+  const { store, blobs, sessions } = config
   const httpFetch: HttpFetch = config.fetch ?? ((url, init) => globalThis.fetch(url, init))
   const apiOrigin = config.apiOrigin ?? defaultApiOrigin()
   const platform = config.platform ?? 'web'
@@ -490,9 +479,6 @@ export const createAppRuntime = (config: AppRuntimeConfig = {}) => {
     account.dispose()
     preferences?.dispose()
     rightPanel.dispose()
-    if (ownsBlobs) {
-      blobs.close?.()
-    }
   }
 
   return {

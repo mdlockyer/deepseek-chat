@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { memoryBlobStore, memoryNoticePort, type BlobEntry } from '@deepseek-chat/spine/ports'
+import type { BlobEntry } from '@deepseek-chat/spine/ports'
+import { memoryBlobStore, memoryNoticePort } from '@deepseek-chat/test-support'
 import {
   ArchiveError,
   BackupError,

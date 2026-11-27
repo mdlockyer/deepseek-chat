@@ -26,8 +26,10 @@ const appDirs = [path.join(root, 'app')]
 
 const SCOPE = '@deepseek-chat/'
 const SPINE_PKG = `${SCOPE}spine`
+const TEST_SUPPORT_PKG = `${SCOPE}test-support`
 const SLICE_PKG_PREFIX = `${SCOPE}slice-`
 const LIB_PKG_PREFIX = `${SCOPE}lib-`
+const testSupportDir = path.join(root, 'test-support')
 const DOMAIN_BLIND = ['runtime', 'ports', 'design'].map((dir) => path.join(spineDir, dir))
 const FACTS_DIR = path.join(spineDir, 'facts')
 const SOURCE_EXT = /\.(?:[cm]?[jt]sx?|css)$/
@@ -225,7 +227,12 @@ for (const file of listSourceFiles(spineDir)) {
   }
   const domainBlind = DOMAIN_BLIND.some((dir) => isInside(dir, file))
   for (const spec of extractImports(file)) {
-    if (spec.startsWith(SLICE_PKG_PREFIX) || spec.startsWith(LIB_PKG_PREFIX)) {
+    if (
+      spec.startsWith(SLICE_PKG_PREFIX) ||
+      spec.startsWith(LIB_PKG_PREFIX) ||
+      spec === TEST_SUPPORT_PKG ||
+      spec.startsWith(`${TEST_SUPPORT_PKG}/`)
+    ) {
       fail('DAG', `spine file ${rel(file)} imports "${spec}"`)
     }
     if (spec.startsWith('.')) {
@@ -262,19 +269,29 @@ const checkManifest = (kind, name, dir, expectedPkg) => {
       `${kind} "${name}" must export exactly "." (found ${JSON.stringify(exportKeys)})`
     )
   }
-  const deps = Object.keys({
+  const prodDeps = Object.keys({
     ...pkg.dependencies,
-    ...pkg.devDependencies,
     ...pkg.peerDependencies,
     ...pkg.optionalDependencies,
   })
-  for (const dep of deps) {
+  const devDeps = Object.keys({ ...pkg.devDependencies })
+  for (const dep of prodDeps) {
     const allowed =
       dep === SPINE_PKG ||
       (kind === 'slice' && dep.startsWith(LIB_PKG_PREFIX)) ||
       (kind === 'library' && name !== 'ui' && dep === LIB_UI_PKG)
     if (dep.startsWith(SCOPE) && !allowed) {
       fail('DAG', `${kind} "${name}" depends on workspace package "${dep}"`)
+    }
+  }
+  for (const dep of devDeps) {
+    const allowed =
+      dep === SPINE_PKG ||
+      dep === TEST_SUPPORT_PKG ||
+      (kind === 'slice' && dep.startsWith(LIB_PKG_PREFIX)) ||
+      (kind === 'library' && name !== 'ui' && dep === LIB_UI_PKG)
+    if (dep.startsWith(SCOPE) && !allowed) {
+      fail('DAG', `${kind} "${name}" devDepends on workspace package "${dep}"`)
     }
   }
 }
@@ -300,8 +317,14 @@ for (const [name, dir] of libDirs) {
     for (const spec of extractImports(file)) {
       const ownPackage = libOfPackage(spec)?.name === name && !libOfPackage(spec)?.deep
       const importsLibUi = name !== 'ui' && spec === LIB_UI_PKG
-      if (spec.startsWith(SCOPE) && !ownPackage && !importsLibUi) {
-        if (!spec.startsWith(`${SPINE_PKG}/`)) {
+      const importsTestSupport = spec === TEST_SUPPORT_PKG && isInside(testsDir, file)
+      if (spec.startsWith(SCOPE) && !ownPackage && !importsLibUi && !importsTestSupport) {
+        if (spec === TEST_SUPPORT_PKG || spec.startsWith(`${TEST_SUPPORT_PKG}/`)) {
+          fail(
+            'TEST-SUPPORT',
+            `library "${name}" production file ${rel(file)} imports dev-only "${spec}"`
+          )
+        } else if (!spec.startsWith(`${SPINE_PKG}/`)) {
           fail('DAG', `library "${name}" file ${rel(file)} imports workspace package "${spec}"`)
         } else if (
           spec.startsWith(`${SPINE_PKG}/facts`) ||
@@ -366,6 +389,13 @@ for (const [name, dir] of sliceDirs) {
         }
       } else if (libOfPackage(spec)?.deep) {
         fail('DAG', `slice "${name}" file ${rel(file)} deep-imports library internals "${spec}"`)
+      } else if (spec === TEST_SUPPORT_PKG || spec.startsWith(`${TEST_SUPPORT_PKG}/`)) {
+        if (!isInside(testsDir, file) || spec !== TEST_SUPPORT_PKG) {
+          fail(
+            'TEST-SUPPORT',
+            `slice "${name}" file ${rel(file)} may only import "${TEST_SUPPORT_PKG}" inside tests/`
+          )
+        }
       } else if (
         spec.startsWith(SCOPE) &&
         spec !== SPINE_PKG &&
@@ -420,7 +450,33 @@ for (const [name, dir] of sliceDirs) {
   }
 }
 
-// 4. App tier: single-export DAG rules plus S3 and S5.
+// 4. Dev-only test-support package: may import only spine (domain-blind parts) and itself.
+if (fs.existsSync(testSupportDir)) {
+  checkManifest('test-support', 'test-support', testSupportDir, TEST_SUPPORT_PKG)
+  const tsTestsDir = path.join(testSupportDir, 'tests')
+  const tsSrcDir = path.join(testSupportDir, 'src')
+  for (const file of listSourceFiles(testSupportDir)) {
+    for (const spec of extractImports(file)) {
+      const own = spec === TEST_SUPPORT_PKG
+      if (spec.startsWith(SCOPE) && !own && !spec.startsWith(`${SPINE_PKG}/`)) {
+        fail('DAG', `test-support file ${rel(file)} imports "${spec}"`)
+      }
+      if (spec.startsWith('.')) {
+        const resolved = path.resolve(path.dirname(file), spec)
+        if (!isInside(testSupportDir, resolved)) {
+          fail('DAG', `test-support file ${rel(file)} escapes boundary via "${spec}"`)
+        } else if (isInside(tsTestsDir, file) && isInside(tsSrcDir, resolved)) {
+          fail(
+            'TESTS',
+            `test-support test ${rel(file)} reaches into src/ via "${spec}"; import ${TEST_SUPPORT_PKG}`
+          )
+        }
+      }
+    }
+  }
+}
+
+// 5. App tier: single-export DAG rules plus S3, S5, and dev-only test-support guard.
 const workbenchDir = path.join(root, 'app', 'workbench')
 const appTestsDir = path.join(root, 'app', 'tests')
 for (const appDir of appDirs) {
@@ -433,6 +489,13 @@ for (const appDir of appDirs) {
     for (const spec of imports) {
       if (/latebindings/i.test(spec)) {
         fail('S3-LATE-BINDINGS', `${rel(file)} imports forbidden late-bindings module "${spec}"`)
+      }
+      if (spec === TEST_SUPPORT_PKG || spec.startsWith(`${TEST_SUPPORT_PKG}/`)) {
+        if (!isInside(appTestsDir, file) && !isInside(workbenchDir, file)) {
+          fail('TEST-SUPPORT', `production app file ${rel(file)} imports dev-only "${spec}"`)
+        } else if (spec !== TEST_SUPPORT_PKG) {
+          fail('DAG', `${rel(file)} deep-imports test-support internals "${spec}"`)
+        }
       }
       const target = sliceOfPackage(spec)
       if (target?.deep) {

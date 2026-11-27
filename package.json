@@ -11,11 +11,11 @@
     "dev:ssa": "rspack serve -c rspack.config.ts --open '/?workbench=1&tab=ssa'",
     "build": "rm -rf dist && NODE_ENV=production rspack build -c rspack.config.ts",
     "type": "tsc -p tsconfig.json",
-    "lint": "oxlint app spine slices libs scripts/check-dag.mjs scripts/check-design.mjs rspack.config.ts",
+    "lint": "oxlint app spine test-support slices libs scripts/check-dag.mjs scripts/check-design.mjs rspack.config.ts",
     "format": "oxfmt --write .",
     "format:check": "oxfmt --check .",
-    "test": "node --import ./scripts/test-loader.mjs --test \"app/tests/**/*.test.ts\" \"spine/tests/**/*.test.ts\" \"slices/*/tests/**/*.test.ts\" \"libs/*/tests/**/*.test.ts\"",
-    "test:spine": "node --import ./scripts/test-loader.mjs --test \"spine/tests/**/*.test.ts\" \"slices/*/tests/**/*.test.ts\" \"libs/*/tests/**/*.test.ts\"",
+    "test": "node --import ./scripts/test-loader.mjs --test \"app/tests/**/*.test.ts\" \"spine/tests/**/*.test.ts\" \"test-support/tests/**/*.test.ts\" \"slices/*/tests/**/*.test.ts\" \"libs/*/tests/**/*.test.ts\"",
+    "test:spine": "node --import ./scripts/test-loader.mjs --test \"spine/tests/**/*.test.ts\" \"test-support/tests/**/*.test.ts\" \"slices/*/tests/**/*.test.ts\" \"libs/*/tests/**/*.test.ts\"",
     "check:dag": "node scripts/check-dag.mjs",
     "check:design": "node scripts/check-design.mjs",
     "desktop:dev": "tauri dev",
@@ -56,6 +56,7 @@
     "zustand": "4.4.7"
   },
   "devDependencies": {
+    "@deepseek-chat/test-support": "workspace:*",
     "@rspack/cli": "2.0.2",
     "@rspack/core": "2.0.2",
     "@rspack/dev-server": "2.0.1",

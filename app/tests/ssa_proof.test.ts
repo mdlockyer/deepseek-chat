@@ -19,9 +19,11 @@ import type {
   SessionDeleted,
   SessionFilesChanged,
 } from '@deepseek-chat/spine/facts/session'
-import { memoryStore, type KeyValueStore } from '@deepseek-chat/spine/ports'
+import type { KeyValueStore } from '@deepseek-chat/spine/ports'
 import type { EventLog } from '@deepseek-chat/spine/runtime'
-import { createAppRuntime, type EnabledSlices } from '../runtime.js'
+import { memoryStore } from '@deepseek-chat/test-support'
+import type { EnabledSlices } from '../runtime.js'
+import { createTestRuntime as createAppRuntime } from './testRuntime.js'
 
 Object.assign(globalThis, {
   document: { visibilityState: 'hidden' },

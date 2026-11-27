@@ -2,7 +2,7 @@ import 'fake-indexeddb/auto'
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { createToolRegistry, type ToolCapability } from '@deepseek-chat/lib-tools'
-import { memoryStore } from '@deepseek-chat/spine/ports'
+import { memoryStore } from '@deepseek-chat/test-support'
 import {
   buildReplyView,
   createIndexedDbSessionStore,

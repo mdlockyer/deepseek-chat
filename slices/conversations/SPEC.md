@@ -33,8 +33,8 @@ may coexist in the same process) and returns:
 | `dispose()`                                                              | Aborts active streams, cancels timers, unsubscribes from `EventLog`, closes DB.                                                                                                                                                                                                                                                                                                                                                                      |
 
 The package also exports pure model functions (`branches`, `reply`, `environmentContext`, `view`,
-`workStrip`, `citations`, `autoTitle`, `requestWith`, `ServerSentEventDecoder`) and session store
-factories (`createIndexedDbSessionStore`, `memorySessionStore`).
+`workStrip`, `citations`, `autoTitle`, `requestWith`, `ServerSentEventDecoder`) and the IndexedDB
+session store factory (`createIndexedDbSessionStore`).
 
 ## Ports (`ConversationsDeps`)
 

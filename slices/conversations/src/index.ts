@@ -19,11 +19,7 @@ export {
   type SessionTurnSummary,
   type TurnSnapshot,
 } from './runtime.js'
-export {
-  createIndexedDbSessionStore,
-  memorySessionStore,
-  type SessionStore,
-} from './sessionStore.js'
+export { createIndexedDbSessionStore, type SessionStore } from './sessionStore.js'
 export type { ReadingCause, ReadingPosition } from './reading.js'
 export type { StreamTrace, StreamTraceBlock } from './streamTrace.js'
 export type {

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { memoryStore } from '@deepseek-chat/spine/ports'
+import { memoryStore } from '@deepseek-chat/test-support'
 import {
   createWebResearchSlice,
   type LocalScrapeResult,

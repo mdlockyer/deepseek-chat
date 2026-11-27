@@ -9,7 +9,7 @@ import type {
   SessionDeleted,
   SessionHistoryReplaced,
 } from '@deepseek-chat/spine/facts/session'
-import { memoryStore } from '@deepseek-chat/spine/ports'
+import { memoryStore } from '@deepseek-chat/test-support'
 import { EventLog } from '@deepseek-chat/spine/runtime'
 import {
   computeSomBadgeBoxes,

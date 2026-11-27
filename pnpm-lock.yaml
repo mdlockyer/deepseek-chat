@@ -93,6 +93,9 @@ importers:
         specifier: 4.4.7
         version: 4.4.7(@types/react@18.3.31)(react@18.3.1)
     devDependencies:
+      '@deepseek-chat/test-support':
+        specifier: workspace:*
+        version: link:test-support
       '@rspack/cli':
         specifier: 2.0.2
         version: 2.0.2(@rspack/core@2.0.2(@swc/helpers@0.5.23))(@rspack/dev-server@2.0.1(@rspack/core@2.0.2(@swc/helpers@0.5.23)))
@@ -237,6 +240,10 @@ importers:
       react:
         specifier: 18.3.1
         version: 18.3.1
+    devDependencies:
+      '@deepseek-chat/test-support':
+        specifier: workspace:*
+        version: link:../../test-support
 
   slices/activity-inspector:
     dependencies:
@@ -309,6 +316,10 @@ importers:
       zustand:
         specifier: 4.4.7
         version: 4.4.7(@types/react@18.3.31)(react@18.3.1)
+    devDependencies:
+      '@deepseek-chat/test-support':
+        specifier: workspace:*
+        version: link:../../test-support
 
   slices/conversations:
     dependencies:
@@ -334,6 +345,9 @@ importers:
         specifier: 4.4.7
         version: 4.4.7(@types/react@18.3.31)(react@18.3.1)
     devDependencies:
+      '@deepseek-chat/test-support':
+        specifier: workspace:*
+        version: link:../../test-support
       fake-indexeddb:
         specifier: 6.2.8
         version: 6.2.8
@@ -358,6 +372,10 @@ importers:
       react:
         specifier: 18.3.1
         version: 18.3.1
+    devDependencies:
+      '@deepseek-chat/test-support':
+        specifier: workspace:*
+        version: link:../../test-support
 
   slices/preferences:
     dependencies:
@@ -373,6 +391,10 @@ importers:
       react:
         specifier: 18.3.1
         version: 18.3.1
+    devDependencies:
+      '@deepseek-chat/test-support':
+        specifier: workspace:*
+        version: link:../../test-support
 
   slices/python:
     dependencies:
@@ -388,6 +410,10 @@ importers:
       react:
         specifier: 18.3.1
         version: 18.3.1
+    devDependencies:
+      '@deepseek-chat/test-support':
+        specifier: workspace:*
+        version: link:../../test-support
 
   slices/subagents:
     dependencies:
@@ -424,6 +450,10 @@ importers:
       react:
         specifier: 18.3.1
         version: 18.3.1
+    devDependencies:
+      '@deepseek-chat/test-support':
+        specifier: workspace:*
+        version: link:../../test-support
 
   slices/web-research:
     dependencies:
@@ -439,6 +469,10 @@ importers:
       react:
         specifier: 18.3.1
         version: 18.3.1
+    devDependencies:
+      '@deepseek-chat/test-support':
+        specifier: workspace:*
+        version: link:../../test-support
 
   slices/workspace-files:
     dependencies:
@@ -463,12 +497,22 @@ importers:
       zustand:
         specifier: 4.4.7
         version: 4.4.7(@types/react@18.3.31)(react@18.3.1)
+    devDependencies:
+      '@deepseek-chat/test-support':
+        specifier: workspace:*
+        version: link:../../test-support
 
   spine:
     dependencies:
       react:
         specifier: 18.3.1
         version: 18.3.1
+
+  test-support:
+    dependencies:
+      '@deepseek-chat/spine':
+        specifier: workspace:*
+        version: link:../spine
 
 packages:
 

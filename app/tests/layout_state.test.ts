@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { memorySessionStore, type Session } from '@deepseek-chat/slice-conversations'
-import { memoryStore } from '@deepseek-chat/spine/ports'
+import type { Session } from '@deepseek-chat/slice-conversations'
+import { memoryStore } from '@deepseek-chat/test-support'
 import { transitionSiderLayout } from '../layout.js'
-import { createAppRuntime } from '../runtime.js'
+import { createTestRuntime as createAppRuntime, memorySessionStore } from './testRuntime.js'
 
 Object.assign(globalThis, {
   document: { visibilityState: 'hidden' },

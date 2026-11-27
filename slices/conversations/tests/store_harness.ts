@@ -13,14 +13,11 @@ import {
   type ToolStepPresenter,
   type TurnLifecycleHooks,
 } from '@deepseek-chat/lib-tools'
-import { memoryBlobStore, memoryStore } from '@deepseek-chat/spine/ports'
 import { EventLog } from '@deepseek-chat/spine/runtime'
-import {
-  memorySessionStore,
-  type ConversationsParams,
-  type StreamTrace,
-} from '@deepseek-chat/slice-conversations'
+import { memoryBlobStore, memoryStore } from '@deepseek-chat/test-support'
+import { type ConversationsParams, type StreamTrace } from '@deepseek-chat/slice-conversations'
 import { createTestSlice } from './harness.js'
+import { memorySessionStore } from './memorySessionStore.js'
 
 // A hidden page: the store writes each streamed event straight away instead of per frame.
 Object.assign(globalThis, {

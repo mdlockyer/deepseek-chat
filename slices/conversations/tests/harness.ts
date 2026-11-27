@@ -1,12 +1,13 @@
 import { createDeepSeekProvider } from '@deepseek-chat/lib-agent'
 import { createToolRegistry } from '@deepseek-chat/lib-tools'
-import { memoryBlobStore, memoryStore, type HttpFetch } from '@deepseek-chat/spine/ports'
+import type { HttpFetch } from '@deepseek-chat/spine/ports'
 import { EventLog } from '@deepseek-chat/spine/runtime'
+import { memoryBlobStore, memoryStore } from '@deepseek-chat/test-support'
 import {
   createConversationsSlice,
-  memorySessionStore,
   type ConversationsDeps,
 } from '@deepseek-chat/slice-conversations'
+import { memorySessionStore } from './memorySessionStore.js'
 
 export type TestSliceOverrides = Partial<ConversationsDeps> & {
   readonly apiOrigin?: string

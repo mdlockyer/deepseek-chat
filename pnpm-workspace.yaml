@@ -1,4 +1,5 @@
 packages:
   - 'spine'
+  - 'test-support'
   - 'libs/*'
   - 'slices/*'

@@ -4,7 +4,7 @@ import type {
   ActiveSessionChanged,
   ReplyLifecycleChanged,
 } from '@deepseek-chat/spine/facts/session'
-import { memoryNoticePort, memoryStore } from '@deepseek-chat/spine/ports'
+import { memoryNoticePort, memoryStore } from '@deepseek-chat/test-support'
 import { EventLog } from '@deepseek-chat/spine/runtime'
 import {
   createVoiceSlice,

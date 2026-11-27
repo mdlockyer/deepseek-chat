@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { createLocaleStore, type LocaleStore } from '@deepseek-chat/spine/i18n'
-import { memoryStore, type KeyValueStore } from '@deepseek-chat/spine/ports'
+import type { KeyValueStore } from '@deepseek-chat/spine/ports'
+import { memoryStore } from '@deepseek-chat/test-support'
 import { createPreferencesSlice } from '@deepseek-chat/slice-preferences'
 
 const LOCALE = 'chat-demo:locale'

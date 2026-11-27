@@ -8,14 +8,14 @@ import {
   type ModelProvider,
 } from '@deepseek-chat/lib-agent'
 import { createToolRegistry, type ToolCapability } from '@deepseek-chat/lib-tools'
-import { memoryBlobStore, memoryStore } from '@deepseek-chat/spine/ports'
 import { EventLog } from '@deepseek-chat/spine/runtime'
+import { memoryBlobStore, memoryStore } from '@deepseek-chat/test-support'
 import {
   CONTINUE_PROMPT,
   createConversationsSlice,
-  memorySessionStore,
   type AssistantMessage,
 } from '@deepseek-chat/slice-conversations'
+import { memorySessionStore } from './memorySessionStore.js'
 
 // Hidden page so streaming writes synchronously per event.
 Object.assign(globalThis, {

@@ -7,7 +7,7 @@ import type {
   SessionFilesChanged,
   SessionHistoryReplaced,
 } from '@deepseek-chat/spine/facts/session'
-import { memoryBlobStore, memoryStore } from '@deepseek-chat/spine/ports'
+import { memoryBlobStore, memoryStore } from '@deepseek-chat/test-support'
 import { EventLog } from '@deepseek-chat/spine/runtime'
 import {
   createPythonSlice,
@@ -93,6 +93,7 @@ const setup = (overrides: Partial<PythonSliceDeps> = {}) => {
     log: events,
     native: fake.host,
     pyodideIndexURL: 'unused://',
+    store: memoryStore(),
     now: () => 0,
     ...overrides,
   })
@@ -274,6 +275,7 @@ describe('python slice: restart notice', () => {
         log: new EventLog(),
         native: null,
         pyodideIndexURL: 'unused://',
+        store: memoryStore(),
         now: () => 0,
         params: { runTimeoutMs: 15, startupTimeoutMs: 15 },
         spawnWorker: () => {

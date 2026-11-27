@@ -15,8 +15,9 @@ import {
 import type { ToolRunContext } from '@deepseek-chat/lib-tools'
 import { ASK_USER_TOOL_NAME } from '@deepseek-chat/slice-ask-user'
 import { POST_TOOL_NAME, WAIT_TOOL_NAME } from '@deepseek-chat/slice-subagents'
-import { memoryStore } from '@deepseek-chat/spine/ports'
-import { COMPOSITION_PROMPT_NOTES, createAppRuntime } from '../runtime.js'
+import { memoryStore } from '@deepseek-chat/test-support'
+import { COMPOSITION_PROMPT_NOTES } from '../runtime.js'
+import { createTestRuntime as createAppRuntime } from './testRuntime.js'
 
 const makeContext = (overrides: Partial<ToolRunContext> = {}): ToolRunContext => ({
   sessionId: 'wiring',
