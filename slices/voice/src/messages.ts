@@ -48,4 +48,4 @@ export const voiceMessages = defineMessages({
   },
 })
 
-export type VoiceMessageKey = Parameters<typeof voiceMessages.translate>[0]
+export type VoiceMessageKey = Parameters<typeof voiceMessages.translate>[1]

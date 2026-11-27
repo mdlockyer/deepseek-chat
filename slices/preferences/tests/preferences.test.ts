@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { getLocale, setLocale as setSpineLocale } from '@deepseek-chat/spine/i18n'
+import { createLocaleStore, type LocaleStore } from '@deepseek-chat/spine/i18n'
 import { memoryStore, type KeyValueStore } from '@deepseek-chat/spine/ports'
 import { createPreferencesSlice } from '@deepseek-chat/slice-preferences'
 
@@ -14,32 +14,45 @@ const GUANGDONG = '440000'
 const GUANGZHOU = '440100'
 const BEIJING_CITY = '110100'
 
-const slice = (initial: Record<string, string> = {}, browserLanguage = 'en-US') => {
+const slice = (
+  initial: Record<string, string> = {},
+  browserLanguage = 'en-US',
+  locale?: LocaleStore
+) => {
   const store = memoryStore(initial)
-  return { prefs: createPreferencesSlice({ store, browserLanguage }), store }
+  return { prefs: createPreferencesSlice({ store, browserLanguage, locale }), store }
 }
 
 const savedLocation = (value: unknown) => ({ [LOCATION]: JSON.stringify(value) })
 
 describe('preferences: locale', () => {
   it('uses a saved locale over the browser language', () => {
-    setSpineLocale('zh-CN')
-    slice({ [LOCALE]: 'en-US' }, 'zh-CN')
-    assert.equal(getLocale(), 'en-US')
+    const locale = createLocaleStore('zh-CN')
+    const { prefs } = slice({ [LOCALE]: 'en-US' }, 'zh-CN', locale)
+    assert.equal(locale.get(), 'en-US')
+    assert.equal(prefs.getLocale(), 'en-US')
   })
 
   it('falls back to the browser language: zh* → zh-CN, anything else → en-US', () => {
-    slice({ [LOCALE]: 'fr-FR' }, 'ZH-tw')
-    assert.equal(getLocale(), 'zh-CN')
-    slice({}, 'en-GB')
-    assert.equal(getLocale(), 'en-US')
+    const zh = createLocaleStore('en-US')
+    slice({ [LOCALE]: 'fr-FR' }, 'ZH-tw', zh)
+    assert.equal(zh.get(), 'zh-CN')
+    const en = createLocaleStore('zh-CN')
+    slice({}, 'en-GB', en)
+    assert.equal(en.get(), 'en-US')
   })
 
-  it('saves a chosen locale and makes it the live locale', () => {
-    const { prefs, store } = slice({}, 'en-US')
-    prefs.setLocale('zh-CN')
-    assert.equal(store.get(LOCALE), 'zh-CN')
-    assert.equal(getLocale(), 'zh-CN')
+  it('saves a chosen locale and isolates separate slice instances', () => {
+    const localeA = createLocaleStore('en-US')
+    const localeB = createLocaleStore('en-US')
+    const { prefs: prefsA, store: storeA } = slice({}, 'en-US', localeA)
+    const { prefs: prefsB } = slice({}, 'en-US', localeB)
+    prefsA.setLocale('zh-CN')
+    assert.equal(storeA.get(LOCALE), 'zh-CN')
+    assert.equal(localeA.get(), 'zh-CN')
+    assert.equal(prefsA.getLocale(), 'zh-CN')
+    assert.equal(localeB.get(), 'en-US')
+    assert.equal(prefsB.getLocale(), 'en-US')
   })
 })
 

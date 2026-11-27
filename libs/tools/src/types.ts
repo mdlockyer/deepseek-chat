@@ -1,3 +1,4 @@
+import type { Locale } from '@deepseek-chat/spine/i18n'
 import type { ComponentType, MouseEvent, ReactNode } from 'react'
 
 /** Model-visible client tool definition (structurally compatible with Anthropic/DeepSeek ClientTool). */
@@ -127,7 +128,7 @@ export type ToolRunResult = {
 /** Composer menu toggle contributed by a capability slice. */
 export type ComposerToggleDescriptor = {
   readonly id: string
-  readonly label: () => string
+  readonly label: (locale?: Locale) => string
   readonly icon: ReactNode
   readonly isEnabled: () => boolean
   readonly setEnabled: (enabled: boolean) => void
@@ -269,7 +270,11 @@ export type ToolStepPresenter = {
   summarize(
     call: ToolCallRecord,
     result: ToolResultRecord | undefined,
-    ctx: { readonly streaming: boolean; readonly capabilityState?: unknown }
+    ctx: {
+      readonly streaming: boolean
+      readonly capabilityState?: unknown
+      readonly locale?: Locale
+    }
   ): ToolStepSummary
   /**
    * Unified detail renderer: renders only the expanded body for a single step inside the Activity

@@ -9,7 +9,7 @@ import type {
   SessionHistoryReplaced,
   TurnInspectionRequested,
 } from '@deepseek-chat/spine/facts/session'
-import type { Locale } from '@deepseek-chat/spine/i18n'
+import { createLocaleStore, type Locale, type LocaleStore } from '@deepseek-chat/spine/i18n'
 import {
   noopNoticePort,
   type BlobEntry,
@@ -29,7 +29,7 @@ import { runCompaction } from './compaction/compact.js'
 import { estimateMessagesTokens, estimateSessionContext } from './compaction/estimate.js'
 import { createDraftsController, prepareDraftMessage } from './drafts.js'
 import { createId } from './id.js'
-import { translate, type LinkedMessage } from './messages.js'
+import { lazyTranslate, type LinkedMessage } from './messages.js'
 import {
   canContinueReply,
   canResumeToolLoop,
@@ -72,6 +72,8 @@ export const DEFAULT_CONVERSATIONS_PARAMS: ConversationsParams = {
 
 export type ConversationsDeps = {
   readonly log: EventLog
+  /** Instance-scoped live UI locale store (defaults to an isolated local store). */
+  readonly locale?: LocaleStore
   /** Provider-neutral model transport (streaming messages + optional file upload port). */
   readonly provider: ModelProvider
   /** Persists the `chat-demo:thinking` toggle owned by this slice. */
@@ -193,6 +195,7 @@ const extractVisibleFileDescriptors = (session: Session): SessionFileDescriptor[
 }
 
 export const createConversationsRuntime = (deps: ConversationsDeps) => {
+  const localeStore = deps.locale ?? createLocaleStore()
   const tools = deps.tools ?? createToolRegistry([])
   const sessionStore = deps.sessions ?? createIndexedDbSessionStore()
   const ownsSessionStore = deps.sessions === undefined
@@ -236,9 +239,9 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
   const showNotice = (notice: LinkedMessage) => {
     const { key, params: msgParams, type, link } = notice
     notify.show({
-      text: () => translate(key, msgParams),
+      text: lazyTranslate(key, msgParams),
       ...(type === 'error' ? { tone: 'error' as const } : {}),
-      ...(link ? { link: { text: () => translate(link.key), href: link.href } } : {}),
+      ...(link ? { link: { text: lazyTranslate(link.key), href: link.href } } : {}),
     })
   }
 
@@ -500,6 +503,7 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
 
   const replyRunner = createReplyRunner({
     log: deps.log,
+    getLocale: localeStore.get,
     readBlob,
     tools,
     provider,
@@ -1355,6 +1359,7 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
 
   return {
     deps,
+    getLocale: localeStore.get,
     tools,
     blobs: deps.blobs,
     provider,

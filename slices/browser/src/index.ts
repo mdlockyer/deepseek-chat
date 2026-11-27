@@ -73,12 +73,12 @@ export const createBrowserSlice = (deps: BrowserSliceDeps) => {
     notify: {
       navigationBlocked: (url, reason) =>
         notice.show({
-          text: () => browserMessages.translate('browserNavigationBlocked', { url, reason }),
+          text: browserMessages.lazy('browserNavigationBlocked', { url, reason }),
           tone: 'error',
         }),
       downloadBlocked: (reason) =>
         notice.show({
-          text: () => browserMessages.translate('browserDownloadBlocked', { reason }),
+          text: browserMessages.lazy('browserDownloadBlocked', { reason }),
         }),
     },
     newId: deps.newId ?? (() => crypto.randomUUID()),
@@ -159,7 +159,7 @@ export const createBrowserSlice = (deps: BrowserSliceDeps) => {
       ? {
           toggle: {
             id: 'browser',
-            label: () => browserMessages.translate('browserToggleLabel'),
+            label: browserMessages.lazy('browserToggleLabel'),
             icon: createElement(IconBrowserOutline14),
             isEnabled: () => enabled,
             setEnabled,

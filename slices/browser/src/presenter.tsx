@@ -1,3 +1,4 @@
+import { useLocale, type Locale } from '@deepseek-chat/spine/i18n'
 import type {
   ActivityStepDetailProps,
   ArchiveFragment,
@@ -116,7 +117,8 @@ const formatOutputPreview = (raw: string): string => {
 const buildVisuals = (
   call: ToolCallRecord,
   result: ToolResultRecord | undefined,
-  meta: BrowserActionMeta
+  meta: BrowserActionMeta,
+  locale?: Locale
 ): readonly ToolStepVisualArtifact[] | undefined => {
   const shots = screenshotsOf(result)
   if (shots.length === 0) {
@@ -126,7 +128,7 @@ const buildVisuals = (
   const humanSummary = callSummaryOf(call)
   const target =
     meta.title || (actionUrl ? getSiteName(actionUrl) : null) || humanSummary || meta.summary
-  const alt = browserMessages.translate('browserScreenshotAlt', { target })
+  const alt = browserMessages.translate(locale, 'browserScreenshotAlt', { target })
   const caption = humanSummary ?? meta.summary
   return shots.map((src) => ({
     src,
@@ -172,12 +174,13 @@ const BrowserStepDetail = ({
   openVisual,
   renderMarkdown,
 }: ActivityStepDetailProps) => {
+  const locale = useLocale()
   const t = browserMessages.useTranslate()
   const { call, result } = entry
   const meta = readMeta(call, result)
   const humanSummary = callSummaryOf(call)
   const actionUrl = meta.url && isHttpUrl(meta.url) ? meta.url : null
-  const visuals = buildVisuals(call, result, meta) ?? []
+  const visuals = buildVisuals(call, result, meta, locale) ?? []
   const failed = Boolean(result && result.status !== 'ok' && result.status !== 'running')
   const script = evalScriptOf(call)
   const rawOutput = result?.content?.trim() ?? ''
@@ -253,19 +256,19 @@ const BrowserStepDetail = ({
 }
 
 export const browserPresenter: ToolStepPresenter = {
-  summarize: (call, result, { streaming }) => {
+  summarize: (call, result, { streaming, locale }) => {
     const meta = readMeta(call, result)
     const humanSummary = callSummaryOf(call)
     const running = !result || result.status === 'running'
     const actionUrl = meta.url && isHttpUrl(meta.url) ? meta.url : null
-    const visuals = buildVisuals(call, result, meta)
+    const visuals = buildVisuals(call, result, meta, locale)
     const script = evalScriptOf(call)
     const hasOutput = Boolean(result?.content?.trim())
 
     return {
       lane: 'browser',
       icon: browserToolIcon(call.name),
-      liveVerb: browserMessages.translate('browserStepRunning'),
+      liveVerb: browserMessages.translate(locale, 'browserStepRunning'),
       detail: humanSummary ?? meta.summary,
       ...(visuals ? { visuals } : {}),
       hasDetail: Boolean(actionUrl || visuals?.length || hasOutput || script),
@@ -275,7 +278,7 @@ export const browserPresenter: ToolStepPresenter = {
         key: 'browser',
         count: 1,
         label: (count) =>
-          browserMessages.translate(count === 1 ? 'browserCountOne' : 'browserCountMany', {
+          browserMessages.translate(locale, count === 1 ? 'browserCountOne' : 'browserCountMany', {
             count,
           }),
       },

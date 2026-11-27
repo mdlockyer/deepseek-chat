@@ -1,3 +1,4 @@
+import { LocaleProvider } from '@deepseek-chat/spine/i18n'
 import { createContext, useContext, type ReactNode } from 'react'
 import type { AppRuntime } from './runtime.js'
 
@@ -9,7 +10,11 @@ export const AppRuntimeProvider = ({
 }: {
   runtime: AppRuntime
   children: ReactNode
-}) => <AppRuntimeContext.Provider value={runtime}>{children}</AppRuntimeContext.Provider>
+}) => (
+  <LocaleProvider store={runtime.locale}>
+    <AppRuntimeContext.Provider value={runtime}>{children}</AppRuntimeContext.Provider>
+  </LocaleProvider>
+)
 
 export const useAppRuntime = (): AppRuntime => {
   const runtime = useContext(AppRuntimeContext)

@@ -13,7 +13,7 @@ import { preferencesMessages } from './messages.js'
 import type { Preferences, ThemePreference } from './preferences.js'
 import styles from './preferences.module.css'
 
-type MessageKey = Parameters<typeof preferencesMessages.translate>[0]
+type MessageKey = Parameters<typeof preferencesMessages.translate>[1]
 
 const themeOptions: { value: ThemePreference; label: MessageKey; icon: ReactNode }[] = [
   { value: 'light', label: 'themeLight', icon: <IconLightOutline16 /> },

@@ -1,3 +1,4 @@
+import { useLocale } from '@deepseek-chat/spine/i18n'
 import { useMemo, useState } from 'react'
 import { useConversations } from '../../context.js'
 import { type AssistantMessage } from '../../types.js'
@@ -17,8 +18,12 @@ const sameSource = (a: Source, b: Source) =>
  * 来源内容未变时复用 sources 数组，避免流式文本更新绕过 Markdown 的解析节流。
  */
 export const useReplyView = (message: AssistantMessage, streaming: boolean) => {
+  const locale = useLocale()
   const { tools } = useConversations()
-  const view = useMemo(() => buildReplyView(message, streaming, tools), [message, streaming, tools])
+  const view = useMemo(
+    () => buildReplyView(message, streaming, tools, locale),
+    [message, streaming, tools, locale]
+  )
   const [sources, setSources] = useState(view.sources)
 
   // 仅来源编号、顺序或元数据变化时更新状态，普通文本增量沿用已有数组。

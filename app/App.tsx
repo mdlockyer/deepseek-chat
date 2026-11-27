@@ -7,7 +7,7 @@ import clsx from 'clsx'
 import { useEffect, useRef } from 'react'
 import { AppErrorBoundary } from './AppErrorBoundary.js'
 import styles from './App.module.css'
-import { translate } from './i18n/index.js'
+import { useTranslate } from './i18n/index.js'
 import { RightPanel } from './rightPanel/RightPanel.js'
 import { useAppRuntime } from './RuntimeContext.js'
 import { SettingsDialog } from './settings/SettingsDialog.js'
@@ -27,6 +27,7 @@ export const App = ({ embedded = false }: { embedded?: boolean }) => {
   const isMobile = useIsMobile() && !embedded
   const dark = useRuntimeTheme(preferences) === 'dark'
   const locale = useLocale()
+  const t = useTranslate()
   const layoutState = runtime.layout.useStore()
   const siderMode: SiderMode = isMobile ? 'absent' : layoutState.mode
   // The toolbar fades out when the last chat is deleted; it keeps showing the mode it had.
@@ -48,8 +49,8 @@ export const App = ({ embedded = false }: { embedded?: boolean }) => {
       return
     }
     document.documentElement.lang = locale
-    document.title = translate('appName')
-  }, [embedded, locale])
+    document.title = t('appName')
+  }, [embedded, locale, t])
 
   conversations.useChatLifecycle()
 

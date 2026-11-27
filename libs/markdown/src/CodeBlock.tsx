@@ -49,7 +49,7 @@ const CodeInfoRow = ({
         className={styles.button}
         onClick={async () => {
           if (!(await copyText(code))) {
-            notice.show({ text: () => markdownMessages.translate('copyFailed') })
+            notice.show({ text: markdownMessages.lazy('copyFailed') })
             return
           }
           setCopied(true)

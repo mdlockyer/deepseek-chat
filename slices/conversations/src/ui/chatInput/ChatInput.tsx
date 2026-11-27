@@ -5,6 +5,7 @@ import {
   IconThinkOutline16,
   useIsMobile,
 } from '@deepseek-chat/lib-ui'
+import { useLocale } from '@deepseek-chat/spine/i18n'
 import clsx from 'clsx'
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ACCEPT } from '../../attachments.js'
@@ -31,6 +32,7 @@ const NO_VOICE = {
 const useNoVoiceInput = () => NO_VOICE
 
 const useCapabilityToggles = (tools: ToolRegistry): ComposerToolSwitch[] => {
+  const locale = useLocale()
   const [, setVersion] = useState(0)
   useEffect(() => {
     const unsubs = tools.toggles.map((toggle) => toggle.subscribe(() => setVersion((v) => v + 1)))
@@ -43,7 +45,7 @@ const useCapabilityToggles = (tools: ToolRegistry): ComposerToolSwitch[] => {
 
   return tools.toggles.map((toggle) => ({
     key: toggle.id,
-    label: toggle.label(),
+    label: toggle.label(locale),
     icon: toggle.icon,
     checked: toggle.isEnabled(),
     onToggle: () => toggle.setEnabled(!toggle.isEnabled()),

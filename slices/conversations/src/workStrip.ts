@@ -1,4 +1,5 @@
 import type { FrontStageNote, LiveTrack } from '@deepseek-chat/lib-tools'
+import type { Locale } from '@deepseek-chat/spine/i18n'
 import type { ReactNode } from 'react'
 import { translate } from './messages.js'
 import type { AssistantMessage } from './types.js'
@@ -118,7 +119,11 @@ const collectMetrics = (view: ReplyView) => {
   }
 }
 
-const formatTallies = (tallies: readonly TallyEntry[], maxItems = 3): string | null => {
+const formatTallies = (
+  tallies: readonly TallyEntry[],
+  maxItems = 3,
+  locale?: Locale
+): string | null => {
   const labels = tallies.slice(0, maxItems).map((entry) => entry.label(entry.count))
   if (labels.length === 0) {
     return null
@@ -127,15 +132,16 @@ const formatTallies = (tallies: readonly TallyEntry[], maxItems = 3): string | n
     return labels[0]
   }
   if (labels.length === 2) {
-    return `${labels[0]}${translate('activityListPairSeparator')}${labels[1]}`
+    return `${labels[0]}${translate(locale, 'activityListPairSeparator')}${labels[1]}`
   }
-  return `${labels.slice(0, -1).join(translate('activityListSeparator'))}${translate('activityListLastSeparator')}${labels.at(-1)}`
+  return `${labels.slice(0, -1).join(translate(locale, 'activityListSeparator'))}${translate(locale, 'activityListLastSeparator')}${labels.at(-1)}`
 }
 
 const liveHeadlineAndDetail = (
   view: ReplyView,
   tracks: readonly LiveTrack[],
-  stalled: boolean
+  stalled: boolean,
+  locale?: Locale
 ): { headline: string; detail: string | null; waitingForUser: boolean } => {
   const last = view.steps.at(-1)
   if (last?.type === 'tool' && last.summary?.waitingForUser && showsRunning(last)) {
@@ -154,8 +160,8 @@ const liveHeadlineAndDetail = (
     return {
       headline:
         runningTracks.length > 1
-          ? translate('activityLiveParallelCount', { count: runningTracks.length })
-          : (trackStep?.summary?.liveVerb ?? translate('replyWorking')),
+          ? translate(locale, 'activityLiveParallelCount', { count: runningTracks.length })
+          : (trackStep?.summary?.liveVerb ?? translate(locale, 'replyWorking')),
       detail: null,
       waitingForUser: false,
     }
@@ -185,8 +191,9 @@ const liveHeadlineAndDetail = (
   }
 
   return {
-    headline: translate('messageThinking'),
-    detail: stalled && needsWorkingIndicator(view) ? translate('replyWorking') : recentDetail,
+    headline: translate(locale, 'messageThinking'),
+    detail:
+      stalled && needsWorkingIndicator(view) ? translate(locale, 'replyWorking') : recentDetail,
     waitingForUser: false,
   }
 }
@@ -202,7 +209,8 @@ export const buildTurnWorkStrip = (
   now: number,
   stalled: boolean,
   hasResponse: boolean,
-  compacting = false
+  compacting = false,
+  locale?: Locale
 ): TurnWorkStripState => {
   const hasSteps = view.steps.length > 0
   const thinkingEnabled = message.thinking ?? view.steps.some((step) => step.type === 'thinking')
@@ -211,12 +219,12 @@ export const buildTurnWorkStrip = (
     if (!hasSteps) {
       return {
         mode: 'waiting',
-        label: translate('compactingConversation'),
+        label: translate(locale, 'compactingConversation'),
       }
     }
     return {
       mode: 'live',
-      headline: translate('compactingConversation'),
+      headline: translate(locale, 'compactingConversation'),
       detail: null,
       liveTracks: [],
       overflowTracks: 0,
@@ -229,7 +237,9 @@ export const buildTurnWorkStrip = (
     if (streaming && !hasResponse) {
       return {
         mode: 'waiting',
-        label: thinkingEnabled ? translate('messageThinking') : translate('replyWaiting'),
+        label: thinkingEnabled
+          ? translate(locale, 'messageThinking')
+          : translate(locale, 'replyWaiting'),
       }
     }
     return { mode: 'hidden' }
@@ -239,7 +249,12 @@ export const buildTurnWorkStrip = (
   const anyToolRunning = view.steps.some((step) => showsRunning(step))
 
   if (streaming && (!hasResponse || anyToolRunning)) {
-    const { headline, detail, waitingForUser } = liveHeadlineAndDetail(view, tracks, stalled)
+    const { headline, detail, waitingForUser } = liveHeadlineAndDetail(
+      view,
+      tracks,
+      stalled,
+      locale
+    )
     const hasRunningTracks = tracks.some((t) => t.status === 'running')
     const orderedTracks = hasRunningTracks
       ? [
@@ -265,22 +280,26 @@ export const buildTurnWorkStrip = (
   const hasThinking = view.steps.some((step) => step.type === 'thinking')
   const thinkingOnly = !hasToolWork && hasThinking
   const thinkingSeconds = hasThinking ? getTotalThinkingSeconds(view.steps, now) : null
-  const workPhrase = formatTallies(tallies, 3)
+  const workPhrase = formatTallies(tallies, 3, locale)
 
   let label: string
   if (stopped) {
     label = workPhrase
-      ? translate('activityStoppedAfter', { work: workPhrase })
-      : translate('messageThinkStopped')
+      ? translate(locale, 'activityStoppedAfter', { work: workPhrase })
+      : translate(locale, 'messageThinkStopped')
   } else if (workPhrase) {
     label = workPhrase
   } else if (hasThinking) {
     label =
       thinkingSeconds !== null
-        ? translate(thinkingSeconds === 1 ? 'messageThinkDuration' : 'messageThinkDurationPlural', {
-            count: thinkingSeconds,
-          })
-        : translate('thinkingSwitch')
+        ? translate(
+            locale,
+            thinkingSeconds === 1 ? 'messageThinkDuration' : 'messageThinkDurationPlural',
+            {
+              count: thinkingSeconds,
+            }
+          )
+        : translate(locale, 'thinkingSwitch')
   } else {
     const noteStep = [...view.steps]
       .reverse()
@@ -288,10 +307,10 @@ export const buildTurnWorkStrip = (
     if (noteStep?.result?.frontStageNote) {
       label =
         noteStep.result.frontStageNote.status === 'skipped'
-          ? translate('noteSkipped')
-          : noteStep.rawSummary || translate('noteAnswered')
+          ? translate(locale, 'noteSkipped')
+          : noteStep.rawSummary || translate(locale, 'noteAnswered')
     } else {
-      label = translate('activityPanelTitle')
+      label = translate(locale, 'activityPanelTitle')
     }
   }
 

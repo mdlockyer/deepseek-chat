@@ -89,8 +89,8 @@ export const createHistoryBackupSlice = (deps: HistoryBackupDeps) => {
       await deps.sessions.replaceHistory(async () => ({ sessions: [], blobs: [] }))
     })
 
-  const historyErrorText = (error: unknown): (() => string) | null =>
-    error instanceof BackupError ? () => historyBackupMessages.translate(error.key) : null
+  const historyErrorText = (error: unknown) =>
+    error instanceof BackupError ? historyBackupMessages.lazy(error.key) : null
 
   const views = createDataSettingsViews({
     exportHistory,

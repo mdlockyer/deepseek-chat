@@ -10,6 +10,7 @@ export const createPreferencesSlice = (deps: PreferencesDeps) => {
   const preferences = createPreferences(deps)
   const views = createViews(preferences)
   return {
+    getLocale: preferences.getLocale,
     setLocale: preferences.setLocale,
     getThemePreference: preferences.getThemePreference,
     setThemePreference: preferences.setThemePreference,

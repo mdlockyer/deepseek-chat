@@ -557,7 +557,7 @@ export const createWebResearchSlice = (deps: WebResearchDeps): WebResearchSlice 
     id: 'web-research',
     toggle: {
       id: 'web-research',
-      label: () => webResearchMessages.translate('webSearchToggleLabel'),
+      label: webResearchMessages.lazy('webSearchToggleLabel'),
       icon: createElement(IconGlobeLanguageOutline14),
       isEnabled: () => searchEnabled,
       setEnabled: setSearchEnabled,

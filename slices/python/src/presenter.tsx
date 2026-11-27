@@ -1,3 +1,4 @@
+import { useLocale, type Locale } from '@deepseek-chat/spine/i18n'
 import { Banner, IconCodeOutline14 } from '@deepseek-chat/lib-ui'
 import type {
   ActivityStepDetailProps,
@@ -28,13 +29,14 @@ const summaryOf = (call: ToolCallRecord): string | null => {
 
 const visualsOf = (
   call: ToolCallRecord,
-  result: ToolResultRecord | undefined
+  result: ToolResultRecord | undefined,
+  locale?: Locale
 ): readonly ToolStepVisualArtifact[] | undefined => {
   const images = result?.previewImages?.length ? result.previewImages : (result?.images ?? [])
   if (images.length === 0) {
     return undefined
   }
-  const label = summaryOf(call) ?? pythonMessages.translate('pythonActivityTitle')
+  const label = summaryOf(call) ?? pythonMessages.translate(locale, 'pythonActivityTitle')
   return images.map((src) => ({ src, alt: label, caption: label }))
 }
 
@@ -54,11 +56,12 @@ export const serializePythonForArchive = (
 }
 
 const PythonStepDetail = ({ entry, openVisual, renderMarkdown }: ActivityStepDetailProps) => {
+  const locale = useLocale()
   const t = pythonMessages.useTranslate()
   const { call, result } = entry
   const code = codeOf(call)
   const failed = Boolean(result && result.status !== 'ok' && result.status !== 'running')
-  const visuals = visualsOf(call, result) ?? []
+  const visuals = visualsOf(call, result, locale) ?? []
 
   return (
     <div className={styles.detail}>
@@ -100,7 +103,7 @@ const PythonStepDetail = ({ entry, openVisual, renderMarkdown }: ActivityStepDet
 }
 
 export const pythonPresenter: ToolStepPresenter = {
-  summarize: (call, result, { streaming }) => {
+  summarize: (call, result, { streaming, locale }) => {
     const running = !result || result.status === 'running'
     const phase = result?.progress?.phase
     const verbKey =
@@ -111,13 +114,13 @@ export const pythonPresenter: ToolStepPresenter = {
           : 'pythonRunning'
     const duration =
       result?.durationMs !== undefined ? `${(result.durationMs / 1000).toFixed(1)}s` : undefined
-    const visuals = visualsOf(call, result)
+    const visuals = visualsOf(call, result, locale)
 
     return {
       lane: 'python',
       icon: <IconCodeOutline14 />,
-      liveVerb: pythonMessages.translate(verbKey),
-      detail: summaryOf(call) ?? pythonMessages.translate('pythonActivityTitle'),
+      liveVerb: pythonMessages.translate(locale, verbKey),
+      detail: summaryOf(call) ?? pythonMessages.translate(locale, 'pythonActivityTitle'),
       ...(duration ? { meta: duration } : {}),
       ...(visuals ? { visuals } : {}),
       hasDetail: Boolean(codeOf(call).trim() || result?.content?.trim() || visuals?.length),
@@ -127,7 +130,9 @@ export const pythonPresenter: ToolStepPresenter = {
         key: 'python',
         count: 1,
         label: (count) =>
-          pythonMessages.translate(count === 1 ? 'pythonCountOne' : 'pythonCountMany', { count }),
+          pythonMessages.translate(locale, count === 1 ? 'pythonCountOne' : 'pythonCountMany', {
+            count,
+          }),
       },
     }
   },

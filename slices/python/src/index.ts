@@ -207,7 +207,7 @@ export const createPythonSlice = (deps: PythonSliceDeps): PythonSlice => {
     id: 'python',
     toggle: {
       id: 'python',
-      label: () => pythonMessages.translate('pythonToggleLabel'),
+      label: pythonMessages.lazy('pythonToggleLabel'),
       icon: createElement(IconCodeOutline14),
       isEnabled: () => enabled,
       setEnabled,

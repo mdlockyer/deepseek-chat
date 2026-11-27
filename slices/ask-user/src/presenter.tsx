@@ -79,24 +79,24 @@ const AskStepDetail = ({ entry }: ActivityStepDetailProps) => {
 }
 
 export const askUserPresenter: ToolStepPresenter = {
-  summarize: (_call, result, { streaming }) => {
+  summarize: (_call, result, { streaming, locale }) => {
     const ask = readAskMeta(result)
     const running = !result || result.status === 'running'
     const failed = !running && result.status !== 'ok'
     const titleText = running
-      ? askUserMessages.translate('askWaiting')
+      ? askUserMessages.translate(locale, 'askWaiting')
       : ask?.status === 'skipped'
-        ? askUserMessages.translate('askSkipped')
-        : askUserMessages.translate('askAnswered')
+        ? askUserMessages.translate(locale, 'askSkipped')
+        : askUserMessages.translate(locale, 'askAnswered')
     const meta = running
       ? undefined
       : ask?.status === 'skipped'
-        ? askUserMessages.translate('askSkippedShort')
-        : askUserMessages.translate('askAnswered')
+        ? askUserMessages.translate(locale, 'askSkippedShort')
+        : askUserMessages.translate(locale, 'askAnswered')
     return {
       lane: 'ask',
       icon: <IconCheckedOutline14 />,
-      liveVerb: askUserMessages.translate('askWaiting'),
+      liveVerb: askUserMessages.translate(locale, 'askWaiting'),
       detail: titleText,
       ...(meta ? { meta } : {}),
       hasDetail: Boolean(ask?.status === 'answered' && ask.items.length > 0),

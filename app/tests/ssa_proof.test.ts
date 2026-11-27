@@ -229,14 +229,20 @@ describe('SSA Proof 1: Multi-instance isolation in the same process', () => {
     await runtimeA.slices.conversations.commands.init()
     await runtimeB.slices.conversations.commands.init()
 
-    // Mutate toggles and send a message ONLY in Runtime A.
+    // Mutate locale, theme, toggles, and send a message ONLY in Runtime A.
+    runtimeA.slices.preferences?.setLocale('zh-CN')
+    runtimeA.slices.preferences?.setThemePreference('dark')
     runtimeA.slices.conversations.setThinking(false)
     runtimeA.tools.toggles.find((t) => t.id === 'web-research')?.setEnabled(true)
     runtimeA.slices.conversations.commands.setDraft(null, 'Hello A')
     assert.equal(runtimeA.slices.conversations.commands.send(null), true)
     await runtimeA.slices.conversations.commands.whenIdle()
 
-    // Runtime A has 1 session & multiple facts; Runtime B has zero sessions & no reply facts.
+    // Runtime A has 1 session, zh-CN locale & dark theme; Runtime B is completely untouched.
+    assert.equal(runtimeA.locale.get(), 'zh-CN')
+    assert.equal(runtimeB.locale.get(), 'en-US')
+    assert.equal(runtimeA.slices.preferences?.getThemePreference(), 'dark')
+    assert.equal(runtimeB.slices.preferences?.getThemePreference(), 'system')
     assert.equal(runtimeA.slices.conversations.getState().sessions.length, 1)
     assert.equal(runtimeB.slices.conversations.getState().sessions.length, 0)
     assert.equal(runtimeA.slices.conversations.getThinking(), false)

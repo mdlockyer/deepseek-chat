@@ -5,6 +5,7 @@ import {
   IconGlobeLanguageOutline16,
   IconRefreshOutline16,
 } from '@deepseek-chat/lib-ui'
+import { useLocale } from '@deepseek-chat/spine/i18n'
 import clsx from 'clsx'
 import { memo, useEffect, useState } from 'react'
 import { useConversations } from '../../context.js'
@@ -60,13 +61,14 @@ export const AssistantMessage = memo(function AssistantMessage({
   versions: MessageVersions
   onSelectVersion: SelectMessageVersion
 }) {
+  const locale = useLocale()
   const t = useTranslate()
   const { deps, requestTurnInspection, regenerateReply, continueReply } = useConversations()
   const ReadAloudButton = deps.ui.voice?.ReadAloudButton ?? null
   const view = useReplyView(message, streaming)
   const useActiveInspection = deps.ui.useActiveInspectionTarget ?? useNoInspection
   const panelTarget = useActiveInspection()
-  const notice = streaming ? null : describeReply(message)
+  const notice = streaming ? null : describeReply(message, locale)
   const refused = message.stopReason === 'refusal'
   const shownAnswer = useHeldAnswer(message.id, view, streaming)
   const answer = refused ? null : shownAnswer

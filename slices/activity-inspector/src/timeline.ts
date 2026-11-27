@@ -5,6 +5,7 @@ import type {
   ToolStepSummary,
   ToolStepVisualArtifact,
 } from '@deepseek-chat/lib-tools'
+import type { Locale } from '@deepseek-chat/spine/i18n'
 import { activityInspectorMessages } from './messages.js'
 import { extractTurnSources, type ExtractedTurnSources } from './sources.js'
 import type { TurnSnapshot, TurnThinkingBlock, TurnToolResultBlock } from './types.js'
@@ -186,7 +187,11 @@ const computeThinkingTiming = (blocks: readonly TurnThinkingBlock[], now: number
   }
 }
 
-const formatTallies = (tallies: readonly TallyEntry[], maxItems = 3): string | null => {
+const formatTallies = (
+  tallies: readonly TallyEntry[],
+  maxItems = 3,
+  locale?: Locale
+): string | null => {
   const labels = tallies.slice(0, maxItems).map((entry) => entry.label(entry.count))
   if (labels.length === 0) {
     return null
@@ -195,9 +200,9 @@ const formatTallies = (tallies: readonly TallyEntry[], maxItems = 3): string | n
     return labels[0] ?? null
   }
   if (labels.length === 2) {
-    return `${labels[0]}${activityInspectorMessages.translate('listPairSeparator')}${labels[1]}`
+    return `${labels[0]}${activityInspectorMessages.translate(locale, 'listPairSeparator')}${labels[1]}`
   }
-  return `${labels.slice(0, -1).join(activityInspectorMessages.translate('listSeparator'))}${activityInspectorMessages.translate('listLastSeparator')}${labels.at(-1)}`
+  return `${labels.slice(0, -1).join(activityInspectorMessages.translate(locale, 'listSeparator'))}${activityInspectorMessages.translate(locale, 'listLastSeparator')}${labels.at(-1)}`
 }
 
 const collectStepVisuals = (
@@ -223,7 +228,8 @@ const collectStepVisuals = (
 export const buildActivityTimeline = (
   turn: TurnSnapshot,
   getPresenter: (capabilityId: string | undefined, toolName: string) => ToolStepPresenter | null,
-  now = Date.now()
+  now = Date.now(),
+  locale?: Locale
 ): ActivityTimeline => {
   const toolResults = new Map<string, TurnToolResultBlock>()
   for (const block of turn.blocks) {
@@ -303,6 +309,7 @@ export const buildActivityTimeline = (
         presenter?.summarize(block, result, {
           streaming: turn.streaming,
           capabilityState: capState,
+          locale,
         }) ?? null
       if (summary?.hiddenInTimeline) {
         return
@@ -407,7 +414,7 @@ export const buildActivityTimeline = (
     thinkingBlocks.length > 0
       ? computeThinkingTiming(thinkingBlocks, now)
       : { thinkingSeconds: null, completedThinkingMs: 0, activeThinkingStartedAt: null }
-  const tallyLabel = formatTallies([...tallies.values()], 3)
+  const tallyLabel = formatTallies([...tallies.values()], 3, locale)
 
   return {
     phases,

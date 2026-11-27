@@ -32,8 +32,7 @@ const describeRecordingError = (error: unknown): VoiceMessageKey => {
  * 每次开始或取消都换一个 operation 编号，迟到的异步结果按编号丢弃。
  */
 export const createVoiceInput = (deps: VoiceInputDeps, onText: (text: string) => void) => {
-  const toast = (key: VoiceMessageKey) =>
-    deps.notify.show({ text: () => voiceMessages.translate(key) })
+  const toast = (key: VoiceMessageKey) => deps.notify.show({ text: voiceMessages.lazy(key) })
   /**
    * 录音依赖 getUserMedia，只在安全上下文可用（HTTPS、localhost、file://）。
    * 普通 HTTP 页面上直接禁用入口，避免点击后必然失败。

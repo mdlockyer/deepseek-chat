@@ -1,4 +1,5 @@
 import type { DeliveredFileRef, ToolRegistry, ToolStepSummary } from '@deepseek-chat/lib-tools'
+import type { Locale } from '@deepseek-chat/spine/i18n'
 import { translate } from './messages.js'
 import type { AssistantMessage, ThinkingPart, ToolCallPart, ToolResultPart } from './types.js'
 
@@ -182,7 +183,8 @@ const joinTextBlocks = (blocks: { text: string }[]) => {
 export const buildReplyView = (
   reply: AssistantMessage,
   streaming: boolean,
-  tools?: ToolRegistry
+  tools?: ToolRegistry,
+  locale?: Locale
 ): ReplyView => {
   const toolResults = new Map<string, ToolResultPart>()
   for (const block of reply.blocks) {
@@ -256,7 +258,7 @@ export const buildReplyView = (
           ? reply.capabilityState[capabilityId]
           : undefined
       const summary = presenter
-        ? presenter.summarize(block, toolResult, { streaming, capabilityState })
+        ? presenter.summarize(block, toolResult, { streaming, capabilityState, locale })
         : null
       steps.push({
         type: 'tool',
@@ -352,23 +354,26 @@ export const getAreaTitle = (
   view: ReplyView,
   streaming: boolean,
   now: number,
-  hasResponse = view.answer !== null
+  hasResponse = view.answer !== null,
+  locale?: Locale
 ) => {
   if (hasResponse) {
     const count = getTotalThinkingSeconds(view.steps, now)
     if (count === null) {
-      return translate('thinkingSwitch')
+      return translate(locale, 'thinkingSwitch')
     }
-    return translate(count === 1 ? 'messageThinkDuration' : 'messageThinkDurationPlural', { count })
+    return translate(locale, count === 1 ? 'messageThinkDuration' : 'messageThinkDurationPlural', {
+      count,
+    })
   }
   if (!streaming) {
-    return translate('messageThinkStopped')
+    return translate(locale, 'messageThinkStopped')
   }
   const last = view.steps.at(-1)
   if (last?.type === 'tool' && showsRunning(last)) {
     return last.rawSummary || last.summary?.detail || last.summary?.liveVerb || last.call.name
   }
-  return translate('messageThinking')
+  return translate(locale, 'messageThinking')
 }
 
 /** 生成中的回复停顿时，是否需要显示「仍在处理」 */

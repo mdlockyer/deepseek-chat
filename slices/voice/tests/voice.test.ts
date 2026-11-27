@@ -1,10 +1,9 @@
 import assert from 'node:assert/strict'
-import { afterEach, beforeEach, describe, it } from 'node:test'
+import { afterEach, describe, it } from 'node:test'
 import type {
   ActiveSessionChanged,
   ReplyLifecycleChanged,
 } from '@deepseek-chat/spine/facts/session'
-import { setLocale } from '@deepseek-chat/spine/i18n'
 import { memoryNoticePort, memoryStore } from '@deepseek-chat/spine/ports'
 import { EventLog } from '@deepseek-chat/spine/runtime'
 import {
@@ -178,8 +177,6 @@ const settle = async () => {
     await tick()
   }
 }
-
-beforeEach(() => setLocale('en-US'))
 
 // ---------- read-aloud ----------
 

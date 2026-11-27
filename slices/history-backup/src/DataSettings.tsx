@@ -5,6 +5,7 @@ import {
   IconUploadOutline14,
   SettingRow,
 } from '@deepseek-chat/lib-ui'
+import { useLocale, type Locale } from '@deepseek-chat/spine/i18n'
 import type { NoticePort } from '@deepseek-chat/spine/ports'
 import { useRef, useState } from 'react'
 import { BackupError } from './errors.js'
@@ -15,7 +16,9 @@ import {
 } from './messages.js'
 import styles from './DataSettings.module.css'
 
-type Status = (HistoryBackupTranslationMessage & { error?: boolean; reason?: () => string }) | null
+type Status =
+  | (HistoryBackupTranslationMessage & { error?: boolean; reason?: (locale?: Locale) => string })
+  | null
 
 export type DataSettingsActions = {
   readonly exportHistory: () => Promise<{ name: string; blob: Blob }>
@@ -47,8 +50,7 @@ export type DataSettingsController = {
 }
 
 const errorStatus = (key: HistoryBackupMessageKey, error: unknown): Status => {
-  const reason =
-    error instanceof BackupError ? () => historyBackupMessages.translate(error.key) : null
+  const reason = error instanceof BackupError ? historyBackupMessages.lazy(error.key) : null
   return {
     key,
     ...(reason
@@ -102,10 +104,10 @@ export const createDataSettingsViews = (actions: DataSettingsActions) => {
       try {
         await actions.clearHistory()
         setDeleteOpened(false)
-        actions.notify.show({ text: () => historyBackupMessages.translate('historyDeleted') })
+        actions.notify.show({ text: historyBackupMessages.lazy('historyDeleted') })
       } catch {
         actions.notify.show({
-          text: () => historyBackupMessages.translate('historyDeleteFailed'),
+          text: historyBackupMessages.lazy('historyDeleteFailed'),
           tone: 'error',
         })
       } finally {
@@ -140,6 +142,7 @@ export const createDataSettingsViews = (actions: DataSettingsActions) => {
   }
 
   const DataSettings = ({ controller }: { controller: DataSettingsController }) => {
+    const locale = useLocale()
     const t = historyBackupMessages.useTranslate()
     const { empty } = actions.useSessionState()
     const inputRef = useRef<HTMLInputElement>(null)
@@ -180,7 +183,7 @@ export const createDataSettingsViews = (actions: DataSettingsActions) => {
                   text: t(
                     importState.status.key,
                     importState.status.reason
-                      ? { message: importState.status.reason() }
+                      ? { message: importState.status.reason(locale) }
                       : importState.status.params
                   ),
                   error: importState.status.error,
@@ -223,7 +226,9 @@ export const createDataSettingsViews = (actions: DataSettingsActions) => {
               ? {
                   text: t(
                     exportStatus.key,
-                    exportStatus.reason ? { message: exportStatus.reason() } : exportStatus.params
+                    exportStatus.reason
+                      ? { message: exportStatus.reason(locale) }
+                      : exportStatus.params
                   ),
                   error: exportStatus.error,
                 }

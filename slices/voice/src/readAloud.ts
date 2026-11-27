@@ -1,3 +1,4 @@
+import type { Locale } from '@deepseek-chat/spine/i18n'
 import type { AudioContextLike, VoiceAudio } from './audio.js'
 import { voiceMessages } from './messages.js'
 import { SpeechApiError, TTS_SAMPLE_RATE, type SpeechApi, type TtsVoice } from './speechApi.js'
@@ -24,11 +25,10 @@ const toFloat32 = (bytes: Uint8Array) => {
   return samples
 }
 
-/** Text for a failed read-aloud, rendered lazily in the current locale. */
-const describeReadAloudError = (error: unknown): (() => string) => {
-  const t = voiceMessages.translate
+/** Text for a failed read-aloud, rendered lazily in the active locale. */
+const describeReadAloudError = (error: unknown): ((locale?: Locale) => string) => {
   if (!(error instanceof SpeechApiError)) {
-    return () => t('ttsFailed')
+    return voiceMessages.lazy('ttsFailed')
   }
   const { failure } = error
   if (failure.kind === 'protocol') {
@@ -38,16 +38,16 @@ const describeReadAloudError = (error: unknown): (() => string) => {
     switch (failure.status) {
       // 400 表示这段正文服务端无法合成，与其余失败区分开
       case 400:
-        return () => t('ttsUnavailable')
+        return voiceMessages.lazy('ttsUnavailable')
       case 401:
-        return () => t('apiKeyInvalidRetry')
+        return voiceMessages.lazy('apiKeyInvalidRetry')
       case 402:
-        return () => t('insufficientBalance')
+        return voiceMessages.lazy('insufficientBalance')
       case 429:
-        return () => t('rateLimited')
+        return voiceMessages.lazy('rateLimited')
     }
   }
-  return () => t('ttsFailed')
+  return voiceMessages.lazy('ttsFailed')
 }
 
 export const createReadAloud = (deps: {
@@ -89,7 +89,11 @@ export const createReadAloud = (deps: {
    * 开始朗读一条回复的正文；同一条正在朗读时调用等于停止。
    * 必须在点击事件中同步调用：AudioContext 需要用户手势才能出声。
    */
-  const toggle = (messageId: string, text: string, onError: (message: () => string) => void) => {
+  const toggle = (
+    messageId: string,
+    text: string,
+    onError: (message: (locale?: Locale) => string) => void
+  ) => {
     const reading = state.status === 'idle' ? null : state.messageId
     stop()
     if (reading === messageId) {

@@ -143,16 +143,16 @@ const FileStepDetail = ({ entry, sessionId, openFile }: ActivityStepDetailProps)
 }
 
 export const workspaceFilesPresenter: ToolStepPresenter = {
-  summarize: (call, result, { streaming }) => {
+  summarize: (call, result, { streaming, locale }) => {
     const action = readAction(call, result)
     const running = !result || result.status === 'running'
     const version = action.version
-      ? workspaceMessages.translate('previewVersionLabel', { version: action.version })
+      ? workspaceMessages.translate(locale, 'previewVersionLabel', { version: action.version })
       : undefined
     return {
       lane: 'files',
       icon: <IconBrowseOutline16 />,
-      liveVerb: workspaceMessages.translate('activityFileWorking'),
+      liveVerb: workspaceMessages.translate(locale, 'activityFileWorking'),
       detail: action.title || action.path,
       ...(version ? { meta: version } : {}),
       hasDetail: true,
@@ -163,6 +163,7 @@ export const workspaceFilesPresenter: ToolStepPresenter = {
         count: 1,
         label: (count) =>
           workspaceMessages.translate(
+            locale,
             count === 1 ? 'activityFileCountOne' : 'activityFileCountMany',
             {
               count,

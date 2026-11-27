@@ -11,7 +11,7 @@ import type {
   SessionFileDescriptor,
   ToolFileDelivered,
 } from '@deepseek-chat/spine/facts/session'
-import { getLocale, type Locale } from '@deepseek-chat/spine/i18n'
+import type { Locale } from '@deepseek-chat/spine/i18n'
 import type { EventLog } from '@deepseek-chat/spine/runtime'
 import { ApiError } from './apiClient.js'
 import { describeUploadError, type UploadsController } from './attachments.js'
@@ -82,6 +82,7 @@ export type ReplyRunnerParams = {
 
 export type ReplyRunnerHost = {
   readonly log: EventLog
+  readonly getLocale: () => Locale
   readonly readBlob: (id: string) => Promise<Blob | undefined>
   readonly tools: ToolRegistry
   readonly provider: ModelProvider
@@ -795,12 +796,13 @@ export const createReplyRunner = (host: ReplyRunnerHost) => {
           reply = { ...reply, stopReason: undefined, stopDetails: undefined }
           const prepared = await prepareFiles(sessionId, request, controller.signal)
           preparing = false
+          const currentLocale = host.getLocale()
           const environmentContext = prepared.continueReply
             ? resolveEnvironmentContext(prepared.continueReply)
             : (resolveEnvironmentContext(reply) ??
               createEnvironmentContext({
-                locale: getLocale(),
-                locationLabel: host.getLocationLabel(getLocale()),
+                locale: currentLocale,
+                locationLabel: host.getLocationLabel(currentLocale),
                 platform: host.platform,
               }))
           const model = initial.model ?? host.provider.defaultModel

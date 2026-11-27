@@ -1,4 +1,5 @@
 import { ApiError as LibApiError, classifyApiError } from '@deepseek-chat/lib-agent'
+import type { Locale } from '@deepseek-chat/spine/i18n'
 import { isTranslationKey, translate } from './messages.js'
 import type { AssistantMessage } from './types.js'
 
@@ -16,34 +17,34 @@ const getTemplateText = (reply: AssistantMessage) =>
     .join('')
 
 /** 回复出错或未正常结束时展示的提示 */
-export const describeReply = (reply: AssistantMessage): Notice | null => {
+export const describeReply = (reply: AssistantMessage, locale?: Locale): Notice | null => {
   if (reply.status === 'error' && reply.error) {
     const { kind, status, localMessage } = reply.error
     // 导入的历史可能来自不同版本；不识别的文案沿用保存时的原文。
     const message =
       localMessage && isTranslationKey(localMessage.key)
-        ? translate(localMessage.key, localMessage.params)
+        ? translate(locale, localMessage.key, localMessage.params)
         : reply.error.message
     // 历史补传错误刷新后仍需说明原因，恢复沿用附件卡片或重新生成。
     if (kind === 'upload') {
-      return { text: message || translate('uploadFileStatusFailed') }
+      return { text: message || translate(locale, 'uploadFileStatusFailed') }
     }
     if (kind === 'network') {
-      return { text: translate('commonNetworkErrorToast') }
+      return { text: translate(locale, 'commonNetworkErrorToast') }
     }
     switch (classifyApiError(new LibApiError(kind, reply.error.message, status))) {
       case 'unauthorized':
-        return { text: translate('replyInvalidApiKey'), action: 'apiKey' }
+        return { text: translate(locale, 'replyInvalidApiKey'), action: 'apiKey' }
       case 'insufficientBalance':
-        return { text: translate('replyInsufficientBalance'), action: 'topUp' }
+        return { text: translate(locale, 'replyInsufficientBalance'), action: 'topUp' }
       case 'contextOverflow':
-        return { text: translate('replyContextOverflow') }
+        return { text: translate(locale, 'replyContextOverflow') }
       case 'payloadTooLarge':
-        return { text: translate('replyPayloadTooLarge') }
+        return { text: translate(locale, 'replyPayloadTooLarge') }
       case 'rateLimited':
-        return { text: translate('replyRateLimited') }
+        return { text: translate(locale, 'replyRateLimited') }
       case 'serverBusy':
-        return { text: translate('completionServerBusyToast') }
+        return { text: translate(locale, 'completionServerBusyToast') }
       default:
         return message ? { text: message } : null
     }
@@ -55,7 +56,7 @@ export const describeReply = (reply: AssistantMessage): Notice | null => {
   }
   if (reply.stopReason === 'refusal') {
     // 导入的拒绝回复优先展示归档中的模板，普通正文仍不可展示。
-    return { text: template || translate('replyRefused'), presentation: 'response' }
+    return { text: template || translate(locale, 'replyRefused'), presentation: 'response' }
   }
   if (template) {
     return { text: template, presentation: 'response' }

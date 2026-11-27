@@ -6,6 +6,7 @@ import {
   IconChevronRightOutline14,
   hoverGlideItem,
 } from '@deepseek-chat/lib-ui'
+import { useLocale } from '@deepseek-chat/spine/i18n'
 import clsx from 'clsx'
 import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { formatSize, getExtension } from '../../attachments.js'
@@ -79,6 +80,7 @@ export const ReplyArea = memo(function ReplyArea({
   stalled: boolean
   hasResponse: boolean
 }) {
+  const locale = useLocale()
   const t = useTranslate()
   const { deps, requestTurnInspection } = useConversations()
   const useActiveInspection = deps.ui.useActiveInspectionTarget ?? useNoInspection
@@ -99,7 +101,8 @@ export const ReplyArea = memo(function ReplyArea({
     Date.now() + tick * 0,
     stalled,
     hasResponse,
-    compacting
+    compacting,
+    locale
   )
   const notes = getFrontStageNotes(view)
 

@@ -9,13 +9,9 @@ import {
   type CompactionCheckpoint,
 } from '@deepseek-chat/slice-conversations'
 import { createDeepSeekProvider } from '@deepseek-chat/lib-agent'
-import { setLocale } from '@deepseek-chat/spine/i18n'
 import { createTestSlice } from './harness.js'
 
-const renderWithEnglish = (render: () => string): string => {
-  setLocale('en-US')
-  return render()
-}
+const renderWithEnglish = (render: () => string): string => render()
 
 describe('conversations: permanent top-right Settings & first-launch chrome', () => {
   it('omits Settings from Sider now that Settings lives permanently in the top-right header', async () => {
@@ -311,7 +307,6 @@ describe('conversations: permanent top-right Settings & first-launch chrome', ()
     assert.doesNotMatch(largeHtml, /data-compaction-divider/)
 
     // Turn Work Strip surfaces compacting calmly in both waiting (turn-start) and live (mid-turn) states.
-    setLocale('en-US')
     const waitingReply: AssistantMessage = {
       id: 'r-wait',
       role: 'assistant',

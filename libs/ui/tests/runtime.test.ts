@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, it, mock } from 'node:test'
 import { act, createElement, useSyncExternalStore } from 'react'
 import { createRoot } from 'react-dom/client'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { setLocale } from '@deepseek-chat/spine/i18n'
+import { createLocaleStore, LocaleProvider } from '@deepseek-chat/spine/i18n'
 import {
   HOVER_GLIDE_ITEM_ATTR,
   HOVER_GLIDE_SURFACE_ATTR,
@@ -96,7 +96,6 @@ describe('lib-ui NoticeBus & ToastViewport', () => {
   )
   afterEach(() => {
     mock.timers.reset()
-    setLocale('en-US')
   })
 
   it('replaces the active notice, cancels stale timers, and keeps linked notices longer', () => {
@@ -118,19 +117,26 @@ describe('lib-ui NoticeBus & ToastViewport', () => {
 
   it('renders active notice inside ToastViewport via UiProvider in the live locale', () => {
     const bus = createNoticeBus()
-    let message = 'initial'
+    const locale = createLocaleStore('zh-CN')
     bus.show({
-      text: () => message,
+      text: (loc) => (loc === 'zh-CN' ? 'rendered-zh' : 'rendered-en'),
       tone: 'error',
-      link: { text: () => 'Details', href: 'https://example.test/' },
+      link: {
+        text: (loc) => (loc === 'zh-CN' ? '详情' : 'Details'),
+        href: 'https://example.test/',
+      },
     })
-    message = 'rendered-now'
 
     const html = renderToStaticMarkup(
-      createElement(UiProvider, { notices: bus }, createElement(ToastViewport))
+      createElement(
+        LocaleProvider,
+        { store: locale },
+        createElement(UiProvider, { notices: bus }, createElement(ToastViewport))
+      )
     )
     assert.match(html, /role="status"/)
-    assert.match(html, /rendered-now/)
+    assert.match(html, /rendered-zh/)
+    assert.match(html, /详情/)
     assert.match(html, /href="https:\/\/example\.test\/"/)
   })
 })

@@ -135,7 +135,7 @@ export const createConversationsSlice = (deps: ConversationsDeps) => {
     replaceSessions: runtime.replaceSessions,
     useHistoryState: runtime.useHistoryState,
     describeReplyNotice: (message: Parameters<typeof describeReply>[0]): string | null =>
-      describeReply(message)?.text ?? null,
+      describeReply(message, runtime.getLocale())?.text ?? null,
 
     // Views and their lifecycle.
     /** Call once from the app shell, outside any error boundary. */

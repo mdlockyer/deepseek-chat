@@ -1,4 +1,5 @@
-import { translate } from './messages.js'
+import { DEFAULT_LOCALE, type Translate } from '@deepseek-chat/spine/i18n'
+import { translate, type TranslationKey } from './messages.js'
 import { monthKey } from './format.js'
 import type { SessionSummary } from './types.js'
 
@@ -6,8 +7,15 @@ const DAY = 86_400_000
 
 const startOfDay = (time: number) => new Date(time).setHours(0, 0, 0, 0)
 
+const defaultTranslate: Translate<TranslationKey> = (key, params) =>
+  translate(DEFAULT_LOCALE, key, params)
+
 /** 分组：今天 / 昨天 / 7 天内 / 30 天内 / 按月 */
-export const groupSessions = (sessions: SessionSummary[], now: number, t = translate) => {
+export const groupSessions = (
+  sessions: SessionSummary[],
+  now: number,
+  t: Translate<TranslationKey> = defaultTranslate
+) => {
   const groups: { key: string; label: string; sessions: SessionSummary[] }[] = []
   for (const session of sessions) {
     const diff = Math.floor((now - startOfDay(session.updatedAt)) / DAY)

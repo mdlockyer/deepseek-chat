@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import type { NativeRuntimeStatus } from './kernel.js'
 import { pythonMessages } from './messages.js'
 
-type MessageKey = Parameters<typeof pythonMessages.translate>[0]
+type MessageKey = Parameters<typeof pythonMessages.translate>[1]
 
 /** Kept as a key so the status re-translates when the language changes. */
 type Status = { key: MessageKey; params?: Record<string, string>; error?: boolean } | null

@@ -164,7 +164,7 @@ const WebResearchStepDetail = ({ entry, openLink }: ActivityStepDetailProps) => 
 }
 
 export const webResearchPresenter: ToolStepPresenter = {
-  summarize: (call, result, { streaming }) => {
+  summarize: (call, result, { streaming, locale }) => {
     const running = !result || result.status === 'running'
     const failed = !running && result.status !== 'ok'
     if (call.name === 'web_scrape') {
@@ -173,7 +173,7 @@ export const webResearchPresenter: ToolStepPresenter = {
       return {
         lane: 'research',
         icon: <IconGlobeLanguageOutline14 />,
-        liveVerb: webResearchMessages.translate('activityWebScrapeWorking'),
+        liveVerb: webResearchMessages.translate(locale, 'activityWebScrapeWorking'),
         detail: page.title || page.url || undefined,
         ...(domain ? { meta: domain } : {}),
         hasDetail: Boolean(page.url || failed),
@@ -184,6 +184,7 @@ export const webResearchPresenter: ToolStepPresenter = {
           count: 1,
           label: (count) =>
             webResearchMessages.translate(
+              locale,
               count === 1 ? 'activityWebPageCountOne' : 'activityWebPageCountMany',
               { count }
             ),
@@ -195,11 +196,12 @@ export const webResearchPresenter: ToolStepPresenter = {
     return {
       lane: 'research',
       icon: <IconSearchOutline16 />,
-      liveVerb: webResearchMessages.translate('activityWebSearchWorking'),
+      liveVerb: webResearchMessages.translate(locale, 'activityWebSearchWorking'),
       detail: query || undefined,
       ...(count > 0
         ? {
             meta: webResearchMessages.translate(
+              locale,
               count === 1 ? 'activityWebResultsOne' : 'activityWebResultsMany',
               { count }
             ),
@@ -213,6 +215,7 @@ export const webResearchPresenter: ToolStepPresenter = {
         count: 1,
         label: (count) =>
           webResearchMessages.translate(
+            locale,
             count === 1 ? 'activityWebSearchCountOne' : 'activityWebSearchCountMany',
             { count }
           ),

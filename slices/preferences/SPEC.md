@@ -9,11 +9,11 @@ and the app applies the theme to the page.
 
 ## Public entrypoint
 
-`createPreferencesSlice({ store, browserLanguage })` returns:
+`createPreferencesSlice({ store, browserLanguage, locale? })` returns:
 
 | Member                                                                                  | Meaning                                                                 |
 | :-------------------------------------------------------------------------------------- | :---------------------------------------------------------------------- |
-| `setLocale(locale)`                                                                     | Save the language and make it the live UI locale (spine i18n).          |
+| `getLocale()` / `setLocale(locale)`                                                     | Read/save the language on this instance's live `LocaleStore`.           |
 | `getThemePreference()` / `setThemePreference(p)` / `subscribe` / `useThemePreference()` | `'light' \| 'dark' \| 'system'`.                                        |
 | `getLocation()` / `setLocation(location \| null)` / `useLocation()`                     | `{ region, province?, city? }` or `null`.                               |
 | `getLocationLabel(locale)`                                                              | The location as words for the model, `''` when unset.                   |

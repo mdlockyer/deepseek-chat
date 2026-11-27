@@ -17,7 +17,7 @@ const EXIT_DURATION_MS = 160
  * when supported so notices stay visible above open `<dialog>` top-layer modals.
  */
 export const ToastViewport = ({ bus: explicitBus }: { bus?: NoticeBus } = {}) => {
-  useLocale()
+  const locale = useLocale()
   const contextBus = useNoticeBus()
   const bus = explicitBus ?? contextBus
 
@@ -76,10 +76,10 @@ export const ToastViewport = ({ bus: explicitBus }: { bus?: NoticeBus } = {}) =>
       aria-live={error ? 'assertive' : 'polite'}
     >
       <span className={styles.content}>
-        {content.text()}
+        {content.text(locale)}
         {content.link ? (
           <a className={styles.link} href={content.link.href} target="_blank" rel="noreferrer">
-            {content.link.text()}
+            {content.link.text(locale)}
           </a>
         ) : null}
       </span>

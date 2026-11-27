@@ -259,7 +259,7 @@ export const conversationsMessages = defineMessages({
   },
 })
 
-export type TranslationKey = Parameters<typeof conversationsMessages.translate>[0]
+export type TranslationKey = Parameters<typeof conversationsMessages.translate>[1]
 export type TranslationParams = MessageParams
 /** A string of this slice's catalogue with its parameters, translated when shown. */
 export type TranslationMessage = { key: TranslationKey; params?: TranslationParams }
@@ -271,4 +271,5 @@ export type LinkedMessage = TranslationMessage & {
 
 export const isTranslationKey = conversationsMessages.has
 export const translate = conversationsMessages.translate
+export const lazyTranslate = conversationsMessages.lazy
 export const useTranslate = conversationsMessages.useTranslate

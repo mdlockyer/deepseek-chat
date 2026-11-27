@@ -72,7 +72,7 @@ export const historyBackupMessages = defineMessages({
   },
 })
 
-export type HistoryBackupMessageKey = Parameters<typeof historyBackupMessages.translate>[0]
+export type HistoryBackupMessageKey = Parameters<typeof historyBackupMessages.translate>[1]
 
 export type HistoryBackupTranslationMessage = {
   readonly key: HistoryBackupMessageKey

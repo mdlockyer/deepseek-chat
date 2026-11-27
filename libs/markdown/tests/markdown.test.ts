@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { createElement, type ReactNode } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { setLocale } from '@deepseek-chat/spine/i18n'
+import { createLocaleStore, LocaleProvider, type Locale } from '@deepseek-chat/spine/i18n'
 import {
   ensureKatex,
   Markdown,
@@ -19,18 +19,23 @@ const render = (
     disableLink?: boolean
     sources?: Source[]
     renderCitation?: (source: Source) => ReactNode
+    locale?: Locale
   } = {}
-) =>
-  renderToStaticMarkup(
-    createElement(Markdown<Source>, {
-      content,
-      loading: false,
-      cacheKey: 'k',
-      disableLink: options.disableLink ?? false,
-      sources: options.sources,
-      renderCitation: options.renderCitation,
-    })
+) => {
+  const el = createElement(Markdown<Source>, {
+    content,
+    loading: false,
+    cacheKey: 'k',
+    disableLink: options.disableLink ?? false,
+    sources: options.sources,
+    renderCitation: options.renderCitation,
+  })
+  return renderToStaticMarkup(
+    options.locale
+      ? createElement(LocaleProvider, { store: createLocaleStore(options.locale) }, el)
+      : el
   )
+}
 
 /** Strips tags, to compare visible text. */
 const textOf = (html: string) => html.replace(/<[^>]+>/g, '')
@@ -161,33 +166,34 @@ describe('markdown: lists and tables', () => {
 
 describe('markdown: code, math and diagrams', () => {
   it('highlights known languages, escapes others, and labels the copy button per locale', () => {
-    setLocale('en-US')
-    const js = render('```js\nconst x = "<b>"\n```')
+    const js = render('```js\nconst x = "<b>"\n```', { locale: 'en-US' })
     assert.match(js, /class="token keyword">const</)
     assert.match(js, />js</)
     assert.match(js, /<span>Copy<\/span>/)
 
-    const plain = render('```weird\n<b>hi</b>\n```')
+    const plain = render('```weird\n<b>hi</b>\n```', { locale: 'en-US' })
     // Prism escapes "<" (and "&"); a lone ">" cannot open a tag.
     assert.match(plain, /<pre>&lt;b>hi&lt;\/b>\n?<\/pre>/)
     assert.doesNotMatch(plain, /class="token/)
 
-    setLocale('zh-CN')
-    assert.match(render('```js\n1\n```'), /<span>复制<\/span>/)
-    setLocale('en-US')
+    assert.match(render('```js\n1\n```', { locale: 'zh-CN' }), /<span>复制<\/span>/)
   })
 
   it('shows mermaid blocks as a diagram with a Diagram/Code toggle', () => {
-    setLocale('en-US')
-    const html = render('```mermaid\ngraph TD; A-->B\n```')
+    const html = render('```mermaid\ngraph TD; A-->B\n```', { locale: 'en-US' })
     assert.match(html, /aria-pressed="true"[^>]*>Diagram</)
     assert.match(html, /aria-pressed="false"[^>]*>Code</)
     assert.match(html, /role="status">Rendering diagram\.\.\.</)
   })
 
   it('says when a diagram is empty', () => {
-    setLocale('en-US')
-    const html = renderToStaticMarkup(createElement(MermaidDiagram, { code: '  ', loading: false }))
+    const html = renderToStaticMarkup(
+      createElement(
+        LocaleProvider,
+        { store: createLocaleStore('en-US') },
+        createElement(MermaidDiagram, { code: '  ', loading: false })
+      )
+    )
     assert.match(html, />This diagram is empty\.</)
   })
 

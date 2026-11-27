@@ -3,13 +3,15 @@
  * Replaces global mutable UI singletons so slices and tests stay hermetic and isolated.
  */
 
+import type { Locale } from '../design/i18n.js'
+
 export type NoticeTone = 'info' | 'error'
 
 export type NoticeContent = {
-  /** Resolved at render time so active notices follow live locale changes. */
-  readonly text: () => string
+  /** Resolved at render time in the active locale so notices follow live locale changes. */
+  readonly text: (locale?: Locale) => string
   readonly tone?: NoticeTone
-  readonly link?: { readonly text: () => string; readonly href: string }
+  readonly link?: { readonly text: (locale?: Locale) => string; readonly href: string }
 }
 
 /** Ephemeral user-facing status notification sink (implemented by the App Shell's toast bus). */

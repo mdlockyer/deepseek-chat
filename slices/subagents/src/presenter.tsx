@@ -1,3 +1,4 @@
+import type { Locale } from '@deepseek-chat/spine/i18n'
 import { Banner, IconThinkOutline14 } from '@deepseek-chat/lib-ui'
 import type {
   ActivityStepDetailProps,
@@ -50,16 +51,16 @@ const notesForAgent = (board: readonly BoardPost[], runId: string): readonly Boa
     return false
   })
 
-const statusLabelOf = (agent: AgentRun): string | undefined => {
+const statusLabelOf = (agent: AgentRun, locale?: Locale): string | undefined => {
   switch (agent.state.status) {
     case 'running':
-      return subagentsMessages.translate('statusRunning')
+      return subagentsMessages.translate(locale, 'statusRunning')
     case 'finished':
-      return subagentsMessages.translate('statusFinished')
+      return subagentsMessages.translate(locale, 'statusFinished')
     case 'exhausted':
-      return subagentsMessages.translate('statusExhausted')
+      return subagentsMessages.translate(locale, 'statusExhausted')
     case 'stopped':
-      return subagentsMessages.translate('statusStopped')
+      return subagentsMessages.translate(locale, 'statusStopped')
     case 'failed':
       return undefined
   }
@@ -146,13 +147,13 @@ const SubagentStepDetail = ({ entry, capabilityState }: ActivityStepDetailProps)
 }
 
 export const subagentsPresenter: ToolStepPresenter = {
-  summarize: (call, result, { streaming, capabilityState }) => {
+  summarize: (call, result, { streaming, capabilityState, locale }) => {
     const state = isSubagentsReplyState(capabilityState) ? capabilityState : null
     if (call.name === WAIT_TOOL_NAME || call.name === POST_TOOL_NAME) {
       const running = !result || result.status === 'running'
       return {
         lane: 'subagents',
-        liveVerb: subagentsMessages.translate('liveWorking'),
+        liveVerb: subagentsMessages.translate(locale, 'liveWorking'),
         hiddenInTimeline: true,
         stillRunning: running && streaming,
         liveTracks: state ? state.agents.map(toLiveTrack) : undefined,
@@ -166,7 +167,7 @@ export const subagentsPresenter: ToolStepPresenter = {
     const failed = agent
       ? agent.state.status === 'failed'
       : Boolean(result && result.status !== 'ok')
-    const meta = agent ? statusLabelOf(agent) : undefined
+    const meta = agent ? statusLabelOf(agent, locale) : undefined
     const hasDetail = Boolean(
       agent &&
       (agent.blocks.some((b) => b.type === 'tool_use') ||
@@ -177,7 +178,7 @@ export const subagentsPresenter: ToolStepPresenter = {
     return {
       lane: 'subagents',
       icon: <IconThinkOutline14 />,
-      liveVerb: subagentsMessages.translate('liveWorking'),
+      liveVerb: subagentsMessages.translate(locale, 'liveWorking'),
       detail: agent?.label || agent?.profile,
       ...(meta ? { meta } : {}),
       hasDetail,
@@ -187,7 +188,7 @@ export const subagentsPresenter: ToolStepPresenter = {
         key: 'subagents',
         count: 1,
         label: (count) =>
-          subagentsMessages.translate(count === 1 ? 'countOne' : 'countMany', { count }),
+          subagentsMessages.translate(locale, count === 1 ? 'countOne' : 'countMany', { count }),
       },
       liveTracks: state ? state.agents.map(toLiveTrack) : undefined,
     }

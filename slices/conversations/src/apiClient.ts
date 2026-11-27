@@ -6,6 +6,7 @@ import {
   type ApiErrorKind,
   type ModelProvider,
 } from '@deepseek-chat/lib-agent'
+import { DEFAULT_LOCALE } from '@deepseek-chat/spine/i18n'
 import type { HttpFetch } from '@deepseek-chat/spine/ports'
 import { translate, type TranslationMessage } from './messages.js'
 
@@ -17,7 +18,9 @@ export class ApiError extends LibApiError {
   constructor(kind: ApiErrorKind, message: string | TranslationMessage, status?: number) {
     super(
       kind,
-      typeof message === 'string' ? message : translate(message.key, message.params),
+      typeof message === 'string'
+        ? message
+        : translate(DEFAULT_LOCALE, message.key, message.params),
       status
     )
     this.localMessage = typeof message === 'string' ? undefined : message

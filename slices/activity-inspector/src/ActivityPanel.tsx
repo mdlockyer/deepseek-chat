@@ -15,6 +15,7 @@ import {
   PanelTitleMenu,
   hoverGlideItem,
 } from '@deepseek-chat/lib-ui'
+import { useLocale, type Locale } from '@deepseek-chat/spine/i18n'
 import clsx from 'clsx'
 import {
   memo,
@@ -428,12 +429,17 @@ export const createActivityPanel = (
   deps: ActivityInspectorDeps,
   resolveMessageId: (selection: ActivitySelection) => string | null
 ) => {
-  const timelines = new WeakMap<TurnSnapshot, ActivityTimeline>()
-  const timelineFor = (turn: TurnSnapshot): ActivityTimeline => {
-    let timeline = timelines.get(turn)
+  const timelinesByLocale = new Map<Locale, WeakMap<TurnSnapshot, ActivityTimeline>>()
+  const timelineFor = (turn: TurnSnapshot, locale: Locale): ActivityTimeline => {
+    let bucket = timelinesByLocale.get(locale)
+    if (!bucket) {
+      bucket = new WeakMap<TurnSnapshot, ActivityTimeline>()
+      timelinesByLocale.set(locale, bucket)
+    }
+    let timeline = bucket.get(turn)
     if (!timeline) {
-      timeline = buildActivityTimeline(turn, deps.getPresenter)
-      timelines.set(turn, timeline)
+      timeline = buildActivityTimeline(turn, deps.getPresenter, undefined, locale)
+      bucket.set(turn, timeline)
     }
     return timeline
   }
@@ -546,9 +552,10 @@ export const createActivityPanel = (
     onOpenVisual: (messageId: string, index: number, fallback?: ActivityVisualItem) => void
     revealElement: (node: HTMLElement) => void
   }) {
+    const locale = useLocale()
     const t = activityInspectorMessages.useTranslate()
     const { summary, turn } = chapter
-    const timeline = turn ? timelineFor(turn) : null
+    const timeline = turn ? timelineFor(turn, locale) : null
     const live = Boolean(turn && turn.streaming && turn.status === 'streaming')
     const bodyRef = useRef<HTMLDivElement>(null)
     const [openStepIds, setOpenStepIds] = useState<ReadonlySet<string>>(() =>
@@ -742,8 +749,9 @@ export const createActivityPanel = (
     current: boolean
     onSelect: (messageId: string) => void
   }) {
+    const locale = useLocale()
     const t = activityInspectorMessages.useTranslate()
-    const timeline = chapter.turn ? timelineFor(chapter.turn) : null
+    const timeline = chapter.turn ? timelineFor(chapter.turn, locale) : null
     if (!timeline) {
       return null
     }
@@ -773,6 +781,7 @@ export const createActivityPanel = (
   })
 
   const ActivityPanel = ({ topActions }: { topActions?: ReactNode } = {}) => {
+    const locale = useLocale()
     const t = activityInspectorMessages.useTranslate()
     const selection = state.useStore((s) => s.selection)
     const panelOpen = state.useStore((s) => s.panelOpen)
@@ -849,9 +858,10 @@ export const createActivityPanel = (
     const sourceChapters = useMemo(
       () =>
         chapters.filter(
-          (chapter) => chapter.turn !== null && timelineFor(chapter.turn).sources.all.length > 0
+          (chapter) =>
+            chapter.turn !== null && timelineFor(chapter.turn, locale).sources.all.length > 0
         ),
-      [chapters]
+      [chapters, locale]
     )
     const hasSources = sourceChapters.length > 0
     const effectiveTab = hasSources ? (activeSelection?.tab ?? 'activity') : 'activity'
@@ -908,7 +918,7 @@ export const createActivityPanel = (
     const lightboxVisuals = lightbox?.fallback
       ? [lightbox.fallback]
       : lightboxTurn
-        ? timelineFor(lightboxTurn).visuals
+        ? timelineFor(lightboxTurn, locale).visuals
         : EMPTY_VISUALS
     const inspectStep = useCallback(
       (callId: string) => {
@@ -973,7 +983,9 @@ export const createActivityPanel = (
                           sourceChapters.reduce(
                             (sum, chapter) =>
                               sum +
-                              (chapter.turn ? timelineFor(chapter.turn).sources.all.length : 0),
+                              (chapter.turn
+                                ? timelineFor(chapter.turn, locale).sources.all.length
+                                : 0),
                             0
                           )
                         ),

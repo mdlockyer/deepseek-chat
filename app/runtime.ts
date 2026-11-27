@@ -55,6 +55,7 @@ import {
   type PreviewHost,
   type WorkspaceFilesSlice,
 } from '@deepseek-chat/slice-workspace-files'
+import { createLocaleStore, type LocaleStore } from '@deepseek-chat/spine/i18n'
 import {
   memoryBlobStore,
   memoryStore,
@@ -106,6 +107,7 @@ export type AppRuntimeConfig = {
   /** Optional model provider override (defaults to DeepSeek Messages API over `fetch`/`apiOrigin`). */
   readonly provider?: ModelProvider
   readonly platform?: 'desktop' | 'web'
+  readonly locale?: LocaleStore
   readonly browserLanguage?: string
   readonly pyodideIndexURL?: string
   readonly enabledSlices?: EnabledSlices
@@ -194,6 +196,7 @@ export const createAppRuntime = (config: AppRuntimeConfig = {}) => {
 
   // ---------- Spine + app-shell controllers ----------
   const log = new EventLog()
+  const locale: LocaleStore = config.locale ?? createLocaleStore()
   const notices = createNoticeBus()
   const overlays = createOverlayCoordinator()
   const rightPanel: RightPanelController = createRightPanelController(store, log)
@@ -228,6 +231,7 @@ export const createAppRuntime = (config: AppRuntimeConfig = {}) => {
   const preferences: PreferencesSlice | null = enabled.preferences
     ? createPreferencesSlice({
         store,
+        locale,
         browserLanguage:
           config.browserLanguage ??
           (typeof navigator === 'undefined' ? 'en-US' : navigator.language),
@@ -342,6 +346,7 @@ export const createAppRuntime = (config: AppRuntimeConfig = {}) => {
 
   const conversations: ConversationsSlice = createConversationsSlice({
     log,
+    locale,
     provider,
     store,
     blobs,
@@ -496,6 +501,7 @@ export const createAppRuntime = (config: AppRuntimeConfig = {}) => {
     syncDocumentTheme: config.syncDocumentTheme ?? false,
     onOpenSettingsShortcut: desktop.onOpenSettings ?? null,
     log,
+    locale,
     notices,
     overlays,
     blobs,

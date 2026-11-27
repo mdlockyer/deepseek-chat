@@ -20,7 +20,7 @@ export const createEnvironmentContext = (
     `Date: ${formatDate(now)} (${weekday})`,
     `Platform: ${platform === 'desktop' ? 'Desktop app' : 'Web browser'}`,
     ...(trimmedLocation ? [`Location: ${trimmedLocation}`] : []),
-    `Language: ${translate('environmentContextLanguage')}`,
+    `Language: ${translate(locale, 'environmentContextLanguage')}`,
   ]
   return `<environment_context>\n${lines.join('\n')}\n</environment_context>`
 }

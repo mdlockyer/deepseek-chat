@@ -444,7 +444,7 @@ const PreviewPanelContent = ({
                 const content = activeLoaded.text ?? ''
                 void env.copyText(content).then((ok) => {
                   if (!ok) {
-                    env.notify.show({ text: () => workspaceMessages.translate('copyFailed') })
+                    env.notify.show({ text: workspaceMessages.lazy('copyFailed') })
                     return
                   }
                   setCopied(true)

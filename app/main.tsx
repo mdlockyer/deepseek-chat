@@ -102,11 +102,11 @@ if (__DEV__ && new URLSearchParams(window.location.search).get('workbench') === 
 
   const render = () =>
     createRoot(rootElement).render(
-      <AppErrorBoundary fullScreen>
-        <AppRuntimeProvider runtime={runtime}>
+      <AppRuntimeProvider runtime={runtime}>
+        <AppErrorBoundary fullScreen>
           <App />
-        </AppRuntimeProvider>
-      </AppErrorBoundary>
+        </AppErrorBoundary>
+      </AppRuntimeProvider>
     )
 
   void Promise.race([runtime.hydrate(), new Promise((resolve) => setTimeout(resolve, 2000))]).then(
