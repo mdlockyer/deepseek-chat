@@ -213,14 +213,6 @@
     color: var(--ui-text-secondary);
     font: var(--ui-type-micro);
     font-variant-numeric: tabular-nums;
-    transition:
-      background-color var(--ui-duration-normal) var(--ui-ease-standard),
-      color var(--ui-duration-normal) var(--ui-ease-standard);
-  }
-
-  .chapterCurrent .chapterNumber {
-    background: var(--ui-accent-solid);
-    color: var(--ui-accent-on-solid);
   }
 
   .chapterTitle {
