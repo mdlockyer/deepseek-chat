@@ -20,7 +20,7 @@
     "check:ipc": "node scripts/check-ipc.mjs",
     "check:design": "node scripts/check-design.mjs",
     "desktop:dev": "tauri dev",
-    "desktop:build": "node scripts/fetch-sparkle.mjs && tauri build",
+    "desktop:build": "node scripts/fetch-sparkle.mjs && tauri build --config src-tauri/tauri.sparkle.conf.json",
     "tauri": "tauri",
     "pyodide:fetch": "node scripts/fetch-pyodide.mjs",
     "sparkle:fetch": "node scripts/fetch-sparkle.mjs",

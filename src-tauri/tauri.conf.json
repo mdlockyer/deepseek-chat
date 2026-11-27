@@ -38,7 +38,6 @@
     "macOS": {
       "bundleVersion": "4",
       "entitlements": "Entitlements.plist",
-      "frameworks": ["../vendor/sparkle/Sparkle.framework"],
       "hardenedRuntime": true,
       "infoPlist": "Info.plist",
       "minimumSystemVersion": "12.0"
