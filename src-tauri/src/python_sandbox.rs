@@ -507,6 +507,31 @@ fn collect_symlink_chain(launch_exe: &Path, real_exe: &Path) -> Vec<PathBuf> {
         }
     }
     seen.insert(real_exe.to_path_buf());
+    #[cfg(target_os = "macos")]
+    {
+        // macOS framework Python builds (Homebrew, python.org, Xcode CLT) place a Mach-O stub at
+        // `.../Versions/<ver>/bin/python3.X` that `posix_spawn(POSIX_SPAWN_SETEXEC)`s the sibling
+        // `.../Versions/<ver>/Resources/Python.app/Contents/MacOS/Python` binary. Allow only that
+        // exact binary in `exe_chain` so Seatbelt permits the in-place exec while still blocking
+        // forks and arbitrary subprocesses.
+        let snapshot: Vec<PathBuf> = seen.iter().cloned().collect();
+        for exe in snapshot {
+            if let Some(version_dir) = exe.parent().and_then(|p| p.parent()) {
+                let framework_bin = version_dir
+                    .join("Resources")
+                    .join("Python.app")
+                    .join("Contents")
+                    .join("MacOS")
+                    .join("Python");
+                if framework_bin.is_file() {
+                    seen.insert(framework_bin.clone());
+                    if let Ok(canon) = std::fs::canonicalize(&framework_bin) {
+                        seen.insert(canon);
+                    }
+                }
+            }
+        }
+    }
     seen.into_iter().collect()
 }
 
