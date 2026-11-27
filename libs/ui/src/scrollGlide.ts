@@ -69,19 +69,6 @@ const prefersReducedMotion = () =>
   typeof window.matchMedia === 'function' &&
   window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
-/** Reads a motion token as resolved on `el`, so reduced-motion overrides apply to script motion too. */
-export const readMotionMs = (el: Element, token: string, fallback: number): number => {
-  const raw = getComputedStyle(el).getPropertyValue(token).trim()
-  const amount = Number.parseFloat(raw)
-  if (Number.isNaN(amount)) {
-    return fallback
-  }
-  return raw.endsWith('ms') ? amount : amount * 1000
-}
-
-export const readMotionEasing = (el: Element, token: string, fallback: string): string =>
-  getComputedStyle(el).getPropertyValue(token).trim() || fallback
-
 /** Binds a spring glide to one scroll container. Create one per element and keep it. */
 export const createScrollGlide = (el: HTMLElement): ScrollGlide => {
   let run: GlideRun | null = null

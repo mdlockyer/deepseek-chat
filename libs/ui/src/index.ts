@@ -170,13 +170,10 @@ export {
   type MinimapSectionShape,
 } from './minimapGeometry.js'
 export { READING_LINE_AT, readingLineY, sectionAt } from './readingLine.js'
-export { RollingNumber, type RollingNumberProps } from './RollingNumber.js'
 export {
   SCROLL_GLIDE_STIFFNESS,
   createScrollGlide,
   onScrollIntent,
-  readMotionEasing,
-  readMotionMs,
   scrollSpringSettled,
   stepScrollSpring,
   type ScrollGlide,

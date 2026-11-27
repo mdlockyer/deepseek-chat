@@ -12,7 +12,6 @@ import {
   IconPhotoOutline14,
   IconThinkOutline16,
   IconButton,
-  RollingNumber,
   Tab,
   TabList,
   TabPanel,
@@ -463,7 +462,7 @@ const isAtBottom = (el: HTMLElement) =>
  * Keeps one tab's scroll container in step with the panel. The container moves on its own only when
  * it is first shown (instantly, to `targetId`) and when `request` changes to a new pin (gliding to
  * `targetId`). The reader moving through the transcript never scrolls it: the container stays where
- * the reader left it, and its highlight and readout name the turn under its own reading line,
+ * the reader left it, and its highlight names the turn under its own reading line,
  * reported through `onReaderMove`. A live last turn keeps the container at the bottom while its
  * steps arrive, as long as the reader is there.
  */
@@ -1037,7 +1036,7 @@ export const createActivityPanel = (
     const displayedIndex = chapters.findIndex(
       (chapter) => chapter.summary.messageId === displayedId
     )
-    // The highlight and readout name the turn at the panel's own reading line, which the panel
+    // The highlight names the turn at the panel's own reading line, which the panel
     // reports as it is first shown and as the reader scrolls it; the transcript does not move. A new
     // pin takes over until the reader scrolls the panel. Letting go of a pin keeps the turn on show,
     // since the panel stays where it is.
@@ -1137,39 +1136,6 @@ export const createActivityPanel = (
       }
     }
 
-    // "Turn 3 of 9" shows only while it fits beside the tabs; in a narrow panel it would run under
-    // the buttons. Each turn's heading still carries its number, and screen readers always get the
-    // full readout.
-    const leadingRef = useRef<HTMLDivElement>(null)
-    const readoutRef = useRef<HTMLSpanElement>(null)
-    const [readoutFits, setReadoutFits] = useState(true)
-    const hasReadout = total >= 2 && shownIndex >= 0
-    useLayoutEffect(() => {
-      const leading = leadingRef.current
-      const readout = readoutRef.current
-      if (!leading || !readout) {
-        return
-      }
-      const check = () => {
-        const beside = [...leading.children].filter(
-          (child) => child !== readout && getComputedStyle(child).position !== 'absolute'
-        )
-        const gap = Number.parseFloat(getComputedStyle(leading).columnGap) || 0
-        // Full widths: a title that truncates would otherwise report its squeezed width.
-        const needed = beside.reduce(
-          (sum, child) =>
-            sum + Math.max((child as HTMLElement).offsetWidth, child.scrollWidth) + gap,
-          readout.offsetWidth
-        )
-        setReadoutFits(needed <= leading.clientWidth)
-      }
-      const observer = new ResizeObserver(check)
-      observer.observe(leading)
-      observer.observe(readout)
-      check()
-      return () => observer.disconnect()
-    }, [hasReadout])
-
     // The scroll-to-bottom button floats over the bottom of the panel while the panel is scrolled
     // up, with a pulsing dot while the latest turn streams. It scrolls the panel only, never the
     // transcript. A keyboard user who presses it lands on the last turn's heading, since the button
@@ -1190,7 +1156,7 @@ export const createActivityPanel = (
     return (
       <Tabs value={effectiveTab} onChange={state.setTab} className={styles.root}>
         <header className={styles.header} data-tauri-drag-region="">
-          <div ref={leadingRef} className={styles.headerLeading} data-tauri-drag-region="">
+          <div className={styles.headerLeading} data-tauri-drag-region="">
             {hasSources ? (
               <>
                 <h2 className={styles.srOnly}>{t('panelTitle')}</h2>
@@ -1221,24 +1187,6 @@ export const createActivityPanel = (
                 {t('panelTitle')}
               </h2>
             )}
-            {hasReadout ? (
-              <>
-                <span className={styles.srOnly}>
-                  {t('turnReadoutLabel', { number: shownIndex + 1, total })}
-                </span>
-                <span
-                  ref={readoutRef}
-                  className={clsx(styles.readout, !readoutFits && styles.readoutOverflow)}
-                  aria-hidden="true"
-                >
-                  <span className={styles.readoutText}>
-                    {t('turnReadoutPrefix')}
-                    <RollingNumber value={shownIndex + 1} className={styles.readoutNumber} />
-                    {t('turnReadoutSuffix', { total })}
-                  </span>
-                </span>
-              </>
-            ) : null}
           </div>
 
           <div className={styles.topActions}>

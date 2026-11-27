@@ -71,37 +71,6 @@
     color: var(--ui-text-muted);
   }
 
-  /* "Turn 3 of 9": which turn the panel shows; the number rolls as it changes. */
-  .readout {
-    display: inline-flex;
-    flex-shrink: 0;
-    align-items: center;
-    min-width: 0;
-  }
-
-  /* Out of the row but still measured, so it comes back as soon as there's room. */
-  .readoutOverflow {
-    position: absolute;
-    top: 0;
-    left: 0;
-    visibility: hidden;
-    pointer-events: none;
-  }
-
-  .readoutText {
-    display: inline-flex;
-    align-items: baseline;
-    gap: var(--ui-space-1);
-    font: var(--ui-type-caption);
-    color: var(--ui-text-muted);
-    white-space: nowrap;
-  }
-
-  .readoutNumber {
-    color: var(--ui-text-primary);
-    font-weight: 500;
-  }
-
   /* Scroll to the bottom of the panel: a round button floating over its bottom edge. It stays mounted
      so it can fade and slide in and out; while hidden it is inert. */
   .bottomButton {

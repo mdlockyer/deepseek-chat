@@ -756,7 +756,11 @@ describe('slice-activity-inspector: redesigned ActivityPanel rendering', () => {
       /Thought for 2s[\s\S]*Thought for 5s/,
       'each chapter shows its own turn'
     )
-    assert.match(latestHtml, /Showing turn 2 of 2/, 'the header names the turn on show')
+    assert.match(
+      latestHtml,
+      /aria-label="Turn 2: Second question" aria-current="true"/,
+      'the turn on show is marked current'
+    )
     assert.match(latestHtml, /aria-label="Previous turn"/)
     assert.doesNotMatch(latestHtml, /·/, 'never renders middot separators')
 
@@ -764,7 +768,7 @@ describe('slice-activity-inspector: redesigned ActivityPanel rendering', () => {
     transcript.read('s1', 'm1', 'reader')
     assert.equal(slice.getTarget()?.messageId, 'm1')
     const earlierHtml = render()
-    assert.match(earlierHtml, /Showing turn 1 of 2/)
+    assert.match(earlierHtml, /aria-label="Turn 1: First question" aria-current="true"/)
 
     // Picking a turn in the panel pins it and asks the transcript to show it too.
     slice.selectTurn('s1', 'm2')
