@@ -17,7 +17,7 @@ const PAD = 24
 const MAX_SCALE = 0.1
 const TEXT_MAX_WIDTH = 44
 
-type Seg = {
+export type Seg = {
   readonly turn: number
   readonly kind: 'text' | 'heading' | 'bubble' | 'code'
   readonly x: number
@@ -26,7 +26,7 @@ type Seg = {
   readonly h: number
 }
 
-type Box = {
+export type Box = {
   readonly turn: number
   readonly kind: 'bubble' | 'code' | 'table' | 'quote'
   readonly x: number
@@ -35,11 +35,22 @@ type Box = {
   readonly h: number
 }
 
-type Measure = {
+/** A paragraph, list item, heading, table, code block or quote: the union of its lines. */
+export type Block = {
+  readonly turn: number
+  readonly kind: Seg['kind']
+  readonly x: number
+  readonly w: number
+  readonly y: number
+  readonly h: number
+}
+
+export type Measure = {
   readonly anchors: readonly number[]
   readonly excerpts: readonly string[]
   readonly segs: readonly Seg[]
   readonly boxes: readonly Box[]
+  readonly blocks: readonly Block[]
   readonly height: number
 }
 
@@ -58,7 +69,7 @@ const el = <K extends keyof SVGElementTagNameMap>(
   return node
 }
 
-const measure = (scroll: HTMLElement, column: HTMLElement): Measure => {
+export const measure = (scroll: HTMLElement, column: HTMLElement): Measure => {
   const scrollRect = scroll.getBoundingClientRect()
   const colRect = column.getBoundingClientRect()
   const toY = (top: number) => top - scrollRect.top + scroll.scrollTop
@@ -162,7 +173,44 @@ const measure = (scroll: HTMLElement, column: HTMLElement): Measure => {
   addBoxes('table', 'table')
   addBoxes('blockquote', 'quote')
 
-  return { anchors, excerpts, segs, boxes, height: scroll.scrollHeight }
+  const grouped = new Map<
+    Element,
+    { kind: Seg['kind']; x0: number; x1: number; top: number; bottom: number }
+  >()
+  for (const line of lines.values()) {
+    if (line.kind === 'bubble') {
+      continue
+    }
+    const key = line.block.closest('table,pre,blockquote') ?? line.block
+    const block = grouped.get(key)
+    if (block) {
+      block.x0 = Math.min(block.x0, line.x0)
+      block.x1 = Math.max(block.x1, line.x1)
+      block.top = Math.min(block.top, line.top)
+      block.bottom = Math.max(block.bottom, line.top + line.h)
+    } else {
+      grouped.set(key, {
+        kind: line.kind,
+        x0: line.x0,
+        x1: line.x1,
+        top: line.top,
+        bottom: line.top + line.h,
+      })
+    }
+  }
+  const blocks = [...grouped.values()].map((block) => {
+    const y = toY(block.top)
+    return {
+      turn: turnOf(y),
+      kind: block.kind,
+      x: toX(block.x0),
+      w: (block.x1 - block.x0) / colRect.width,
+      y,
+      h: block.bottom - block.top,
+    }
+  })
+
+  return { anchors, excerpts, segs, boxes, blocks, height: scroll.scrollHeight }
 }
 
 export const mountMinimapRail = (

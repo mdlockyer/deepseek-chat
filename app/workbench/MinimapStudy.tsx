@@ -4,11 +4,20 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { App } from '../App.js'
 import { createAppRuntime } from '../runtime.js'
 import { AppRuntimeProvider } from '../RuntimeContext.js'
+import { mountAdaptiveMinimap } from './minimapAdaptive.js'
 import { mountMinimapRail, type MinimapStyle } from './minimapRail.js'
 import styles from './MinimapStudy.module.css'
 import { MINIMAP_STUDY_TURNS } from './minimapStudyScript.js'
 
-type Choice = 'today' | MinimapStyle
+type Choice = 'today' | MinimapStyle | 'adaptive'
+
+const LENGTHS = ['8', '40', '150'] as const
+type Length = (typeof LENGTHS)[number]
+
+const params = new URLSearchParams(window.location.search)
+const LENGTH: Length = (LENGTHS as readonly string[]).includes(params.get('turns') ?? '')
+  ? (params.get('turns') as Length)
+  : '8'
 
 const USAGE = {
   input_tokens: 42,
@@ -65,7 +74,7 @@ const studyFetch: HttpFetch = async (url, init) => {
         (m.content as { type?: string }[]).some((p) => p.type === 'tool_result')
       )
   ).length
-  const turn = MINIMAP_STUDY_TURNS[Math.max(0, Math.min(prompts, MINIMAP_STUDY_TURNS.length) - 1)]
+  const turn = MINIMAP_STUDY_TURNS[Math.max(0, prompts - 1) % MINIMAP_STUDY_TURNS.length]
   if (!turn) {
     return new Response('{"ok":true}', { headers: { 'Content-Type': 'application/json' } })
   }
@@ -93,9 +102,10 @@ export const MinimapStudy = () => {
     []
   )
   const [choice, setChoice] = useState<Choice>(
-    () => (new URLSearchParams(window.location.search).get('style') as Choice | null) ?? 'text'
+    () => (params.get('style') as Choice | null) ?? 'adaptive'
   )
   const [ready, setReady] = useState(false)
+  const [replayed, setReplayed] = useState(0)
   const appRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => () => runtime.dispose(), [runtime])
@@ -106,10 +116,12 @@ export const MinimapStudy = () => {
     void (async () => {
       await chats.commands.init()
       chats.setThinking(true)
-      for (const turn of MINIMAP_STUDY_TURNS) {
-        if (cancelled) {
+      for (let i = 0; i < Number(LENGTH); i += 1) {
+        const turn = MINIMAP_STUDY_TURNS[i % MINIMAP_STUDY_TURNS.length]
+        if (cancelled || !turn) {
           return
         }
+        setReplayed(i)
         const id = chats.getState().activeId
         chats.commands.setDraft(id, turn.prompt)
         chats.commands.send(id)
@@ -136,7 +148,9 @@ export const MinimapStudy = () => {
     if (!scroll || !area || !column) {
       return
     }
-    return mountMinimapRail(area, scroll, column, choice)
+    return choice === 'adaptive'
+      ? mountAdaptiveMinimap(area, scroll, column)
+      : mountMinimapRail(area, scroll, column, choice)
   }, [ready, choice])
 
   return (
@@ -152,12 +166,25 @@ export const MinimapStudy = () => {
             { value: 'today', label: 'Today' },
             { value: 'text', label: 'B · Text minimap' },
             { value: 'stems', label: 'D · Ticks on stems' },
+            { value: 'adaptive', label: 'Adaptive' },
           ]}
+        />
+        <SegmentedControl<Length>
+          size="sm"
+          ariaLabel="Chat length"
+          value={LENGTH}
+          onChange={(next) => {
+            const url = new URL(window.location.href)
+            url.searchParams.set('turns', next)
+            url.searchParams.set('style', choice)
+            window.location.assign(url)
+          }}
+          options={LENGTHS.map((value) => ({ value, label: `${value} turns` }))}
         />
         <span className={styles.barHint}>
           {ready
             ? 'Scroll the chat, drag the window on the rail, or click the rail to jump.'
-            : 'Replaying the conversation…'}
+            : `Replaying turn ${replayed + 1} of ${LENGTH}…`}
         </span>
       </div>
       <div ref={appRef} className={styles.app}>
