@@ -435,6 +435,7 @@ export const TranscriptChapters = ({
         contentRef={contentRef}
         sectionSelector="[data-turn-anchor]"
         markerSelector="[data-turn-bubble]"
+        side="right"
         onSeek={seek}
         onDragEnd={dragEnded}
         onNavigate={(index) => navigate(index)}

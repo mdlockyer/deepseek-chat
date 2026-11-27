@@ -1,5 +1,5 @@
 @layer components {
-  /* Fills the box it's given (usually a page gutter); only the canvas takes the pointer. */
+  /* Fills the box it's given (usually a page gutter); only the rail's column takes the pointer. */
   .root {
     position: absolute;
     inset: 0;
@@ -15,6 +15,12 @@
     inset: 0;
     width: 100%;
     height: 100%;
+  }
+
+  .hit {
+    position: absolute;
+    top: 0;
+    bottom: 0;
     pointer-events: auto;
     cursor: pointer;
     touch-action: none;
@@ -49,6 +55,11 @@
     }
   }
 
+  /* Beside a right-hand rail the label opens to its left, sliding in from the rail. */
+  .root[data-side='right'] .peek:not([data-open]) {
+    transform: translateY(-50%) translateX(var(--ui-space-1));
+  }
+
   .peekNumber {
     color: var(--ui-text-muted);
     font-variant-numeric: tabular-nums;
@@ -75,7 +86,7 @@
   .returnButton {
     position: absolute;
     top: 0;
-    left: var(--ui-space-1);
+    left: 0;
     display: inline-flex;
     align-items: center;
     gap: var(--ui-space-1-5);

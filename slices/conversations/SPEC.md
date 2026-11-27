@@ -145,7 +145,7 @@ factories (`createIndexedDbSessionStore`, `memorySessionStore`).
     turn on `contextOverflow` or `payloadTooLarge` errors.
 
 13. **Transcript minimap & reading position.** Chats with two or more turns show a `Minimap` in the
-    transcript's left gutter (desktop widths, and only while the gutter is at least 48 px wide so it never covers the messages), one section per turn (from each `data-turn-anchor`, its prompt bubble the marker) labelled by the prompt, with a divider after each compaction checkpoint. The reading turn is the one whose start (its prompt, or the reply when it has none) is last above the reading line (`readingLineY`), which travels with scroll progress from the top of the view to its bottom, so every turn, however short, is current somewhere and the latest turn is current at the bottom; it is
+    transcript's right gutter (desktop widths, and only while the gutter is at least 48 px wide so it never covers the messages), one section per turn (from each `data-turn-anchor`, its prompt bubble the marker) labelled by the prompt, with a divider after each compaction checkpoint. The reading turn is the one whose start (its prompt, or the reply when it has none) is last above the reading line (`readingLineY`), which travels with scroll progress from the top of the view to its bottom, so every turn, however short, is current somewhere and the latest turn is current at the bottom; it is
     published through `getReadingPosition` after scrolling rests on it, and at once for navigation.
     Choosing a turn from the minimap's list, `⌥↑` / `⌥↓` (outside text fields), or a reveal glides the transcript so the
     turn starts 24 px below the top, holds that turn as the reading turn until the reader scrolls,

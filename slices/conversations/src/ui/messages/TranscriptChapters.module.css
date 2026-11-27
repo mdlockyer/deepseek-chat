@@ -1,11 +1,11 @@
 @layer slice {
-  /* The transcript's left gutter: the space between the scroll area's edge and the message
-     column, which the minimap draws in. Its turn label overlaps the column. */
+  /* The transcript's right gutter: the space between the message column and the scroll area's
+     edge, which the minimap draws in. Its turn label opens over the column. */
   .gutter {
     position: absolute;
     top: 0;
+    right: 0;
     bottom: 0;
-    left: 0;
     width: max(
       0px,
       calc(

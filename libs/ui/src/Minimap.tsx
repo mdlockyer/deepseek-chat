@@ -53,12 +53,21 @@ export type MinimapProps = {
   /** Enter (or a click without a pointer) on a section's button. */
   readonly onNavigate: (index: number) => void
   readonly returnTo?: MinimapReturn | null
+  /**
+   * Which edge of the content the rail sits beside. On the right it keeps clear of the scroller's
+   * scrollbar, and the section label opens toward the content, to its left.
+   */
+  readonly side?: 'left' | 'right'
   readonly className?: string
 }
 
 const RAIL_PAD = 24
 const MAX_RAIL_WIDTH = 44
 const MIN_GUTTER = 48
+/** Room left for an overlay scrollbar beside a right-hand rail, when the scroller reserves none. */
+const SCROLLBAR_CLEARANCE = 12
+/** How far either side of the rail column the pointer still reaches it. */
+const HIT_SLOP = 8
 const DRAG_SLOP_PX = 3
 /** How long a section's highlight takes to ease in or out, as a time constant in seconds. */
 const EMPHASIS_TAU = 0.12
@@ -121,10 +130,12 @@ export const Minimap = ({
   onDragEnd,
   onNavigate,
   returnTo = null,
+  side = 'left',
   className,
 }: MinimapProps) => {
   const rootRef = useRef<HTMLElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const hitRef = useRef<HTMLDivElement>(null)
   const peekRef = useRef<HTMLDivElement>(null)
   const returnRef = useRef<HTMLButtonElement>(null)
   const buttonRefs = useRef<(HTMLButtonElement | null)[]>([])
@@ -157,10 +168,11 @@ export const Minimap = ({
     const root = rootRef.current
     const canvas = canvasRef.current
     const peek = peekRef.current
+    const hit = hitRef.current
     const scroll = scrollRef.current
     const content = contentRef.current
     const ctx = canvas?.getContext('2d')
-    if (!root || !canvas || !peek || !scroll || !content || !ctx) {
+    if (!root || !canvas || !peek || !hit || !scroll || !content || !ctx) {
       return
     }
 
@@ -287,7 +299,27 @@ export const Minimap = ({
       const width = root.clientWidth
       const height = root.clientHeight
       const w = Math.min(MAX_RAIL_WIDTH, width - 20)
-      size = { width, height, w, x: clamp((width - w) / 2, 8, 16) }
+      let x = clamp((width - w) / 2, 8, 16)
+      let hitRight = Math.min(width, x + w + HIT_SLOP)
+      if (side === 'right') {
+        // Keep clear of the scrollbar: the space the scroller reserves for it on each edge, or room
+        // for an overlay scrollbar when it reserves none.
+        const scrollbar = Math.max(
+          SCROLLBAR_CLEARANCE,
+          (scroll.offsetWidth - scroll.clientWidth) / 2
+        )
+        x = Math.max(4, width - w - Math.max(scrollbar + 4, clamp((width - w) / 2, 8, 16)))
+        hitRight = Math.min(x + w + HIT_SLOP, width - scrollbar)
+      }
+      size = { width, height, w, x }
+      // Only the rail's column takes the pointer, so whatever is beside it (the scrollbar) still works.
+      const hitLeft = Math.max(0, x - HIT_SLOP)
+      hit.style.left = `${hitLeft}px`
+      hit.style.width = `${Math.max(0, hitRight - hitLeft)}px`
+      const back = returnRef.current
+      if (back) {
+        back.style.left = `${Math.max(0, x - 4)}px`
+      }
       root.toggleAttribute('data-hidden', width < MIN_GUTTER || w < 24)
       const dpr = window.devicePixelRatio || 1
       canvas.width = Math.round(width * dpr)
@@ -330,7 +362,13 @@ export const Minimap = ({
         number.textContent = String(index + 1)
         label.textContent = section.label
       }
-      peek.style.left = `${size.x + size.w + 14}px`
+      if (side === 'right') {
+        peek.style.left = ''
+        peek.style.right = `${size.width - size.x + 14}px`
+      } else {
+        peek.style.right = ''
+        peek.style.left = `${size.x + size.w + 14}px`
+      }
       peek.style.top = `${railY}px`
       peek.setAttribute('data-open', '')
     }
@@ -364,7 +402,7 @@ export const Minimap = ({
       }
       drag = { offset, fromTop: scrollTop, y: event.clientY, moved: false }
       try {
-        canvas.setPointerCapture(event.pointerId)
+        hit.setPointerCapture(event.pointerId)
       } catch {
         // Synthetic pointers can't be captured; the drag still follows moves over the rail.
       }
@@ -399,11 +437,11 @@ export const Minimap = ({
         setHover(-1, 0)
       }
     }
-    canvas.addEventListener('pointerdown', onPointerDown)
-    canvas.addEventListener('pointermove', onPointerMove)
-    canvas.addEventListener('pointerup', onPointerUp)
-    canvas.addEventListener('pointercancel', onPointerUp)
-    canvas.addEventListener('pointerleave', onPointerLeave)
+    hit.addEventListener('pointerdown', onPointerDown)
+    hit.addEventListener('pointermove', onPointerMove)
+    hit.addEventListener('pointerup', onPointerUp)
+    hit.addEventListener('pointercancel', onPointerUp)
+    hit.addEventListener('pointerleave', onPointerLeave)
 
     // Keyboard focus on a section's button shows its label beside it.
     const showFocused = () => {
@@ -426,13 +464,13 @@ export const Minimap = ({
       rootObserver.disconnect()
       theme.disconnect()
       scroll.removeEventListener('scroll', schedule)
-      canvas.removeEventListener('pointerdown', onPointerDown)
-      canvas.removeEventListener('pointermove', onPointerMove)
-      canvas.removeEventListener('pointerup', onPointerUp)
-      canvas.removeEventListener('pointercancel', onPointerUp)
-      canvas.removeEventListener('pointerleave', onPointerLeave)
+      hit.removeEventListener('pointerdown', onPointerDown)
+      hit.removeEventListener('pointermove', onPointerMove)
+      hit.removeEventListener('pointerup', onPointerUp)
+      hit.removeEventListener('pointercancel', onPointerUp)
+      hit.removeEventListener('pointerleave', onPointerLeave)
     }
-  }, [scrollRef, contentRef, sectionSelector, markerSelector])
+  }, [scrollRef, contentRef, sectionSelector, markerSelector, side])
 
   const onKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
     if (event.altKey || event.metaKey || event.ctrlKey) {
@@ -464,8 +502,14 @@ export const Minimap = ({
   const rovingIndex = focusIndex ?? current
 
   return (
-    <nav ref={rootRef} aria-label={ariaLabel} className={clsx(styles.root, className)}>
+    <nav
+      ref={rootRef}
+      aria-label={ariaLabel}
+      className={clsx(styles.root, className)}
+      data-side={side}
+    >
       <canvas ref={canvasRef} className={styles.canvas} aria-hidden="true" />
+      <div ref={hitRef} className={styles.hit} aria-hidden="true" />
       <div ref={peekRef} className={styles.peek} aria-hidden="true">
         <span className={styles.peekNumber} />
         <span className={styles.peekLabel} />
