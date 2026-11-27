@@ -1,8 +1,7 @@
 import type { DeliveredFileRef, ToolStepPresenter } from '@deepseek-chat/lib-tools'
 import type { PanelSlot } from '@deepseek-chat/spine/ports'
 import type { EventLog } from '@deepseek-chat/spine/runtime'
-import type { ReadingPosition } from '../../src/reading.js'
-import type { AssistantMessage, ReplyBlock } from '../../src/types.js'
+import type { AssistantMessage, ReadingPosition, ReplyBlock } from '../../kernel/index.js'
 
 export type ActivityTab = 'activity' | 'sources'
 

@@ -1,4 +1,4 @@
-import type { ReplyBlock, ToolResultPart } from '../../src/types.js'
+import type { ReplyBlock, ToolResultPart } from '../../kernel/index.js'
 import type { ActivitySource } from './types.js'
 
 type LegacyScrapedResult = ToolResultPart & {

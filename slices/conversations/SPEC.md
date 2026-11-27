@@ -5,7 +5,13 @@
 Core chat domain: sessions and their message trees (branches from edits and regenerations), sending
 a question and streaming the reply, the domain-blind client-tool loop, attachments and drafts, the
 DeepThink composer toggle, factory-scoped local session persistence, the chat views, and the
-built-in right-hand Activity & Sources inspector Depth-2 cell (`cells/activity-inspector/`).
+built-in right-hand Activity & Sources inspector.
+
+Depth-2 layout: pure domain kernel (`kernel/`: types, pure session lifecycle & LRU eviction state
+machine, branch tree, reply wire assembly, compaction policy, attachments/drafts rules, environment
+context, auto-title, reading contracts, messages) plus five isolated cells (`cells/storage/`,
+`cells/compaction/`, `cells/turn-loop/`, `cells/views/`, `cells/activity-inspector/`) wired by thin
+`src/runtime.ts` and `src/index.ts`.
 
 Sibling capabilities (web research, Python, built-in browser, workspace files, clarifying questions,
 subagents, history backup, voice) are sealed slices outside `conversations`. They plug in through

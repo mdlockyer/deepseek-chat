@@ -5,7 +5,7 @@
     "outDir": ".tsbuild/pkg",
     "tsBuildInfoFile": ".tsbuild/pkg.tsbuildinfo"
   },
-  "include": ["src", "cells"],
+  "include": ["kernel", "src", "cells"],
   "references": [
     {
       "path": "../../libs/agent"

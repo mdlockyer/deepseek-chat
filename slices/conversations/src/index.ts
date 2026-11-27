@@ -27,12 +27,18 @@ import {
   type SessionTurnSummary,
   type TurnSnapshot,
 } from '../cells/activity-inspector/index.js'
-import { bindView } from './context.js'
-import { describeReply } from './describe.js'
+import {
+  ChatMain,
+  ChatSaveBanner,
+  MobileSider,
+  Sider,
+  SiderToolbar,
+  bindView,
+  createChatHooks,
+  describeReply,
+} from '../cells/views/index.js'
+import { isHistoryReady, replyingSessionIds } from '../kernel/index.js'
 import { createConversationsRuntime, type ConversationsDeps } from './runtime.js'
-import { ChatMain, ChatSaveBanner, createChatHooks } from './ui/session/ChatMain.js'
-import { SiderToolbar } from './ui/sider/SiderToolbar.js'
-import { MobileSider, Sider } from './ui/sider/Sider.js'
 
 export {
   DEFAULT_CONVERSATIONS_PARAMS,
@@ -57,16 +63,16 @@ export type {
   SessionTurnSummary,
   TurnSnapshot,
 }
-export { createIndexedDbSessionStore, type SessionStore } from './sessionStore.js'
-export type { ReadingCause, ReadingPosition, RevealRequest } from './reading.js'
-export type { StreamTrace, StreamTraceBlock } from './streamTrace.js'
+export { createIndexedDbSessionStore, type SessionStore } from '../cells/storage/index.js'
+export type { ReadingCause, ReadingPosition, RevealRequest } from '../kernel/index.js'
+export type { StreamTrace, StreamTraceBlock } from '../cells/turn-loop/index.js'
 export type {
   ChatFile,
   ConversationsViewDeps,
   SettingsSection,
   SiderMode,
   VoiceViews,
-} from './views.js'
+} from '../cells/views/index.js'
 export type { ClientTool } from '@deepseek-chat/lib-agent'
 export type {
   AssistantMessage,
@@ -81,7 +87,7 @@ export type {
   ToolCallPart,
   ToolResultPart,
   UserMessage,
-} from './types.js'
+} from '../kernel/index.js'
 
 export type AttachRefusal = {
   readonly key: string
@@ -140,8 +146,13 @@ export const createConversationsSlice = (deps: ConversationsDeps) => {
 
     /** The session list (newest first), the chat on screen, and which chats are replying. */
     getState: () => {
-      const { ready, sessions, activeId, streaming } = runtime.useChatStore.getState()
-      return { ready, sessions, activeId, replying: Object.keys(streaming) }
+      const state = runtime.useChatStore.getState()
+      return {
+        ready: isHistoryReady(state),
+        sessions: [...state.sessions],
+        activeId: state.activeId,
+        replying: replyingSessionIds(state),
+      }
     },
 
     /** Notifies listeners whenever session readiness, list, active selection, or streaming state changes. */
@@ -170,7 +181,7 @@ export const createConversationsSlice = (deps: ConversationsDeps) => {
           getTarget: runtime.activity.getTarget,
           close: runtime.activity.close,
           setReadingPosition: runtime.reading.setReadingPosition,
-          getRevealRequest: () => runtime.reading.useReadingStore.getState().reveal,
+          getRevealRequest: runtime.reading.getRevealRequest,
         }
       : null,
 
@@ -201,16 +212,21 @@ export type ConversationsSlice = ReturnType<typeof createConversationsSlice>
 
 // ---------- Pure model functions (also the boundary tests' surface) ----------
 
-export { ApiError, requestWith } from './apiClient.js'
+export { ApiError, requestWith } from '../cells/turn-loop/index.js'
 export {
   AUTO_TITLE_KEEP,
   MAX_AUTO_TITLE_CHARS,
   buildAutoTitlePrompt,
   buildAutoTitleRequest,
   parseAutoTitleResponse,
-} from './autoTitle.js'
+} from '../kernel/index.js'
 export { ServerSentEventDecoder, readServerSentEvents } from '@deepseek-chat/lib-agent'
-export { appendBranch, getVisibleMessages, normalizeSession, selectVersion } from './branches.js'
+export {
+  appendBranch,
+  getVisibleMessages,
+  normalizeSession,
+  selectVersion,
+} from '../kernel/index.js'
 export {
   CONTINUE_PROMPT,
   applyEvent,
@@ -222,63 +238,58 @@ export {
   toRequestMessages,
   type InlineAttachmentData,
   type ToRequestMessagesOptions,
-} from './reply.js'
+} from '../kernel/index.js'
 export {
   computeCompactionPolicy,
   selectCompactionTrigger,
   type CompactionPolicy,
-} from './compaction/budget.js'
-export {
-  runCompaction,
-  type CompactionResult,
-  type RunCompactionParams,
-} from './compaction/compact.js'
-export {
-  estimateAttachmentTokens,
-  estimateMessagesTokens,
-  estimateSessionContext,
-  estimateTextTokens,
-  type SessionContextEstimate,
-} from './compaction/estimate.js'
-export { buildCompactionLedgerText } from './compaction/ledger.js'
+} from '../kernel/index.js'
 export {
   CHECKPOINT_ACK,
   buildChunkedCompactionPrompt,
   buildCompactionInstruction,
+  buildCompactionLedgerText,
+  buildVerbatimSection,
+  estimateAttachmentTokens,
+  estimateMessagesTokens,
+  estimateSessionContext,
+  estimateTextTokens,
   renderCheckpointWireText,
+  runCompaction,
   validateCompactionSummary,
-} from './compaction/prompts.js'
-export { buildVerbatimSection, type VerbatimSelection } from './compaction/verbatim.js'
+  type CompactionResult,
+  type RunCompactionParams,
+  type SessionContextEstimate,
+  type VerbatimSelection,
+} from '../cells/compaction/index.js'
 export {
+  collectCitedUrls,
   createEnvironmentContext,
   formatLegacyLatestReminder,
   resolveEnvironmentContext,
-} from './environmentContext.js'
-export { collectCitedUrls } from './citations.js'
-export {
-  buildReplyView,
-  getAreaTitle,
-  getTotalThinkingSeconds,
-  holdsNarration,
-  NARRATION_HOLD_MS,
-  NARRATION_MAX_CHARS,
-  needsWorkingIndicator,
-  showsRunning,
-  type ReplyView,
-  type Source,
-  type Step,
-  type ToolStep,
-} from './view.js'
+} from '../kernel/index.js'
 export {
   INLINE_TRACE_PREVIEW_LIMIT,
+  NARRATION_HOLD_MS,
+  NARRATION_MAX_CHARS,
   buildInlineTrace,
+  buildReplyView,
   buildTurnWorkStrip,
+  getAreaTitle,
   getFrontStageNotes,
+  getTotalThinkingSeconds,
+  holdsNarration,
+  needsWorkingIndicator,
   selectInlineTracePreview,
+  showsRunning,
   type FrontStageNoteEntry,
   type InlineTrace,
   type InlineTraceItem,
   type InlineTracePreview,
   type InlineTracePreviewEntry,
+  type ReplyView,
+  type Source,
+  type Step,
+  type ToolStep,
   type TurnWorkStripState,
-} from './workStrip.js'
+} from '../cells/views/index.js'

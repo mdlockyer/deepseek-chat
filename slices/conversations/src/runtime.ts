@@ -4,7 +4,6 @@ import type { BrowserControlTakenOver } from '@deepseek-chat/spine/facts/browser
 import type {
   ActiveSessionChanged,
   SessionDeleted,
-  SessionFileDescriptor,
   SessionFilesChanged,
   SessionHistoryReplaced,
 } from '@deepseek-chat/spine/facts/session'
@@ -26,45 +25,70 @@ import {
   type SessionTurnSummary,
   type TurnSnapshot,
 } from '../cells/activity-inspector/index.js'
-import { localizeProvider } from './apiClient.js'
-import { createUploadsController } from './attachments.js'
-import { createAutoTitleRunner } from './autoTitleRunner.js'
-import { appendBranch, getVisibleMessages, normalizeSession, selectVersion } from './branches.js'
-import { computeCompactionPolicy } from './compaction/budget.js'
-import { runCompaction } from './compaction/compact.js'
-import { estimateMessagesTokens, estimateSessionContext } from './compaction/estimate.js'
-import { createDraftsController, prepareDraftMessage } from './drafts.js'
-import { createId } from './id.js'
-import { lazyTranslate, type LinkedMessage } from './messages.js'
 import {
-  canContinueReply,
-  canResumeToolLoop,
-  findActiveCheckpoint,
-  getContextRounds,
-  settleReply,
-  toHistoryPrefixMessages,
-  trimAfterLastToolResult,
-  type InlineAttachmentData,
-} from './reply.js'
-import { createReadingPositions } from './reading.js'
-import { SYSTEM_PROMPT, createReplyRunner, type ReplyRunnerParams } from './replyRunner.js'
+  estimateMessagesTokens,
+  estimateSessionContext,
+  runCompaction,
+} from '../cells/compaction/index.js'
 import {
   createIndexedDbSessionStore,
   reportStorageError,
   type SessionStore,
-} from './sessionStore.js'
-import type { StreamTrace } from './streamTrace.js'
-import { excerptOfPrompt, hasTurnActivity } from './turns.js'
+} from '../cells/storage/index.js'
 import {
-  toSessionSummary,
+  SYSTEM_PROMPT,
+  createAutoTitleRunner,
+  createDraftsController,
+  createReplyRunner,
+  createUploadsController,
+  localizeProvider,
+  type ReplyRunnerParams,
+  type StreamTrace,
+} from '../cells/turn-loop/index.js'
+import {
+  createReadingPositions,
+  type ConversationsViewDeps,
+  type ConversationsViewRuntime,
+} from '../cells/views/index.js'
+import {
+  INITIAL_CONVERSATIONS_STATE,
+  appendBranch,
+  canContinueReply,
+  canResumeToolLoop,
+  computeCompactionPolicy,
+  createId,
+  excerptOfPrompt,
+  extractVisibleFileDescriptors,
+  findActiveCheckpoint,
+  getCachedSession,
+  getContextRounds,
+  getVisibleMessages,
+  hasTurnActivity,
+  isHistoryReady,
+  isHistoryReplacing,
+  isSessionBusy,
+  isSessionDeleting,
+  isSessionOrAllIdle,
+  isSessionStreaming,
+  lazyTranslate,
+  normalizeSession,
+  prepareDraftMessage,
+  reduceConversations,
+  sameSummary,
+  selectVersion,
+  settleReply,
+  toHistoryPrefixMessages,
+  trimAfterLastToolResult,
   type AssistantMessage,
   type CompactionCheckpoint,
+  type ConversationsKernelAction,
+  type ConversationsKernelState,
+  type InlineAttachmentData,
+  type LinkedMessage,
   type Message,
   type Session,
-  type SessionSummary,
   type UserMessage,
-} from './types.js'
-import type { ConversationsViewDeps } from './views.js'
+} from '../kernel/index.js'
 
 export type ConversationsParams = ReplyRunnerParams
 
@@ -102,19 +126,6 @@ export type ConversationsDeps = {
   readonly ui: ConversationsViewDeps
 }
 
-type ChatState = {
-  ready: boolean
-  initError: boolean
-  importingHistory: boolean
-  sessions: SessionSummary[]
-  sessionCache: Record<string, Session>
-  sessionLoadErrors: Record<string, boolean>
-  sessionSaveErrors: Record<string, boolean>
-  activeId: string | null
-  streaming: Record<string, AbortController>
-  compacting: Record<string, boolean>
-}
-
 const THINKING_TOGGLE_KEY = 'chat-demo:thinking'
 const SESSION_CACHE_LIMIT = 5
 const NO_MESSAGES: readonly Message[] = []
@@ -131,60 +142,6 @@ const blobToBase64 = async (blob: Blob): Promise<string> => {
   return btoa(binary)
 }
 
-const sortSessions = (sessions: SessionSummary[]) =>
-  [...sessions].sort((a, b) => b.updatedAt - a.updatedAt)
-
-const sameSummary = (a: SessionSummary, b: SessionSummary) =>
-  a.title === b.title && a.createdAt === b.createdAt && a.updatedAt === b.updatedAt
-
-const extractVisibleFileDescriptors = (session: Session): SessionFileDescriptor[] => {
-  const descriptors: SessionFileDescriptor[] = []
-  for (const message of getVisibleMessages(session)) {
-    if (message.role === 'user') {
-      for (const file of message.files) {
-        descriptors.push({
-          kind: 'upload',
-          fileId: file.id,
-          name: file.name,
-          size: file.size,
-          mimeType: file.mimeType,
-          messageId: message.id,
-          createdAt: message.createdAt,
-        })
-      }
-      continue
-    }
-    const callById = new Map(
-      message.blocks.flatMap((block) => (block.type === 'tool_use' ? [[block.id, block]] : []))
-    )
-    for (const block of message.blocks) {
-      if (block.type !== 'tool_result' || !block.files?.length) {
-        continue
-      }
-      const call = callById.get(block.tool_use_id)
-      for (const file of block.files) {
-        descriptors.push({
-          kind: 'delivered',
-          fileId: file.id,
-          name: file.name,
-          size: file.size,
-          mimeType: file.mimeType,
-          ...(file.path ? { path: file.path } : {}),
-          ...(file.title ? { title: file.title } : {}),
-          ...(file.version !== undefined ? { version: file.version } : {}),
-          ...((file.producer ?? block.capability)
-            ? { producer: file.producer ?? block.capability }
-            : {}),
-          ...(call ? { producedByTool: call.name } : {}),
-          messageId: message.id,
-          createdAt: message.createdAt,
-        })
-      }
-    }
-  }
-  return descriptors
-}
-
 export const createConversationsRuntime = (deps: ConversationsDeps) => {
   const localeStore = deps.locale ?? createLocaleStore()
   const tools = deps.tools ?? createToolRegistry([])
@@ -198,6 +155,7 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
   const provider = localizeProvider(deps.provider)
   const uploads = createUploadsController(provider)
   const drafts = createDraftsController(uploads, newId)
+  const reading = createReadingPositions()
 
   const useThinkingStore = create<{ thinking: boolean }>(() => ({
     thinking: deps.store.get(THINKING_TOGGLE_KEY) === 'true',
@@ -207,25 +165,15 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
     useThinkingStore.setState({ thinking })
   }
 
-  const reading = createReadingPositions()
-
   const useMobileSider = create<{ open: boolean }>(() => ({ open: false }))
   const openMobileSider = () => useMobileSider.setState({ open: true })
   const closeMobileSider = () => useMobileSider.setState({ open: false })
 
-  const useChatStore = create<ChatState>(() => ({
-    ready: false,
-    initError: false,
-    importingHistory: false,
-    sessions: [],
-    sessionCache: {},
-    sessionLoadErrors: {},
-    sessionSaveErrors: {},
-    activeId: null,
-    streaming: {},
-    compacting: {},
-  }))
-  const { getState: get, setState: set } = useChatStore
+  const useChatStore = create<ConversationsKernelState>(() => INITIAL_CONVERSATIONS_STATE)
+  const { getState: get, setState } = useChatStore
+  const dispatch = (action: ConversationsKernelAction) => {
+    setState((prev) => reduceConversations(prev, action))
+  }
 
   const showNotice = (notice: LinkedMessage) => {
     const { key, params: msgParams, type, link } = notice
@@ -244,18 +192,15 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
     return false
   }
 
-  const sessionAccess = new Map<string, number>()
-  const unsavedSessions = new Set<string>()
-  const pendingBlobs = new Map<string, BlobEntry[]>()
-  const deletingSessions = new Set<string>()
-  const deletionTasks = new Set<Promise<boolean>>()
-  const streamFlushes = new Map<string, () => void>()
+  // Non-serializable live runtime handles (never stored in Zustand state).
+  const streamControllers = new Map<string, AbortController>()
   const manualCompactions = new Map<string, AbortController>()
+  const streamFlushes = new Map<string, () => void>()
+  const pendingBlobs = new Map<string, BlobEntry[]>()
+  const deletionTasks = new Set<Promise<boolean>>()
   const publishedFileSessions = new Set<string>()
   const turnListeners = new Set<() => void>()
   const sessionLoads = new Map<string, { promise: Promise<void> }>()
-  let accessSequence = 0
-  let historyEpoch = 0
   let initTask: Promise<void> | undefined
   let lastPublishedActiveId: string | null | undefined
 
@@ -276,33 +221,41 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
     })
   }
 
-  const getSession = (id: string) => {
-    const cache = get().sessionCache
-    return Object.hasOwn(cache, id) ? cache[id] : undefined
-  }
-
-  const getStreamController = (id: string) => {
-    const streams = get().streaming
-    return Object.hasOwn(streams, id) ? streams[id] : undefined
-  }
-
-  const isSessionBusy = (id: string) =>
-    Boolean(getStreamController(id)) || manualCompactions.has(id) || get().compacting[id] === true
+  const getSession = (id: string) => getCachedSession(get(), id)
 
   const setCompacting = (sessionId: string, active: boolean) => {
-    set((state) => {
-      const current = state.compacting[sessionId] === true
-      if (current === active) {
-        return state
-      }
-      return {
-        compacting: active
-          ? { ...state.compacting, [sessionId]: true }
-          : Object.fromEntries(Object.entries(state.compacting).filter(([id]) => id !== sessionId)),
-      }
-    })
+    dispatch({ type: 'setCompacting', id: sessionId, active })
     notifyTurnListeners()
   }
+
+  const updateSession = (id: string, update: (session: Session) => Session) => {
+    let changed = false
+    setState((state) => {
+      const previous = getCachedSession(state, id)
+      if (!previous) {
+        return state
+      }
+      const nextSession = update(previous)
+      if (nextSession === previous) {
+        return state
+      }
+      changed = true
+      return reduceConversations(state, { type: 'updateSession', id, session: nextSession })
+    })
+    if (changed) {
+      notifyTurnListeners()
+    }
+  }
+
+  const updateReply = (sessionId: string, reply: AssistantMessage) =>
+    updateSession(sessionId, (session) => ({
+      ...session,
+      messages: session.messages.map((message) =>
+        message.id === reply.id
+          ? { ...reply, parentId: message.parentId, selectedChildId: message.selectedChildId }
+          : message
+      ),
+    }))
 
   const appendCheckpoint = (sessionId: string, checkpoint: CompactionCheckpoint) => {
     updateSession(sessionId, (session) => ({
@@ -325,85 +278,16 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
     })
   }
 
-  const touchSession = (id: string) => sessionAccess.set(id, ++accessSequence)
-
-  const trimSessionCache = () => {
-    const state = get()
-    const ids = Object.keys(state.sessionCache)
-    if (ids.length <= SESSION_CACHE_LIMIT) {
-      return
-    }
-    const removable = ids
-      .filter(
-        (id) =>
-          id !== state.activeId &&
-          !Object.hasOwn(state.streaming, id) &&
-          state.compacting[id] !== true &&
-          !unsavedSessions.has(id) &&
-          !deletingSessions.has(id)
-      )
-      .sort((a, b) => (sessionAccess.get(a) ?? 0) - (sessionAccess.get(b) ?? 0))
-    const evicted = new Set(removable.slice(0, ids.length - SESSION_CACHE_LIMIT))
-    for (const id of evicted) {
-      sessionAccess.delete(id)
-    }
-    if (evicted.size > 0) {
-      set({
-        sessionCache: Object.fromEntries(
-          Object.entries(state.sessionCache).filter(([id]) => !evicted.has(id))
-        ),
-      })
-    }
-  }
-
-  const updateSession = (id: string, update: (session: Session) => Session) => {
-    let changed = false
-    set((state) => {
-      const previous = Object.hasOwn(state.sessionCache, id) ? state.sessionCache[id] : undefined
-      if (!previous) {
-        return state
-      }
-      const session = update(previous)
-      if (session === previous) {
-        return state
-      }
-      changed = true
-      return {
-        sessionCache: { ...state.sessionCache, [id]: session },
-        sessions: sameSummary(previous, session)
-          ? state.sessions
-          : sortSessions(
-              state.sessions.map((summary) =>
-                summary.id === id ? toSessionSummary(session) : summary
-              )
-            ),
-      }
-    })
-    if (changed) {
-      notifyTurnListeners()
-    }
-  }
-
-  const updateReply = (sessionId: string, reply: AssistantMessage) =>
-    updateSession(sessionId, (session) => ({
-      ...session,
-      messages: session.messages.map((message) =>
-        message.id === reply.id
-          ? { ...reply, parentId: message.parentId, selectedChildId: message.selectedChildId }
-          : message
-      ),
-    }))
-
   const persist = (sessionId: string) => {
     const session = getSession(sessionId)
     if (!session) {
       return
     }
-    unsavedSessions.add(sessionId)
-    if (deletingSessions.has(sessionId)) {
+    dispatch({ type: 'markUnsaved', id: sessionId })
+    if (isSessionDeleting(get(), sessionId)) {
       return
     }
-    const epoch = historyEpoch
+    const epoch = get().historyEpoch
     const blobsToWrite = pendingBlobs.get(sessionId)
     void (async () => {
       try {
@@ -411,48 +295,45 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
           await deps.blobs.put(blobsToWrite)
         }
         await sessionStore.saveSession(session)
-        if (epoch !== historyEpoch || !getSession(sessionId)) {
+        if (epoch !== get().historyEpoch || !getSession(sessionId)) {
           return
         }
         if (pendingBlobs.get(sessionId) === blobsToWrite) {
           pendingBlobs.delete(sessionId)
         }
         if (getSession(sessionId) === session) {
-          unsavedSessions.delete(sessionId)
-          set((state) => ({
-            sessionSaveErrors: Object.fromEntries(
-              Object.entries(state.sessionSaveErrors).filter(([id]) => id !== sessionId)
-            ),
-          }))
-          trimSessionCache()
+          dispatch({ type: 'markSaved', id: sessionId, savedSession: session })
+          dispatch({ type: 'trimCache', limit: SESSION_CACHE_LIMIT })
         }
       } catch (error) {
         reportStorageError('save session')(error)
-        if (epoch === historyEpoch && getSession(sessionId)) {
-          set((state) => ({
-            sessionSaveErrors: { ...state.sessionSaveErrors, [sessionId]: true },
-          }))
+        if (epoch === get().historyEpoch && getSession(sessionId)) {
+          dispatch({ type: 'markSaveError', id: sessionId })
         }
       }
     })()
   }
 
   const retrySaveSessions = () => {
-    if (!get().importingHistory) {
-      unsavedSessions.forEach(persist)
+    const state = get()
+    if (!isHistoryReplacing(state)) {
+      for (const id of Object.keys(state.unsavedIds)) {
+        persist(id)
+      }
     }
   }
 
   const bindChatPersistence = () => {
     const save = () => {
-      if (get().importingHistory) {
+      const state = get()
+      if (isHistoryReplacing(state)) {
         return
       }
       for (const [id, flush] of streamFlushes) {
         flush()
         persist(id)
       }
-      for (const id of unsavedSessions) {
+      for (const id of Object.keys(state.unsavedIds)) {
         if (!streamFlushes.has(id)) {
           persist(id)
         }
@@ -484,9 +365,9 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
   const autoTitleRunner = createAutoTitleRunner({
     enabled: deps.autoTitle !== false,
     provider,
-    getHistoryEpoch: () => historyEpoch,
-    isImportingHistory: () => get().importingHistory,
-    isDeletingSession: (id) => deletingSessions.has(id),
+    getHistoryEpoch: () => get().historyEpoch,
+    isImportingHistory: () => isHistoryReplacing(get()),
+    isDeletingSession: (id) => isSessionDeleting(get(), id),
     getSession,
     updateSession,
     persist,
@@ -499,38 +380,47 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
     tools,
     provider,
     uploads,
+    compaction: {
+      estimateMessagesTokens,
+      estimateSessionContext,
+      runCompaction,
+    },
     platform,
     params,
     getLocationLabel: deps.getLocationLabel,
     onStreamTrace: deps.onStreamTrace,
-    getHistoryEpoch: () => historyEpoch,
-    isImportingHistory: () => get().importingHistory,
-    getActiveSessionId: () => get().activeId,
-    getSession,
-    updateSession,
-    updateReply,
-    persist,
-    publishSessionFiles,
-    setStreaming: (sessionId, controller) => {
-      set((state) => ({
-        streaming: controller
-          ? { ...state.streaming, [sessionId]: controller }
-          : Object.fromEntries(Object.entries(state.streaming).filter(([id]) => id !== sessionId)),
-      }))
-      notifyTurnListeners()
-    },
-    setCompacting,
-    appendCheckpoint,
-    notifyCompactionNotice: (key) => showNotice({ key }),
     newId,
-    registerFlush: (sessionId, flush) => {
-      if (flush) {
-        streamFlushes.set(sessionId, flush)
-      } else {
-        streamFlushes.delete(sessionId)
-      }
+    session: {
+      getHistoryEpoch: () => get().historyEpoch,
+      isImportingHistory: () => isHistoryReplacing(get()),
+      getActiveSessionId: () => get().activeId,
+      get: getSession,
+      update: updateSession,
+      updateReply,
+      persist,
+      publishFiles: publishSessionFiles,
+      setStreaming: (sessionId, controller) => {
+        if (controller) {
+          streamControllers.set(sessionId, controller)
+          dispatch({ type: 'setStreaming', id: sessionId, active: true })
+        } else {
+          streamControllers.delete(sessionId)
+          dispatch({ type: 'setStreaming', id: sessionId, active: false })
+        }
+        notifyTurnListeners()
+      },
+      setCompacting,
+      appendCheckpoint,
+      notifyCompactionNotice: (key) => showNotice({ key }),
+      registerFlush: (sessionId, flush) => {
+        if (flush) {
+          streamFlushes.set(sessionId, flush)
+        } else {
+          streamFlushes.delete(sessionId)
+        }
+      },
+      onAutoTitle: (autoParams) => autoTitleRunner.run(autoParams),
     },
-    onAutoTitle: (autoParams) => autoTitleRunner.run(autoParams),
   })
 
   const createReply = (): AssistantMessage => ({
@@ -580,28 +470,28 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
   }
 
   const initChat = (): Promise<void> => {
-    if (get().ready) {
+    if (isHistoryReady(get())) {
       return Promise.resolve()
     }
     if (initTask) {
       return initTask
     }
-    const epoch = historyEpoch
-    set({ initError: false })
+    const epoch = get().historyEpoch
+    dispatch({ type: 'initStart' })
     initTask = (async () => {
       try {
         const summaries = await sessionStore.loadSummaries()
-        if (epoch === historyEpoch) {
-          set({ ready: true, sessions: sortSessions(summaries) })
+        if (epoch === get().historyEpoch) {
+          dispatch({ type: 'initSucceeded', summaries })
           publishActiveSession(get().activeId)
         }
       } catch (error) {
-        if (epoch === historyEpoch) {
-          set({ initError: true })
+        if (epoch === get().historyEpoch) {
+          dispatch({ type: 'initFailed' })
           reportStorageError('read local sessions')(error)
         }
       } finally {
-        if (epoch === historyEpoch) {
+        if (epoch === get().historyEpoch) {
           initTask = undefined
         }
       }
@@ -618,14 +508,14 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
     if (pending) {
       return pending.promise
     }
-    const epoch = historyEpoch
-    set((state) => ({ sessionLoadErrors: { ...state.sessionLoadErrors, [id]: false } }))
+    const epoch = get().historyEpoch
+    dispatch({ type: 'setLoadError', id, failed: false })
     const load = { promise: Promise.resolve() }
     sessionLoads.set(id, load)
     load.promise = (async () => {
       try {
         const stored = await sessionStore.loadSession(id)
-        if (epoch !== historyEpoch || sessionLoads.get(id) !== load) {
+        if (epoch !== get().historyEpoch || sessionLoads.get(id) !== load) {
           return
         }
         const summary = get().sessions.find((session) => session.id === id)
@@ -637,17 +527,16 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
         }
         const settled = settleInterrupted(normalizeSession(stored))
         const session = sameSummary(settled, summary) ? settled : { ...settled, ...summary }
-        touchSession(id)
-        set((state) => ({ sessionCache: { ...state.sessionCache, [id]: session } }))
+        dispatch({ type: 'cacheLoadedSession', session })
         notifyTurnListeners()
         publishSessionFiles(id)
         if (session !== stored) {
           persist(id)
         }
-        trimSessionCache()
+        dispatch({ type: 'trimCache', limit: SESSION_CACHE_LIMIT })
       } catch (error) {
-        if (epoch === historyEpoch && sessionLoads.get(id) === load) {
-          set((state) => ({ sessionLoadErrors: { ...state.sessionLoadErrors, [id]: true } }))
+        if (epoch === get().historyEpoch && sessionLoads.get(id) === load) {
+          dispatch({ type: 'setLoadError', id, failed: true })
           reportStorageError('read session')(error)
         }
       } finally {
@@ -661,16 +550,12 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
 
   const waitForIdle = (sessionId?: string) =>
     new Promise<void>((resolve) => {
-      const isIdle = (state: ChatState) =>
-        sessionId === undefined
-          ? Object.keys(state.streaming).length === 0 && Object.keys(state.compacting).length === 0
-          : !Object.hasOwn(state.streaming, sessionId) && state.compacting[sessionId] !== true
-      if (isIdle(get())) {
+      if (isSessionOrAllIdle(get(), sessionId)) {
         resolve()
         return
       }
       const unsubscribe = useChatStore.subscribe((state) => {
-        if (isIdle(state)) {
+        if (isSessionOrAllIdle(state, sessionId)) {
           unsubscribe()
           resolve()
         }
@@ -683,20 +568,20 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
       readonly blobs: readonly BlobEntry[]
     }>
   ): Promise<number> => {
-    if (get().importingHistory) {
+    if (isHistoryReplacing(get())) {
       throw new Error('History replacement is already in progress')
     }
-    set({ importingHistory: true })
+    dispatch({ type: 'beginHistoryReplace' })
     try {
       autoTitleRunner.cancel()
-      for (const controller of Object.values(get().streaming)) {
+      for (const controller of streamControllers.values()) {
         controller.abort()
       }
       for (const controller of manualCompactions.values()) {
         controller.abort()
       }
       await Promise.all(deletionTasks)
-      historyEpoch += 1
+      dispatch({ type: 'bumpHistoryEpoch' })
       initTask = undefined
       sessionLoads.clear()
       await waitForIdle()
@@ -711,29 +596,19 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
       publishedFileSessions.clear()
       deps.log.publish<SessionHistoryReplaced>({ type: 'SessionHistoryReplaced' })
       reading.clear()
-      sessionAccess.clear()
-      unsavedSessions.clear()
       pendingBlobs.clear()
       drafts.clearAllDrafts()
-      set({
-        ready: true,
-        initError: false,
-        sessions: sortSessions(summaries),
-        sessionCache: {},
-        sessionLoadErrors: {},
-        sessionSaveErrors: {},
-        activeId: null,
-      })
+      dispatch({ type: 'commitHistoryReplace', summaries })
       publishActiveSession(null)
       notifyTurnListeners()
       return summaries.length
     } finally {
-      set({ importingHistory: false })
+      dispatch({ type: 'finishHistoryReplace' })
       retrySaveSessions()
-      const { activeId, ready } = get()
-      if (activeId !== null) {
-        void ensureSessionLoaded(activeId)
-      } else if (!ready) {
+      const latest = get()
+      if (latest.activeId !== null) {
+        void ensureSessionLoaded(latest.activeId)
+      } else if (!isHistoryReady(latest)) {
         void initChat()
       }
     }
@@ -742,32 +617,33 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
   const snapshotForExport = () => {
     const { sessions, sessionCache } = get()
     return {
-      summaries: sessions,
+      summaries: [...sessions],
       loadSession: async (id: string): Promise<Session | undefined> =>
         Object.hasOwn(sessionCache, id) ? sessionCache[id] : sessionStore.loadSession(id),
     }
   }
 
   const newChat = () => {
-    if (!get().importingHistory) {
-      set({ activeId: null })
+    if (!isHistoryReplacing(get())) {
+      dispatch({ type: 'setActiveSession', id: null })
       publishActiveSession(null)
-      trimSessionCache()
+      dispatch({ type: 'trimCache', limit: SESSION_CACHE_LIMIT })
     }
   }
 
   const selectSession = (id: string) => {
-    if (!get().importingHistory && get().sessions.some((session) => session.id === id)) {
-      touchSession(id)
-      set({ activeId: id })
+    const state = get()
+    if (!isHistoryReplacing(state) && state.sessions.some((session) => session.id === id)) {
+      dispatch({ type: 'setActiveSession', id })
       publishActiveSession(id)
       void ensureSessionLoaded(id)
-      trimSessionCache()
+      dispatch({ type: 'trimCache', limit: SESSION_CACHE_LIMIT })
     }
   }
 
   const renameSession = (id: string, title: string) => {
-    if (get().importingHistory || deletingSessions.has(id)) {
+    const state = get()
+    if (isHistoryReplacing(state) || isSessionDeleting(state, id)) {
       return
     }
     autoTitleRunner.cancel(id)
@@ -776,11 +652,7 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
       updateSession(id, (session) => ({ ...session, title, titleLocked }))
       persist(id)
     } else {
-      set((state) => ({
-        sessions: state.sessions.map((session) =>
-          session.id === id ? { ...session, title } : session
-        ),
-      }))
+      dispatch({ type: 'renameUnloadedSession', id, title })
       void sessionStore
         .renameSession(id, title, titleLocked)
         .catch(reportStorageError('rename session'))
@@ -788,21 +660,22 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
   }
 
   const removeSessionData = async (id: string): Promise<boolean> => {
+    const state = get()
     if (
-      get().importingHistory ||
-      deletingSessions.has(id) ||
-      !get().sessions.some((session) => session.id === id)
+      isHistoryReplacing(state) ||
+      isSessionDeleting(state, id) ||
+      !state.sessions.some((session) => session.id === id)
     ) {
       return false
     }
-    const epoch = historyEpoch
-    deletingSessions.add(id)
+    const epoch = state.historyEpoch
+    dispatch({ type: 'setDeleting', id, deleting: true })
     try {
       autoTitleRunner.cancel(id)
-      getStreamController(id)?.abort()
+      streamControllers.get(id)?.abort()
       manualCompactions.get(id)?.abort()
       await waitForIdle(id)
-      if (epoch !== historyEpoch) {
+      if (epoch !== get().historyEpoch) {
         return false
       }
       const orphanedBlobs = await sessionStore.deleteSession(id)
@@ -814,28 +687,14 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
       }
       deps.log.publish<SessionDeleted>({ type: 'SessionDeleted', sessionId: id })
       reading.forget(id)
-      if (epoch !== historyEpoch) {
+      if (epoch !== get().historyEpoch) {
         return true
       }
       sessionLoads.delete(id)
-      sessionAccess.delete(id)
-      unsavedSessions.delete(id)
       pendingBlobs.delete(id)
       drafts.clearDraft(id)
       const wasActive = get().activeId === id
-      set((state) => ({
-        sessions: state.sessions.filter((session) => session.id !== id),
-        sessionCache: Object.fromEntries(
-          Object.entries(state.sessionCache).filter(([key]) => key !== id)
-        ),
-        sessionLoadErrors: Object.fromEntries(
-          Object.entries(state.sessionLoadErrors).filter(([key]) => key !== id)
-        ),
-        sessionSaveErrors: Object.fromEntries(
-          Object.entries(state.sessionSaveErrors).filter(([key]) => key !== id)
-        ),
-        activeId: state.activeId === id ? null : state.activeId,
-      }))
+      dispatch({ type: 'removeSession', id })
       if (wasActive) {
         publishActiveSession(null)
       }
@@ -845,10 +704,10 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
       reportStorageError('delete session')(error)
       return false
     } finally {
-      deletingSessions.delete(id)
+      dispatch({ type: 'setDeleting', id, deleting: false })
       if (getSession(id)) {
-        if (get().importingHistory) {
-          unsavedSessions.add(id)
+        if (isHistoryReplacing(get())) {
+          dispatch({ type: 'markUnsaved', id })
         } else {
           persist(id)
         }
@@ -863,14 +722,20 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
   }
 
   const stopReply = (sessionId: string) => {
-    getStreamController(sessionId)?.abort()
+    streamControllers.get(sessionId)?.abort()
     manualCompactions.get(sessionId)?.abort()
   }
 
   const compactSession = async (
     sessionId: string
   ): Promise<'compacted' | 'notNeeded' | 'cancelled' | 'failed'> => {
-    if (get().importingHistory || deletingSessions.has(sessionId) || isSessionBusy(sessionId)) {
+    const state = get()
+    if (
+      isHistoryReplacing(state) ||
+      isSessionDeleting(state, sessionId) ||
+      isSessionBusy(state, sessionId) ||
+      manualCompactions.has(sessionId)
+    ) {
       return 'failed'
     }
     const session = getSession(sessionId)
@@ -886,7 +751,7 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
       return 'failed'
     }
 
-    const epoch = historyEpoch
+    const epoch = get().historyEpoch
     const controller = new AbortController()
     manualCompactions.set(sessionId, controller)
     setCompacting(sessionId, true)
@@ -960,7 +825,7 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
         newId,
       })
 
-      if (epoch !== historyEpoch || deletingSessions.has(sessionId)) {
+      if (epoch !== get().historyEpoch || isSessionDeleting(get(), sessionId)) {
         return 'cancelled'
       }
       if (result.kind === 'compacted') {
@@ -985,13 +850,11 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
   }
 
   const sendMessage = (targetSessionId: string | null) => {
-    if (get().importingHistory || !get().ready) {
+    const state = get()
+    if (isHistoryReplacing(state) || !isHistoryReady(state)) {
       return false
     }
-    const prepared = prepareDraftMessage(
-      drafts.getDraft(targetSessionId),
-      uploads.useUploads.getState().tasks
-    )
+    const prepared = prepareDraftMessage(drafts.getDraft(targetSessionId), uploads.getTasks())
     if (!prepared) {
       return false
     }
@@ -1000,7 +863,9 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
     let sessionId = targetSessionId
     if (
       sessionId !== null &&
-      (deletingSessions.has(sessionId) || isSessionBusy(sessionId) || !getSession(sessionId))
+      (isSessionDeleting(state, sessionId) ||
+        isSessionBusy(state, sessionId) ||
+        !getSession(sessionId))
     ) {
       return false
     }
@@ -1014,12 +879,7 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
         rootMessageId: null,
       }
       sessionId = session.id
-      touchSession(session.id)
-      set((state) => ({
-        sessions: [toSessionSummary(session), ...state.sessions],
-        sessionCache: { ...state.sessionCache, [session.id]: session },
-        activeId: session.id,
-      }))
+      dispatch({ type: 'createSession', session })
       publishActiveSession(session.id)
     }
     const current = getSession(sessionId)
@@ -1062,11 +922,12 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
   }
 
   const regenerateReply = (sessionId: string, messageId?: string) => {
-    if (get().importingHistory || deletingSessions.has(sessionId)) {
+    const state = get()
+    if (isHistoryReplacing(state) || isSessionDeleting(state, sessionId)) {
       return
     }
     const session = getSession(sessionId)
-    if (!session || isSessionBusy(sessionId)) {
+    if (!session || isSessionBusy(state, sessionId)) {
       return
     }
     const path = getVisibleMessages(session)
@@ -1089,11 +950,12 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
   }
 
   const editMessage = (sessionId: string, messageId: string, content: string): boolean => {
-    if (get().importingHistory || deletingSessions.has(sessionId)) {
+    const state = get()
+    if (isHistoryReplacing(state) || isSessionDeleting(state, sessionId)) {
       return false
     }
     const session = getSession(sessionId)
-    if (!session || isSessionBusy(sessionId)) {
+    if (!session || isSessionBusy(state, sessionId)) {
       return false
     }
     const path = getVisibleMessages(session)
@@ -1123,7 +985,12 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
   }
 
   const selectMessageVersion = (sessionId: string, messageId: string) => {
-    if (get().importingHistory || deletingSessions.has(sessionId) || isSessionBusy(sessionId)) {
+    const state = get()
+    if (
+      isHistoryReplacing(state) ||
+      isSessionDeleting(state, sessionId) ||
+      isSessionBusy(state, sessionId)
+    ) {
       return
     }
     autoTitleRunner.cancel(sessionId)
@@ -1133,11 +1000,12 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
   }
 
   const continueReply = (sessionId: string, messageId: string) => {
-    if (get().importingHistory || deletingSessions.has(sessionId)) {
+    const state = get()
+    if (isHistoryReplacing(state) || isSessionDeleting(state, sessionId)) {
       return
     }
     const session = getSession(sessionId)
-    if (!session || isSessionBusy(sessionId)) {
+    if (!session || isSessionBusy(state, sessionId)) {
       return
     }
     const path = getVisibleMessages(session)
@@ -1176,11 +1044,12 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
   }
 
   const retryUpload = (sessionId: string, messageId: string) => {
-    if (get().importingHistory || deletingSessions.has(sessionId)) {
+    const state = get()
+    if (isHistoryReplacing(state) || isSessionDeleting(state, sessionId)) {
       return
     }
     const session = getSession(sessionId)
-    if (!session || isSessionBusy(sessionId)) {
+    if (!session || isSessionBusy(state, sessionId)) {
       return
     }
     const path = getVisibleMessages(session)
@@ -1212,16 +1081,12 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
   }
 
   const useChatMessages = (sessionId: string | null): readonly Message[] => {
-    const session = useChatStore((state) =>
-      sessionId && Object.hasOwn(state.sessionCache, sessionId)
-        ? state.sessionCache[sessionId]
-        : undefined
-    )
+    const session = useChatStore((state) => getCachedSession(state, sessionId))
     return useMemo(() => (session ? getVisibleMessages(session) : NO_MESSAGES), [session])
   }
 
   const useHistoryState = () => ({
-    replacing: useChatStore((state) => state.importingHistory),
+    replacing: useChatStore(isHistoryReplacing),
     empty: useChatStore((state) => state.sessions.length === 0),
   })
 
@@ -1233,13 +1098,11 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
 
   const listSessionTurns = (sessionId: string): readonly SessionTurnSummary[] => {
     const state = get()
-    const session = Object.hasOwn(state.sessionCache, sessionId)
-      ? state.sessionCache[sessionId]
-      : undefined
+    const session = getCachedSession(state, sessionId)
     if (!session) {
       return NO_TURNS
     }
-    const isStreaming = Object.hasOwn(state.streaming, sessionId)
+    const isStreaming = isSessionStreaming(state, sessionId)
     const cached = sessionTurnsCache.get(session)
     if (cached && cached.isStreaming === isStreaming) {
       return cached.list
@@ -1268,14 +1131,12 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
 
   const getTurnSnapshot = (sessionId: string, messageId: string): TurnSnapshot | null => {
     const state = get()
-    const session = Object.hasOwn(state.sessionCache, sessionId)
-      ? state.sessionCache[sessionId]
-      : undefined
+    const session = getCachedSession(state, sessionId)
     const found = session?.messages.find((item) => item.id === messageId)
     if (!found || found.role !== 'assistant') {
       return null
     }
-    const streaming = Object.hasOwn(state.streaming, sessionId) && found.status === 'streaming'
+    const streaming = isSessionStreaming(state, sessionId) && found.status === 'streaming'
     const cached = turnSnapshotCache.get(found)
     if (
       cached &&
@@ -1346,9 +1207,10 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
   const dispose = () => {
     activity?.dispose()
     autoTitleRunner.cancel()
-    for (const controller of Object.values(get().streaming)) {
+    for (const controller of streamControllers.values()) {
       controller.abort()
     }
+    streamControllers.clear()
     for (const controller of manualCompactions.values()) {
       controller.abort()
     }
@@ -1364,16 +1226,17 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
     }
   }
 
-  return {
+  const viewRuntime: ConversationsViewRuntime = {
     deps,
-    getLocale: localeStore.get,
     tools,
     blobs: deps.blobs,
     provider,
     uploads,
     drafts,
-    useChatStore,
-    useThinkingStore,
+    useChatState: useChatStore,
+    getChatState: get,
+    subscribeChatState: useChatStore.subscribe,
+    useThinking: useThinkingStore,
     setThinking,
     useMobileSider,
     openMobileSider,
@@ -1395,6 +1258,16 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
     retryUpload,
     stopReply,
     compactSession,
+    requestTurnInspection,
+    activity,
+    reading,
+  }
+
+  return {
+    ...viewRuntime,
+    getLocale: localeStore.get,
+    useChatStore,
+    useThinkingStore,
     waitForIdle,
     replaceSessions,
     snapshotForExport,
@@ -1403,9 +1276,7 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
     useChatMessages,
     useHistoryState,
     getTurnSnapshot,
-    requestTurnInspection,
     activity,
-    reading,
     dispose,
   }
 }

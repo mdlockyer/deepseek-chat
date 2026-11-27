@@ -6,7 +6,7 @@ import type {
   ToolStepVisualArtifact,
 } from '@deepseek-chat/lib-tools'
 import type { Locale } from '@deepseek-chat/spine/i18n'
-import type { ThinkingPart, ToolResultPart } from '../../src/types.js'
+import type { ThinkingPart, ToolResultPart } from '../../kernel/index.js'
 import { activityInspectorMessages } from './messages.js'
 import { extractTurnSources, type ExtractedTurnSources } from './sources.js'
 import type { TurnSnapshot } from './types.js'
