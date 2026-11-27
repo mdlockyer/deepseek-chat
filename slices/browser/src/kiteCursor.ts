@@ -9,7 +9,9 @@
  * One implementation draws it in two places: in the app's own window over the browser's toolbar,
  * and inside web pages, where the driver scripts embed this function's source. So the function
  * must stay self-contained: everything it uses comes from its parameters or from globals every
- * page has (`Math`, `performance`), never from this module's scope or imports.
+ * page has (`Math`, `performance`), never from this module's scope or imports. That is also why
+ * it carries its own copy of the spring that `@deepseek-chat/lib-ui`'s `createScrollGlide` uses
+ * (`stepScrollSpring`): the kit cannot be imported into a web page.
  */
 
 export type KiteCursor = {

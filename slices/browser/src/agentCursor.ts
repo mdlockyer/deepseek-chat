@@ -42,6 +42,12 @@ export type ChromeTarget =
   | `tab:${string}`
   | `close:${string}`
 
+/** Marks a toolbar control as one the agent cursor can press (spread onto the element). */
+export const agentTarget = (target: ChromeTarget) => ({ 'data-agent-target': target })
+
+/** Marks the element the page's webview is drawn over, so the cursor can map page to window. */
+export const BROWSER_VIEWPORT_MARK = { 'data-browser-viewport': '' } as const
+
 export type AgentCursorDeps = {
   /** Runs a driver script in a tab and parses its JSON (throws when it reports a failure). */
   readonly evalJson: <T extends { ok: boolean }>(
