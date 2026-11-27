@@ -1,5 +1,6 @@
 @layer slice {
   .root {
+    position: relative;
     display: flex;
     flex-direction: column;
     flex: 1;
@@ -101,11 +102,58 @@
     font-weight: 500;
   }
 
+  /* Jump to the latest turn: a round button floating over the bottom of the panel. It stays mounted
+     so it can fade and slide in and out; while hidden it is inert. */
   .latestButton {
-    flex-shrink: 0;
-    min-width: 0;
-    padding: 0 var(--ui-space-2);
-    color: var(--ui-accent-text);
+    position: absolute;
+    bottom: var(--ui-space-4);
+    left: 50%;
+    z-index: 2;
+    margin-left: calc(var(--ui-control-sm) / -2);
+    background-color: var(--ui-surface-overlay);
+    box-shadow: var(--ui-elevation-2);
+    color: var(--ui-text-secondary);
+    opacity: 0;
+    translate: 0 var(--ui-space-2);
+    pointer-events: none;
+    transition:
+      opacity var(--ui-duration-normal) var(--ui-ease-standard),
+      translate var(--ui-duration-normal) var(--ui-ease-standard),
+      color var(--ui-duration-normal) var(--ui-ease-standard),
+      transform var(--ui-duration-fast) var(--ui-ease-standard);
+
+    &[data-shown] {
+      opacity: 1;
+      translate: 0 0;
+      pointer-events: auto;
+    }
+
+    /* The hover and pressed washes are translucent; laying them over the surface keeps the button
+       opaque above the text scrolling beneath it. */
+    @media (hover: hover) {
+      &:hover:not(:disabled) {
+        background-color: var(--ui-surface-overlay);
+        background-image: linear-gradient(var(--ui-interactive-hover), var(--ui-interactive-hover));
+        color: var(--ui-text-primary);
+      }
+    }
+
+    &:active:not(:disabled) {
+      background-color: var(--ui-surface-overlay);
+      background-image: linear-gradient(var(--ui-interactive-active), var(--ui-interactive-active));
+    }
+  }
+
+  .latestLiveDot {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: var(--ui-space-2);
+    height: var(--ui-space-2);
+    border-radius: var(--ui-radius-pill);
+    background: var(--ui-accent-solid);
+    box-shadow: 0 0 0 2px var(--ui-surface-overlay);
+    animation: live-pulse 1.4s var(--ui-ease-standard) infinite;
   }
 
   .liveDot {

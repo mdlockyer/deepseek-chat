@@ -1,7 +1,6 @@
 import { Markdown } from '@deepseek-chat/lib-markdown'
 import type { ToolStepVisualArtifact } from '@deepseek-chat/lib-tools'
 import {
-  Button,
   EmptyState,
   HoverGlide,
   IconActivityOutline16,
@@ -1118,6 +1117,27 @@ export const createActivityPanel = (
       return () => observer.disconnect()
     }, [hasReadout])
 
+    // The jump-to-latest button floats over the bottom of the panel while an earlier turn is on
+    // show, with a pulsing dot while the latest turn streams. A keyboard user who presses it lands
+    // on the latest turn's heading, since the button hides (and goes inert) once that turn shows.
+    const latestRef = useRef<HTMLButtonElement>(null)
+    const canFollowLatest = Boolean(sessionId) && shownIndex >= 0 && shownIndex < total - 1
+    const latestStreaming = chapters.at(-1)?.summary.streaming ?? false
+    const followLatest = () => {
+      if (!sessionId) {
+        return
+      }
+      const hadFocus = document.activeElement === latestRef.current
+      state.followLatest(sessionId)
+      if (hadFocus) {
+        requestAnimationFrame(() => {
+          const content = effectiveTab === 'sources' ? sourcesRef.current : activityRef.current
+          const headings = content?.querySelectorAll<HTMLElement>(`.${styles.chapterHeader}`)
+          headings?.[headings.length - 1]?.focus({ preventScroll: true })
+        })
+      }
+    }
+
     return (
       <Tabs value={effectiveTab} onChange={state.setTab} className={styles.root}>
         <header className={styles.header} data-tauri-drag-region="">
@@ -1173,17 +1193,6 @@ export const createActivityPanel = (
           </div>
 
           <div className={styles.topActions}>
-            {sessionId && shownIndex >= 0 && shownIndex < total - 1 ? (
-              <Button
-                variant="ghost"
-                size="s"
-                className={styles.latestButton}
-                aria-label={t('followLatestLabel')}
-                onClick={() => state.followLatest(sessionId)}
-              >
-                {t('followLatest')}
-              </Button>
-            ) : null}
             {total >= 2 ? (
               <>
                 <IconButton
@@ -1269,6 +1278,23 @@ export const createActivityPanel = (
             </div>
           </TabPanel>
         ) : null}
+
+        <IconButton
+          ref={latestRef}
+          size="sm"
+          className={styles.latestButton}
+          data-shown={canFollowLatest ? '' : undefined}
+          {...(canFollowLatest ? {} : { inert: '', 'aria-hidden': true })}
+          icon={
+            <>
+              <IconChevronDownOutline14 />
+              {latestStreaming ? <span className={styles.latestLiveDot} /> : null}
+            </>
+          }
+          tooltip={t('followLatestLabel')}
+          tooltipPlacement="top"
+          onClick={followLatest}
+        />
 
         <VisualLightbox
           visuals={lightboxVisuals}

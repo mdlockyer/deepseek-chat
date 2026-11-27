@@ -9,7 +9,7 @@ its prompt, and stays in step with the transcript: in `follow_reading` mode it s
 reader is on (from the optional `transcript` port; the latest turn without one), and in `pinned`
 mode it holds one turn (from `TurnInspectionRequested`, the header's previous / next buttons, or a
 chapter header) until the reader moves on to another turn in the transcript. Scrolling the drawer
-only moves its own highlight; it never scrolls the transcript. A header readout names the turn on show, and `Latest` returns to the
+only moves its own highlight; it never scrolls the transcript. A header readout names the turn on show, and a round chevron button at the bottom of the panel returns to the
 newest one.
 
 Rather than duplicating the left chat pane's step list under stacked filter bars, the drawer keeps
@@ -53,7 +53,7 @@ turn and scrolling it moves nothing else.
    the chat, else the streaming turn, else the latest turn; a brand-new chat shows a calm
    `EmptyState`. `useActiveTarget()` / `getTarget()` report the resolved `{ sessionId, messageId,
 tab }` in both modes while open, and `null` while closed or displaced. Whenever the displayed
-   turn is not the latest, a header `Latest` control calls `followLatest`.
+   turn is not the latest, a round chevron button floating at the bottom of the panel calls `followLatest` (a pulsing dot on it while the latest turn streams; a keyboard user who presses it lands on the latest turn's heading).
 2. **Turn pinning, chapters & persistent step targeting.** `TurnInspectionRequested` pins
    `(sessionId, messageId, tab)` and opens the panel slot. When `callId` is omitted, a request for
    the turn and tab the open panel already displays (pinned or followed) toggles it closed. When
