@@ -79,6 +79,7 @@ export type MinimapPaint = {
 export const paintMinimap = (p: MinimapPaint) => {
   const { ctx, map, doc, x: X, w: W, emphasis, palette, toRgba } = p
   ctx.clearRect(0, 0, p.width, p.height)
+  const dividerYs: number[] = []
 
   const fill = (r: MinimapRect, colour: Rgba, radius = 0) => {
     if (colour[3] <= 0.004) {
@@ -210,15 +211,7 @@ export const paintMinimap = (p: MinimapPaint) => {
     }
 
     if (p.dividers.has(s) && s > 0) {
-      const y = Math.round(at(0) - 3) + 0.5
-      ctx.strokeStyle = css(palette.divider)
-      ctx.lineWidth = 1
-      ctx.setLineDash([2, 2])
-      ctx.beginPath()
-      ctx.moveTo(X, y)
-      ctx.lineTo(X + W, y)
-      ctx.stroke()
-      ctx.setLineDash([])
+      dividerYs.push(at(0) - 3)
     }
   })
 
@@ -236,6 +229,21 @@ export const paintMinimap = (p: MinimapPaint) => {
   ctx.fillStyle = css(tint(palette.veil, lerp(VEIL_REST, VEIL_ENGAGED, p.attention)))
   ctx.fillRect(X - 6, 0, W + 12, Math.max(0, top))
   ctx.fillRect(X - 6, bottom, W + 12, Math.max(0, p.height - bottom))
+
+  // Dividers go over the veil, so a break (a summarized context, say) is visible anywhere on the
+  // map: a dashed rule across the window's width, darker and heavier than the content around it.
+  ctx.strokeStyle = css(palette.divider)
+  ctx.lineWidth = 1.5
+  ctx.lineCap = 'round'
+  ctx.setLineDash([3, 3])
+  for (const y of dividerYs) {
+    ctx.beginPath()
+    ctx.moveTo(X - 3, Math.round(y) + 0.25)
+    ctx.lineTo(X + W + 3, Math.round(y) + 0.25)
+    ctx.stroke()
+  }
+  ctx.setLineDash([])
+  ctx.lineCap = 'butt'
 
   // Keyboard focus: a ring around the focused section.
   if (p.focused !== null) {

@@ -62,6 +62,15 @@ const studyFetch: HttpFetch = async (url, init) => {
     return new Response('{"ok":true}', { headers: { 'Content-Type': 'application/json' } })
   }
   const body = JSON.parse(String(init.body)) as { messages?: { role: string; content: unknown }[] }
+  // A compaction request asks for a handoff summary with Goal and Next Steps sections.
+  if (String(init.body).includes('Write only the structured summary')) {
+    return sse([
+      {
+        kind: 'text',
+        text: '## Goal\nDecide whether to replace an oil furnace with a cold-climate heat pump.\n\n## Next Steps\nGet two quotes with a Manual J load calculation.',
+      },
+    ])
+  }
   const prompts = (body.messages ?? []).filter(
     (m) =>
       m.role === 'user' &&
@@ -80,12 +89,15 @@ const studyFetch: HttpFetch = async (url, init) => {
   ])
 }
 
+/** `&compact=N` summarizes the context after turn N, to see a compaction on the minimap. */
+const COMPACT_AFTER = Number(params.get('compact') ?? 0)
+
 const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 /**
  * The real app replaying a scripted chat of 8, 40 or 150 turns, to try the transcript's minimap
  * on short and long chats without an API key. Open with `/?workbench=1&study=minimap`
- * (add `&turns=40` or `&turns=150`).
+ * (add `&turns=40` or `&turns=150`, and `&compact=N` to summarize the context after turn N).
  */
 export const MinimapStudy = () => {
   const runtime = useMemo(
@@ -120,6 +132,11 @@ export const MinimapStudy = () => {
         chats.commands.send(id)
         await pause(30)
         await chats.commands.whenIdle()
+        const active = chats.getState().activeId
+        if (i + 1 === COMPACT_AFTER && active) {
+          await chats.commands.compact(active)
+          await chats.commands.whenIdle()
+        }
       }
       if (!cancelled) {
         setReady(true)

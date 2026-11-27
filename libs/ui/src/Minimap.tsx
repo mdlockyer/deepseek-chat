@@ -73,7 +73,7 @@ const PALETTE_TOKENS = {
   windowBorderStrong: '--ui-border-strong',
   veil: '--ui-surface-canvas',
   focusRing: '--ui-focus-ring',
-  divider: '--ui-border-strong',
+  divider: '--ui-text-muted',
   marker: '--ui-minimap-marker',
 } as const
 

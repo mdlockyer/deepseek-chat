@@ -110,7 +110,8 @@ every slice's UI and pass the full gate with zero slice edits.
     within half a viewport of it, follows larger moves on a critically damped spring, and holds
     still while the window is dragged. The map always fills the rail exactly. The section being
     read (`current`), the one under the pointer and the one focused are highlighted, easing over about 120 ms.
-    Outside the window the map is thinly veiled in the surface colour (more while the pointer is
+    A section with `dividerBefore` gets a dashed rule across the window's width above it, in
+    muted text colour and drawn over the veil, so a break is visible anywhere on the map. Outside the window the map is thinly veiled in the surface colour (more while the pointer is
     on the rail or dragging, easing back after), so what's on screen reads at full strength. A click outside the window asks
     the consumer to glide there (`onSeek(top, 'glide')`); dragging the window asks for each new
     position (`onSeek(top, 'drag')`) and reports where it started (`onDragEnd`). Keyboard and
