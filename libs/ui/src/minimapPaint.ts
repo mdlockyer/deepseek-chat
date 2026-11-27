@@ -14,6 +14,9 @@ export type MinimapPalette = {
   readonly window: Rgba
   readonly windowActive: Rgba
   readonly windowBorder: Rgba
+  readonly windowBorderStrong: Rgba
+  /** The surface behind the rail, laid thinly over the map outside the window. */
+  readonly veil: Rgba
   readonly focusRing: Rgba
   readonly divider: Rgba
   readonly ink: Rgba
@@ -24,6 +27,9 @@ const SLAB_X = 0
 const SLAB_W = 0.86
 /** The window never gets shorter than this, so it stays grabbable in a long document. */
 export const MINIMAP_WINDOW_MIN = 16
+/** How much the map outside the window is veiled, at rest and with the pointer on the rail. */
+const VEIL_REST = 0.35
+const VEIL_ENGAGED = 0.5
 
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t
 const clamp = (value: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, value))
@@ -58,6 +64,8 @@ export type MinimapPaint = {
   readonly scrollTop: number
   readonly viewport: number
   readonly dragging: boolean
+  /** 0–1: how much the pointer is engaged with the rail (over it, or dragging). */
+  readonly attention: number
   /** A section with keyboard focus gets a focus ring. */
   readonly focused: number | null
   /** Sections with a divider before them. */
@@ -217,6 +225,21 @@ export const paintMinimap = (p: MinimapPaint) => {
     }
   })
 
+  // The window: what's on screen.
+  const windowTop = map.top(p.scrollTop)
+  const windowBottom = map.top(p.scrollTop + p.viewport)
+  const middle = (windowTop + windowBottom) / 2
+  const half = Math.max(MINIMAP_WINDOW_MIN / 2, (windowBottom - windowTop) / 2)
+  const top = middle - half
+  const bottom = middle + half
+
+  // Outside the window the map steps back under a thin veil of the surface behind it, so the part
+  // on screen reads at full strength without a heavier frame; a little more while the pointer is
+  // on the rail.
+  ctx.fillStyle = css(tint(palette.veil, lerp(VEIL_REST, VEIL_ENGAGED, p.attention)))
+  ctx.fillRect(X - 6, 0, W + 12, Math.max(0, top))
+  ctx.fillRect(X - 6, bottom, W + 12, Math.max(0, p.height - bottom))
+
   // Keyboard focus: a ring around the focused section.
   if (p.focused !== null) {
     const top = doc.tops[p.focused]
@@ -231,16 +254,13 @@ export const paintMinimap = (p: MinimapPaint) => {
     }
   }
 
-  // The window: what's on screen.
-  const windowTop = map.top(p.scrollTop)
-  const windowBottom = map.top(p.scrollTop + p.viewport)
-  const middle = (windowTop + windowBottom) / 2
-  const half = Math.max(MINIMAP_WINDOW_MIN / 2, (windowBottom - windowTop) / 2)
   ctx.fillStyle = css(p.dragging ? palette.windowActive : palette.window)
-  ctx.strokeStyle = css(palette.windowBorder)
+  ctx.strokeStyle = css(
+    blend(palette.windowBorder, palette.windowBorderStrong, lerp(0.5, 1, p.attention))
+  )
   ctx.lineWidth = 1
   ctx.beginPath()
-  ctx.roundRect(X - 4.5, middle - half + 0.5, W + 9, Math.max(4, half * 2) - 1, 4)
+  ctx.roundRect(X - 4.5, top + 0.5, W + 9, Math.max(4, half * 2) - 1, 4)
   ctx.fill()
   ctx.stroke()
 }

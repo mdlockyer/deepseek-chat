@@ -70,6 +70,8 @@ const PALETTE_TOKENS = {
   window: '--ui-interactive-hover',
   windowActive: '--ui-interactive-active',
   windowBorder: '--ui-border-default',
+  windowBorderStrong: '--ui-border-strong',
+  veil: '--ui-surface-canvas',
   focusRing: '--ui-focus-ring',
   divider: '--ui-border-strong',
   ink: '--ui-text-primary',
@@ -175,6 +177,8 @@ export const Minimap = ({
     let emphasis = new Float32Array(0)
     let hovered = -1
     let dragging = false
+    let pointerInside = false
+    let attention = 0
     let frame = 0
     let lastTick = 0
     let readPending = true
@@ -216,6 +220,7 @@ export const Minimap = ({
         scrollTop: scroll.scrollTop,
         viewport: scroll.clientHeight,
         dragging,
+        attention,
         focused: live.current.focused,
         dividers: new Set(
           live.current.sections.flatMap((section, i) => (section.dividerBefore ? [i] : []))
@@ -252,6 +257,10 @@ export const Minimap = ({
         emphasis[i] = next
         moving ||= next !== goal
       }
+      const engaged = pointerInside || dragging ? 1 : 0
+      attention =
+        Math.abs(engaged - attention) < 0.01 ? engaged : attention + (engaged - attention) * ease
+      moving ||= attention !== engaged
       paint()
       if (moving) {
         frame = requestAnimationFrame(tick)
@@ -399,15 +408,22 @@ export const Minimap = ({
       schedule()
     }
     const onPointerLeave = () => {
+      pointerInside = false
       if (!drag) {
         setHover(-1)
       }
+      schedule()
+    }
+    const onPointerEnter = () => {
+      pointerInside = true
+      schedule()
     }
     hit.addEventListener('pointerdown', onPointerDown)
     hit.addEventListener('pointermove', onPointerMove)
     hit.addEventListener('pointerup', onPointerUp)
     hit.addEventListener('pointercancel', onPointerUp)
     hit.addEventListener('pointerleave', onPointerLeave)
+    hit.addEventListener('pointerenter', onPointerEnter)
 
     return () => {
       cancelAnimationFrame(frame)
@@ -424,6 +440,7 @@ export const Minimap = ({
       hit.removeEventListener('pointerup', onPointerUp)
       hit.removeEventListener('pointercancel', onPointerUp)
       hit.removeEventListener('pointerleave', onPointerLeave)
+      hit.removeEventListener('pointerenter', onPointerEnter)
     }
   }, [scrollRef, contentRef, sectionSelector, markerSelector, side])
 

@@ -109,7 +109,8 @@ every slice's UI and pass the full gate with zero slice edits.
     within half a viewport of it, follows larger moves on a critically damped spring, and holds
     still while the window is dragged. The map always fills the rail exactly. The section being
     read (`current`), the one under the pointer and the one focused are highlighted, easing over about 120 ms.
-    A click outside the window asks
+    Outside the window the map is thinly veiled in the surface colour (more while the pointer is
+    on the rail or dragging, easing back after), so what's on screen reads at full strength. A click outside the window asks
     the consumer to glide there (`onSeek(top, 'glide')`); dragging the window asks for each new
     position (`onSeek(top, 'drag')`) and reports where it started (`onDragEnd`). Keyboard and
     assistive technology reach the sections through a `<nav aria-label>` holding an ordered list of
@@ -152,6 +153,7 @@ every slice's UI and pass the full gate with zero slice edits.
 | Minimap lens follow          | `0.5` / `90`    | Viewports the reader moves before the lens follows / spring stiffness (about 0.6 s to settle) |
 | Minimap highlight            | `120` ms        | Time constant of a section's highlight easing in or out                                       |
 | Minimap window               | `16` px         | Shortest the window gets in a long document                                                   |
+| Minimap veil                 | `0.35` / `0.5`  | Strength of the veil outside the window, at rest / with the pointer on the rail               |
 | Minimap gutter               | `48` px         | Narrower than this the minimap hides                                                          |
 | Scroll glide stiffness       | `210` /s²       | Critically damped (about 0.7 s to land a 1000 px jump)                                        |
 | Scroll glide long jump       | `1.4` viewports | Beyond this a glide fades and cuts to `0.42` viewports short                                  |
