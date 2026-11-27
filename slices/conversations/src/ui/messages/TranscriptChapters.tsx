@@ -4,6 +4,7 @@ import {
   Tooltip,
   createScrollGlide,
   onScrollIntent,
+  readingLineY,
   type ChapterRailHandle,
   type ChapterRailItem,
   type ScrollGlide,
@@ -36,16 +37,12 @@ export type TranscriptTurn = {
   readonly afterCheckpoint: boolean
 }
 
-/** Fraction of the viewport, from the top, where reading happens: the turn crossing it is current. */
-const READING_LINE = 0.3
 /** Space left above a turn's first message after jumping to it. */
 const LANDING_MARGIN_PX = 24
 /** How long scrolling must rest on a turn before followers are told. */
 const FOLLOW_DELAY_MS = 100
 /** Jumps longer than this many viewports offer a way back. */
 const RETURN_THRESHOLD = 1.2
-/** Within this distance of the bottom the latest turn is current (matches stick-to-bottom). */
-const BOTTOM_SLACK_PX = 40
 
 /** Turns of the visible branch in order; a reply's label is the prompt before it. */
 export const buildTranscriptTurns = (
@@ -199,10 +196,7 @@ export const TranscriptChapters = ({
     if (lockRef.current !== null) {
       return
     }
-    const atBottom = scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight < BOTTOM_SLACK_PX
-    const index = atBottom
-      ? turnsRef.current.length - 1
-      : indexAt(scroll.scrollTop + scroll.clientHeight * READING_LINE)
+    const index = indexAt(readingLineY(scroll.scrollTop, scroll.clientHeight, scroll.scrollHeight))
     if (index !== currentRef.current) {
       setCurrentIndex(index)
       publish(index, 'reader', false)

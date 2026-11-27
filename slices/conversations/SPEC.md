@@ -145,8 +145,7 @@ factories (`createIndexedDbSessionStore`, `memorySessionStore`).
     turn on `contextOverflow` or `payloadTooLarge` errors.
 
 13. **Chapter rail & reading position.** Chats with two or more turns show a `ChapterRail` in the
-    transcript's left gutter (desktop widths, and only while the gutter is at least 48 px wide so it never covers the messages), one chapter per reply labelled by the prompt before it, with a divider after each compaction checkpoint; a streaming reply's number takes the accent colour in the open card. The reading turn is the one whose start (its prompt, or the reply when it has none) is
-    last above a line 30% down the viewport, or the latest turn within 40 px of the bottom; it is
+    transcript's left gutter (desktop widths, and only while the gutter is at least 48 px wide so it never covers the messages), one chapter per reply labelled by the prompt before it, with a divider after each compaction checkpoint; a streaming reply's number takes the accent colour in the open card. The reading turn is the one whose start (its prompt, or the reply when it has none) is last above the reading line (`readingLineY`), which travels with scroll progress from the top of the view to its bottom, so every turn, however short, is current somewhere and the latest turn is current at the bottom; it is
     published through `getReadingPosition` after scrolling rests on it, and at once for navigation.
     Clicking a chapter, `⌥↑` / `⌥↓` (outside text fields), or a reveal glides the transcript so the
     turn starts 24 px below the top, holds that turn as the reading turn until the reader scrolls,
@@ -158,22 +157,22 @@ factories (`createIndexedDbSessionStore`, `memorySessionStore`).
 
 ## Parameters
 
-| Name                                        | Value                                       |
-| :------------------------------------------ | :------------------------------------------ |
-| Loaded chat details kept in memory          | 5 (plus active, streaming and unsaved ones) |
-| Tool rounds per turn                        | 50 (`toolRoundLimit`)                       |
-| Concurrent `read` calls per batch           | 6 (`maxParallelReadCalls`)                  |
-| Network retries per turn                    | 2 (`networkRetryLimit`)                     |
-| Re-uploads per request after a dropped file | 2 (`fileReuploadLimit`)                     |
-| Backoff before retry n (from 0)             | 1 s × 2ⁿ (`retryBaseDelayMs`)               |
-| Attachments per message                     | 50                                          |
-| Attachment size                             | 64 MB                                       |
-| Concurrent uploads                          | 3                                           |
-| Compaction line scaling                     | 70% at <=200K -> 50% at >=1M (`ModelSpec`)  |
-| Verbatim dialogue retention budget          | 20K at <=200K -> 40K at >=1M (<=25% window) |
-| Stall delay before "Working…"               | 1.5 s                                       |
-| Inline trace preview cap                    | 6 steps (`INLINE_TRACE_PREVIEW_LIMIT`)      |
-| Reading line                                | 30% down the transcript viewport            |
-| Reading position settle delay               | 100 ms                                      |
-| Return offered after a jump of              | 1.2 viewports                               |
-| Space above a turn after jumping to it      | 24 px                                       |
+| Name                                        | Value                                             |
+| :------------------------------------------ | :------------------------------------------------ |
+| Loaded chat details kept in memory          | 5 (plus active, streaming and unsaved ones)       |
+| Tool rounds per turn                        | 50 (`toolRoundLimit`)                             |
+| Concurrent `read` calls per batch           | 6 (`maxParallelReadCalls`)                        |
+| Network retries per turn                    | 2 (`networkRetryLimit`)                           |
+| Re-uploads per request after a dropped file | 2 (`fileReuploadLimit`)                           |
+| Backoff before retry n (from 0)             | 1 s × 2ⁿ (`retryBaseDelayMs`)                     |
+| Attachments per message                     | 50                                                |
+| Attachment size                             | 64 MB                                             |
+| Concurrent uploads                          | 3                                                 |
+| Compaction line scaling                     | 70% at <=200K -> 50% at >=1M (`ModelSpec`)        |
+| Verbatim dialogue retention budget          | 20K at <=200K -> 40K at >=1M (<=25% window)       |
+| Stall delay before "Working…"               | 1.5 s                                             |
+| Inline trace preview cap                    | 6 steps (`INLINE_TRACE_PREVIEW_LIMIT`)            |
+| Reading line                                | moves with scroll progress, top of view to bottom |
+| Reading position settle delay               | 100 ms                                            |
+| Return offered after a jump of              | 1.2 viewports                                     |
+| Space above a turn after jumping to it      | 24 px                                             |

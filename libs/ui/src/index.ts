@@ -165,6 +165,7 @@ export {
   chapterPositionY,
   layoutChapterRail,
   nearestChapter,
+  readingLineY,
   revealChapterRow,
   type ChapterRailLayout,
 } from './chapterRailLayout.js'

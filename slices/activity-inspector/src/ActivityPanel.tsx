@@ -21,6 +21,7 @@ import {
   createScrollGlide,
   hoverGlideItem,
   onScrollIntent,
+  readingLineY,
   type ScrollGlide,
 } from '@deepseek-chat/lib-ui'
 import clsx from 'clsx'
@@ -403,8 +404,12 @@ const SourcesView = ({
   )
 }
 
-/** How long the reader's scrolling must rest on a turn before the panel pins it. */
-const CHAPTER_SETTLE_MS = 130
+/**
+ * How long the reader's scrolling must rest on a turn before the panel pins it and the transcript
+ * follows. The panel's own highlight and readout follow at once; only the transcript waits, so
+ * scrolling past a turn does not drag the transcript through it.
+ */
+const CHAPTER_SETTLE_MS = 200
 /** Scroll events this soon after the reader's own input (or another such event) are theirs. */
 const READER_SCROLL_WINDOW_MS = 250
 /** Within this distance of the bottom, a live turn's new steps keep the panel at the bottom. */
@@ -459,6 +464,7 @@ const useChapterScroller = ({
   lastId,
   live,
   visible,
+  onReaderMove,
   onReaderChapter,
 }: {
   containerRef: RefObject<HTMLDivElement | null>
@@ -466,6 +472,9 @@ const useChapterScroller = ({
   lastId: string | null
   live: boolean
   visible: boolean
+  /** The turn under the reading line while the reader scrolls, at once. */
+  onReaderMove: (messageId: string) => void
+  /** The turn the reader's scrolling settled on. */
   onReaderChapter: (messageId: string) => void
 }) => {
   const glideRef = useRef<ScrollGlide | null>(null)
@@ -479,6 +488,9 @@ const useChapterScroller = ({
   targetRef.current = targetId
   const onReaderRef = useRef(onReaderChapter)
   onReaderRef.current = onReaderChapter
+  const onMoveRef = useRef(onReaderMove)
+  onMoveRef.current = onReaderMove
+  const lastMovedRef = useRef<string | null>(null)
   const followBottomRef = useRef(false)
   followBottomRef.current = live && targetId !== null && targetId === lastId
 
@@ -490,18 +502,11 @@ const useChapterScroller = ({
       return
     }
     const glide = glideFor(el)
-    const chapterAtTop = () => {
-      const chapters = el.querySelectorAll<HTMLElement>('[data-chapter-id]')
-      const last = chapters[chapters.length - 1]
-      if (!last) {
-        return null
-      }
-      if (el.scrollHeight - el.scrollTop - el.clientHeight < 2) {
-        return last.dataset.chapterId ?? null
-      }
+    const chapterAtLine = () => {
+      const line = readingLineY(el.scrollTop, el.clientHeight, el.scrollHeight)
       let found: string | null = null
-      for (const chapter of chapters) {
-        if (found === null || chapter.offsetTop <= el.scrollTop + 8) {
+      for (const chapter of el.querySelectorAll<HTMLElement>('[data-chapter-id]')) {
+        if (found === null || chapter.offsetTop <= line) {
           found = chapter.dataset.chapterId ?? null
         }
       }
@@ -525,7 +530,11 @@ const useChapterScroller = ({
       }
       readerUntilRef.current = now + READER_SCROLL_WINDOW_MS
       window.clearTimeout(settleTimer.current)
-      const id = chapterAtTop()
+      const id = chapterAtLine()
+      if (id && id !== lastMovedRef.current) {
+        lastMovedRef.current = id
+        onMoveRef.current(id)
+      }
       if (!id || id === targetRef.current) {
         return
       }
@@ -571,6 +580,7 @@ const useChapterScroller = ({
       return
     }
     reportedRef.current = null
+    lastMovedRef.current = targetId
     const chapter = el.querySelector<HTMLElement>(`[data-chapter-id="${escapeAttr(targetId)}"]`)
     if (!chapter) {
       return
@@ -1010,6 +1020,19 @@ export const createActivityPanel = (
     const displayedIndex = chapters.findIndex(
       (chapter) => chapter.summary.messageId === displayedId
     )
+    // While the reader scrolls the panel, the highlight and readout follow the reading line at
+    // once; the pin (and the transcript) catch up when scrolling settles. Any other change to the
+    // shown turn takes over again.
+    const [readerId, setReaderId] = useState<string | null>(null)
+    const [readerBase, setReaderBase] = useState(displayedId)
+    if (readerBase !== displayedId) {
+      setReaderBase(displayedId)
+      if (readerId !== displayedId) {
+        setReaderId(null)
+      }
+    }
+    const shownId = readerId ?? displayedId
+    const shownIndex = chapters.findIndex((chapter) => chapter.summary.messageId === shownId)
     const lastChapter = chapters.at(-1) ?? null
 
     const sourceChapters = useMemo(
@@ -1048,6 +1071,7 @@ export const createActivityPanel = (
       lastId: lastChapter?.summary.messageId ?? null,
       live: lastChapter?.summary.streaming ?? false,
       visible: panelOpen && effectiveTab === 'activity',
+      onReaderMove: setReaderId,
       onReaderChapter: pin,
     })
     useChapterScroller({
@@ -1056,6 +1080,7 @@ export const createActivityPanel = (
       lastId: sourceChapters.at(-1)?.summary.messageId ?? null,
       live: false,
       visible: panelOpen && effectiveTab === 'sources',
+      onReaderMove: setReaderId,
       onReaderChapter: pin,
     })
 
@@ -1125,14 +1150,14 @@ export const createActivityPanel = (
                 {t('panelTitle')}
               </h2>
             )}
-            {total >= 2 && displayedIndex >= 0 ? (
+            {total >= 2 && shownIndex >= 0 ? (
               <span className={styles.readout}>
                 <span className={styles.srOnly}>
-                  {t('turnReadoutLabel', { number: displayedIndex + 1, total })}
+                  {t('turnReadoutLabel', { number: shownIndex + 1, total })}
                 </span>
                 <span className={styles.readoutText} aria-hidden="true">
                   {t('turnReadoutPrefix')}
-                  <RollingNumber value={displayedIndex + 1} className={styles.readoutNumber} />
+                  <RollingNumber value={shownIndex + 1} className={styles.readoutNumber} />
                   {t('turnReadoutSuffix', { total })}
                 </span>
               </span>
@@ -1140,7 +1165,7 @@ export const createActivityPanel = (
           </div>
 
           <div className={styles.topActions}>
-            {sessionId && displayedIndex >= 0 && displayedIndex < total - 1 ? (
+            {sessionId && shownIndex >= 0 && shownIndex < total - 1 ? (
               <Button
                 variant="ghost"
                 size="s"
@@ -1159,8 +1184,8 @@ export const createActivityPanel = (
                   tooltip={t('previousTurn')}
                   tooltipPlacement="bottom"
                   aria-label={t('previousTurn')}
-                  disabled={displayedIndex <= 0}
-                  onClick={() => stepTo(displayedIndex - 1)}
+                  disabled={shownIndex <= 0}
+                  onClick={() => stepTo(shownIndex - 1)}
                 />
                 <IconButton
                   size="xs"
@@ -1168,8 +1193,8 @@ export const createActivityPanel = (
                   tooltip={t('nextTurn')}
                   tooltipPlacement="bottom"
                   aria-label={t('nextTurn')}
-                  disabled={displayedIndex < 0 || displayedIndex >= total - 1}
-                  onClick={() => stepTo(displayedIndex + 1)}
+                  disabled={shownIndex < 0 || shownIndex >= total - 1}
+                  onClick={() => stepTo(shownIndex + 1)}
                 />
               </>
             ) : null}
@@ -1205,7 +1230,7 @@ export const createActivityPanel = (
                       key={chapter.summary.messageId}
                       chapter={chapter}
                       number={deps.turnSource.listTurns ? index + 1 : chapter.summary.turnNumber}
-                      current={chapter.summary.messageId === displayedId}
+                      current={chapter.summary.messageId === shownId}
                       focusedCallId={isFocused ? focusedCallId : null}
                       focusNonce={isFocused ? focusNonce : 0}
                       onSelect={pin}

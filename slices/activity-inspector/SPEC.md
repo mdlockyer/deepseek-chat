@@ -66,8 +66,7 @@ tab }` in both modes while open, and `null` while closed or displaced. Whenever 
    and a step count, source count or live marker, each keeping its own expanded steps. When the
    displayed turn changes for any reason other than the reader scrolling the drawer, the visible
    tab glides to that chapter (instantly when the tab is first shown, to the bottom while a live
-   latest turn streams); when the reader scrolls the drawer and rests on another chapter, that turn
-   is pinned and revealed in the transcript. Previous / next header buttons and chapter headers pin
+   latest turn streams); while the reader scrolls the drawer, the chapter under the reading line (`readingLineY`, which travels with scroll progress so short chapters are reachable) is highlighted and named in the readout at once, and when scrolling rests on another chapter that turn is pinned and revealed in the transcript. Previous / next header buttons and chapter headers pin
    and reveal the same way.
 3. **Displacement isolation.** When another right-hand panel displaces Activity on the same
    session, `useActiveTarget()` / `getTarget()` reports `null` while hidden, and clicking
@@ -112,6 +111,6 @@ Consumes `ActiveSessionChanged`, `SessionDeleted`, `SessionHistoryReplaced`,
 
 | Name                                 | Value  |
 | :----------------------------------- | :----- |
-| Drawer scrolling rest before pinning | 130 ms |
+| Drawer scrolling rest before pinning | 200 ms |
 | Reader-scroll window after input     | 250 ms |
 | Live turn keeps the drawer at bottom | 48 px  |

@@ -8,6 +8,7 @@ import {
   layoutChapterRail,
   nearestChapter,
   planScrollGlide,
+  readingLineY,
   revealChapterRow,
   scrollSpringSettled,
   stepScrollSpring,
@@ -75,6 +76,20 @@ describe('ChapterRail geometry', () => {
     assert.equal(chapterPositionY(ticks, 3), 118)
     assert.equal(chapterPositionY(ticks, 7), 118, 'positions past the end clamp to the end')
     assert.equal(chapterPositionY([], 1), 0)
+  })
+
+  it('moves the reading line with scroll progress so every chapter can be current', () => {
+    // A 600px view over 1000px of content scrolls 400px; the line runs from the top of the view
+    // (0) to its bottom (1000), so content offset c is on the line at scrollTop c x 400 / 1000.
+    assert.equal(readingLineY(0, 600, 1000), 0)
+    assert.equal(readingLineY(200, 600, 1000), 500)
+    assert.equal(readingLineY(400, 600, 1000), 1000)
+    // A short chapter from 820 to 900, already on screen at the start, is current from
+    // scrollTop 328 to 360: in between, the line sits inside it.
+    const line = readingLineY(340, 600, 1000)
+    assert.ok(line >= 820 && line < 900, `line at ${line}`)
+    // Content that does not scroll reads at its end, so its last chapter is current.
+    assert.equal(readingLineY(0, 600, 500), 600)
   })
 
   it('finds the chapter nearest a pointer', () => {

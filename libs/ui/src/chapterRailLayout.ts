@@ -138,6 +138,20 @@ export const chapterPositionY = (ticks: readonly number[], position: number): nu
   return low + fraction * (high - low)
 }
 
+/**
+ * Where reading happens in a scroller, in content px: the line that decides which chapter is
+ * current. It travels with scroll progress, from the top of the view when scrolled to the top to
+ * the bottom of the view when scrolled to the bottom. Every chapter, however short, therefore
+ * crosses it at some scroll position (one starting at content offset `c` becomes current at
+ * scrollTop `c × max / scrollHeight`), and the first and last chapters are current at the ends.
+ * A line fixed near the top would skip short chapters that never reach it before the end.
+ */
+export const readingLineY = (scrollTop: number, clientHeight: number, scrollHeight: number) => {
+  const max = Math.max(0, scrollHeight - clientHeight)
+  const progress = max > 0 ? Math.min(1, Math.max(0, scrollTop / max)) : 1
+  return scrollTop + clientHeight * progress
+}
+
 /** The chapter whose centre (tick or row) is nearest to `y`; -1 when there are none. */
 export const nearestChapter = (centres: readonly number[], y: number): number => {
   let best = -1
