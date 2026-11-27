@@ -248,6 +248,7 @@ const UI_CONTRAST_PAIRS = [
   ['--ui-danger-border', '--ui-surface-canvas'],
   ['--ui-handle-fill', '--ui-surface-sunken'],
   ['--ui-surface-switch-off', '--ui-surface-canvas'],
+  ['--ui-minimap-marker', '--ui-surface-canvas'],
 ]
 
 for (const [themeName, themeMap] of [

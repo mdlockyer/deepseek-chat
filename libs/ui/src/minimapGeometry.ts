@@ -39,9 +39,8 @@ export type MinimapDecoration = {
   readonly h: number
 }
 
-/** What starts a section (for a chat, the prompt bubble): its fill and its own lines of text. */
+/** What starts a section (for a chat, the prompt bubble) and its own lines of text. */
 export type MinimapMarker = {
-  readonly fill: string
   readonly x: number
   readonly w: number
   readonly y: number

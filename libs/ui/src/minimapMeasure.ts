@@ -276,7 +276,6 @@ const measureSection = (
     if (el) {
       const r = rectOf(el)
       marker = {
-        fill: styleOf(el).backgroundColor,
         x: toX(r.left),
         w: r.width / frame.width,
         y: toY(r.top),

@@ -19,7 +19,8 @@ export type MinimapPalette = {
   readonly veil: Rgba
   readonly focusRing: Rgba
   readonly divider: Rgba
-  readonly ink: Rgba
+  /** What the markers (the sections' openers) are drawn in. */
+  readonly marker: Rgba
 }
 
 /** Where a section's slab sits across the rail column, as fractions of its width. */
@@ -182,32 +183,28 @@ export const paintMinimap = (p: MinimapPaint) => {
       }
     }
 
-    // The marker, at every level of detail: with room it is its own fill with its text showing;
-    // as it shrinks to a sliver it takes its text's colour so it can still be found. Where
-    // sections are only a few px apart, markers fade so they don't stripe the rail.
+    // The marker, at every level of detail, in the marker colour so sections' openers stand out
+    // from everything else: with room, a light pill with its text showing in the colour; as it
+    // shrinks to a sliver, solid colour so it can still be found. Where sections are only a few px
+    // apart, markers fade so they don't stripe the rail.
     const marker = shape.marker
     if (marker) {
       const y0 = at(marker.y)
       const h = Math.max(1.5, at(marker.y + marker.h) - y0)
       const roomy = smoothstep(2, 5, h)
       const presence = lerp(smoothstep(2.5, 7, at(shape.height) - at(0)), 1, e)
-      const firstRun = marker.runs[0]
-      const ink = firstRun ? toRgba(firstRun.color) : palette.ink
-      const sliver = tint(ink, lerp(0.4, 0.85, e))
-      const pill = blend(toRgba(marker.fill), ink, lerp(0, 0.1, e))
+      const sliver = tint(palette.marker, lerp(0.7, 1, e))
+      const pill = tint(palette.marker, lerp(0.16, 0.26, e))
       fill(
         { x: X + marker.x * W - 1, w: Math.max(4, marker.w * W) + 2, y0, y1: y0 + h },
         tint(blend(sliver, pill, roomy), presence),
         3
       )
       if (roomy > 0.01) {
+        const ink = tint(palette.marker, lerp(0.75, 1, e) * roomy * presence)
         for (const run of marker.runs) {
           const centre = (at(run.y) + at(run.y + run.h)) / 2
-          fill(
-            { x: X + run.x * W, w: run.w * W, y0: centre - 0.7, y1: centre + 0.7 },
-            tint(toRgba(run.color), lerp(0.55, 0.9, e) * roomy * presence),
-            0.7
-          )
+          fill({ x: X + run.x * W, w: run.w * W, y0: centre - 0.7, y1: centre + 0.7 }, ink, 0.7)
         }
       }
     }

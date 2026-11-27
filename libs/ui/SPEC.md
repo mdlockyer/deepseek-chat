@@ -95,8 +95,9 @@ every slice's UI and pass the full gate with zero slice edits.
 11. **Minimap (`Minimap`).** A canvas in the consumer's box (usually a page gutter) drawing the
     scrolled document: the consumer's content column is split into sections at each direct child
     matching `sectionSelector`, and every line of text is drawn at its position, length and
-    computed colour, with code backgrounds, table rules, quote bars and each section's
-    `markerSelector` element in their own colours. Text a container clips on screen (a disclosure
+    computed colour, with code backgrounds, table rules and quote bars in their own colours, and
+    each section's `markerSelector` element in `--ui-minimap-marker` (a light pill with its text showing, solid
+    as it shrinks to a sliver), so sections' openers stand out from everything else. Text a container clips on screen (a disclosure
     while it animates, a scroll box) is left out, so the map reveals and hides lines with the page.
     Each section is measured relative to its own top and measured again only when one of its
     children resizes or changes; resizes repaint on the same frame, so the map moves with the

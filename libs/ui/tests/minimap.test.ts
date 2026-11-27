@@ -217,7 +217,7 @@ describe('Minimap section shapes', () => {
   const shape = shapeMinimapSection(
     {
       height: 300,
-      marker: { fill: 'blue', x: 0.6, w: 0.4, y: 0, h: 40, runs: [] },
+      marker: { x: 0.6, w: 0.4, y: 0, h: 40, runs: [] },
       blocks: [
         { x: 0, w: 0.5, y: 60, h: 44 },
         { x: 0, w: 0.5, y: 130, h: 18 },

@@ -155,6 +155,10 @@
     --ui-glyph-slide: var(--_p-orange-500);
     --ui-glyph-media: var(--_p-purple-500);
 
+    /* Minimap: the mark for what opens each section (in a chat, the reader's own prompts). Coral
+       sits opposite the blue accent, so the two can't be confused at any size. */
+    --ui-minimap-marker: var(--_p-coral-500);
+
     /* ==========================================================================
      * Elevation — three levels. Each carries a 1px hairline ring, so elevated
      * elements need no separate border. Dark mode leans on the lighter surfaces.
