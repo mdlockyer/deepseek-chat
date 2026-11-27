@@ -291,6 +291,26 @@ const checkPackageTsconfigs = (kind, name, dir, workspaceProdDeps) => {
       )
     }
   }
+
+  if (kind === 'slice') {
+    const hasKernel = fs.existsSync(path.join(dir, 'kernel'))
+    const hasCells = fs.existsSync(path.join(dir, 'cells'))
+    if (hasKernel || hasCells) {
+      const includeList = Array.isArray(prodCfg.include) ? prodCfg.include : []
+      if (prodCfg.compilerOptions?.rootDir !== '.') {
+        fail(
+          'TSCONFIG',
+          `${rel(prodCfgPath)} must set compilerOptions.rootDir to "." for Depth-2 slice layout`
+        )
+      }
+      if (hasKernel && !includeList.includes('kernel')) {
+        fail('TSCONFIG', `${rel(prodCfgPath)} must include "kernel"`)
+      }
+      if (hasCells && !includeList.includes('cells')) {
+        fail('TSCONFIG', `${rel(prodCfgPath)} must include "cells"`)
+      }
+    }
+  }
 }
 
 const checkManifest = (kind, name, dir, expectedPkg) => {
@@ -372,15 +392,98 @@ const checkRelativeBoundaries = (kind, name, dir, expectedPkg, file, imports) =>
   }
 }
 
-/**
- * Enforces CSA Depth-2 cell isolation inside slices that contain `cells/<name>/`:
- * - cells never cross-import sibling cells;
- * - code outside `cells/` imports a cell only through `cells/<name>/index.js`;
- * - cells may depend on `kernel/` or narrow shared type modules (`src/types`, `src/reading`),
- *   never reaching into `src/runtime` or `src/ui/*`.
- */
-const ALLOWED_CELL_SRC_IMPORTS = new Set(['types', 'reading'])
+const KERNEL_BANNED_PKG_PREFIXES = [
+  'react',
+  'react-dom',
+  'zustand',
+  'idb',
+  `${LIB_PKG_PREFIX}ui`,
+  `${LIB_PKG_PREFIX}markdown`,
+]
 
+const isBannedKernelPkg = (spec) =>
+  KERNEL_BANNED_PKG_PREFIXES.some((pkg) => spec === pkg || spec.startsWith(`${pkg}/`))
+
+/**
+ * Enforces CSA Depth-2 kernel purity inside slices that contain `kernel/`:
+ * - `kernel/` contains no `.tsx` or `.css` files;
+ * - `kernel/` never imports UI, store, or persistence frameworks (`react`, `react-dom`, `zustand`,
+ *   `idb`, `@deepseek-chat/lib-ui`, `@deepseek-chat/lib-markdown`);
+ * - `kernel/` never imports from `src/` or `cells/`;
+ * - code outside `kernel/` imports the kernel only through `kernel/index.js`.
+ */
+const checkKernelPurity = (sliceName, sliceDir, file, imports) => {
+  const kernelDir = path.join(sliceDir, 'kernel')
+  const cellsDir = path.join(sliceDir, 'cells')
+  const srcDir = path.join(sliceDir, 'src')
+  const testsDir = path.join(sliceDir, 'tests')
+  if (!fs.existsSync(kernelDir) || isInside(testsDir, file)) {
+    return
+  }
+  const inKernel = isInside(kernelDir, file)
+  if (inKernel) {
+    if (file.endsWith('.tsx') || file.endsWith('.css')) {
+      fail(
+        'KERNEL-PURITY',
+        `slice "${sliceName}" kernel file ${rel(file)} must be pure TypeScript (no .tsx or .css in kernel/)`
+      )
+    }
+    for (const spec of imports) {
+      if (spec.endsWith('.css')) {
+        fail(
+          'KERNEL-PURITY',
+          `slice "${sliceName}" kernel file ${rel(file)} imports stylesheet "${spec}"`
+        )
+        continue
+      }
+      if (!spec.startsWith('.')) {
+        if (isBannedKernelPkg(spec)) {
+          fail(
+            'KERNEL-PURITY',
+            `slice "${sliceName}" kernel file ${rel(file)} imports forbidden UI/store/IO package "${spec}"`
+          )
+        }
+        continue
+      }
+      const resolved = path.resolve(path.dirname(file), spec)
+      if (isInside(srcDir, resolved)) {
+        fail(
+          'KERNEL-PURITY',
+          `slice "${sliceName}" kernel file ${rel(file)} imports src/ via "${spec}"; kernel/ is the bottom layer`
+        )
+      } else if (isInside(cellsDir, resolved)) {
+        fail(
+          'KERNEL-PURITY',
+          `slice "${sliceName}" kernel file ${rel(file)} imports cells/ via "${spec}"; kernel/ must not depend on cells`
+        )
+      }
+    }
+    return
+  }
+
+  for (const spec of imports) {
+    if (!spec.startsWith('.')) {
+      continue
+    }
+    const resolved = path.resolve(path.dirname(file), spec)
+    if (isInside(kernelDir, resolved)) {
+      const kernelEntry = path.relative(kernelDir, resolved).replace(/\.(?:[cm]?[jt]sx?)$/, '')
+      if (kernelEntry !== 'index') {
+        fail(
+          'KERNEL-PURITY',
+          `slice "${sliceName}" file ${rel(file)} bypasses kernel/index.js via "${spec}"`
+        )
+      }
+    }
+  }
+}
+
+/**
+ * Enforces strict CSA Depth-2 cell isolation inside slices that contain `cells/<name>/`:
+ * - cells never cross-import sibling cells;
+ * - cells never import anything from `src/`;
+ * - code outside `cells/` imports a cell only through `cells/<name>/index.js`.
+ */
 const checkCellIsolation = (sliceName, sliceDir, file, imports) => {
   const cellsDir = path.join(sliceDir, 'cells')
   const testsDir = path.join(sliceDir, 'tests')
@@ -410,12 +513,10 @@ const checkCellIsolation = (sliceName, sliceDir, file, imports) => {
         )
       } else if (!targetCell && isInside(srcDir, resolved)) {
         const stem = path.relative(srcDir, resolved).replace(/\.(?:[cm]?[jt]sx?)$/, '')
-        if (!ALLOWED_CELL_SRC_IMPORTS.has(stem)) {
-          fail(
-            'CELL-ISOLATION',
-            `slice "${sliceName}" cell "${sourceCell}" file ${rel(file)} reaches into src/${stem} via "${spec}"; cells may depend only on kernel/ or shared types`
-          )
-        }
+        fail(
+          'CELL-ISOLATION',
+          `slice "${sliceName}" cell "${sourceCell}" file ${rel(file)} reaches into src/${stem} via "${spec}"; cells may depend only on kernel/index.js, libs/*, or spine/*`
+        )
       }
     } else if (targetCell) {
       const cellEntry = path
@@ -515,6 +616,7 @@ for (const [name, dir] of sliceDirs) {
   for (const file of listSourceFiles(dir)) {
     const imports = extractImports(file)
     checkRelativeBoundaries('slice', name, dir, expectedPkg, file, imports)
+    checkKernelPurity(name, dir, file, imports)
     checkCellIsolation(name, dir, file, imports)
 
     if (!isInside(testsDir, file) && CODE_EXT.test(file)) {
@@ -692,6 +794,12 @@ if (errors.length > 0) {
   process.exit(1)
 }
 
+const depth2Slices = sliceNames.filter(
+  (name) =>
+    fs.existsSync(path.join(slicesDir, name, 'kernel')) ||
+    fs.existsSync(path.join(slicesDir, name, 'cells'))
+)
+
 process.stdout.write(
-  `CSA boundary check passed: spine (${factDefinitions.length} active facts), ${libNames.length} library(ies) (${libNames.join(', ')}), ${sliceNames.length} slice(s) (${sliceNames.join(', ')}), app tier, tsconfig refs, and S1–S5 verified.\n`
+  `CSA boundary check passed: spine (${factDefinitions.length} active facts), ${libNames.length} library(ies) (${libNames.join(', ')}), ${sliceNames.length} slice(s) (${sliceNames.join(', ')}), ${depth2Slices.length} Depth-2 slice(s) (${depth2Slices.join(', ')}), app tier, tsconfig refs, and S1–S5 verified.\n`
 )
