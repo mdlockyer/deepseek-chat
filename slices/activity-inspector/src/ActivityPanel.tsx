@@ -1085,10 +1085,43 @@ export const createActivityPanel = (
       }
     }
 
+    // "Turn 3 of 9" shows only while it fits beside the tabs; in a narrow panel it would run under
+    // the buttons. Each turn's heading still carries its number, and screen readers always get the
+    // full readout.
+    const leadingRef = useRef<HTMLDivElement>(null)
+    const readoutRef = useRef<HTMLSpanElement>(null)
+    const [readoutFits, setReadoutFits] = useState(true)
+    const hasReadout = total >= 2 && shownIndex >= 0
+    useLayoutEffect(() => {
+      const leading = leadingRef.current
+      const readout = readoutRef.current
+      if (!leading || !readout) {
+        return
+      }
+      const check = () => {
+        const beside = [...leading.children].filter(
+          (child) => child !== readout && getComputedStyle(child).position !== 'absolute'
+        )
+        const gap = Number.parseFloat(getComputedStyle(leading).columnGap) || 0
+        // Full widths: a title that truncates would otherwise report its squeezed width.
+        const needed = beside.reduce(
+          (sum, child) =>
+            sum + Math.max((child as HTMLElement).offsetWidth, child.scrollWidth) + gap,
+          readout.offsetWidth
+        )
+        setReadoutFits(needed <= leading.clientWidth)
+      }
+      const observer = new ResizeObserver(check)
+      observer.observe(leading)
+      observer.observe(readout)
+      check()
+      return () => observer.disconnect()
+    }, [hasReadout])
+
     return (
       <Tabs value={effectiveTab} onChange={state.setTab} className={styles.root}>
         <header className={styles.header} data-tauri-drag-region="">
-          <div className={styles.headerLeading} data-tauri-drag-region="">
+          <div ref={leadingRef} className={styles.headerLeading} data-tauri-drag-region="">
             {hasSources ? (
               <>
                 <h2 className={styles.srOnly}>{t('panelTitle')}</h2>
@@ -1119,17 +1152,23 @@ export const createActivityPanel = (
                 {t('panelTitle')}
               </h2>
             )}
-            {total >= 2 && shownIndex >= 0 ? (
-              <span className={styles.readout}>
+            {hasReadout ? (
+              <>
                 <span className={styles.srOnly}>
                   {t('turnReadoutLabel', { number: shownIndex + 1, total })}
                 </span>
-                <span className={styles.readoutText} aria-hidden="true">
-                  {t('turnReadoutPrefix')}
-                  <RollingNumber value={shownIndex + 1} className={styles.readoutNumber} />
-                  {t('turnReadoutSuffix', { total })}
+                <span
+                  ref={readoutRef}
+                  className={clsx(styles.readout, !readoutFits && styles.readoutOverflow)}
+                  aria-hidden="true"
+                >
+                  <span className={styles.readoutText}>
+                    {t('turnReadoutPrefix')}
+                    <RollingNumber value={shownIndex + 1} className={styles.readoutNumber} />
+                    {t('turnReadoutSuffix', { total })}
+                  </span>
                 </span>
-              </span>
+              </>
             ) : null}
           </div>
 
