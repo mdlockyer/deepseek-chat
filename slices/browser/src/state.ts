@@ -1369,6 +1369,10 @@ export const createBrowserState = (deps: BrowserStateDeps) => {
     return session.tabs.find((t) => t.id === session.activeTabId) ?? session.tabs[0] ?? null
   }
 
+  /** Whether `tabId` is the page the reader can see right now. */
+  const isTabOnScreen = (tabId: string): boolean =>
+    shouldShowNativeWebview(get()) && getActiveBrowserTab()?.id === tabId
+
   return {
     useBrowserStore,
     registerBrowserOpenListener,
@@ -1400,6 +1404,7 @@ export const createBrowserState = (deps: BrowserStateDeps) => {
     waitForTabLoad,
     setBrowserControlling,
     getActiveBrowserTab,
+    isTabOnScreen,
   }
 }
 

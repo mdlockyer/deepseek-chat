@@ -1,6 +1,8 @@
 import { resolveViewportRequest } from './viewportRequest.js'
 import {
   buildClickScript,
+  buildCursorMoveScript,
+  buildCursorRestoreScript,
   buildPageEvalScript,
   buildPressKeyScript,
   buildScrollScript,
@@ -25,6 +27,8 @@ const MAX_TOOL_TEXT_CHARS = 24_000
 const MAX_DELTA_TEXT_CHARS = 4_000
 const POST_TYPE_SUBMIT_DELAY_MS = 150
 const POST_LOAD_SETTLE_MS = 180
+/** The longest an action waits for the agent cursor to land on its target. */
+const CURSOR_GLIDE_MAX_MS = 700
 
 export const BROWSER_NAVIGATE_TOOL_NAME = 'browser_navigate'
 export const BROWSER_OBSERVE_TOOL_NAME = 'browser_observe'
@@ -766,6 +770,7 @@ export const createBrowserTools = (state: BrowserState, host: BrowserHost | null
     createBrowserTab,
     ensureNativeTab,
     getActiveBrowserTab,
+    isTabOnScreen,
     navigateBrowserTab,
     revealBrowserPanel,
     runBrowserHistory,
@@ -779,6 +784,8 @@ export const createBrowserTools = (state: BrowserState, host: BrowserHost | null
   } = state
 
   const lastObservedText = new Map<string, { url: string; text: string }>()
+  /** Where the agent cursor last landed in each tab, so it carries over across page loads. */
+  const cursorAt = new Map<string, { x: number; y: number }>()
 
   const evalDriverJson = async <T extends { ok: boolean; error?: string; staleRef?: StaleRefInfo }>(
     tabId: string,
@@ -943,7 +950,10 @@ export const createBrowserTools = (state: BrowserState, host: BrowserHost | null
     if (options.includeScreenshot) {
       // Capture one clean screenshot for the user-facing transcript, then composite `[eN]` SoM
       // badges deterministically onto a copy for the model (no page DOM mutation or paint race).
-      const cleanShot = await native.takeSnapshot(tabId, 1280)
+      const cleanShot = await native.takeSnapshot(tabId, 1280).finally(() =>
+        // The snapshot script hid the agent cursor so the capture stays clean; bring it back.
+        native.evalJs(tabId, buildCursorRestoreScript(), true, 2_000).catch(() => '')
+      )
       previewImages.push(cleanShot.dataUrl)
       const shotW = cleanShot.pixelWidth ?? cleanShot.width
       const shotH = cleanShot.pixelHeight ?? cleanShot.height
@@ -967,6 +977,42 @@ export const createBrowserTools = (state: BrowserState, host: BrowserHost | null
       previewImages,
       url: snap.url,
       title: snap.title,
+    }
+  }
+
+  /**
+   * Glides the agent cursor to what an action is about to target, and waits for it to land while
+   * the reader can see that page, so they watch it arrive before the action happens. Best effort:
+   * a target that cannot be resolved is left for the action itself to report.
+   */
+  const glideCursor = async (
+    tabId: string,
+    target: { ref?: string; x?: number; y?: number },
+    signal: AbortSignal
+  ): Promise<void> => {
+    let landed: { moved?: boolean; x?: number; y?: number; ms?: number }
+    try {
+      landed = await evalDriverJson<{
+        ok: boolean
+        moved?: boolean
+        x?: number
+        y?: number
+        ms?: number
+      }>(
+        tabId,
+        buildCursorMoveScript({ ...target, from: cursorAt.get(tabId) ?? null }),
+        true,
+        3_000
+      )
+    } catch {
+      return
+    }
+    if (!landed.moved || typeof landed.x !== 'number' || typeof landed.y !== 'number') {
+      return
+    }
+    cursorAt.set(tabId, { x: landed.x, y: landed.y })
+    if (typeof landed.ms === 'number' && landed.ms > 0 && isTabOnScreen(tabId)) {
+      await delay(Math.min(landed.ms, CURSOR_GLIDE_MAX_MS), signal)
     }
   }
 
@@ -1261,6 +1307,15 @@ export const createBrowserTools = (state: BrowserState, host: BrowserHost | null
             throw new Error('No page is loaded in the active browser tab.')
           }
           await ensureNativeTab(tabId)
+          await glideCursor(
+            tabId,
+            {
+              ref: typeof input.ref === 'string' ? input.ref : undefined,
+              x: typeof input.x === 'number' ? input.x : undefined,
+              y: typeof input.y === 'number' ? input.y : undefined,
+            },
+            signal
+          )
           const navWatch = beginNavigationWatch(tabId)
           let clickRes: {
             ok: boolean
@@ -1326,6 +1381,15 @@ export const createBrowserTools = (state: BrowserState, host: BrowserHost | null
           const shouldSubmit = input.submit === true
           const ref = typeof input.ref === 'string' ? input.ref : undefined
           await ensureNativeTab(tabId)
+          await glideCursor(
+            tabId,
+            {
+              ref,
+              x: typeof input.x === 'number' ? input.x : undefined,
+              y: typeof input.y === 'number' ? input.y : undefined,
+            },
+            signal
+          )
           try {
             await evalDriverJson(
               tabId,
@@ -1492,6 +1556,7 @@ export const createBrowserTools = (state: BrowserState, host: BrowserHost | null
             throw new Error('ref and values[] are required for browser_select.')
           }
           await ensureNativeTab(tabId)
+          await glideCursor(tabId, { ref }, signal)
           const navWatch = beginNavigationWatch(tabId)
           try {
             await evalDriverJson(tabId, buildSelectScript({ ref, values }), true)
@@ -1683,6 +1748,7 @@ export const createBrowserTools = (state: BrowserState, host: BrowserHost | null
     runBrowserTool,
     dispose: () => {
       lastObservedText.clear()
+      cursorAt.clear()
     },
   }
 }

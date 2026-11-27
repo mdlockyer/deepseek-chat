@@ -164,29 +164,175 @@ const __resolveTarget = (ref, x, y) => {
   throw new Error('Either ref or (x, y) coordinates must be provided.');
 };
 
-const __flashHighlight = (el) => {
+// The agent cursor: a small solid kite in the app's accent blue that glides to what the model acts
+// on, presses as it clicks, and glows faintly while it moves or presses (never at rest). It lives in
+// a closed shadow root on the top document, takes no pointer events, and fades out when the reader
+// uses the page or after a quiet spell. Hidden (not removed) while a screenshot is captured.
+const __CURSOR_IDLE_MS = 20000;
+const __CURSOR_SPRING = 170;
+const __cursorPoint = (el, x, y) => {
+  let px = x;
+  let py = y;
+  let W = __ownerWin(el);
+  for (let d = 0; d < 6 && W && W !== window; d++) {
+    let frame = null;
+    try { frame = W.frameElement; } catch { frame = null; }
+    if (!frame) break;
+    const r = frame.getBoundingClientRect();
+    px += r.left + (frame.clientLeft || 0);
+    py += r.top + (frame.clientTop || 0);
+    W = __ownerWin(frame);
+  }
+  return { x: px, y: py };
+};
+const __dsCursor = () => {
+  const prev = __dsStore.cursor;
+  if (prev && prev.host && prev.host.isConnected) return prev;
+  const doc = document;
+  const SVG = 'http://www.w3.org/2000/svg';
+  const host = doc.createElement('ds-agent-cursor');
+  host.setAttribute('aria-hidden', 'true');
+  host.setAttribute('data-ds-cursor', '1');
+  host.style.cssText = 'all:initial;position:fixed;left:0;top:0;width:0;height:0;z-index:2147483647;pointer-events:none;';
+  const root = typeof host.attachShadow === 'function' ? host.attachShadow({ mode: 'closed' }) : host;
+  const wrap = doc.createElement('div');
+  wrap.style.cssText = 'position:absolute;left:0;top:0;width:16px;height:16px;pointer-events:none;transform-origin:1.5px 1.5px;opacity:0;transition:opacity 180ms cubic-bezier(0.4,0,0.2,1);will-change:transform,filter;';
+  const svg = doc.createElementNS(SVG, 'svg');
+  svg.setAttribute('width', '16');
+  svg.setAttribute('height', '16');
+  svg.setAttribute('viewBox', '0 0 16 16');
+  svg.style.cssText = 'display:block;overflow:visible;';
+  const kite = doc.createElementNS(SVG, 'polygon');
+  kite.setAttribute('points', '1.5,1.5 12.38,6.72 13,13 6.72,12.38');
+  kite.setAttribute('stroke', '#ffffff');
+  kite.setAttribute('stroke-width', '1.5');
+  kite.setAttribute('stroke-linejoin', 'round');
+  kite.style.fill = '#4364f7';
+  kite.style.fill = 'oklch(0.57 0.233 267)';
+  svg.appendChild(kite);
+  wrap.appendChild(svg);
+  root.appendChild(wrap);
+  (doc.documentElement || doc.body).appendChild(host);
+  const reduce = typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const c = {
+    host, wrap,
+    x: prev && isFinite(prev.x) ? prev.x : NaN,
+    y: prev && isFinite(prev.y) ? prev.y : NaN,
+    vx: 0, vy: 0, tx: NaN, ty: NaN, scale: 1, pressUntil: 0, pulse: 0, glow: 0,
+    frame: 0, last: 0, idleTimer: 0, reduce, captured: false,
+  };
+  c.tx = c.x;
+  c.ty = c.y;
+  const paint = () => {
+    const speed = Math.min(1, Math.hypot(c.vx, c.vy) / 900);
+    const radius = 2.5 + 3 * speed + 3 * c.pulse;
+    wrap.style.transform = 'translate(' + (c.x - 1.5).toFixed(2) + 'px,' + (c.y - 1.5).toFixed(2) + 'px) scale(' + c.scale.toFixed(3) + ')';
+    wrap.style.filter = c.glow > 0.01 ? 'drop-shadow(0 0 ' + radius.toFixed(1) + 'px oklch(0.57 0.233 267 / ' + c.glow.toFixed(3) + '))' : 'none';
+  };
+  const tick = (now) => {
+    c.frame = 0;
+    const dt = c.last ? Math.min(0.034, Math.max(0, (now - c.last) / 1000)) : 0.016;
+    c.last = now;
+    if (c.reduce) {
+      c.x = c.tx; c.y = c.ty; c.vx = 0; c.vy = 0;
+    } else {
+      const k = __CURSOR_SPRING;
+      const damping = 2 * Math.sqrt(k);
+      for (let i = 0; i < 4; i++) {
+        const h = dt / 4;
+        c.vx += (-k * (c.x - c.tx) - damping * c.vx) * h;
+        c.vy += (-k * (c.y - c.ty) - damping * c.vy) * h;
+        c.x += c.vx * h;
+        c.y += c.vy * h;
+      }
+    }
+    c.pulse = Math.max(0, c.pulse - dt / 0.45);
+    const speed = Math.min(1, Math.hypot(c.vx, c.vy) / 900);
+    const glowGoal = c.reduce ? 0 : Math.min(0.6, 0.08 + 0.34 * speed + 0.4 * c.pulse);
+    c.glow += (glowGoal - c.glow) * Math.min(1, dt * 12);
+    const scaleGoal = now < c.pressUntil ? 0.84 : 1;
+    c.scale += (scaleGoal - c.scale) * Math.min(1, dt * 30);
+    paint();
+    const settled = Math.abs(c.x - c.tx) < 0.3 && Math.abs(c.y - c.ty) < 0.3 &&
+      Math.hypot(c.vx, c.vy) < 5 && c.pulse === 0 && Math.abs(c.scale - 1) < 0.002 &&
+      Math.abs(c.glow - glowGoal) < 0.005;
+    if (settled) {
+      c.x = c.tx; c.y = c.ty; c.vx = 0; c.vy = 0; c.scale = 1;
+      paint();
+      c.last = 0;
+      return;
+    }
+    c.frame = requestAnimationFrame(tick);
+  };
+  c.wake = () => {
+    if (!c.frame) c.frame = requestAnimationFrame(tick);
+    clearTimeout(c.idleTimer);
+    c.idleTimer = setTimeout(() => c.hide(), __CURSOR_IDLE_MS);
+  };
+  c.show = () => { if (!c.captured) wrap.style.opacity = '1'; };
+  c.hide = () => { wrap.style.opacity = '0'; };
+  c.setCaptured = (captured) => {
+    c.captured = captured;
+    wrap.style.visibility = captured ? 'hidden' : 'visible';
+  };
+  c.place = (x, y) => {
+    c.x = c.tx = x; c.y = c.ty = y; c.vx = 0; c.vy = 0;
+    paint();
+  };
+  // Starts a glide to (x, y); returns roughly how long it takes to land, in milliseconds.
+  c.moveTo = (x, y, from) => {
+    if (!isFinite(c.x) || !isFinite(c.y)) {
+      if (from && isFinite(from.x) && isFinite(from.y)) {
+        c.place(from.x, from.y);
+      } else {
+        const vw = window.innerWidth || 0;
+        const vh = window.innerHeight || 0;
+        c.place(Math.min(Math.max(0, vw - 4), x + 28), Math.min(Math.max(0, vh - 4), y + 36));
+      }
+    }
+    c.tx = x;
+    c.ty = y;
+    c.show();
+    c.wake();
+    if (c.reduce) return 0;
+    let px = c.x - x, py = c.y - y, vx = c.vx, vy = c.vy, ms = 0;
+    const k = __CURSOR_SPRING, damping = 2 * Math.sqrt(k), h = 1 / 240;
+    while (ms < 900 && (Math.hypot(px, py) > 1.5 || Math.hypot(vx, vy) > 30)) {
+      vx += (-k * px - damping * vx) * h;
+      vy += (-k * py - damping * vy) * h;
+      px += vx * h;
+      py += vy * h;
+      ms += 1000 * h;
+    }
+    return Math.round(ms);
+  };
+  c.press = (x, y) => {
+    if (!isFinite(c.tx) || Math.hypot(c.tx - x, c.ty - y) > 2) c.place(x, y);
+    c.pressUntil = performance.now() + 120;
+    c.pulse = 1;
+    c.show();
+    c.wake();
+  };
+  const onReaderInput = (ev) => { if (ev && ev.isTrusted) c.hide(); };
+  for (const type of ['pointerdown', 'keydown', 'wheel']) {
+    doc.addEventListener(type, onReaderInput, { capture: true, passive: true });
+  }
+  __dsStore.cursor = c;
+  return c;
+};
+const __pressTopLevel = (x, y) => {
+  try { __dsCursor().press(x, y); } catch {}
+};
+const __pressAt = (el, x, y) => {
   try {
-    const doc = (el && el.ownerDocument) || document;
+    const p = __cursorPoint(el, x, y);
+    __dsCursor().press(p.x, p.y);
+  } catch {}
+};
+const __pressOn = (el) => {
+  try {
     const rect = el.getBoundingClientRect();
-    const box = doc.createElement('div');
-    box.setAttribute('data-ds-overlay', '1');
-    box.style.cssText = [
-      'position:fixed',
-      'pointer-events:none',
-      'z-index:2147483646',
-      'left:' + Math.max(0, rect.left - 2) + 'px',
-      'top:' + Math.max(0, rect.top - 2) + 'px',
-      'width:' + Math.max(8, rect.width + 4) + 'px',
-      'height:' + Math.max(8, rect.height + 4) + 'px',
-      'border:2px solid #3964fe',
-      'background:rgba(57,100,254,0.12)',
-      'border-radius:6px',
-      'box-sizing:border-box',
-      'transition:opacity 240ms ease',
-    ].join(';');
-    (doc.documentElement || doc.body).appendChild(box);
-    setTimeout(() => { box.style.opacity = '0'; }, 220);
-    setTimeout(() => { box.remove(); }, 500);
+    __pressAt(el, rect.left + rect.width / 2, rect.top + rect.height / 2);
   } catch {}
 };
 
@@ -233,6 +379,68 @@ const __collectSameOriginFrameBodies = (rootNode, depth = 0, out = []) => {
 };
 `
 
+/**
+ * Glides the agent cursor to what the next action targets (a ref, viewport coordinates, or the
+ * focused element) and reports where it lands and roughly how long the glide takes. A ref is
+ * scrolled into view first, as the action itself would. `from` is where the cursor last was in this
+ * tab, so it carries over across page loads.
+ */
+export const buildCursorMoveScript = (params: {
+  ref?: string
+  x?: number
+  y?: number
+  from?: { x: number; y: number } | null
+}): string => {
+  const args = JSON.stringify(params)
+  return `
+try {
+  ${SHARED_HELPERS}
+  const p = ${args};
+  let el;
+  let px;
+  let py;
+  if (p.ref || (typeof p.x === 'number' && typeof p.y === 'number')) {
+    el = __resolveTarget(p.ref, p.x, p.y);
+  } else {
+    el = __getActiveElement();
+    const activeDoc = (el && el.ownerDocument) || document;
+    if (!el || el === activeDoc.body || el === activeDoc.documentElement) {
+      return JSON.stringify({ ok: true, moved: false });
+    }
+  }
+  if (p.ref && el.scrollIntoView) {
+    el.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' });
+  }
+  if (typeof p.x === 'number' && typeof p.y === 'number' && !p.ref) {
+    px = p.x;
+    py = p.y;
+  } else {
+    const rect = el.getBoundingClientRect();
+    const point = __cursorPoint(el, rect.left + rect.width / 2, rect.top + rect.height / 2);
+    px = point.x;
+    py = point.y;
+  }
+  const ms = __dsCursor().moveTo(px, py, p.from || null);
+  return JSON.stringify({ ok: true, moved: true, x: px, y: py, ms });
+} catch (err) {
+  return JSON.stringify({ ok: false, error: err instanceof Error ? err.message : String(err) });
+}
+`
+}
+
+/** Shows the agent cursor again after a screenshot, if this document has one. */
+export const buildCursorRestoreScript = (): string => `
+try {
+  const __DS_KEY = Symbol.for('__ds_browser_driver__');
+  const store = window[__DS_KEY];
+  const c = store && store.cursor;
+  if (c && c.host && c.host.isConnected) c.setCaptured(false);
+  return JSON.stringify({ ok: true });
+} catch (err) {
+  return JSON.stringify({ ok: false, error: err instanceof Error ? err.message : String(err) });
+}
+`
+
 export type SnapshotOptions = {
   includeText?: boolean
   selector?: string
@@ -258,6 +466,9 @@ try {
   const opts = ${args};
   if (opts.clearOverlays) {
     __clearOverlays(document);
+    if (__dsStore.cursor && __dsStore.cursor.host && __dsStore.cursor.host.isConnected) {
+      __dsStore.cursor.setCaptured(true);
+    }
   }
   for (const [existingRef, weak] of __dsStore.refs.entries()) {
     const existingEl = weak.deref();
@@ -596,7 +807,11 @@ try {
   const rect = el.getBoundingClientRect();
   const cx = typeof p.x === 'number' && !p.ref ? p.x : Math.round(rect.left + rect.width / 2);
   const cy = typeof p.y === 'number' && !p.ref ? p.y : Math.round(rect.top + rect.height / 2);
-  __flashHighlight(el);
+  if (typeof p.x === 'number' && typeof p.y === 'number' && !p.ref) {
+    __pressTopLevel(p.x, p.y);
+  } else {
+    __pressAt(el, cx, cy);
+  }
 
   const W = __ownerWin(el);
   const doc = el.ownerDocument || document;
@@ -716,7 +931,11 @@ try {
   if (p.ref && el.scrollIntoView) {
     el.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' });
   }
-  __flashHighlight(el);
+  if (typeof p.x === 'number' && typeof p.y === 'number' && !p.ref) {
+    __pressTopLevel(p.x, p.y);
+  } else {
+    __pressOn(el);
+  }
   if (typeof el.focus === 'function') el.focus({ preventScroll: true });
 
   const W = __ownerWin(el);
@@ -1070,7 +1289,7 @@ try {
   if (__tag(el) !== 'select') {
     throw new Error('Target element <' + __tag(el) + '> is not a <select>.');
   }
-  __flashHighlight(el);
+  __pressOn(el);
   const W = __ownerWin(el);
   const Ev = W.Event || Event;
   const wanted = new Set((p.values || []).map(String));
