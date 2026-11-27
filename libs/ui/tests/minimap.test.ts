@@ -23,7 +23,7 @@ import {
 describe('Reading line', () => {
   it('sits at a fixed place in the view through the middle of a long scroll', () => {
     // A 600px view over 6000px: away from both ends the line is READING_LINE_AT of the view
-    // (0.3 x 600 = 180px) below the top, wherever the reader is.
+    // (half of 600 = 300px) below the top, wherever the reader is.
     for (const scrollTop of [1000, 2500, 4000]) {
       assert.equal(readingLineY(scrollTop, 600, 6000), scrollTop + 600 * READING_LINE_AT)
     }

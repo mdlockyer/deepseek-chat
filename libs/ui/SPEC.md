@@ -127,7 +127,7 @@ every slice's UI and pass the full gate with zero slice edits.
     theme. Under
     reduced motion the lens and highlights change in place.
 12. **Reading line (`readingLineY`, `sectionAt`).** The line that decides which section is
-    current stays `READING_LINE_AT` (30%) of the view below its top through most of a scroll, so the
+    current stays `READING_LINE_AT` (the middle) of the view below its top through most of a scroll, so the
     current section changes at the same place on screen; it eases from the top of the view at the
     very top and to its bottom at the very end, and only ever moves forward as the reader scrolls
     down, so every section, however short, is current somewhere. Content that doesn't scroll reads

@@ -1,5 +1,6 @@
-/** Where the reading line sits through most of a scroll, as a fraction of the view from its top. */
-export const READING_LINE_AT = 0.3
+/** Where the reading line sits through most of a scroll, as a fraction of the view from its top:
+ * the middle, so the current section is the one at the centre of what the reader is looking at. */
+export const READING_LINE_AT = 0.5
 
 const smoothstep = (t: number) => {
   const x = Math.min(1, Math.max(0, t))
