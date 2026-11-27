@@ -1,7 +1,8 @@
 /**
  * The agent cursor: a small solid kite in the app's accent blue with a white edge, its tip on the
- * point it acts on. It glides on a critically damped spring, presses (shrinks a little) as it
- * clicks, drifts and tilts very slightly while it waits, and carries a faint glow that follows its
+ * point it acts on. It glides along a gentle arc, leaning into sideways moves and arriving a pixel
+ * or two past its target before settling back; it presses (shrinks a little) as it clicks, drifts
+ * and tilts very slightly while it waits, and carries a faint glow that follows its
  * outline: almost none at rest, more as it moves faster, and a short bloom on each press. Reduced
  * motion makes it jump, with no glow and no drift.
  *
@@ -75,12 +76,37 @@ export function createKiteCursor(doc: Document, win: Window & typeof globalThis)
   const reduce =
     typeof win.matchMedia === 'function' &&
     win.matchMedia('(prefers-reduced-motion: reduce)').matches
-  let x = Number.NaN
-  let y = Number.NaN
+
+  // A glide follows a gentle arc from where it starts to the target: a quadratic curve whose middle
+  // bulges to one side by 7% of the distance, at most 32 px (its control point sits twice as far). A slightly underdamped spring drives progress
+  // along it, so the cursor arrives a little past the target and settles back: 2% of the distance
+  // on short moves, never more than 2.5 px.
+  const BOW = 0.14
+  const MAX_BOW = 64
+  const OVERSHOOT = 0.02
+  const MAX_OVERSHOOT_PX = 2.5
+  /** Spring damping for a glide of `distance` px that overshoots by the allowed amount. */
+  const dampingFor = (distance: number) => {
+    const fraction = Math.min(OVERSHOOT, MAX_OVERSHOOT_PX / Math.max(1, distance))
+    const log = Math.log(fraction)
+    const ratio = -log / Math.sqrt(Math.PI * Math.PI + log * log)
+    return 2 * ratio * Math.sqrt(SPRING)
+  }
+  let damping = dampingFor(0)
+  let fx = Number.NaN
+  let fy = Number.NaN
+  let cx = Number.NaN
+  let cy = Number.NaN
   let tx = Number.NaN
   let ty = Number.NaN
+  let s = 1
+  let sv = 0
+  // Where it is drawn, and how fast that is moving (px/s).
+  let x = Number.NaN
+  let y = Number.NaN
   let vx = 0
   let vy = 0
+  let lean = 0
   let scale = 1
   let pressUntil = 0
   let pulse = 0
@@ -94,6 +120,18 @@ export function createKiteCursor(doc: Document, win: Window & typeof globalThis)
   let idle = 0
   let clock = 0
 
+  /** The point at progress `t` along the arc; past the end it carries on along the arc's tangent. */
+  const along = (t: number) => {
+    if (t <= 1) {
+      const u = 1 - t
+      return {
+        px: u * u * fx + 2 * u * t * cx + t * t * tx,
+        py: u * u * fy + 2 * u * t * cy + t * t * ty,
+      }
+    }
+    return { px: tx + 2 * (tx - cx) * (t - 1), py: ty + 2 * (ty - cy) * (t - 1) }
+  }
+
   const paint = () => {
     if (!Number.isFinite(x) || !Number.isFinite(y)) {
       return
@@ -105,7 +143,7 @@ export function createKiteCursor(doc: Document, win: Window & typeof globalThis)
       idle * (1.1 * Math.sin((turn * clock) / 3.7) + 0.5 * Math.sin((turn * clock) / 1.9 + 1))
     const dy =
       idle * (0.9 * Math.sin((turn * clock) / 4.3 + 2) + 0.4 * Math.sin((turn * clock) / 2.3))
-    const tilt = idle * 2.5 * Math.sin((turn * clock) / 5.1 + 0.5)
+    const tilt = lean + idle * 2.5 * Math.sin((turn * clock) / 5.1 + 0.5)
     wrap.style.transform =
       'translate(' +
       (x - HOT + dx).toFixed(2) +
@@ -131,41 +169,42 @@ export function createKiteCursor(doc: Document, win: Window & typeof globalThis)
     const dt = last ? Math.min(0.034, Math.max(0, (now - last) / 1000)) : 0.016
     last = now
     if (reduce) {
-      x = tx
-      y = ty
-      vx = 0
-      vy = 0
+      s = 1
+      sv = 0
     } else {
-      const damping = 2 * Math.sqrt(SPRING)
       for (let i = 0; i < 4; i += 1) {
         const h = dt / 4
-        vx += (-SPRING * (x - tx) - damping * vx) * h
-        vy += (-SPRING * (y - ty) - damping * vy) * h
-        x += vx * h
-        y += vy * h
+        sv += (-SPRING * (s - 1) - damping * sv) * h
+        s += sv * h
       }
     }
+    if (Math.abs(s - 1) < 0.0015 && Math.abs(sv) < 0.02) {
+      s = 1
+      sv = 0
+    }
+    const at = along(s)
+    vx = dt > 0 ? (at.px - x) / dt : 0
+    vy = dt > 0 ? (at.py - y) / dt : 0
+    x = at.px
+    y = at.py
+    // Lean up to 10° into sideways movement, and straighten as it slows.
+    const leanGoal = reduce ? 0 : Math.max(-10, Math.min(10, vx * 0.011))
+    lean += (leanGoal - lean) * Math.min(1, dt * 9)
     pulse = Math.max(0, pulse - dt / 0.45)
     const speed = Math.min(1, Math.hypot(vx, vy) / 900)
     const glowGoal = reduce ? 0 : Math.min(0.6, 0.08 + 0.34 * speed + 0.4 * pulse)
     glow += (glowGoal - glow) * Math.min(1, dt * 12)
     scale += ((now < pressUntil ? 0.84 : 1) - scale) * Math.min(1, dt * 30)
-    const resting =
-      Math.abs(x - tx) < 0.3 &&
-      Math.abs(y - ty) < 0.3 &&
-      Math.hypot(vx, vy) < 5 &&
-      pulse === 0 &&
-      Math.abs(scale - 1) < 0.002
+    const resting = s === 1 && Math.abs(lean) < 0.05 && pulse === 0 && Math.abs(scale - 1) < 0.002
     // Ease into the drift over a second or so; drop it quickly as soon as it moves or presses.
     const idleGoal = resting && shown && !reduce ? 1 : 0
     idle += (idleGoal - idle) * Math.min(1, dt * (idleGoal ? 1.2 : 10))
     clock += dt
     paint()
     if (resting && idleGoal === 0 && idle < 0.002 && Math.abs(glow - glowGoal) < 0.005) {
-      x = tx
-      y = ty
       vx = 0
       vy = 0
+      lean = 0
       scale = 1
       idle = 0
       paint()
@@ -193,10 +232,16 @@ export function createKiteCursor(doc: Document, win: Window & typeof globalThis)
     wake()
   }
   const place = (px: number, py: number) => {
-    x = px
-    y = py
+    fx = px
+    fy = py
+    cx = px
+    cy = py
     tx = px
     ty = py
+    x = px
+    y = py
+    s = 1
+    sv = 0
     vx = 0
     vy = 0
     paint()
@@ -206,26 +251,43 @@ export function createKiteCursor(doc: Document, win: Window & typeof globalThis)
     if (!Number.isFinite(x) || !Number.isFinite(y)) {
       place(px, py)
     }
+    const dx = px - x
+    const dy = py - y
+    const distance = Math.hypot(dx, dy)
+    show()
+    if (distance < 0.5) {
+      place(px, py)
+      wake()
+      return 0
+    }
+    // Bow to the same side for the same direction of travel, so paths look deliberate.
+    const side = dx * 0.3 + dy > 0 ? 1 : -1
+    const bow = Math.min(MAX_BOW, distance * BOW) * side
+    fx = x
+    fy = y
     tx = px
     ty = py
-    show()
+    cx = (fx + tx) / 2 - (dy / distance) * bow
+    cy = (fy + ty) / 2 + (dx / distance) * bow
+    // Keep its current speed: start progress moving at the part of its velocity along the arc.
+    const startX = 2 * (cx - fx)
+    const startY = 2 * (cy - fy)
+    const startLength = startX * startX + startY * startY
+    damping = dampingFor(distance)
+    s = 0
+    sv = startLength > 0 ? Math.max(0, (vx * startX + vy * startY) / startLength) : 0
     wake()
     if (reduce) {
       return 0
     }
-    // Run the same spring ahead of time to see when it lands.
-    let ox = x - px
-    let oy = y - py
-    let ux = vx
-    let uy = vy
+    // Run the same spring ahead of time to see when it lands (within 1.5 px, nearly still).
+    let ps = 0
+    let pv = sv
     let ms = 0
-    const damping = 2 * Math.sqrt(SPRING)
     const h = 1 / 240
-    while (ms < 900 && (Math.hypot(ox, oy) > 1.5 || Math.hypot(ux, uy) > 30)) {
-      ux += (-SPRING * ox - damping * ux) * h
-      uy += (-SPRING * oy - damping * uy) * h
-      ox += ux * h
-      oy += uy * h
+    while (ms < 900 && (Math.abs(1 - ps) * distance > 1.5 || Math.abs(pv) * distance > 30)) {
+      pv += (-SPRING * (ps - 1) - damping * pv) * h
+      ps += pv * h
       ms += 1000 * h
     }
     return Math.round(ms)

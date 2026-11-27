@@ -101,7 +101,9 @@ panel, from `spine/design`), `KeyValueStore`.
     (a ref's centre after it is scrolled into view, explicit `(x, y)`, or the focused element) and
     presses (scales to 0.84) as the action fires; `browser_press_key` takes it to the focused element
     (or leaves it where it is) and presses; `browser_scroll` keeps it where it is (or brings it to
-    the middle of the page). `browser_navigate` takes it up out of the page to the address bar,
+    the middle of the page). Each glide follows a gentle arc (bulging to one side by 7% of the
+    distance, at most 32 px), leans up to 10° into sideways movement, and arrives slightly past its
+    target before settling back (2% of the distance, at most 2.5 px). `browser_navigate` takes it up out of the page to the address bar,
     which it presses and types the URL into (at most 450 ms) before loading, or to the back, forward
     or reload button; `browser_tabs` takes it to the new-tab button, the tab, or the tab's close
     button. It stays in the toolbar until the next page action brings it back down into the page.
@@ -131,7 +133,8 @@ panel, from `spine/design`), `KeyValueStore`.
   overflow count), extracted page text cap (12,000 chars), and outer tool output cap (24,000 chars,
   truncated inside `<untrusted_webpage_content>`).
 - Agent cursor: 22 px kite (50° tip, widest 60% of the way back), idle drift about 1.5 px and
-  2.5° on 1.9–5.1 s cycles, spring stiffness 170 /s², longest wait for it to land 700 ms in the
+  2.5° on 1.9–5.1 s cycles, arc bulge 7% (at most 32 px), lean 0.011°/(px/s) up to 10°, overshoot
+  2% (at most 2.5 px), spring stiffness 170 /s², longest wait for it to land 700 ms in the
   page and 600 ms in the toolbar, address typing at most 450 ms, leaves the page 30 px above its
   top edge, press scale 0.84 for 120 ms, glow alpha 0.08 at rest rising to 0.42 at speed (900 px/s)
   plus up to 0.4 on a press (fading over 450 ms, capped at 0.6).
