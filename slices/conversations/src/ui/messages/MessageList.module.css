@@ -25,6 +25,8 @@
     overscroll-behavior: contain;
     scrollbar-gutter: stable both-edges;
     scrollbar-color: var(--ui-scrollbar-thumb) transparent;
+    /* The minimap's column (set by the chat stage): the message column centres beside it. */
+    padding-right: var(--transcript-rail, 0px);
   }
 
   @media not all and (min-width: 768px) {

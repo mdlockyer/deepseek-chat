@@ -10,7 +10,9 @@
     align-items: center;
     min-height: 0;
     box-sizing: border-box;
-    padding: 0 var(--message-list-padding-horizontal);
+    /* Centred in the space beside the transcript minimap's column, like the composer. */
+    padding: 0 calc(var(--message-list-padding-horizontal) + var(--transcript-rail, 0px)) 0
+      var(--message-list-padding-horizontal);
   }
 
   .above {

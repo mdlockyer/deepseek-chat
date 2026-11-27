@@ -1,32 +1,19 @@
 @layer slice {
-  /* The transcript's right gutter: the space between the message column and the scroll area's
-     edge, which the minimap draws in. Its turn label opens over the column. */
+  /* The minimap's column at the transcript's right edge, as wide as the chat stage makes it (none
+     in a narrow window). Its turn label opens over the messages. */
   .gutter {
     position: absolute;
     top: 0;
     right: 0;
     bottom: 0;
-    width: max(
-      0px,
-      calc(
-        (
-            100% -
-              min(
-                calc(var(--message-list-max-width) - 2 * var(--message-list-padding-horizontal)),
-                calc(100% - var(--ui-space-10))
-              )
-          ) /
-          2
-      )
-    );
+    width: var(--transcript-rail, 0px);
   }
 
   .gutter {
     container: chapter-gutter / inline-size;
   }
 
-  /* The minimap needs 48px between the scroll area's edge and the messages; any narrower and it
-     would sit on top of them, so it hides (the transcript works the same without it). */
+  /* Without a column for it the minimap hides (the transcript works the same without it). */
   @container chapter-gutter (width < 48px) {
     .rail {
       display: none;

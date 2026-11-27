@@ -4,6 +4,23 @@
     inset: 0;
     display: flex;
     flex-direction: column;
+    container: chat-stage / inline-size;
+  }
+
+  /* The transcript's minimap is a column of its own on the right: the messages, the composer and
+     the new-chat greeting centre in the space beside it. It is kept in every chat (not only once a
+     chat has two turns, when the minimap appears), so nothing moves when a message is sent; only
+     a window too narrow for it (or the mobile layout) gives the space back. */
+  @container chat-stage (width >= 640px) {
+    .stage > * {
+      --transcript-rail: 64px;
+    }
+  }
+
+  @media not all and (min-width: 768px) {
+    .stage > * {
+      --transcript-rail: 0px;
+    }
   }
 
   /* One composer for both screens. In a conversation it spans the message column (752px at
@@ -18,9 +35,11 @@
     flex-shrink: 0;
     box-sizing: border-box;
     width: calc(var(--message-list-max-width) - var(--message-list-padding-horizontal) * 2);
-    max-width: calc(100% - var(--ui-space-8));
+    max-width: calc(100% - var(--ui-space-8) - var(--transcript-rail, 0px));
     margin: 0 auto;
     padding-top: var(--ui-space-2);
+    /* Centred in the space beside the minimap's column, over the messages. */
+    translate: calc(var(--transcript-rail, 0px) / -2) 0;
     background: var(--ui-surface-canvas);
   }
 
