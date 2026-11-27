@@ -1,9 +1,11 @@
 import {
   Minimap,
   createScrollGlide,
+  measureSectionTops,
   onScrollIntent,
   readingLineY,
   sectionAt,
+  sectionAtReadingLine,
   type MinimapSection,
   type ScrollGlide,
 } from '@deepseek-chat/lib-ui'
@@ -120,18 +122,11 @@ export const TranscriptChapters = ({
     if (!scroll || !content) {
       return
     }
-    const base = scroll.getBoundingClientRect().top - scroll.scrollTop
-    const starts = new Map<string, number>()
-    for (const anchor of content.querySelectorAll<HTMLElement>('[data-turn-anchor]')) {
-      const id = anchor.dataset.turnAnchor
-      if (id) {
-        starts.set(id, anchor.getBoundingClientRect().top - base)
-      }
-    }
+    const anchors = [...content.querySelectorAll<HTMLElement>('[data-turn-anchor]')]
+    const tops = measureSectionTops(scroll, anchors)
+    const starts = new Map(anchors.map((anchor, index) => [anchor.dataset.turnAnchor, tops[index]]))
     topsRef.current = turnsRef.current.map((turn) => starts.get(turn.messageId) ?? 0)
   }, [scrollRef, contentRef])
-
-  const indexAt = (y: number) => sectionAt(topsRef.current, y)
 
   const publish = useCallback(
     (index: number, cause: ReadingCause, immediate: boolean) => {
@@ -165,7 +160,7 @@ export const TranscriptChapters = ({
     if (lockRef.current !== null) {
       return
     }
-    const index = indexAt(readingLineY(scroll.scrollTop, scroll.clientHeight, scroll.scrollHeight))
+    const index = sectionAtReadingLine(scroll, topsRef.current)
     if (index !== currentRef.current) {
       setCurrentIndex(index)
       publish(index, 'reader', false)

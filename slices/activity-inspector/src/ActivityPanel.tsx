@@ -13,26 +13,21 @@ import {
   IconThinkOutline16,
   IconButton,
   PanelTitleMenu,
-  createScrollGlide,
   hoverGlideItem,
-  onScrollIntent,
-  readingLineY,
-  type ScrollGlide,
 } from '@deepseek-chat/lib-ui'
 import clsx from 'clsx'
 import {
   memo,
   useCallback,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
   useSyncExternalStore,
   type MouseEvent,
   type ReactNode,
-  type RefObject,
 } from 'react'
+import { escapeAttr, useChapterScroller } from './chapterScroller.js'
 import { EvidenceShelf } from './EvidenceShelf.js'
 import { GenericStepDetail } from './GenericStepView.js'
 import { activityInspectorMessages } from './messages.js'
@@ -399,13 +394,6 @@ const SourcesView = ({
   )
 }
 
-/** Scroll events this soon after the reader's own input (or another such event) are theirs. */
-const READER_SCROLL_WINDOW_MS = 250
-/** Within this distance of the bottom, a live turn's new steps keep the panel at the bottom. */
-const LIVE_STICK_PX = 48
-/** Height of a sticky chapter header; a step brought into view clears it. */
-const CHAPTER_HEADER_PX = 44
-
 /** One turn of the chat in the panel: its summary and its live snapshot. */
 type Chapter = { readonly summary: SessionTurnSummary; readonly turn: TurnSnapshot | null }
 
@@ -434,197 +422,6 @@ const sameTurn = (a: TurnSnapshot | null, b: TurnSnapshot | null) =>
     a.streaming === b.streaming &&
     a.blocks === b.blocks &&
     a.capabilityState === b.capabilityState)
-
-const escapeAttr = (value: string) =>
-  typeof CSS !== 'undefined' && typeof CSS.escape === 'function'
-    ? CSS.escape(value)
-    : value.replace(/["\\]/g, '\\$&')
-
-/** The chapter under the reading line of a scroll container. */
-const chapterAtLine = (el: HTMLElement): string | null => {
-  const line = readingLineY(el.scrollTop, el.clientHeight, el.scrollHeight)
-  let found: string | null = null
-  for (const chapter of el.querySelectorAll<HTMLElement>('[data-chapter-id]')) {
-    if (found === null || chapter.offsetTop <= line) {
-      found = chapter.dataset.chapterId ?? null
-    }
-  }
-  return found
-}
-
-const isAtBottom = (el: HTMLElement) =>
-  el.scrollHeight - el.scrollTop - el.clientHeight <= LIVE_STICK_PX
-
-/**
- * Keeps one tab's scroll container in step with the panel. The container moves on its own only when
- * it is first shown (instantly, to `targetId`) and when `request` changes to a new pin (gliding to
- * `targetId`). The reader moving through the transcript never scrolls it: the container stays where
- * the reader left it, and its highlight names the turn under its own reading line,
- * reported through `onReaderMove`. A live last turn keeps the container at the bottom while its
- * steps arrive, as long as the reader is there.
- */
-const useChapterScroller = ({
-  containerRef,
-  targetId,
-  request,
-  lastId,
-  live,
-  visible,
-  onReaderMove,
-}: {
-  containerRef: RefObject<HTMLDivElement | null>
-  targetId: string | null
-  /** Changes each time the reader asks for a turn (a pin); `null` while following. */
-  request: object | null
-  lastId: string | null
-  live: boolean
-  visible: boolean
-  /** The turn under the container's reading line, whenever the reader or the panel moves it. */
-  onReaderMove: (messageId: string) => void
-}) => {
-  const glideRef = useRef<ScrollGlide | null>(null)
-  const readerUntilRef = useRef(0)
-  const draggingRef = useRef(false)
-  const atBottomRef = useRef(true)
-  const [atBottom, setAtBottom] = useState(true)
-  const positionedRef = useRef(false)
-  const requestRef = useRef<object | null>(null)
-  const onMoveRef = useRef(onReaderMove)
-  onMoveRef.current = onReaderMove
-  const lastMovedRef = useRef<string | null>(null)
-  const liveRef = useRef(live)
-  liveRef.current = live
-  const goalBottomRef = useRef(false)
-  goalBottomRef.current = live && targetId !== null && targetId === lastId
-
-  const glideFor = (el: HTMLDivElement) => (glideRef.current ??= createScrollGlide(el))
-  const report = (el: HTMLElement) => {
-    const id = chapterAtLine(el)
-    if (id) {
-      lastMovedRef.current = id
-      onMoveRef.current(id)
-    }
-  }
-  const noteBottom = (el: HTMLElement) => {
-    atBottomRef.current = isAtBottom(el)
-    setAtBottom(atBottomRef.current)
-  }
-
-  useEffect(() => {
-    const el = containerRef.current
-    if (!el) {
-      return
-    }
-    const glide = glideFor(el)
-    const stopIntent = onScrollIntent(el, () => {
-      readerUntilRef.current = performance.now() + READER_SCROLL_WINDOW_MS
-      glide.cancel()
-    })
-    const onPointerDown = () => {
-      draggingRef.current = true
-    }
-    const onPointerUp = () => {
-      draggingRef.current = false
-    }
-    const onScroll = () => {
-      noteBottom(el)
-      const now = performance.now()
-      if (glide.isActive() || (!draggingRef.current && now > readerUntilRef.current)) {
-        return
-      }
-      readerUntilRef.current = now + READER_SCROLL_WINDOW_MS
-      const id = chapterAtLine(el)
-      if (id && id !== lastMovedRef.current) {
-        lastMovedRef.current = id
-        onMoveRef.current(id)
-      }
-    }
-    const observer = new ResizeObserver(() => {
-      if (liveRef.current && atBottomRef.current && !glide.isActive()) {
-        el.scrollTop = el.scrollHeight
-        report(el)
-      }
-      noteBottom(el)
-    })
-    if (el.firstElementChild) {
-      observer.observe(el.firstElementChild)
-    }
-    observer.observe(el)
-    el.addEventListener('pointerdown', onPointerDown)
-    window.addEventListener('pointerup', onPointerUp)
-    window.addEventListener('pointercancel', onPointerUp)
-    el.addEventListener('scroll', onScroll, { passive: true })
-    return () => {
-      stopIntent()
-      observer.disconnect()
-      el.removeEventListener('pointerdown', onPointerDown)
-      window.removeEventListener('pointerup', onPointerUp)
-      window.removeEventListener('pointercancel', onPointerUp)
-      el.removeEventListener('scroll', onScroll)
-      glide.cancel()
-    }
-  }, [containerRef])
-
-  useLayoutEffect(() => {
-    const el = containerRef.current
-    if (!visible) {
-      positionedRef.current = false
-      return
-    }
-    if (!el || !targetId) {
-      return
-    }
-    const first = !positionedRef.current
-    if (!first && (request === null || request === requestRef.current)) {
-      // The reader moved in the transcript, or let go of a pin: the container stays put.
-      requestRef.current = request
-      return
-    }
-    const chapter = el.querySelector<HTMLElement>(`[data-chapter-id="${escapeAttr(targetId)}"]`)
-    if (!chapter) {
-      return
-    }
-    requestRef.current = request
-    lastMovedRef.current = targetId
-    const goal = goalBottomRef.current ? el.scrollHeight : chapter.offsetTop
-    if (first) {
-      glideFor(el).to(goal, { instant: true })
-      positionedRef.current = true
-      report(el)
-    } else {
-      glideFor(el).to(goal)
-    }
-    noteBottom(el)
-  }, [visible, targetId, request, containerRef])
-
-  /** Glides just far enough to show `node` below the sticky chapter header. */
-  const reveal = useCallback(
-    (node: HTMLElement) => {
-      const el = containerRef.current
-      if (!el) {
-        return
-      }
-      const top = node.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop
-      const bottom = top + node.offsetHeight
-      if (top >= el.scrollTop + CHAPTER_HEADER_PX && bottom <= el.scrollTop + el.clientHeight) {
-        return
-      }
-      glideFor(el).to(top - CHAPTER_HEADER_PX - 8)
-    },
-    [containerRef]
-  )
-
-  /** Glides to the bottom of the container, then names the turn there. */
-  const toBottom = useCallback(() => {
-    const el = containerRef.current
-    if (!el) {
-      return
-    }
-    glideFor(el).to(el.scrollHeight, { onDone: () => report(el) })
-  }, [containerRef])
-
-  return { reveal, toBottom, atBottom }
-}
 
 export const createActivityPanel = (
   state: ActivityPanelState,
@@ -1086,7 +883,7 @@ export const createActivityPanel = (
       lastId: lastChapter?.summary.messageId ?? null,
       live: lastChapter?.summary.streaming ?? false,
       visible: panelOpen && effectiveTab === 'activity',
-      onReaderMove: setReaderId,
+      onLineChapter: setReaderId,
     })
     const sourcesScroller = useChapterScroller({
       containerRef: sourcesRef,
@@ -1095,7 +892,7 @@ export const createActivityPanel = (
       lastId: sourceChapters.at(-1)?.summary.messageId ?? null,
       live: false,
       visible: panelOpen && effectiveTab === 'sources',
-      onReaderMove: setReaderId,
+      onLineChapter: setReaderId,
     })
     const revealInActivity = activityScroller.reveal
     const tabScroller = effectiveTab === 'sources' ? sourcesScroller : activityScroller

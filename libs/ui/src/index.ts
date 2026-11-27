@@ -172,6 +172,13 @@ export {
 } from './minimapGeometry.js'
 export { READING_LINE_AT, readingLineY, sectionAt } from './readingLine.js'
 export {
+  READER_SCROLL_WINDOW_MS,
+  createReaderScroll,
+  measureSectionTops,
+  sectionAtReadingLine,
+  type ReaderScroll,
+} from './readingSections.js'
+export {
   SCROLL_GLIDE_STIFFNESS,
   createScrollGlide,
   onScrollIntent,
