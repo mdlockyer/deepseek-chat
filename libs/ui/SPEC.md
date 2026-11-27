@@ -126,14 +126,20 @@ every slice's UI and pass the full gate with zero slice edits.
     appears or hides (its box narrower than 48 px), and `false` when it unmounts. Colours follow the
     theme. Under
     reduced motion the lens and highlights change in place.
-12. **Scroll glide (`createScrollGlide`).** Drives `scrollTop` with a critically damped spring that
+12. **Reading line (`readingLineY`, `sectionAt`).** The line that decides which section is
+    current stays `READING_LINE_AT` (30%) of the view below its top through most of a scroll, so the
+    current section changes at the same place on screen; it eases from the top of the view at the
+    very top and to its bottom at the very end, and only ever moves forward as the reader scrolls
+    down, so every section, however short, is current somewhere. Content that doesn't scroll reads
+    at its end.
+13. **Scroll glide (`createScrollGlide`).** Drives `scrollTop` with a critically damped spring that
     never overshoots, clamps targets to the scroll range, retargets in flight without resetting
     velocity, and calls `onDone` only when it lands. Jumps longer than `SCROLL_GLIDE_LONG_JUMP`
     viewports fade the given content out, cut to `SCROLL_GLIDE_LEAD_IN` viewports short of the target,
     and glide the rest while fading back in. Under reduced motion it jumps. `onScrollIntent` reports
     the reader's own wheel, touch, pointer and key input so consumers can cancel glides and tell the
     reader's scrolling from programmatic scrolling.
-13. **Rolling number (`RollingNumber`).** Rolls up to a larger value and down to a smaller one over
+14. **Rolling number (`RollingNumber`).** Rolls up to a larger value and down to a smaller one over
     `--ui-duration-panel`; the outgoing value is `aria-hidden`, so only the current value is read.
 
 ## Tunable Parameters

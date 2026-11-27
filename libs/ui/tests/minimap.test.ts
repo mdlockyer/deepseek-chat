@@ -10,6 +10,7 @@ import {
   minimapLineDetail,
   mixRect,
   planScrollGlide,
+  READING_LINE_AT,
   readingLineY,
   scrollSpringSettled,
   sectionAt,
@@ -20,18 +21,37 @@ import {
 } from '@deepseek-chat/lib-ui'
 
 describe('Reading line', () => {
-  it('moves with scroll progress so every section can be current', () => {
-    // A 600px view over 1000px of content scrolls 400px; the line runs from the top of the view
-    // (0) to its bottom (1000), so content offset c is on the line at scrollTop c x 400 / 1000.
-    assert.equal(readingLineY(0, 600, 1000), 0)
-    assert.equal(readingLineY(200, 600, 1000), 500)
-    assert.equal(readingLineY(400, 600, 1000), 1000)
-    // A short section from 820 to 900, already on screen at the start, is current from
-    // scrollTop 328 to 360: in between, the line sits inside it.
-    const line = readingLineY(340, 600, 1000)
-    assert.ok(line >= 820 && line < 900, `line at ${line}`)
+  it('sits at a fixed place in the view through the middle of a long scroll', () => {
+    // A 600px view over 6000px: away from both ends the line is READING_LINE_AT of the view
+    // (0.3 x 600 = 180px) below the top, wherever the reader is.
+    for (const scrollTop of [1000, 2500, 4000]) {
+      assert.equal(readingLineY(scrollTop, 600, 6000), scrollTop + 600 * READING_LINE_AT)
+    }
+  })
+
+  it('reaches the first section at the top and the last at the bottom', () => {
+    assert.equal(readingLineY(0, 600, 6000), 0, 'the top of the content at the top')
+    assert.equal(readingLineY(5400, 600, 6000), 6000, 'the end of the content at the end')
+    // Short scroll ranges keep both ends too.
+    assert.equal(readingLineY(0, 600, 700), 0)
+    assert.equal(readingLineY(100, 600, 700), 700)
     // Content that does not scroll reads at its end, so its last section is current.
     assert.equal(readingLineY(0, 600, 500), 600)
+  })
+
+  it('only moves forward, so a section of any length starting anywhere is current somewhere', () => {
+    for (const [view, height] of [
+      [600, 6000],
+      [600, 900],
+      [400, 450],
+    ] as const) {
+      let previous = -Infinity
+      for (let scrollTop = 0; scrollTop <= height - view; scrollTop += 1) {
+        const line = readingLineY(scrollTop, view, height)
+        assert.ok(line >= previous, `moved back at ${scrollTop} (${view} over ${height})`)
+        previous = line
+      }
+    }
   })
 
   it('finds the section a point is in', () => {

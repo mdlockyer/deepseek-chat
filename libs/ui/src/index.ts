@@ -169,7 +169,7 @@ export {
   type MinimapSectionContent,
   type MinimapSectionShape,
 } from './minimapGeometry.js'
-export { readingLineY, sectionAt } from './readingLine.js'
+export { READING_LINE_AT, readingLineY, sectionAt } from './readingLine.js'
 export { RollingNumber, type RollingNumberProps } from './RollingNumber.js'
 export {
   SCROLL_GLIDE_LEAD_IN,
