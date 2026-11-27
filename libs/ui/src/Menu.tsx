@@ -29,6 +29,8 @@ export type MenuRadioOption = {
   key: string
   label: string
   icon?: ReactNode
+  /** Quiet trailing text, such as a count. */
+  detail?: string
   checked: boolean
   disabled?: boolean
   onSelect: () => void
@@ -227,7 +229,12 @@ export const Menu = ({
             const checked =
               option.type === 'radio' || option.type === 'switch' ? option.checked : undefined
             const isDanger = (!option.type || option.type === 'command') && option.danger
-            const shortcut = !option.type || option.type === 'command' ? option.shortcut : undefined
+            const shortcut =
+              !option.type || option.type === 'command'
+                ? option.shortcut
+                : option.type === 'radio'
+                  ? option.detail
+                  : undefined
             const keepOpen = option.type === 'switch' && option.keepOpen
 
             return (

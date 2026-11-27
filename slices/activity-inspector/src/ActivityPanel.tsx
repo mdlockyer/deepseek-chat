@@ -12,10 +12,7 @@ import {
   IconPhotoOutline14,
   IconThinkOutline16,
   IconButton,
-  Tab,
-  TabList,
-  TabPanel,
-  Tabs,
+  PanelTitleMenu,
   createScrollGlide,
   hoverGlideItem,
   onScrollIntent,
@@ -1154,39 +1151,42 @@ export const createActivityPanel = (
     }
 
     return (
-      <Tabs value={effectiveTab} onChange={state.setTab} className={styles.root}>
+      <div className={styles.root}>
         <header className={styles.header} data-tauri-drag-region="">
           <div className={styles.headerLeading} data-tauri-drag-region="">
-            {hasSources ? (
-              <>
-                <h2 className={styles.srOnly}>{t('panelTitle')}</h2>
-                <TabList
-                  ariaLabel={t('panelTitle')}
-                  variant="underline"
-                  className={styles.headerTabs}
-                >
-                  <Tab value="activity">{t('tabSteps')}</Tab>
-                  <Tab
-                    value="sources"
-                    badge={
-                      <span className={styles.tabCount}>
-                        {sourceChapters.reduce(
-                          (sum, chapter) =>
-                            sum + (chapter.turn ? timelineFor(chapter.turn).sources.all.length : 0),
-                          0
-                        )}
-                      </span>
-                    }
-                  >
-                    {t('tabSources')}
-                  </Tab>
-                </TabList>
-              </>
-            ) : (
-              <h2 className={styles.title} data-tauri-drag-region="">
-                {t('panelTitle')}
-              </h2>
-            )}
+            <h2 className={styles.srOnly}>{t('panelTitle')}</h2>
+            <PanelTitleMenu
+              label={effectiveTab === 'sources' ? t('tabSources') : t('tabSteps')}
+              ariaLabel={t('panelTitle')}
+              options={
+                hasSources
+                  ? [
+                      {
+                        type: 'radio',
+                        key: 'activity',
+                        label: t('tabSteps'),
+                        checked: effectiveTab === 'activity',
+                        onSelect: () => state.setTab('activity'),
+                      },
+                      {
+                        type: 'radio',
+                        key: 'sources',
+                        label: t('tabSources'),
+                        detail: String(
+                          sourceChapters.reduce(
+                            (sum, chapter) =>
+                              sum +
+                              (chapter.turn ? timelineFor(chapter.turn).sources.all.length : 0),
+                            0
+                          )
+                        ),
+                        checked: effectiveTab === 'sources',
+                        onSelect: () => state.setTab('sources'),
+                      },
+                    ]
+                  : []
+              }
+            />
           </div>
 
           <div className={styles.topActions}>
@@ -1224,7 +1224,7 @@ export const createActivityPanel = (
           </div>
         </header>
 
-        <TabPanel value="activity" keepMounted plain={!hasSources} className={styles.tabPanel}>
+        <div className={styles.tabPanel} hidden={effectiveTab !== 'activity'}>
           <div ref={activityRef} className={styles.content}>
             <div className={styles.chapters}>
               {chapters.length === 0 ? (
@@ -1256,10 +1256,10 @@ export const createActivityPanel = (
               )}
             </div>
           </div>
-        </TabPanel>
+        </div>
 
         {hasSources ? (
-          <TabPanel value="sources" keepMounted className={styles.tabPanel}>
+          <div className={styles.tabPanel} hidden={effectiveTab !== 'sources'}>
             <div ref={sourcesRef} className={styles.content}>
               <div className={styles.chapters}>
                 {sourceChapters.map((chapter) => (
@@ -1273,7 +1273,7 @@ export const createActivityPanel = (
                 ))}
               </div>
             </div>
-          </TabPanel>
+          </div>
         ) : null}
 
         <IconButton
@@ -1303,7 +1303,7 @@ export const createActivityPanel = (
           onInspectStep={inspectStep}
           onOpenLink={openLink}
         />
-      </Tabs>
+      </div>
     )
   }
 

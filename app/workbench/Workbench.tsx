@@ -30,6 +30,7 @@ import {
   PasswordField,
   Popover,
   RadioCardGroup,
+  PanelTitleMenu,
   SegmentedControl,
   Select,
   SettingGroup,
@@ -313,6 +314,7 @@ export const Workbench = () => {
   const [dialogSelect, setDialogSelect] = useState('opt-a')
   const [popoverOpen, setPopoverOpen] = useState(false)
   const [menuRadio, setMenuRadio] = useState<'fit' | 'actual'>('fit')
+  const [panelView, setPanelView] = useState<'activity' | 'sources'>('activity')
   const [menuChecked, setMenuChecked] = useState(true)
   const [confirming, setConfirming] = useState(false)
   const [activeGlide, setActiveGlide] = useState('item-1')
@@ -694,6 +696,28 @@ export const Workbench = () => {
                         </Button>
                       )}
                     </Menu>
+
+                    <PanelTitleMenu
+                      label={panelView === 'activity' ? 'Activity' : 'Sources'}
+                      ariaLabel="Panel view"
+                      options={[
+                        {
+                          type: 'radio',
+                          key: 'activity',
+                          label: 'Activity',
+                          checked: panelView === 'activity',
+                          onSelect: () => setPanelView('activity'),
+                        },
+                        {
+                          type: 'radio',
+                          key: 'sources',
+                          label: 'Sources',
+                          detail: '24',
+                          checked: panelView === 'sources',
+                          onSelect: () => setPanelView('sources'),
+                        },
+                      ]}
+                    />
 
                     <HoverCard
                       renderTrigger={({ domRef, domProps }) => (

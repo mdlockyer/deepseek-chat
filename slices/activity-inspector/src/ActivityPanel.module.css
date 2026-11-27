@@ -29,7 +29,8 @@
     flex-shrink: 0;
     box-sizing: border-box;
     height: var(--ui-panel-header-height);
-    padding: 0 var(--ui-space-2-5) 0 var(--ui-space-4);
+    /* Matches the file preview panel, so both panels' titles start at the same place. */
+    padding: 0 var(--ui-space-2-5) 0 var(--ui-space-3);
     border-bottom: 1px solid var(--ui-border-default);
   }
 
@@ -48,27 +49,6 @@
     align-items: center;
     gap: var(--ui-space-1);
     flex-shrink: 0;
-  }
-
-  .title {
-    margin: 0;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font: var(--ui-type-label-strong);
-    color: var(--ui-text-primary);
-  }
-
-  .headerTabs {
-    height: 100%;
-    align-items: stretch;
-  }
-
-  .tabCount {
-    font: var(--ui-type-micro);
-    font-variant-numeric: tabular-nums;
-    color: var(--ui-text-muted);
   }
 
   /* Scroll to the bottom of the panel: a round button floating over its bottom edge. It stays mounted
@@ -154,6 +134,10 @@
     flex-direction: column;
     flex: 1;
     min-height: 0;
+
+    &[hidden] {
+      display: none;
+    }
   }
 
   .content {

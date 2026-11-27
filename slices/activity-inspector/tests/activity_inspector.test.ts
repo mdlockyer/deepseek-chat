@@ -502,7 +502,7 @@ describe('slice-activity-inspector: redesigned ActivityPanel rendering', () => {
     slice.dispose()
   })
 
-  it('promotes errors & visuals in the Evidence Shelf (without filter chips), folds narration into expanded step details, and preserves h2 + Tabs with keepMounted', () => {
+  it('promotes errors & visuals in the Evidence Shelf (without filter chips), folds narration into expanded step details, and preserves h2 + a mounted Sources view', () => {
     const log = new EventLog()
     const panel = fakePanel()
     const presenter: ToolStepPresenter = {
@@ -652,9 +652,11 @@ describe('slice-activity-inspector: redesigned ActivityPanel rendering', () => {
       'inter-tool narration is folded out of the collapsed timeline'
     )
     assert.doesNotMatch(collapsedHtml, /BETA_OUTPUT/, 'untargeted steps start collapsed')
-    assert.match(collapsedHtml, /role="tablist"/, 'uses accessible Tabs when sources exist')
-    assert.match(collapsedHtml, /role="tabpanel"/, 'links tablist to accessible tabpanel')
-    assert.match(collapsedHtml, /aria-controls="/, 'tabs wire aria-controls to tabpanels')
+    assert.match(
+      collapsedHtml,
+      /<button[^>]*aria-haspopup="menu"[^>]*>[\s\S]*?Activity/,
+      'when sources exist, the title opens a menu that switches to them'
+    )
     assert.match(
       collapsedHtml,
       /hidden=""[^>]*>[\s\S]*Example/,

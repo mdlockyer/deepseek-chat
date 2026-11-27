@@ -14,7 +14,7 @@ transcript never scrolls it, and scrolling the drawer never scrolls the transcri
 chevron button at the bottom of the drawer scrolls the drawer to its bottom.
 
 Rather than duplicating the left chat pane's step list under stacked filter bars, the drawer keeps
-**one single 52px header** (with underline `Activity` | `Sources` tabs when sources exist), pins an
+**one single 52px header** (its title, `Activity`, opens a menu that switches to `Sources` when sources exist), pins an
 **Outputs strip** at the top of the scrollable body whenever files, charts, or screenshots were
 produced (opening generated files in File Preview and opening visuals in a native `Dialog`
 lightbox), groups multi-round **Reasoning** inside a single top disclosure with per-round causal
@@ -95,10 +95,11 @@ tab }` in both modes while open, and `null` while closed or displaced. Whenever 
    visual opens a native `Dialog` lightbox with keyboard prev/next navigation, descriptive external
    link, and `"Show step"`.
 6. **Stable mount across `Sources` transitions & accessible navigation.** `Activity` / `Sources`
-   navigation uses `@deepseek-chat/lib-ui` `Tabs` (`variant="underline"`, `keepMounted`). The
+   navigation is the header title, a `@deepseek-chat/lib-ui` `PanelTitleMenu` (plain text when there
+   are no sources), and both views stay mounted, the hidden one with `hidden`. The
    Activity scroll container stays mounted at one stable tree position when `hasSources` changes
    mid-stream or when switching tabs, preserving scroll position and expanded state, while keeping
-   an accessible `<h2>` panel heading in both tabbed and single-view modes.
+   an accessible `<h2>` panel heading whether or not there are sources.
 7. **Sources ordering.** Deduplicated sources preserve first-seen 1-based citation numbers; the
    `Sources` tab lists cited sources first followed by all remaining uncited sources.
 8. **Multi-instance isolation & snapshot stability.** All Zustand state and subscriptions live

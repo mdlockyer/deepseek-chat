@@ -9,7 +9,7 @@ import {
   IconCopyOutline16,
   IconDownloadOutline16,
   IconRefreshOutline16,
-  SegmentedControl,
+  PanelTitleMenu,
 } from '@deepseek-chat/lib-ui'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useWorkspace, WorkspaceProvider, type WorkspaceEnv } from './context.js'
@@ -369,9 +369,7 @@ const PreviewPanelContent = ({
               onSelect={(key) => activeSessionId && selectPreviewFile(activeSessionId, key)}
             />
           ) : (
-            <div className={styles.headerTitleStatic} data-tauri-drag-region>
-              <span className={styles.headerTitleText}>{t('previewPanelTitle')}</span>
-            </div>
+            <PanelTitleMenu label={t('previewPanelTitle')} options={[]} />
           )}
           {activeItem && activeEntry ? (
             <VersionMenu
@@ -386,15 +384,18 @@ const PreviewPanelContent = ({
 
         <div className={styles.headerControls}>
           {activeItem && activeEntry && canToggleMode ? (
-            <SegmentedControl
-              value={effectiveMode}
-              options={[
-                { value: 'preview', label: t('previewModePreview') },
-                { value: 'code', label: t('previewModeCode') },
-              ]}
-              onChange={(mode) =>
-                activeSessionId && setPreviewViewMode(activeSessionId, activeItem.key, mode)
-              }
+            <PanelTitleMenu
+              label={effectiveMode === 'code' ? t('previewModeCode') : t('previewModePreview')}
+              ariaLabel={t('previewModeMenu')}
+              align="end"
+              options={(['preview', 'code'] as const).map((mode) => ({
+                type: 'radio' as const,
+                key: mode,
+                label: mode === 'code' ? t('previewModeCode') : t('previewModePreview'),
+                checked: effectiveMode === mode,
+                onSelect: () =>
+                  activeSessionId && setPreviewViewMode(activeSessionId, activeItem.key, mode),
+              }))}
             />
           ) : null}
 
