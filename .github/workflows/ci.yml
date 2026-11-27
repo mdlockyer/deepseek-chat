@@ -93,7 +93,6 @@ jobs:
         with:
           workspaces: src-tauri
           shared-key: linux-rust-ci
-          cache-on-failure: true
 
       - name: Run Rust clippy
         run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings

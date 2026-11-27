@@ -13,6 +13,7 @@ import sys
 import traceback
 
 os.environ.setdefault("MPLBACKEND", "Agg")
+mimetypes.knownfiles = []
 mimetypes.init([])
 
 REQ_FD = 3
