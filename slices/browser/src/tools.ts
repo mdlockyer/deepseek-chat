@@ -925,7 +925,7 @@ export const createBrowserTools = (state: BrowserState, host: BrowserHost | null
       buildSnapshotScript({
         includeText,
         selector: options.selector,
-        clearOverlays: options.includeScreenshot === true,
+        hideCursor: options.includeScreenshot === true,
       }),
       true
     )

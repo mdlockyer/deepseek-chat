@@ -1536,6 +1536,11 @@ describe('browser: navigation settling, async form submit, stale-ref recovery, a
     const simWindow: Record<PropertyKey, unknown> = {
       innerWidth: 800,
       innerHeight: 600,
+      // Enough for the agent cursor: no animation frames, and reduced motion so it never glides.
+      requestAnimationFrame: () => 1,
+      cancelAnimationFrame: () => undefined,
+      matchMedia: () => ({ matches: true }),
+      performance: { now: () => 0 },
       scrollX: 0,
       scrollY: 0,
       scrollBy: (_opts: { top?: number; left?: number }) => {
@@ -1580,6 +1585,11 @@ describe('browser: navigation settling, async form submit, stale-ref recovery, a
       },
       createElement: (tag: string) => {
         const el = new SimHTMLElement(tag || 'div', '', 0)
+        el.ownerDocument = simDocument
+        return el
+      },
+      createElementNS: (_namespace: string, tag: string) => {
+        const el = new SimSVGElement(tag, '', 0)
         el.ownerDocument = simDocument
         return el
       },
@@ -2299,7 +2309,7 @@ describe('browser: navigation settling, async form submit, stale-ref recovery, a
     env.browser.dispose()
   })
 
-  it('clears transient driver highlight overlays before taking a screenshot and deduplicates text across same-page #hash clicks', async () => {
+  it('hides the agent cursor while it takes a screenshot and deduplicates text across same-page #hash clicks', async () => {
     const dom = createInteractiveDom(
       'https://en.wikipedia.org/wiki/DeepSeek',
       'DeepSeek - Wikipedia'
@@ -2314,11 +2324,14 @@ describe('browser: navigation settling, async form submit, stale-ref recovery, a
     dom.body.append(historyLink)
 
     const env = await withVisiblePage()
-    let overlaysDuringSnapshot = -1
+    // The cursor's drawing is the first child of its host (the sim has no shadow roots).
+    const cursorDrawing = () =>
+      dom.docRoot.querySelectorAll('*').find((el) => el.tagName === 'DS-AGENT-CURSOR')?.children[0]
+    let cursorDuringSnapshot: string | undefined
     env.host.host.evalJs = async (_tabId, script, isolated) =>
       isolated ? dom.runScript(script) : JSON.stringify({ ok: true, value: null })
     env.host.host.takeSnapshot = async () => {
-      overlaysDuringSnapshot = dom.docRoot.querySelectorAll('[data-ds-overlay="1"]').length
+      cursorDuringSnapshot = cursorDrawing()?.style.visibility
       return { dataUrl: 'data:image/jpeg;base64,CLEAN', width: 800, height: 600 }
     }
 
@@ -2333,11 +2346,8 @@ describe('browser: navigation settling, async form submit, stale-ref recovery, a
       { signal: signal(), sessionId: 's1' }
     )
     assert.equal(clicked.status, 'ok')
-    assert.equal(
-      overlaysDuringSnapshot,
-      0,
-      'transient highlight overlays must be cleared before screenshot'
-    )
+    assert.equal(cursorDuringSnapshot, 'hidden', 'the agent cursor is hidden during the capture')
+    assert.equal(cursorDrawing()?.style.visibility, 'visible', 'and shown again afterwards')
     assert.doesNotMatch(
       clicked.text,
       /Long article body paragraph/,

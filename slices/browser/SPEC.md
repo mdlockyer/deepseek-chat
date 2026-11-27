@@ -85,7 +85,7 @@ panel, from `spine/design`), `KeyValueStore`.
     include password field values, traverse accessible same-origin iframes into `[eN]` refs and
     page text, list visible cross-origin iframes (title and `src`) when present, index visible
     scrollable containers for `browser_scroll({ ref })` (excluded from screenshot SoM badges), and
-    clear transient driver overlays (and hide the agent cursor) before capturing screenshots. Layout/chrome actions
+    hide the agent cursor before capturing screenshots. Layout/chrome actions
     (`browser_scroll`, `browser_set_viewport`, `browser_tabs` switch) omit page text unless
     requested (`browser_scroll` with `ref` reports the container's updated scroll position);
     same-URL content-mutating actions (`browser_click`, `browser_type`, `browser_press_key`,

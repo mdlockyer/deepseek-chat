@@ -74,23 +74,6 @@ const __inViewport = (rect) => {
   return rect.bottom > 0 && rect.right > 0 && rect.top < vh && rect.left < vw;
 };
 
-const __clearOverlays = (rootDoc, depth = 0) => {
-  if (!rootDoc || depth > 4) return;
-  try {
-    if (typeof rootDoc.querySelectorAll === 'function') {
-      const boxes = rootDoc.querySelectorAll('[data-ds-overlay="1"]');
-      for (let i = 0; i < boxes.length; i++) {
-        if (typeof boxes[i].remove === 'function') boxes[i].remove();
-      }
-      const frames = rootDoc.querySelectorAll('iframe');
-      for (let i = 0; i < frames.length; i++) {
-        const info = __getFrameDocument(frames[i]);
-        if (info.doc) __clearOverlays(info.doc, depth + 1);
-      }
-    }
-  } catch {}
-};
-
 const __getActiveElement = () => {
   let doc = document;
   let active = doc.activeElement;
@@ -374,7 +357,8 @@ export const buildCursorRestoreScript = (): string =>
 export type SnapshotOptions = {
   includeText?: boolean
   selector?: string
-  clearOverlays?: boolean
+  /** Hide the agent cursor (until `buildCursorRestoreScript`) so a screenshot comes out clean. */
+  hideCursor?: boolean
   maxElements?: number
   maxTextChars?: number
 }
@@ -383,7 +367,7 @@ export const buildSnapshotScript = (options: SnapshotOptions = {}): string => {
   const args = JSON.stringify({
     includeText: options.includeText ?? true,
     selector: options.selector ?? null,
-    clearOverlays: options.clearOverlays === true,
+    hideCursor: options.hideCursor === true,
     maxElements: options.maxElements ?? 140,
     maxScrollables: 8,
     maxIframes: 12,
@@ -394,11 +378,8 @@ export const buildSnapshotScript = (options: SnapshotOptions = {}): string => {
 try {
   ${SHARED_HELPERS}
   const opts = ${args};
-  if (opts.clearOverlays) {
-    __clearOverlays(document);
-    if (__dsStore.cursor && __dsStore.cursor.isConnected()) {
-      __dsStore.cursor.setCaptured(true);
-    }
+  if (opts.hideCursor && __dsStore.cursor && __dsStore.cursor.isConnected()) {
+    __dsStore.cursor.setCaptured(true);
   }
   for (const [existingRef, weak] of __dsStore.refs.entries()) {
     const existingEl = weak.deref();
@@ -415,7 +396,6 @@ try {
 
   const isInteractive = (el) => {
     if (!__isHtmlOrSvg(el)) return false;
-    if (el.getAttribute('data-ds-overlay') === '1') return false;
     const tag = __tag(el);
     if (tag === 'a' && el.hasAttribute('href')) return true;
     if (tag === 'button' || tag === 'input' || tag === 'textarea' || tag === 'select' || tag === 'summary') {
@@ -432,7 +412,6 @@ try {
 
   const isScrollableContainer = (el) => {
     if (!__isHtmlOrSvg(el)) return false;
-    if (el.getAttribute('data-ds-overlay') === '1') return false;
     const tag = __tag(el);
     if (tag === 'html' || tag === 'body' || tag === 'iframe') return false;
     const style = __computedStyle(el);
@@ -498,7 +477,6 @@ try {
   const walk = (node, offsetX, offsetY, depth) => {
     if (!node) return;
     if (__isElement(node)) {
-      if (node.getAttribute('data-ds-overlay') === '1') return;
       const tag = __tag(node);
       if (tag === 'iframe') {
         if (__isVisible(node)) {
@@ -985,7 +963,6 @@ try {
     const walk = (node, depth) => {
       if (!node) return;
       if (__isElement(node)) {
-        if (node.getAttribute('data-ds-overlay') === '1') return;
         if (__tag(node) === 'iframe') {
           if (__isVisible(node) && depth < 4) {
             const info = __getFrameDocument(node);
