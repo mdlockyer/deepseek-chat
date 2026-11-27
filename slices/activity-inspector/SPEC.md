@@ -7,9 +7,9 @@ a first-class `HeaderToggle` in the session header alongside peer workspace togg
 scrolls through every turn of the chat as chapters, each under a sticky header naming the turn by
 its prompt, and stays in step with the transcript: in `follow_reading` mode it shows the turn the
 reader is on (from the optional `transcript` port; the latest turn without one), and in `pinned`
-mode it holds one turn (from `TurnInspectionRequested`, the header's previous / next buttons, a
-chapter header, or the reader scrolling the drawer itself) until the reader moves on to another
-turn in the transcript. A header readout names the turn on show, and `Latest` returns to the
+mode it holds one turn (from `TurnInspectionRequested`, the header's previous / next buttons, or a
+chapter header) until the reader moves on to another turn in the transcript. Scrolling the drawer
+only moves its own highlight; it never scrolls the transcript. A header readout names the turn on show, and `Latest` returns to the
 newest one.
 
 Rather than duplicating the left chat pane's step list under stacked filter bars, the drawer keeps
@@ -66,8 +66,8 @@ tab }` in both modes while open, and `null` while closed or displaced. Whenever 
    and a step count, source count or live marker, each keeping its own expanded steps. When the
    displayed turn changes for any reason other than the reader scrolling the drawer, the visible
    tab glides to that chapter (instantly when the tab is first shown, to the bottom while a live
-   latest turn streams); while the reader scrolls the drawer, the chapter under the reading line (`readingLineY`, which travels with scroll progress so short chapters are reachable) is highlighted and named in the readout at once, and when scrolling rests on another chapter that turn is pinned and revealed in the transcript. Previous / next header buttons and chapter headers pin
-   and reveal the same way.
+   latest turn streams); while the reader scrolls the drawer, the chapter under the reading line (`readingLineY`, which travels with scroll progress so short chapters are reachable) is highlighted and named in the readout, and the transcript does not move; any other change to the shown turn takes over again. Previous / next header buttons and chapter headers pin
+   the turn and reveal it in the transcript.
 3. **Displacement isolation.** When another right-hand panel displaces Activity on the same
    session, `useActiveTarget()` / `getTarget()` reports `null` while hidden, and clicking
    `HeaderToggle` again resumes that session's selection (clearing any stale `focusedCallId`).
@@ -111,6 +111,5 @@ Consumes `ActiveSessionChanged`, `SessionDeleted`, `SessionHistoryReplaced`,
 
 | Name                                 | Value  |
 | :----------------------------------- | :----- |
-| Drawer scrolling rest before pinning | 200 ms |
 | Reader-scroll window after input     | 250 ms |
 | Live turn keeps the drawer at bottom | 48 px  |

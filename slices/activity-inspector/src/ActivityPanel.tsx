@@ -404,12 +404,6 @@ const SourcesView = ({
   )
 }
 
-/**
- * How long the reader's scrolling must rest on a turn before the panel pins it and the transcript
- * follows. The panel's own highlight and readout follow at once; only the transcript waits, so
- * scrolling past a turn does not drag the transcript through it.
- */
-const CHAPTER_SETTLE_MS = 200
 /** Scroll events this soon after the reader's own input (or another such event) are theirs. */
 const READER_SCROLL_WINDOW_MS = 250
 /** Within this distance of the bottom, a live turn's new steps keep the panel at the bottom. */
@@ -454,9 +448,10 @@ const escapeAttr = (value: string) =>
 /**
  * Keeps one tab's scroll container in step with the turn the panel shows. When that turn changes
  * for any reason other than the reader scrolling this container, it glides there (instantly the
- * first time the tab is shown). When the reader scrolls to another turn and rests, it reports
- * that turn so the panel can pin it and the transcript can follow. A live last turn keeps the
- * container at the bottom while its steps arrive, as long as the reader is there.
+ * first time the tab is shown). While the reader scrolls it, it reports the turn under the reading
+ * line so the panel's highlight and readout can follow; that never moves the transcript. A live
+ * last turn keeps the container at the bottom while its steps arrive, as long as the reader is
+ * there.
  */
 const useChapterScroller = ({
   containerRef,
@@ -465,29 +460,20 @@ const useChapterScroller = ({
   live,
   visible,
   onReaderMove,
-  onReaderChapter,
 }: {
   containerRef: RefObject<HTMLDivElement | null>
   targetId: string | null
   lastId: string | null
   live: boolean
   visible: boolean
-  /** The turn under the reading line while the reader scrolls, at once. */
+  /** The turn under the reading line while the reader scrolls this container. */
   onReaderMove: (messageId: string) => void
-  /** The turn the reader's scrolling settled on. */
-  onReaderChapter: (messageId: string) => void
 }) => {
   const glideRef = useRef<ScrollGlide | null>(null)
-  const reportedRef = useRef<string | null>(null)
   const readerUntilRef = useRef(0)
   const draggingRef = useRef(false)
   const atBottomRef = useRef(true)
   const positionedRef = useRef(false)
-  const settleTimer = useRef(0)
-  const targetRef = useRef(targetId)
-  targetRef.current = targetId
-  const onReaderRef = useRef(onReaderChapter)
-  onReaderRef.current = onReaderChapter
   const onMoveRef = useRef(onReaderMove)
   onMoveRef.current = onReaderMove
   const lastMovedRef = useRef<string | null>(null)
@@ -529,19 +515,11 @@ const useChapterScroller = ({
         return
       }
       readerUntilRef.current = now + READER_SCROLL_WINDOW_MS
-      window.clearTimeout(settleTimer.current)
       const id = chapterAtLine()
       if (id && id !== lastMovedRef.current) {
         lastMovedRef.current = id
         onMoveRef.current(id)
       }
-      if (!id || id === targetRef.current) {
-        return
-      }
-      settleTimer.current = window.setTimeout(() => {
-        reportedRef.current = id
-        onReaderRef.current(id)
-      }, CHAPTER_SETTLE_MS)
     }
     const observer = new ResizeObserver(() => {
       if (followBottomRef.current && atBottomRef.current && !glide.isActive()) {
@@ -562,7 +540,6 @@ const useChapterScroller = ({
       window.removeEventListener('pointerup', onPointerUp)
       window.removeEventListener('pointercancel', onPointerUp)
       el.removeEventListener('scroll', onScroll)
-      window.clearTimeout(settleTimer.current)
       glide.cancel()
     }
   }, [containerRef])
@@ -576,10 +553,6 @@ const useChapterScroller = ({
     if (!el || !targetId) {
       return
     }
-    if (positionedRef.current && targetId === reportedRef.current) {
-      return
-    }
-    reportedRef.current = null
     lastMovedRef.current = targetId
     const chapter = el.querySelector<HTMLElement>(`[data-chapter-id="${escapeAttr(targetId)}"]`)
     if (!chapter) {
@@ -1020,16 +993,14 @@ export const createActivityPanel = (
     const displayedIndex = chapters.findIndex(
       (chapter) => chapter.summary.messageId === displayedId
     )
-    // While the reader scrolls the panel, the highlight and readout follow the reading line at
-    // once; the pin (and the transcript) catch up when scrolling settles. Any other change to the
-    // shown turn takes over again.
+    // While the reader scrolls the panel, the highlight and readout follow its reading line. That
+    // stays in the panel: the transcript does not move. Any other change to the shown turn (the
+    // reader moving in the transcript, a pin, Latest) takes over again.
     const [readerId, setReaderId] = useState<string | null>(null)
-    const [readerBase, setReaderBase] = useState(displayedId)
-    if (readerBase !== displayedId) {
-      setReaderBase(displayedId)
-      if (readerId !== displayedId) {
-        setReaderId(null)
-      }
+    const [readerBase, setReaderBase] = useState({ displayedId, selection })
+    if (readerBase.displayedId !== displayedId || readerBase.selection !== selection) {
+      setReaderBase({ displayedId, selection })
+      setReaderId(null)
     }
     const shownId = readerId ?? displayedId
     const shownIndex = chapters.findIndex((chapter) => chapter.summary.messageId === shownId)
@@ -1072,7 +1043,6 @@ export const createActivityPanel = (
       live: lastChapter?.summary.streaming ?? false,
       visible: panelOpen && effectiveTab === 'activity',
       onReaderMove: setReaderId,
-      onReaderChapter: pin,
     })
     useChapterScroller({
       containerRef: sourcesRef,
@@ -1081,7 +1051,6 @@ export const createActivityPanel = (
       live: false,
       visible: panelOpen && effectiveTab === 'sources',
       onReaderMove: setReaderId,
-      onReaderChapter: pin,
     })
 
     const [lightbox, setLightbox] = useState<LightboxState | null>(null)
