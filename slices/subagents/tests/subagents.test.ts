@@ -135,7 +135,7 @@ describe('slice-subagents: spawn, read-only guard, board, wait, citations, and t
       },
     }
 
-    let registryRef!: ReturnType<typeof createToolRegistry>
+    const childHost = createToolRegistry([providerCap])
     const log = new EventLog()
     const subagents = createSubagentsSlice({
       log,
@@ -168,10 +168,10 @@ describe('slice-subagents: spawn, read-only guard, board, wait, citations, and t
           ])
         },
       }),
-      getToolHost: () => registryRef,
+      toolHost: childHost,
     })
 
-    registryRef = createToolRegistry([providerCap, subagents.capability])
+    const registryRef = createToolRegistry([providerCap, subagents.capability])
 
     // Subagents automatically declares wait & post when a spawn profile is present
     const declared = registryRef.declare({ questionText: '', enabledCapabilities: {} })

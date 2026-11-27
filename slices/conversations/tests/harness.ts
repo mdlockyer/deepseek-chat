@@ -38,7 +38,6 @@ export const createTestSlice = (overrides: TestSliceOverrides = {}) => {
       openSettings: () => {},
       openInApp: null,
       saveFile: async () => {},
-      setSiderCollapsed: () => {},
     },
     ...rest,
   })

@@ -55,5 +55,4 @@ export type ConversationsViewDeps = {
   readonly openInApp: ((url: string) => void) | null
   /** Saves a file for the user (desktop: save dialog; web: download). */
   readonly saveFile: (name: string, blob: Blob) => Promise<void>
-  readonly setSiderCollapsed: (collapsed: boolean) => void
 }

@@ -529,7 +529,6 @@ describe('conversations/cells/activity-inspector: ActivityPanel rendering & read
         openSettings: () => undefined,
         openInApp: null,
         saveFile: async () => undefined,
-        setSiderCollapsed: () => undefined,
       },
     })
     assert.ok(slice.activity)

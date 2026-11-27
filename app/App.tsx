@@ -28,8 +28,8 @@ export const App = ({ embedded = false }: { embedded?: boolean }) => {
   const dark = useRuntimeTheme(preferences) === 'dark'
   const locale = useLocale()
   const t = useTranslate()
-  const layoutState = runtime.layout.useStore()
-  const siderMode: SiderMode = isMobile ? 'absent' : layoutState.mode
+  const siderLayoutMode = runtime.layout.useStore((state) => state.mode)
+  const siderMode: SiderMode = isMobile ? 'absent' : siderLayoutMode
   // The toolbar fades out when the last chat is deleted; it keeps showing the mode it had.
   const lastToolbarModeRef = useRef<'collapsed' | 'expanded'>('collapsed')
   if (siderMode !== 'absent') {
@@ -99,7 +99,11 @@ export const App = ({ embedded = false }: { embedded?: boolean }) => {
             <>
               <Sider collapsed={siderMode !== 'expanded'} />
               {showToolbar ? (
-                <SiderToolbar siderMode={lastToolbarModeRef.current} exiting={toolbarExiting} />
+                <SiderToolbar
+                  siderMode={lastToolbarModeRef.current}
+                  exiting={toolbarExiting}
+                  onSetCollapsed={runtime.layout.setSiderCollapsed}
+                />
               ) : null}
             </>
           )}

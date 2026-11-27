@@ -154,8 +154,8 @@ export type SubagentsToolHost = {
 export type SubagentsSliceDeps = {
   readonly log: EventLog
   readonly provider: ModelProvider
-  /** Lazy getter returning the composed ToolRegistry / host (avoids construction-order coupling). */
-  readonly getToolHost: () => SubagentsToolHost
+  /** Read-only host of non-subagent capabilities (makes recursive subagent spawning impossible). */
+  readonly toolHost: SubagentsToolHost
   readonly params?: Partial<SubagentsParams>
   readonly newId?: () => string
 }

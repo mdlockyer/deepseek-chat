@@ -9,7 +9,6 @@ import {
   createToolRegistry,
   type CompositionPromptNote,
   type ToolCapability,
-  type ToolRegistry,
 } from '@deepseek-chat/lib-tools'
 import { copyText, createNoticeBus, createOverlayCoordinator } from '@deepseek-chat/lib-ui'
 import { createAccountSlice, type AccountSlice } from '@deepseek-chat/slice-account'
@@ -182,7 +181,6 @@ export const createAppRuntime = (config: AppRuntimeConfig) => {
   const notices = createNoticeBus()
   const overlays = createOverlayCoordinator()
   const rightPanel: RightPanelController = createRightPanelController(store, log)
-  const layout: SiderLayoutController = createSiderLayoutController(log)
 
   const useSettingsDialog = create<{ open: boolean; section: SettingsSection }>(() => ({
     open: false,
@@ -294,27 +292,27 @@ export const createAppRuntime = (config: AppRuntimeConfig) => {
 
   const askUser: AskUserSlice | null = enabled.askUser ? createAskUserSlice({ log }) : null
 
-  // Subagents resolves the aggregated registry lazily when tools execute (zero module globals).
-  let toolRegistry!: ToolRegistry
-  const subagents: SubagentsSlice | null = enabled.subagents
-    ? createSubagentsSlice({
-        log,
-        provider,
-        getToolHost: () => toolRegistry,
-        newId: createId,
-      })
-    : null
-
-  const capabilities: ToolCapability[] = [
+  // Non-subagent capabilities form the eager read-only host for child agents (non-recursive by construction).
+  const baseCapabilities: ToolCapability[] = [
     ...(workspaceFiles ? [workspaceFiles.capability] : []),
     ...(askUser ? [askUser.capability] : []),
     ...(webResearch ? [webResearch.capability] : []),
     ...(python ? [python.capability] : []),
     ...(browser ? [browser.capability] : []),
-    ...(subagents ? [subagents.capability] : []),
     ...(config.extraCapabilities ?? []),
   ]
-  toolRegistry = createToolRegistry(capabilities, COMPOSITION_PROMPT_NOTES)
+  const childToolHost = createToolRegistry(baseCapabilities, COMPOSITION_PROMPT_NOTES)
+  const subagents: SubagentsSlice | null = enabled.subagents
+    ? createSubagentsSlice({
+        log,
+        provider,
+        toolHost: childToolHost,
+        newId: createId,
+      })
+    : null
+  const toolRegistry = subagents
+    ? createToolRegistry([...baseCapabilities, subagents.capability], COMPOSITION_PROMPT_NOTES)
+    : childToolHost
 
   const headerActions: ComponentType<{ readonly sessionId: string }>[] = [
     ...(workspaceFiles ? [workspaceFiles.HeaderToggle] : []),
@@ -377,11 +375,10 @@ export const createAppRuntime = (config: AppRuntimeConfig) => {
           }
         : null,
       saveFile,
-      setSiderCollapsed: layout.setSiderCollapsed,
     },
   })
 
-  layout.bindSessions(conversations)
+  const layout: SiderLayoutController = createSiderLayoutController(log, conversations)
 
   const historyBackup: HistoryBackupSlice | null = enabled.historyBackup
     ? createHistoryBackupSlice({

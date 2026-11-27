@@ -37,7 +37,6 @@ describe('conversations: permanent top-right Settings & first-launch chrome', ()
         openSettings: () => {},
         openInApp: null,
         saveFile: async () => {},
-        setSiderCollapsed: () => {},
       },
     })
     await needsKeySlice.commands.init()
@@ -57,7 +56,6 @@ describe('conversations: permanent top-right Settings & first-launch chrome', ()
         openSettings: () => {},
         openInApp: null,
         saveFile: async () => {},
-        setSiderCollapsed: () => {},
       },
     })
     await hasKeySlice.commands.init()
@@ -83,7 +81,6 @@ describe('conversations: permanent top-right Settings & first-launch chrome', ()
         openSettings: () => {},
         openInApp: null,
         saveFile: async () => {},
-        setSiderCollapsed: () => {},
       },
     })
 

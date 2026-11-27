@@ -118,7 +118,7 @@ export const createSubagentsSlice = (deps: SubagentsSliceDeps) => {
     const runtime = createReplySubagentRuntime({
       initialState,
       provider: deps.provider,
-      tools: deps.getToolHost(),
+      tools: deps.toolHost,
       params,
       newId,
       retry: {
@@ -156,7 +156,7 @@ export const createSubagentsSlice = (deps: SubagentsSliceDeps) => {
     }),
   ]
 
-  const isSpawnTool = (name: string) => deps.getToolHost().agentProfile(name) !== null
+  const isSpawnTool = (name: string) => deps.toolHost.agentProfile(name) !== null
 
   const capability: ToolCapability = {
     id: 'subagents',

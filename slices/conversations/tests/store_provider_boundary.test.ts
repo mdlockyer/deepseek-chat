@@ -170,7 +170,6 @@ describe('conversations: provider-neutral boundary proof (synthetic inline-base6
         openSettings: () => {},
         openInApp: null,
         saveFile: async () => {},
-        setSiderCollapsed: () => {},
       },
     })
 

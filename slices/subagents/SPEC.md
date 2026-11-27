@@ -22,8 +22,9 @@ Pure exports: `POST_TOOL_NAME`, `WAIT_TOOL_NAME`, `AUTO_WAIT_ID_PREFIX`, `DEFAUL
 ## Behavioural invariants
 
 1. **Read-only & depth 1.** Children receive only `read` tools named in their profile (never another
-   `spawn` tool), `post`, and their profile's `finish` tool. Calls to any other tool resolve as an
-   error without invoking the tool dispatcher.
+   `spawn` tool), `post`, and their profile's `finish` tool. `deps.toolHost` is injected eagerly as
+   a non-subagent host so recursive subagent spawning is structurally impossible, and calls to any
+   other tool resolve as an error without invoking the tool dispatcher.
 2. **Caps & concurrency.** Enforces `maxRunningChildren`, `maxChildrenPerReply`, and per-child
    `maxParallelReadCalls`.
 3. **Shared board & `wait`.** Children post `finding` or `question` up to `maxPostsPerChild` and

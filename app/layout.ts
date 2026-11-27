@@ -5,13 +5,27 @@ import { create } from 'zustand'
 
 export type SiderLayoutState = { readonly mode: SiderMode }
 
-export type SiderLayoutEvent =
-  | { readonly type: 'hydrated'; readonly sessionCount: number }
+/**
+ * Single-owner discriminated state for the desktop sidebar lifecycle.
+ * Holds hydration phase, visible mode, last observed session count, and pending history-replace
+ * marker with zero external closure flags.
+ */
+export type SiderLayoutMachineState =
   | {
-      readonly type: 'sessionsChanged'
-      readonly sessionCount: number
-      readonly fromHistoryReplace: boolean
+      readonly phase: 'unhydrated'
+      readonly mode: 'absent'
+      readonly pendingHistoryReplace: boolean
     }
+  | {
+      readonly phase: 'ready'
+      readonly mode: SiderMode
+      readonly sessionCount: number
+      readonly pendingHistoryReplace: boolean
+    }
+
+export type SiderLayoutEvent =
+  | { readonly type: 'historyReplaced' }
+  | { readonly type: 'sessionsSynced'; readonly ready: boolean; readonly sessionCount: number }
   | { readonly type: 'setCollapsed'; readonly collapsed: boolean }
 
 export type SessionCountSource = {
@@ -19,100 +33,100 @@ export type SessionCountSource = {
   readonly subscribe: (listener: () => void) => () => void
 }
 
-const absentState = (): SiderLayoutState => ({ mode: 'absent' })
-const expandedState = (): SiderLayoutState => ({ mode: 'expanded' })
-const collapsedState = (): SiderLayoutState => ({ mode: 'collapsed' })
+export const INITIAL_SIDER_LAYOUT: SiderLayoutMachineState = {
+  phase: 'unhydrated',
+  mode: 'absent',
+  pendingHistoryReplace: false,
+}
 
-/** Pure state transition for the desktop sidebar lifecycle (`absent` / `collapsed` / `expanded`). */
-export const transitionSiderLayout = (
-  state: SiderLayoutState,
+/** Pure state transition covering the entire desktop sidebar lifecycle (`absent` / `collapsed` / `expanded`). */
+export const stepSiderLayout = (
+  state: SiderLayoutMachineState,
   event: SiderLayoutEvent
-): SiderLayoutState => {
+): SiderLayoutMachineState => {
   switch (event.type) {
-    case 'hydrated':
-      return event.sessionCount > 0 ? expandedState() : absentState()
-    case 'sessionsChanged':
-      if (event.sessionCount === 0) {
-        return state.mode === 'absent' ? state : absentState()
+    case 'historyReplaced':
+      return state.pendingHistoryReplace ? state : { ...state, pendingHistoryReplace: true }
+    case 'sessionsSynced': {
+      if (!event.ready) {
+        return state
       }
-      if (state.mode === 'absent') {
-        return event.fromHistoryReplace ? expandedState() : collapsedState()
+      if (state.phase === 'unhydrated') {
+        return {
+          phase: 'ready',
+          mode: event.sessionCount > 0 ? 'expanded' : 'absent',
+          sessionCount: event.sessionCount,
+          pendingHistoryReplace: false,
+        }
       }
-      return state
-    case 'setCollapsed':
+      if (event.sessionCount === state.sessionCount && !state.pendingHistoryReplace) {
+        return state
+      }
+      const nextMode: SiderMode =
+        event.sessionCount === 0
+          ? 'absent'
+          : state.mode === 'absent'
+            ? state.pendingHistoryReplace
+              ? 'expanded'
+              : 'collapsed'
+            : state.mode
+      return {
+        phase: 'ready',
+        mode: nextMode,
+        sessionCount: event.sessionCount,
+        pendingHistoryReplace: false,
+      }
+    }
+    case 'setCollapsed': {
       if (state.mode === 'absent') {
         return state
       }
-      if (event.collapsed) {
-        return state.mode === 'collapsed' ? state : collapsedState()
-      }
-      return state.mode === 'expanded' ? state : expandedState()
+      const nextMode: SiderMode = event.collapsed ? 'collapsed' : 'expanded'
+      return state.mode === nextMode ? state : { ...state, mode: nextMode }
+    }
   }
 }
 
-export const siderModeOf = (state: SiderLayoutState): SiderMode => state.mode
+export const siderModeOf = (state: Pick<SiderLayoutMachineState, 'mode'>): SiderMode => state.mode
 
-/** Factory-scoped desktop sidebar layout controller bound to a runtime's Spine EventLog. */
-export const createSiderLayoutController = (log: EventLog) => {
-  const useStore = create<SiderLayoutState>(absentState)
-  let hydrated = false
-  let lastSessionCount = 0
-  let pendingHistoryReplace = false
-  let unsubSessions: (() => void) | null = null
+/** Factory-scoped desktop sidebar layout controller wired eagerly to `log` and `sessions`. */
+export const createSiderLayoutController = (log: EventLog, sessions: SessionCountSource) => {
+  const syncEvent = (): SiderLayoutEvent => {
+    const { ready, sessions: list } = sessions.getState()
+    return { type: 'sessionsSynced', ready, sessionCount: list.length }
+  }
+
+  const useStore = create<SiderLayoutMachineState>(() =>
+    stepSiderLayout(INITIAL_SIDER_LAYOUT, syncEvent())
+  )
 
   const dispatch = (event: SiderLayoutEvent) => {
     const prev = useStore.getState()
-    const next = transitionSiderLayout(prev, event)
+    const next = stepSiderLayout(prev, event)
     if (next !== prev) {
       useStore.setState(next, true)
     }
   }
 
   const unsubHistory = log.subscribe<SessionHistoryReplaced>('SessionHistoryReplaced', () => {
-    pendingHistoryReplace = true
+    dispatch({ type: 'historyReplaced' })
   })
-
-  const syncFromSource = (source: SessionCountSource) => {
-    const { ready, sessions } = source.getState()
-    if (!ready) {
-      return
-    }
-    const sessionCount = sessions.length
-    const fromHistoryReplace = pendingHistoryReplace
-    pendingHistoryReplace = false
-
-    if (!hydrated) {
-      hydrated = true
-      lastSessionCount = sessionCount
-      dispatch({ type: 'hydrated', sessionCount })
-      return
-    }
-    if (sessionCount !== lastSessionCount || fromHistoryReplace) {
-      lastSessionCount = sessionCount
-      dispatch({ type: 'sessionsChanged', sessionCount, fromHistoryReplace })
-    }
-  }
-
-  const bindSessions = (source: SessionCountSource) => {
-    unsubSessions?.()
-    syncFromSource(source)
-    unsubSessions = source.subscribe(() => syncFromSource(source))
-  }
+  const unsubSessions = sessions.subscribe(() => {
+    dispatch(syncEvent())
+  })
 
   const setSiderCollapsed = (collapsed: boolean) => {
     dispatch({ type: 'setCollapsed', collapsed })
   }
 
   const dispose = () => {
-    unsubSessions?.()
-    unsubSessions = null
+    unsubSessions()
     unsubHistory()
   }
 
   return {
     useStore,
-    getState: () => useStore.getState(),
-    bindSessions,
+    getState: (): SiderLayoutState => ({ mode: useStore.getState().mode }),
     setSiderCollapsed,
     dispose,
   }

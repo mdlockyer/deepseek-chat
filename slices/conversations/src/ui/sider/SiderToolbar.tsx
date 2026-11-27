@@ -16,12 +16,14 @@ import styles from './Sider.module.css'
 export const SiderToolbar = ({
   siderMode,
   exiting = false,
+  onSetCollapsed,
 }: {
   siderMode: 'collapsed' | 'expanded'
   exiting?: boolean
+  onSetCollapsed?: (collapsed: boolean) => void
 }) => {
   const t = useTranslate()
-  const { deps, newChat } = useConversations()
+  const { newChat } = useConversations()
   const expanded = siderMode === 'expanded'
   const toolbarRef = useRef<HTMLDivElement | null>(null)
   const [moving, setMoving] = useState(false)
@@ -64,7 +66,7 @@ export const SiderToolbar = ({
         tooltipPlacement="bottom"
         tooltipDisabled={exiting}
         aria-expanded={expanded}
-        onClick={() => deps.ui.setSiderCollapsed(expanded)}
+        onClick={() => onSetCollapsed?.(expanded)}
       />
       <span className={styles.toolbarNewChat} aria-hidden={expanded || undefined}>
         <IconButton

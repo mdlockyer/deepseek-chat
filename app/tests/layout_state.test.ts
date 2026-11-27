@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import type { Session } from '@deepseek-chat/slice-conversations'
 import { memoryStore } from '@deepseek-chat/test-support'
-import { transitionSiderLayout } from '../layout.js'
+import { INITIAL_SIDER_LAYOUT, stepSiderLayout } from '../layout.js'
 import { createTestRuntime as createAppRuntime, memorySessionStore } from './testRuntime.js'
 
 Object.assign(globalThis, {
@@ -53,64 +53,83 @@ const sampleSession = (id: string, title = 'Saved chat'): Session => ({
   ],
 })
 
-describe('transitionSiderLayout pure state machine', () => {
-  it('enforces absent, collapsed and expanded invariants', () => {
-    const absent = transitionSiderLayout({ mode: 'absent' }, { type: 'hydrated', sessionCount: 0 })
-    assert.deepEqual(absent, { mode: 'absent' })
+describe('stepSiderLayout pure state machine', () => {
+  it('enforces unhydrated, absent, collapsed, expanded, and history-replace invariants without closure flags', () => {
+    // Ignores sync ticks while unhydrated and ready === false.
+    const stillUnhydrated = stepSiderLayout(INITIAL_SIDER_LAYOUT, {
+      type: 'sessionsSynced',
+      ready: false,
+      sessionCount: 5,
+    })
+    assert.equal(stillUnhydrated, INITIAL_SIDER_LAYOUT)
+
+    // Hydrating with zero sessions transitions to ready + absent.
+    const absent = stepSiderLayout(INITIAL_SIDER_LAYOUT, {
+      type: 'sessionsSynced',
+      ready: true,
+      sessionCount: 0,
+    })
+    assert.equal(absent.phase, 'ready')
+    assert.equal(absent.mode, 'absent')
+
+    // Hydrating directly with existing sessions starts expanded.
+    const hydratedWithSessions = stepSiderLayout(INITIAL_SIDER_LAYOUT, {
+      type: 'sessionsSynced',
+      ready: true,
+      sessionCount: 2,
+    })
+    assert.equal(hydratedWithSessions.mode, 'expanded')
 
     // Cannot expand or collapse while zero sessions exist.
-    assert.deepEqual(
-      transitionSiderLayout(absent, { type: 'setCollapsed', collapsed: false }),
+    assert.equal(stepSiderLayout(absent, { type: 'setCollapsed', collapsed: false }), absent)
+    assert.equal(stepSiderLayout(absent, { type: 'setCollapsed', collapsed: true }), absent)
+
+    // Idempotent sync with unchanged count returns identical state reference.
+    assert.equal(
+      stepSiderLayout(absent, { type: 'sessionsSynced', ready: true, sessionCount: 0 }),
       absent
     )
-    assert.deepEqual(
-      transitionSiderLayout(absent, { type: 'setCollapsed', collapsed: true }),
-      absent
-    )
+
+    // Empty history import consumes pendingHistoryReplace without leaking onto a subsequent first send.
+    const afterEmptyImport = stepSiderLayout(stepSiderLayout(absent, { type: 'historyReplaced' }), {
+      type: 'sessionsSynced',
+      ready: true,
+      sessionCount: 0,
+    })
+    assert.equal(afterEmptyImport.mode, 'absent')
+    assert.equal(afterEmptyImport.pendingHistoryReplace, false)
 
     // 0 -> 1 via normal send shows the toolbar with the sidebar collapsed (no layout jump).
-    const firstReveal = transitionSiderLayout(absent, {
-      type: 'sessionsChanged',
+    const firstReveal = stepSiderLayout(afterEmptyImport, {
+      type: 'sessionsSynced',
+      ready: true,
       sessionCount: 1,
-      fromHistoryReplace: false,
     })
-    assert.deepEqual(firstReveal, { mode: 'collapsed' })
+    assert.equal(firstReveal.mode, 'collapsed')
 
-    // User expands.
-    const expanded = transitionSiderLayout(firstReveal, { type: 'setCollapsed', collapsed: false })
-    assert.deepEqual(expanded, { mode: 'expanded' })
-
-    // User collapses again.
-    const collapsed = transitionSiderLayout(expanded, {
-      type: 'setCollapsed',
-      collapsed: true,
-    })
-    assert.deepEqual(collapsed, { mode: 'collapsed' })
+    // User expands, then collapses again.
+    const expanded = stepSiderLayout(firstReveal, { type: 'setCollapsed', collapsed: false })
+    assert.equal(expanded.mode, 'expanded')
+    const collapsed = stepSiderLayout(expanded, { type: 'setCollapsed', collapsed: true })
+    assert.equal(collapsed.mode, 'collapsed')
 
     // 0 -> N via history import expands sidebar immediately.
-    const imported = transitionSiderLayout(absent, {
-      type: 'sessionsChanged',
+    const imported = stepSiderLayout(stepSiderLayout(absent, { type: 'historyReplaced' }), {
+      type: 'sessionsSynced',
+      ready: true,
       sessionCount: 3,
-      fromHistoryReplace: true,
     })
-    assert.deepEqual(imported, { mode: 'expanded' })
+    assert.equal(imported.mode, 'expanded')
+    assert.equal(imported.pendingHistoryReplace, false)
 
     // Deleting the last session from either collapsed or expanded returns to absent.
-    assert.deepEqual(
-      transitionSiderLayout(collapsed, {
-        type: 'sessionsChanged',
-        sessionCount: 0,
-        fromHistoryReplace: false,
-      }),
-      { mode: 'absent' }
+    assert.equal(
+      stepSiderLayout(collapsed, { type: 'sessionsSynced', ready: true, sessionCount: 0 }).mode,
+      'absent'
     )
-    assert.deepEqual(
-      transitionSiderLayout(expanded, {
-        type: 'sessionsChanged',
-        sessionCount: 0,
-        fromHistoryReplace: false,
-      }),
-      { mode: 'absent' }
+    assert.equal(
+      stepSiderLayout(expanded, { type: 'sessionsSynced', ready: true, sessionCount: 0 }).mode,
+      'absent'
     )
   })
 })
