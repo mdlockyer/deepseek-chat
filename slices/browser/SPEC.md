@@ -151,6 +151,9 @@ Consumes `ActiveSessionChanged`, `SessionDeleted`, `SessionHistoryReplaced`,
 
 ## Ownership notes
 
+- Depth-2 layout: pure domain kernel (`kernel/`: types, URL normalization, state machine, native sync planner, tool metadata, messages) + three isolated cells (`cells/runtime/`, `cells/tools/`, `cells/panel/`) wired by thin `src/index.ts`.
 - The right-hand panel (which kind is shown per chat, width, animation, stage size) belongs to the
-  app; this slice sees it only through its `PanelSlot`.
-- The page-driver scripts (`driver.ts`) run inside web pages and are tested through `run`.
+  app; this slice reads `panelOpen` live from `PanelSlot` rather than duplicating it.
+- Native sync cache advances only after host IPC succeeds; a failed sync invalidates the cache so
+  subsequent syncs retry instead of stalling.
+- The page-driver scripts (`cells/tools/driver.ts`) run inside web pages and are tested through `run`.

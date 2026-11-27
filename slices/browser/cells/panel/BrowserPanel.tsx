@@ -28,9 +28,14 @@ import {
   type ReactNode,
 } from 'react'
 import chrome from './BrowserChrome.module.css'
-import { browserMessages } from './messages.js'
-import { EMPTY_SESSION_BROWSER_STATE, isHttpUrl, type BrowserState } from './state.js'
-import { agentTarget, BROWSER_VIEWPORT_MARK } from './agentCursor.js'
+import {
+  agentTarget,
+  BROWSER_VIEWPORT_MARK,
+  browserMessages,
+  EMPTY_SESSION_BROWSER_TABS,
+  isHttpUrl,
+  type BrowserController,
+} from '../../kernel/index.js'
 import styles from './BrowserPanel.module.css'
 
 const displayTabTitle = (url: string, title: string, fallback: string) => {
@@ -54,7 +59,7 @@ export type BrowserPanelDeps = {
 }
 
 /** 右侧内置浏览器面板内容（托管在共享 SidePanel 壳层内） */
-export const createBrowserPanel = (state: BrowserState, deps: BrowserPanelDeps) => {
+export const createBrowserPanel = (controller: BrowserController, deps: BrowserPanelDeps) => {
   const {
     clearBrowserTabData,
     closeBrowserPanel,
@@ -68,16 +73,16 @@ export const createBrowserPanel = (state: BrowserState, deps: BrowserPanelDeps) 
     setBrowserStageSize,
     setBrowserTabViewport,
     switchBrowserTab,
-    useBrowserStore,
-  } = state
+    useState: useBrowserState,
+  } = controller
 
   const BrowserPanel = ({ topActions }: { topActions?: ReactNode } = {}) => {
     const t = browserMessages.useTranslate()
-    const activeSessionId = useBrowserStore((state) => state.activeSessionId)
-    const sessionBrowser = useBrowserStore((state) =>
+    const activeSessionId = useBrowserState((state) => state.activeSessionId)
+    const sessionBrowser = useBrowserState((state) =>
       state.activeSessionId && Object.hasOwn(state.sessions, state.activeSessionId)
         ? state.sessions[state.activeSessionId]
-        : EMPTY_SESSION_BROWSER_STATE
+        : EMPTY_SESSION_BROWSER_TABS
     )
     const { tabs, activeTabId } = sessionBrowser
     const overlayLocked = deps.panel.useLayout((layout) => layout.overlayLocked)
@@ -89,7 +94,7 @@ export const createBrowserPanel = (state: BrowserState, deps: BrowserPanelDeps) 
     const viewportRef = useRef<HTMLDivElement>(null)
     const omniboxRef = useRef<HTMLInputElement>(null)
     const [addressDraft, setAddressDraft] = useState('')
-    const agentAddress = useBrowserStore((state) => state.agentAddress)
+    const agentAddress = useBrowserState((state) => state.agentAddress)
     const [editingAddress, setEditingAddress] = useState(false)
 
     const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? tabs[0] ?? null

@@ -1,10 +1,11 @@
 import type { KeyValueStore } from '@deepseek-chat/spine/ports'
+import type { LocalhostPreference } from '../../kernel/index.js'
 
 /** Storage key kept from the original app so the saved choice survives the upgrade. */
 const ALLOW_LOCALHOST_KEY = 'chat-demo:browser-allow-localhost'
 
 /** Whether the model may navigate the built-in browser to localhost / private addresses. */
-export const createLocalhostPreference = (store: KeyValueStore) => {
+export const createLocalhostPreference = (store: KeyValueStore): LocalhostPreference => {
   let allow = store.get(ALLOW_LOCALHOST_KEY) === 'true'
   const listeners = new Set<() => void>()
   return {
@@ -24,5 +25,3 @@ export const createLocalhostPreference = (store: KeyValueStore) => {
     },
   }
 }
-
-export type LocalhostPreference = ReturnType<typeof createLocalhostPreference>

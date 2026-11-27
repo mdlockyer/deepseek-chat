@@ -1,7 +1,6 @@
 import { Select, SettingRow } from '@deepseek-chat/lib-ui'
 import { useSyncExternalStore } from 'react'
-import { browserMessages } from './messages.js'
-import type { LocalhostPreference } from './prefs.js'
+import { browserMessages, type LocalhostPreference } from '../../kernel/index.js'
 
 /** 内置浏览器是否允许模型访问 localhost / 内网地址 */
 export const createLocalhostSetting = (preference: LocalhostPreference) => {

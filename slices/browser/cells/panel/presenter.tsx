@@ -16,16 +16,16 @@ import {
   IconViewportOutline14,
 } from '@deepseek-chat/lib-ui'
 import styles from './BrowserActivity.module.css'
-import { browserMessages } from './messages.js'
-import { isHttpUrl } from './state.js'
 import {
   BROWSER_EVAL_TOOL_NAME,
   BROWSER_NAVIGATE_TOOL_NAME,
   BROWSER_OBSERVE_TOOL_NAME,
   BROWSER_SET_VIEWPORT_TOOL_NAME,
+  browserMessages,
   describeAction,
+  isHttpUrl,
   type BrowserActionMeta,
-} from './tools.js'
+} from '../../kernel/index.js'
 
 const MAX_OUTPUT_PREVIEW_CHARS = 1800
 

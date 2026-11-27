@@ -927,6 +927,75 @@ describe('browser: bounds sync, stable refs, and SoM screenshot badges', () => {
     env.browser.dispose()
   })
 
+  it('invalidates the native sync cache when host IPC rejects so the next sync retries and recovers', async () => {
+    const env = await withVisiblePage()
+    const baseSetBounds = env.host.host.setBounds
+    const baseSetActiveTab = env.host.host.setActiveTab
+    const loggedErrors: unknown[] = []
+    // eslint-disable-next-line no-console
+    const origError = console.error
+    // eslint-disable-next-line no-console
+    console.error = (...args: unknown[]) => {
+      loggedErrors.push(args)
+    }
+    try {
+      let failBoundsOnce = true
+      env.host.host.setBounds = (bounds, zoom) => {
+        if (failBoundsOnce) {
+          failBoundsOnce = false
+          return Promise.reject(new Error('transient setBounds IPC error'))
+        }
+        return baseSetBounds(bounds, zoom)
+      }
+      const targetBounds = { x: 700, y: 120, width: 420, height: 640 }
+      env.browser.setPanelBounds(targetBounds, 0.9)
+      await settle()
+      assert.equal(loggedErrors.length, 1, 'logs the rejected native sync error')
+      assert.equal(
+        env.host.named('setBounds').filter((c) => (c.args[0] as { x: number }).x === 700).length,
+        0,
+        'failed setBounds did not reach successful host state'
+      )
+
+      // Repeating the EXACT same bounds (without force) must still retry because the cache was invalidated.
+      let failActiveOnce = true
+      env.host.host.setActiveTab = (tabId, bounds, visible, zoom) => {
+        if (failActiveOnce) {
+          failActiveOnce = false
+          return Promise.reject(new Error('transient setActiveTab IPC error'))
+        }
+        return baseSetActiveTab(tabId, bounds, visible, zoom)
+      }
+      env.browser.setPanelBounds(targetBounds, 0.9)
+      await settle()
+      assert.equal(loggedErrors.length, 2, 'logs the rejected setActiveTab retry error')
+
+      // Third attempt with identical bounds now succeeds and brings the native webview up to date.
+      env.browser.setPanelBounds(targetBounds, 0.9)
+      await settle()
+      const recovered = env.host.named('setActiveTab').at(-1)
+      assert.deepEqual(recovered?.args[1], targetBounds)
+      assert.equal(recovered?.args[2], true)
+      assert.equal(recovered?.args[3], 0.9)
+    } finally {
+      // eslint-disable-next-line no-console
+      console.error = origError
+      env.browser.dispose()
+    }
+  })
+
+  it('derives panelOpen live from PanelSlot without shadow drift even before start()', async () => {
+    const { browser, panel, activate } = setup()
+    activate('s1')
+    await browser.openPanel('s1')
+    assert.equal(browser.getSession('s1').panelOpen, true)
+
+    // Without calling browser.start(), displacing the panel slot immediately updates panelOpen.
+    panel.showOther('s1')
+    assert.equal(browser.getSession('s1').panelOpen, false)
+    browser.dispose()
+  })
+
   it('keeps element refs stable across scroll and DOM insertions, and rejects detached refs', async () => {
     class FakeElement {
       tagName: string

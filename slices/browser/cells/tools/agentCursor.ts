@@ -1,3 +1,4 @@
+import type { ChromeTarget } from '../../kernel/index.js'
 import {
   buildCursorHideScript,
   buildCursorMoveScript,
@@ -31,22 +32,6 @@ type MoveResult = {
   readonly vw?: number
   readonly cross?: Crossing | null
 }
-
-/** A browser toolbar control the cursor can press, by its `data-agent-target` name. */
-export type ChromeTarget =
-  | 'address'
-  | 'back'
-  | 'forward'
-  | 'reload'
-  | 'new-tab'
-  | `tab:${string}`
-  | `close:${string}`
-
-/** Marks a toolbar control as one the agent cursor can press (spread onto the element). */
-export const agentTarget = (target: ChromeTarget) => ({ 'data-agent-target': target })
-
-/** Marks the element the page's webview is drawn over, so the cursor can map page to window. */
-export const BROWSER_VIEWPORT_MARK = { 'data-browser-viewport': '' } as const
 
 export type AgentCursorDeps = {
   /** Runs a driver script in a tab and parses its JSON (throws when it reports a failure). */

@@ -1,14 +1,10 @@
-import type {
-  ActivityStepEntry,
-  CompactionLedgerSection,
-  ToolCapability,
-} from '@deepseek-chat/lib-tools'
-import { IconBrowserOutline14, IconButton, IconGlobeLanguageOutline16 } from '@deepseek-chat/lib-ui'
+import type { ToolCapability } from '@deepseek-chat/lib-tools'
+import { IconBrowserOutline14 } from '@deepseek-chat/lib-ui'
 import type { BrowserControlTakenOver } from '@deepseek-chat/spine/facts/browser'
 import type {
   ActiveSessionChanged,
-  SessionDeleted,
   ReplyLifecycleChanged,
+  SessionDeleted,
   SessionHistoryReplaced,
 } from '@deepseek-chat/spine/facts/session'
 import {
@@ -18,32 +14,51 @@ import {
   type PanelSlot,
 } from '@deepseek-chat/spine/ports'
 import type { EventLog } from '@deepseek-chat/spine/runtime'
-import { createElement, type ComponentType } from 'react'
-import { createBrowserPanel } from './BrowserPanel.js'
-import headerToggleStyles from './HeaderToggle.module.css'
-import type { BrowserHost } from './host.js'
-import { createLocalhostSetting } from './LocalhostSetting.js'
-import { browserMessages } from './messages.js'
-import { createLocalhostPreference } from './prefs.js'
-import { browserPresenter, serializeBrowserForArchive } from './presenter.js'
-import { createBrowserState, getSessionBrowser, type SessionBrowserState } from './state.js'
+import { createElement } from 'react'
+import {
+  browserPresenter,
+  createBrowserHeaderToggle,
+  createBrowserPanel,
+  createLocalhostSetting,
+  serializeBrowserForArchive,
+} from '../cells/panel/index.js'
+import { createBrowserController, createLocalhostPreference } from '../cells/runtime/index.js'
+import { createBrowserTools } from '../cells/tools/index.js'
 import {
   BROWSER_TOOL_INSTRUCTIONS,
   BROWSER_TOOL_NAMES,
   BROWSER_TOOLS,
-  createBrowserTools,
+  browserMessages,
+  buildBrowserCompactionLedger,
+  type BrowserHost,
   type BrowserToolDefinition,
   type BrowserToolRunResult,
-} from './tools.js'
+  type SessionBrowserState,
+} from '../kernel/index.js'
 
-export type * from './host.js'
-export type { SomBadgeBox, SomBadgeElement, SomBadgeLayout } from './somOverlay.js'
-export type { BrowserTab, SessionBrowserState } from './state.js'
-export type { BrowserActionMeta, BrowserToolDefinition, BrowserToolRunResult } from './tools.js'
-export { computeSomBadgeBoxes } from './somOverlay.js'
-export { isHttpUrl, normalizeOmniboxInput } from './state.js'
-/** Tool names persisted in chat history; never rename. */
-export { BROWSER_TOOL_NAMES } from './tools.js'
+export type {
+  BrowserActionMeta,
+  BrowserBlockedPayload,
+  BrowserBounds,
+  BrowserHost,
+  BrowserNewTabPayload,
+  BrowserSnapshotResult,
+  BrowserStateResult,
+  BrowserTab,
+  BrowserTabStatePayload,
+  BrowserToolDefinition,
+  BrowserToolRunResult,
+  SessionBrowserState,
+} from '../kernel/index.js'
+export type { SomBadgeBox, SomBadgeElement, SomBadgeLayout } from '../cells/tools/index.js'
+export { computeSomBadgeBoxes } from '../cells/tools/index.js'
+export {
+  /** Tool names persisted in chat history; never rename. */
+  BROWSER_TOOL_NAMES,
+  isHttpUrl,
+  NO_HOST,
+  normalizeOmniboxInput,
+} from '../kernel/index.js'
 
 const BROWSER_TOGGLE_KEY = 'chat-demo:browser'
 
@@ -65,7 +80,7 @@ export type BrowserSliceDeps = {
 export const createBrowserSlice = (deps: BrowserSliceDeps) => {
   const allowLocalhost = createLocalhostPreference(deps.store)
   const notice = deps.notify ?? noopNoticePort
-  const state = createBrowserState({
+  const controller = createBrowserController({
     host: deps.host,
     panel: deps.panel,
     allowLocalhost,
@@ -83,7 +98,7 @@ export const createBrowserSlice = (deps: BrowserSliceDeps) => {
     },
     newId: deps.newId ?? (() => crypto.randomUUID()),
   })
-  const tools = createBrowserTools(state, deps.host)
+  const tools = createBrowserTools(controller, deps.host)
   const desktop = deps.host !== null
 
   let enabled = deps.store.get(BROWSER_TOGGLE_KEY) === 'true'
@@ -109,13 +124,13 @@ export const createBrowserSlice = (deps: BrowserSliceDeps) => {
 
   const unsubscribers = [
     deps.log.subscribe<ActiveSessionChanged>('ActiveSessionChanged', ({ fact }) => {
-      state.setActiveBrowserSession(fact.sessionId)
+      controller.setActiveBrowserSession(fact.sessionId)
     }),
     deps.log.subscribe<SessionDeleted>('SessionDeleted', ({ fact }) => {
-      void state.disposeSessionBrowser(fact.sessionId)
+      void controller.disposeSessionBrowser(fact.sessionId)
     }),
     deps.log.subscribe<SessionHistoryReplaced>('SessionHistoryReplaced', () => {
-      void state.clearAllSessionBrowsers()
+      void controller.clearAllSessionBrowsers()
     }),
     // The agent cursor stays on screen for the whole reply that drives the browser, then goes.
     deps.log.subscribe<ReplyLifecycleChanged>('ReplyLifecycleChanged', ({ fact }) => {
@@ -125,33 +140,10 @@ export const createBrowserSlice = (deps: BrowserSliceDeps) => {
     }),
   ]
 
-  const HeaderToggle: ComponentType<{ readonly sessionId: string }> = ({ sessionId }) => {
-    const t = browserMessages.useTranslate()
-    const open = deps.panel.useLayout(() => deps.panel.isOpen(sessionId))
-    const controllingHere = state.useBrowserStore(
-      (s) => s.controlling && s.controllingSessionId === sessionId
-    )
-    if (!desktop) {
-      return null
-    }
-    const backgroundActive = !open && controllingHere
-    return createElement(IconButton, {
-      size: 'm',
-      tone: 'primary',
-      className: open
-        ? headerToggleStyles.active
-        : backgroundActive
-          ? headerToggleStyles.backgroundActive
-          : undefined,
-      icon: createElement(IconGlobeLanguageOutline16),
-      tooltip: t(
-        open ? 'closeBrowser' : backgroundActive ? 'browserRunningBackground' : 'openBrowser'
-      ),
-      tooltipPlacement: 'bottom',
-      'aria-pressed': open,
-      onClick: () => void state.toggleBrowserPanel(sessionId),
-    })
-  }
+  const HeaderToggle = createBrowserHeaderToggle(controller, {
+    panel: deps.panel,
+    desktop,
+  })
 
   const capability: ToolCapability = {
     id: 'browser',
@@ -197,52 +189,7 @@ export const createBrowserSlice = (deps: BrowserSliceDeps) => {
     },
     presenter: browserPresenter,
     serializeForArchive: serializeBrowserForArchive,
-    buildCompactionLedger: (
-      entries: readonly ActivityStepEntry[]
-    ): CompactionLedgerSection | null => {
-      let lastUrl: string | undefined
-      let lastTitle: string | null | undefined
-      let lastError: { tool: string; reason: string } | null = null
-      let hadBrowserCall = false
-      for (const { call, result } of entries) {
-        if (!result || result.status === 'running') {
-          continue
-        }
-        hadBrowserCall = true
-        const meta =
-          result.payload && typeof result.payload === 'object'
-            ? (result.payload as { url?: unknown; title?: unknown })
-            : null
-        if (result.status === 'ok') {
-          if (typeof meta?.url === 'string' && meta.url.trim()) {
-            lastUrl = meta.url.trim()
-            lastTitle = typeof meta.title === 'string' ? meta.title.trim() || null : null
-          }
-          lastError = null
-        } else if (result.status === 'error') {
-          const reason = result.content.split('\n')[0]?.trim().slice(0, 160) || 'error'
-          lastError = { tool: call.name, reason }
-        }
-      }
-      if (!hadBrowserCall) {
-        return null
-      }
-      const lines: string[] = []
-      if (lastUrl) {
-        lines.push(
-          lastTitle
-            ? `- Last browser page: ${lastTitle} (${lastUrl})`
-            : `- Last browser page: ${lastUrl}`
-        )
-      }
-      if (lastError) {
-        lines.push(`- Last browser action (${lastError.tool}) failed: ${lastError.reason}`)
-      }
-      lines.push(
-        'Older page snapshots and screenshots were omitted; call `browser_observe` to inspect the current tab.'
-      )
-      return { title: 'Built-in browser', lines }
-    },
+    buildCompactionLedger: buildBrowserCompactionLedger,
   }
 
   return {
@@ -264,32 +211,31 @@ export const createBrowserSlice = (deps: BrowserSliceDeps) => {
       tools.runBrowserTool(toolName, input, options.signal, options.sessionId),
 
     /** The session whose chat is on screen (`null`: the new-chat screen). */
-    setActiveSession: state.setActiveBrowserSession,
+    setActiveSession: controller.setActiveBrowserSession,
     /** Binds desktop host events; returns the unbinding function. */
-    start: state.bindBrowserEvents,
-    getSession: (sessionId: string): SessionBrowserState =>
-      getSessionBrowser(state.useBrowserStore.getState(), sessionId),
-    openPanel: state.openBrowserPanel,
-    closePanel: state.closeBrowserPanel,
-    togglePanel: state.toggleBrowserPanel,
+    start: controller.bindBrowserEvents,
+    getSession: (sessionId: string): SessionBrowserState => controller.getSession(sessionId),
+    openPanel: controller.openBrowserPanel,
+    closePanel: controller.closeBrowserPanel,
+    togglePanel: controller.toggleBrowserPanel,
     /** Opens a URL in the panel (or externally on the new-chat screen). */
-    openUrl: state.openUrlInBrowserPanel,
+    openUrl: controller.openUrlInBrowserPanel,
     /** User takes over control of the browser for `sessionId` (publishes `BrowserControlTakenOver`). */
     takeOver,
     HeaderToggle,
     tabs: {
-      create: state.createBrowserTab,
-      close: state.closeBrowserTab,
-      switch: state.switchBrowserTab,
-      navigate: state.navigateBrowserTab,
-      setViewport: state.setBrowserTabViewport,
+      create: controller.createBrowserTab,
+      close: controller.closeBrowserTab,
+      switch: controller.switchBrowserTab,
+      navigate: controller.navigateBrowserTab,
+      setViewport: controller.setBrowserTabViewport,
     },
-    setStageSize: state.setBrowserStageSize,
-    setPanelBounds: state.setBrowserPanelBounds,
+    setStageSize: controller.setBrowserStageSize,
+    setPanelBounds: controller.setBrowserPanelBounds,
     /** Refreshes the still image shown while the native webview is hidden. */
-    refreshSnapshot: state.refreshActiveTabSnapshot,
+    refreshSnapshot: controller.refreshActiveTabSnapshot,
 
-    BrowserPanel: createBrowserPanel(state, {
+    BrowserPanel: createBrowserPanel(controller, {
       panel: deps.panel,
       desktop,
       openExternal: deps.openExternal,

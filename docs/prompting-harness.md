@@ -56,7 +56,7 @@ situational awareness **without breaking KV-cache prefix reuse**:
 | Subagent Coordination (`wait`, `post`) & Orientation    | `buildLeadSubagentInstructions`, `buildSubagentOrientation` in `slices/subagents/src/tools.ts`                                                                     |
 | Web Research (`web_search`, `web_scrape`, `research`)   | `instructionsFor` & `createResearchProfile` in `slices/web-research/src/index.ts` and `researchProfile.ts` (static desktop local-scrape vs. web Firecrawl wording) |
 | Python (`python`, native vs. web)                       | `buildPythonInstructions` in `slices/python/src/tool.ts`                                                                                                           |
-| Built-in Browser (`browser_*`)                          | `BROWSER_TOOL_INSTRUCTIONS` in `slices/browser/src/tools.ts`                                                                                                       |
+| Built-in Browser (`browser_*`)                          | `BROWSER_TOOL_INSTRUCTIONS` in `slices/browser/kernel/toolMeta.ts`                                                                                                 |
 
 ## Maintenance Checklist (Preventing Drift & Regression)
 

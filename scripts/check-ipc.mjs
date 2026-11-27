@@ -317,7 +317,7 @@ const rustMaxTabs = readConstant(
   'MAX_OPEN_TABS'
 )
 const tsMaxLiveTabs = readConstant(
-  path.join(root, 'slices', 'browser', 'src', 'state.ts'),
+  path.join(root, 'slices', 'browser', 'kernel', 'types.ts'),
   /\bconst\s+MAX_LIVE_NATIVE_TABS\s*=\s*([^\n;]+)/,
   'MAX_LIVE_NATIVE_TABS'
 )
