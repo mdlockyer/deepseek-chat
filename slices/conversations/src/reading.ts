@@ -10,12 +10,10 @@ export type ReadingCause = 'reader' | 'reveal'
 /** The turn the transcript is on, by its reply's message id. */
 export type ReadingPosition = { readonly messageId: string; readonly cause: ReadingCause }
 
-/** A request to bring a turn (or the latest output) into view in a chat's transcript. */
+/** A request to bring a turn into view in a chat's transcript. */
 export type RevealRequest = {
   readonly sessionId: string
-  readonly target:
-    | { readonly kind: 'turn'; readonly messageId: string }
-    | { readonly kind: 'latest' }
+  readonly messageId: string
   readonly nonce: number
 }
 
@@ -55,9 +53,9 @@ export const createReadingPositions = () => {
     })
   }
 
-  const request = (sessionId: string, target: RevealRequest['target']) => {
+  const request = (sessionId: string, messageId: string) => {
     nonce += 1
-    useReadingStore.setState({ reveal: { sessionId, target, nonce } })
+    useReadingStore.setState({ reveal: { sessionId, messageId, nonce } })
   }
 
   const forget = (sessionId: string) => {
@@ -79,10 +77,7 @@ export const createReadingPositions = () => {
     setReadingPosition,
     subscribeToReading,
     /** Brings a turn into view in that chat's transcript, as if the reader had navigated to it. */
-    revealTurn: (sessionId: string, messageId: string) =>
-      request(sessionId, { kind: 'turn', messageId }),
-    /** Scrolls that chat's transcript to its latest output and follows it again. */
-    revealLatest: (sessionId: string) => request(sessionId, { kind: 'latest' }),
+    revealTurn: (sessionId: string, messageId: string) => request(sessionId, messageId),
     forget,
     clear: () => useReadingStore.setState({ positions: {}, reveal: null }),
   }

@@ -884,8 +884,6 @@
 
   @media (pointer: coarse) {
     .rowButton,
-    .turnMenuButton,
-    .errorSummaryLink,
     .roundAnchorButton,
     .lightboxLink {
       min-height: var(--ui-control-xl);

@@ -318,16 +318,12 @@ export const TranscriptChapters = ({
     if (reveal.sessionId !== sessionId) {
       return
     }
-    if (reveal.target.kind === 'latest') {
-      goLatest('reveal')
-      return
-    }
-    const { messageId } = reveal.target
+    const { messageId } = reveal
     const index = turnsRef.current.findIndex((turn) => turn.messageId === messageId)
     if (index >= 0) {
       navigate(index, { offerReturn: false, cause: 'reveal' })
     }
-  }, [reveal, sessionId, navigate, goLatest])
+  }, [reveal, sessionId, navigate])
 
   // ⌥↑ / ⌥↓ step between turns (⌥↑ first returns to the top of the current one); ⌥← goes back.
   useEffect(() => {

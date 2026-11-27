@@ -129,7 +129,6 @@ export const createConversationsSlice = (deps: ConversationsDeps) => {
     getReadingPosition: runtime.reading.getReadingPosition,
     subscribeToReading: runtime.reading.subscribeToReading,
     revealTurn: runtime.reading.revealTurn,
-    revealLatest: runtime.reading.revealLatest,
 
     // Storage ports consumed by `slices/history-backup` via app composition.
     snapshotForExport: runtime.snapshotForExport,

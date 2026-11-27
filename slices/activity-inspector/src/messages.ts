@@ -10,7 +10,6 @@ export const activityInspectorMessages = defineMessages({
     tabSources: '来源',
     liveStatus: '进行中',
     emptyTitle: '暂无执行活动',
-    empty: '这一轮没有记录工具步骤、思考过程或引用来源。',
     emptySession: '当 DeepSeek 搜索网页、运行代码或操作浏览器时，你可以在这里查看执行步骤与依据。',
     turnShortLabel: '第 {number} 轮',
     chapterLabel: '第 {number} 轮：{prompt}',
@@ -59,7 +58,6 @@ export const activityInspectorMessages = defineMessages({
     tabSources: 'Sources',
     liveStatus: 'Working',
     emptyTitle: 'No activity yet',
-    empty: 'No tool steps, reasoning, or sources were recorded for this turn.',
     emptySession:
       'When DeepSeek searches, runs code, or uses the browser, you can inspect the steps and evidence here.',
     turnShortLabel: 'Turn {number}',
