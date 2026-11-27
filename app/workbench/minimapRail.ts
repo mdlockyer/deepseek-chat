@@ -59,6 +59,14 @@ export type Measure = {
   readonly boxes: readonly Box[]
   readonly blocks: readonly Block[]
   readonly height: number
+  /** The element each entry above was measured from, so positions can be tracked between
+   * measures: a line's paragraph (or prompt bubble), a block's element, a box, a turn anchor. */
+  readonly els: {
+    readonly segs: readonly Element[]
+    readonly blocks: readonly Element[]
+    readonly boxes: readonly Element[]
+    readonly anchors: readonly Element[]
+  }
 }
 
 const BLOCKS = 'p,li,td,th,h1,h2,h3,h4,pre,blockquote,[data-turn-bubble]'
@@ -172,6 +180,7 @@ export const measure = (scroll: HTMLElement, column: HTMLElement): Measure => {
     }
   }
   const boxes: Box[] = []
+  const boxEls: Element[] = []
   const addBoxes = (
     selector: string,
     kind: Box['kind'],
@@ -184,6 +193,7 @@ export const measure = (scroll: HTMLElement, column: HTMLElement): Measure => {
       const rect = node.getBoundingClientRect()
       if (rect.height > 0) {
         const y = toY(edge === 'bottom' ? rect.bottom - 1 : rect.top)
+        boxEls.push(node)
         boxes.push({
           turn: turnOf(y),
           kind,
@@ -269,7 +279,20 @@ export const measure = (scroll: HTMLElement, column: HTMLElement): Measure => {
     }
   })
 
-  return { anchors, excerpts, segs, boxes, blocks, height: scroll.scrollHeight }
+  return {
+    anchors,
+    excerpts,
+    segs,
+    boxes,
+    blocks,
+    height: scroll.scrollHeight,
+    els: {
+      segs: [...lines.values()].map((line) => line.block),
+      blocks: [...grouped.keys()],
+      boxes: boxEls,
+      anchors: anchorEls,
+    },
+  }
 }
 
 export const mountMinimapRail = (

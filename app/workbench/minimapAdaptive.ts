@@ -323,6 +323,104 @@ const shapeTurns = (m: Measure): TurnShape[] => {
   })
 }
 
+/**
+ * Every element a measure read, where it was, and the container that can clip it (one whose
+ * overflow is hidden, like a disclosure animating its height).
+ */
+type Tracker = {
+  readonly els: readonly Element[]
+  readonly base: Float64Array
+  /** Every ancestor that can clip it, nearest first; the visible part is inside all of them. */
+  readonly clips: readonly (readonly Element[])[]
+  readonly segs: Int32Array
+  readonly blocks: Int32Array
+  readonly boxes: Int32Array
+  readonly anchors: Int32Array
+}
+
+const trackElements = (m: Measure, scroll: HTMLElement, column: HTMLElement): Tracker => {
+  const index = new Map<Element, number>()
+  const els: Element[] = []
+  const slot = (el: Element) => {
+    let i = index.get(el)
+    if (i === undefined) {
+      i = els.length
+      index.set(el, i)
+      els.push(el)
+    }
+    return i
+  }
+  const segs = Int32Array.from(m.els.segs, slot)
+  const blocks = Int32Array.from(m.els.blocks, slot)
+  const boxes = Int32Array.from(m.els.boxes, slot)
+  const anchors = Int32Array.from(m.els.anchors, slot)
+  const scrollTop = scroll.getBoundingClientRect().top - scroll.scrollTop
+  const base = Float64Array.from(els, (el) => el.getBoundingClientRect().top - scrollTop)
+  const clipping = new Map<Element, boolean>()
+  const clips = els.map((el) => {
+    const found: Element[] = []
+    for (let node = el.parentElement; node && node !== column; node = node.parentElement) {
+      // A disclosure clipping while it opens or closes, or a scroll box like the reasoning panel.
+      let clips = clipping.get(node)
+      if (clips === undefined) {
+        clips = getComputedStyle(node).overflowY !== 'visible'
+        clipping.set(node, clips)
+      }
+      if (clips) {
+        found.push(node)
+      }
+    }
+    return found
+  })
+  return { els, base, clips, segs, blocks, boxes, anchors }
+}
+
+/** The measure with every entry moved by as much as its element has moved, clipped to its container. */
+const moveToElements = (m: Measure, t: Tracker, scroll: HTMLElement): Measure => {
+  const origin = scroll.getBoundingClientRect().top - scroll.scrollTop
+  const shift = new Float64Array(t.els.length)
+  const clipTop = new Float64Array(t.els.length)
+  const clipBottom = new Float64Array(t.els.length)
+  const clipRects = new Map<Element, readonly [number, number]>()
+  t.els.forEach((el, i) => {
+    shift[i] = el.isConnected ? el.getBoundingClientRect().top - origin - (t.base[i] ?? 0) : 0
+    let top = -Infinity
+    let bottom = Infinity
+    for (const clip of t.clips[i] ?? []) {
+      let edges = clipRects.get(clip)
+      if (!edges) {
+        const rect = clip.getBoundingClientRect()
+        edges = [rect.top - origin, rect.bottom - origin]
+        clipRects.set(clip, edges)
+      }
+      top = Math.max(top, edges[0])
+      bottom = Math.min(bottom, edges[1])
+    }
+    clipTop[i] = el.isConnected ? top : Infinity
+    clipBottom[i] = el.isConnected ? bottom : -Infinity
+  })
+  const moved = <T extends { y: number; h: number }>(entry: T, i: number): T => {
+    const y = entry.y + (shift[i] ?? 0)
+    const top = Math.max(y, clipTop[i] ?? -Infinity)
+    const bottom = Math.min(y + entry.h, clipBottom[i] ?? Infinity)
+    return { ...entry, y: top, h: Math.max(0, bottom - top) }
+  }
+  return {
+    ...m,
+    anchors: m.anchors.map((y, k) => y + (shift[t.anchors[k] ?? 0] ?? 0)),
+    // A line is shown once its whole height is inside its container, as text is revealed.
+    segs: m.segs
+      .map((seg, k) => {
+        const next = moved(seg, t.segs[k] ?? 0)
+        return next.h >= seg.h - 0.5 ? next : null
+      })
+      .filter((seg): seg is Seg => seg !== null),
+    blocks: m.blocks.map((block, k) => moved(block, t.blocks[k] ?? 0)),
+    boxes: m.boxes.map((box, k) => moved(box, t.boxes[k] ?? 0)),
+    height: scroll.scrollHeight,
+  }
+}
+
 export const mountAdaptiveMinimap = (
   area: HTMLElement,
   scroll: HTMLElement,
@@ -347,7 +445,10 @@ export const mountAdaptiveMinimap = (
 
   const ctx = canvas.getContext('2d')
   const glide = createScrollGlide(scroll)
+  /** The last full measure, and `m`: the same, moved to where its elements are now. */
+  let measured: Measure | null = null
   let m: Measure | null = null
+  let tracker: Tracker | null = null
   let palette = resolvePalette(host)
   let shapes: TurnShape[] = []
   /** How highlighted each turn is, 0–1; eases toward 1 for the turn being read and the one hovered. */
@@ -429,6 +530,9 @@ export const mountAdaptiveMinimap = (
       if (b.kind === 'bubble' || b.kind === 'table') {
         continue
       }
+      if (b.h <= (b.kind === 'rule' ? 0 : 0.5)) {
+        continue
+      }
       const alpha = lineAlpha(L.scaleAt(b.y + b.h / 2))
       if (alpha < 0.01) {
         continue
@@ -465,6 +569,9 @@ export const mountAdaptiveMinimap = (
         const toSlab = 1 - blockAlpha(scale)
         const slabTile = span(SLAB_X, SLAB_W, shape.slabTop, shape.slabBottom)
         const barColour = barInk(shape.color, e)
+        if (block.h <= 0.5) {
+          continue
+        }
         if (toBar >= 1) {
           // The paragraph is one bar, stretching toward its share of the slab.
           fill(
@@ -552,7 +659,9 @@ export const mountAdaptiveMinimap = (
   }
 
   const draw = () => {
-    m = measure(scroll, column)
+    measured = measure(scroll, column)
+    tracker = trackElements(measured, scroll, column)
+    m = measured
     palette = resolvePalette(host)
     const areaRect = area.getBoundingClientRect()
     const gutter = Math.max(0, column.getBoundingClientRect().left - areaRect.left)
@@ -628,11 +737,47 @@ export const mountAdaptiveMinimap = (
     clearTimeout(redraw)
     redraw = window.setTimeout(draw, 80)
   }
-  const resize = new ResizeObserver(scheduleDraw)
+  // While the transcript changes height (a reasoning row opening, an image loading), follow it
+  // frame by frame: move every line with its element and clip it to the container that's
+  // growing or shrinking, as the transcript does. A full measure follows once it settles.
+  const follow = () => {
+    if (!measured || !tracker) {
+      return
+    }
+    m = moveToElements(measured, tracker, scroll)
+    shapes = shapeTurns(m)
+    paint()
+    clearTimeout(redraw)
+    redraw = window.setTimeout(draw, 160)
+  }
+  const resize = new ResizeObserver((entries) => {
+    if (entries.some((entry) => entry.target === area)) {
+      scheduleDraw()
+    } else {
+      follow()
+    }
+  })
   resize.observe(column)
   resize.observe(area)
-  const mutations = new MutationObserver(scheduleDraw)
-  mutations.observe(column, { childList: true, subtree: true, characterData: true })
+  // New content (the reasoning text that just opened) is measured on the next frame, so it can
+  // be followed as it's revealed rather than appearing once the animation ends.
+  let measureFrame = 0
+  const mutations = new MutationObserver(() => {
+    if (!measureFrame) {
+      measureFrame = requestAnimationFrame(() => {
+        measureFrame = 0
+        draw()
+      })
+    }
+  })
+  // `data-phase` is how the transcript's disclosures switch clipping on while they open or close.
+  mutations.observe(column, {
+    childList: true,
+    subtree: true,
+    characterData: true,
+    attributes: true,
+    attributeFilter: ['data-phase'],
+  })
   const theme = new MutationObserver(scheduleDraw)
   theme.observe(document.documentElement, { attributes: true })
 
@@ -729,6 +874,7 @@ export const mountAdaptiveMinimap = (
   return () => {
     clearTimeout(redraw)
     cancelAnimationFrame(frame)
+    cancelAnimationFrame(measureFrame)
     glide.cancel()
     resize.disconnect()
     mutations.disconnect()
