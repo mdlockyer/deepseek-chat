@@ -20,11 +20,6 @@
     font: var(--ui-type-caption);
   }
 
-  .barTitle {
-    color: var(--ui-text-primary);
-    font: var(--ui-type-label-strong);
-  }
-
   .barHint {
     margin-left: auto;
     color: var(--ui-text-muted);

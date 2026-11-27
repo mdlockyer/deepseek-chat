@@ -9,7 +9,7 @@ import { mountMinimapRail, type MinimapStyle } from './minimapRail.js'
 import styles from './MinimapStudy.module.css'
 import { MINIMAP_STUDY_TURNS } from './minimapStudyScript.js'
 
-type Choice = 'today' | MinimapStyle | 'adaptive'
+type Choice = 'today' | MinimapStyle | 'adaptive' | 'lens'
 
 const LENGTHS = ['8', '40', '150'] as const
 type Length = (typeof LENGTHS)[number]
@@ -148,15 +148,14 @@ export const MinimapStudy = () => {
     if (!scroll || !area || !column) {
       return
     }
-    return choice === 'adaptive'
-      ? mountAdaptiveMinimap(area, scroll, column)
+    return choice === 'adaptive' || choice === 'lens'
+      ? mountAdaptiveMinimap(area, scroll, column, { lens: choice === 'lens' })
       : mountMinimapRail(area, scroll, column, choice)
   }, [ready, choice])
 
   return (
     <div className={styles.root}>
       <div className={styles.bar}>
-        <span className={styles.barTitle}>Transcript minimap study</span>
         <SegmentedControl<Choice>
           size="sm"
           ariaLabel="Rail style"
@@ -167,6 +166,7 @@ export const MinimapStudy = () => {
             { value: 'text', label: 'B · Text minimap' },
             { value: 'stems', label: 'D · Ticks on stems' },
             { value: 'adaptive', label: 'Adaptive' },
+            { value: 'lens', label: 'Adaptive + magnifier' },
           ]}
         />
         <SegmentedControl<Length>
@@ -183,7 +183,7 @@ export const MinimapStudy = () => {
         />
         <span className={styles.barHint}>
           {ready
-            ? 'Scroll the chat, drag the window on the rail, or click the rail to jump.'
+            ? 'Scroll, drag the window, or click the rail.'
             : `Replaying turn ${replayed + 1} of ${LENGTH}…`}
         </span>
       </div>

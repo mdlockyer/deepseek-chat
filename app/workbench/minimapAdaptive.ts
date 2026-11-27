@@ -11,11 +11,11 @@ import styles from './MinimapStudy.module.css'
  *    scale can carry: text lines while a line still gets about 2px of rail, then one bar per
  *    paragraph, table or code block, then one slab per answer. Each part fades between levels,
  *    so the rail never shows lines too dense to read.
- * 2. A lens around the reading position. Once the whole chat no longer fits at full detail, the
- *    viewport and about a viewport on either side keep the full-detail scale and the rest of the
- *    chat shares what's left of the rail. The lens moves with the scroll position, so the part
- *    you're reading always shows text lines, the window keeps one height however long the chat
- *    gets, and the far ends show the shape of the whole chat as slabs.
+ * 2. Optionally, a lens around the reading position. Without it the whole chat shares the rail at
+ *    one scale and only the window moves. With it, once the chat no longer fits at full detail,
+ *    the viewport and about a viewport on either side keep full detail and detail eases off over
+ *    the next three viewports. The lens holds still for small scrolls and follows larger ones on
+ *    a spring, so the map doesn't flow under every scroll tick.
  */
 
 const PAD = 24
@@ -23,12 +23,16 @@ const BIN = 4
 const MAX_WIDTH = 44
 /** Rail px per transcript px at full detail, and inside the lens. */
 const NEAR = 0.1
-/** Transcript kept at full detail on each side of the viewport's centre, in viewports. */
-const LENS_CORE = 0.75
-/** Distance over which detail falls from the lens to the rest of the chat, in viewports. */
-const LENS_FALLOFF = 1.25
+/** Transcript kept at full detail on each side of the lens's centre, in viewports. */
+const LENS_CORE = 1
+/** Distance over which detail eases from the lens to the rest of the chat, in viewports. */
+const LENS_FALLOFF = 3
 /** The most of the rail the lens may take, so the rest of the chat keeps some room. */
-const LENS_MAX_SHARE = 0.5
+const LENS_MAX_SHARE = 0.6
+/** How far the reading position moves, in viewports, before the lens follows it. */
+const LENS_SLACK = 0.5
+/** Spring the lens follows with (critically damped; settles in about half a second). */
+const LENS_STIFFNESS = 90
 const LINE_HEIGHT = 22
 
 const clamp = (value: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, value))
@@ -50,7 +54,7 @@ type MapLayout = {
 const layoutMap = (
   height: number,
   viewport: number,
-  scrollTop: number,
+  centre: number | null,
   railTop: number,
   railHeight: number
 ): MapLayout => {
@@ -62,11 +66,10 @@ const layoutMap = (
       toContent: (railY) => (railY - top0) / scale,
     }
   }
-  if (railHeight / height >= NEAR) {
-    return uniform(NEAR)
+  if (centre === null || railHeight / height >= NEAR) {
+    return uniform(Math.min(NEAR, railHeight / height))
   }
 
-  const centre = scrollTop + viewport / 2
   const core = viewport * LENS_CORE
   const falloff = viewport * LENS_FALLOFF
   const bins = Math.ceil(height / BIN)
@@ -149,7 +152,8 @@ const resolvePalette = (host: HTMLElement): Palette => {
 export const mountAdaptiveMinimap = (
   area: HTMLElement,
   scroll: HTMLElement,
-  column: HTMLElement
+  column: HTMLElement,
+  options: { readonly lens: boolean }
 ) => {
   const hidden = [...area.children].filter((child) => child !== scroll) as HTMLElement[]
   for (const child of hidden) {
@@ -176,10 +180,18 @@ export const mountAdaptiveMinimap = (
   let layout: MapLayout | null = null
   let hovered = -1
   let dragging = false
+  let lensCentre = scroll.scrollTop + scroll.clientHeight / 2
+  let lensVelocity = 0
 
-  const currentLayout = (scrollTop = scroll.scrollTop) =>
+  const currentLayout = () =>
     m
-      ? layoutMap(m.height, scroll.clientHeight, scrollTop, PAD, Math.max(1, geo.height - PAD * 2))
+      ? layoutMap(
+          m.height,
+          scroll.clientHeight,
+          options.lens ? lensCentre : null,
+          PAD,
+          Math.max(1, geo.height - PAD * 2)
+        )
       : null
 
   const turnAt = (y: number) => {
@@ -326,8 +338,11 @@ export const mountAdaptiveMinimap = (
     }
 
     // The window: what's on screen.
-    const y0 = L.top(scrollTop)
-    const y1 = L.top(scrollTop + clientHeight)
+    // In a long chat at one scale the window would shrink to a sliver; keep it grabbable.
+    const middle = (L.top(scrollTop) + L.top(scrollTop + clientHeight)) / 2
+    const half = Math.max(8, (L.top(scrollTop + clientHeight) - L.top(scrollTop)) / 2)
+    const y0 = middle - half
+    const y1 = middle + half
     ctx.globalAlpha = 1
     ctx.fillStyle = dragging ? palette['interactive-active'] : palette['interactive-hover']
     ctx.strokeStyle = palette['border-default']
@@ -359,10 +374,42 @@ export const mountAdaptiveMinimap = (
     paint()
   }
 
+  // The lens stays put while the reading position moves within LENS_SLACK of its centre, so
+  // small scrolls only move the window; past that it follows on a spring instead of rigidly.
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)')
   let frame = 0
+  let lastTick = 0
+  const tick = (now: number) => {
+    frame = 0
+    const dt = lastTick ? Math.min(0.05, (now - lastTick) / 1000) : 1 / 60
+    lastTick = now
+    const target = scroll.scrollTop + scroll.clientHeight / 2
+    const slack = scroll.clientHeight * LENS_SLACK
+    const desired = dragging ? lensCentre : clamp(lensCentre, target - slack, target + slack)
+    if (reducedMotion.matches) {
+      lensCentre = desired
+      lensVelocity = 0
+    } else {
+      lensVelocity +=
+        (LENS_STIFFNESS * (desired - lensCentre) - 2 * Math.sqrt(LENS_STIFFNESS) * lensVelocity) *
+        dt
+      lensCentre += lensVelocity * dt
+      if (Math.abs(desired - lensCentre) < 0.5 && Math.abs(lensVelocity) < 5) {
+        lensCentre = desired
+        lensVelocity = 0
+      }
+    }
+    paint()
+    if (lensCentre !== desired || lensVelocity !== 0) {
+      frame = requestAnimationFrame(tick)
+    } else {
+      lastTick = 0
+    }
+  }
   const schedulePaint = () => {
-    cancelAnimationFrame(frame)
-    frame = requestAnimationFrame(paint)
+    if (!frame) {
+      frame = requestAnimationFrame(tick)
+    }
   }
   scroll.addEventListener('scroll', schedulePaint, { passive: true })
   let redraw = 0
@@ -401,22 +448,6 @@ export const mountAdaptiveMinimap = (
     peek.setAttribute('data-open', '')
   }
 
-  /** The scrollTop whose window starts at `railY`; the lens moves with scrolling, so search. */
-  const scrollTopForWindow = (railY: number) => {
-    let lo = 0
-    let hi = Math.max(0, scroll.scrollHeight - scroll.clientHeight)
-    for (let i = 0; i < 24 && hi - lo > 0.5; i += 1) {
-      const mid = (lo + hi) / 2
-      const L = currentLayout(mid)
-      if (L && L.top(mid) < railY) {
-        lo = mid
-      } else {
-        hi = mid
-      }
-    }
-    return (lo + hi) / 2
-  }
-
   let drag: { offset: number; moved: boolean; y: number } | null = null
   const onDown = (event: PointerEvent) => {
     if (!m || !layout || event.button !== 0) {
@@ -429,11 +460,10 @@ export const mountAdaptiveMinimap = (
     const { scrollTop, clientHeight } = scroll
     const windowTop = layout.top(scrollTop)
     const windowBottom = layout.top(scrollTop + clientHeight)
-    if (railY < windowTop - 4 || railY > windowBottom + 4) {
+    if (railY < windowTop - 8 || railY > windowBottom + 8) {
       const target = clamp(y - clientHeight / 2, 0, scroll.scrollHeight - clientHeight)
       glide.to(target, { fade: column })
-      const next = currentLayout(target)
-      drag = { offset: next ? railY - next.top(target) : 0, moved: false, y: event.clientY }
+      drag = { offset: (windowBottom - windowTop) / 2, moved: false, y: event.clientY }
     } else {
       drag = { offset: railY - windowTop, moved: false, y: event.clientY }
     }
@@ -453,7 +483,10 @@ export const mountAdaptiveMinimap = (
         drag.moved = true
         dragging = true
       }
-      scroll.scrollTop = scrollTopForWindow(localY(event) - drag.offset)
+      // The lens holds still while dragging, so the rail under the pointer doesn't move.
+      if (layout) {
+        scroll.scrollTop = layout.toContent(localY(event) - drag.offset)
+      }
       if (layout) {
         setHover(turnAt(layout.toContent(localY(event))), event)
       }
