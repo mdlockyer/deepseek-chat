@@ -108,7 +108,9 @@ panel, from `spine/design`), `KeyValueStore`.
     Actions wait for each glide (at most 700 ms in the page, 600 ms in the toolbar) only while that
     tab is the page on screen; off screen nothing waits and the toolbar part is skipped. A faint
     glow follows the kite's outline: almost none at rest, more as it moves faster, and a short bloom
-    on each press; reduced motion makes it jump, with no glow and no typing. It takes no pointer
+    on each press. While it waits it drifts about a pixel and tilts about 2.5°, easing in over a
+    second or so and dropping out as soon as it moves. Reduced motion makes it jump, with no glow,
+    no drift and no typing. It takes no pointer
     events, lives in a closed shadow root in the page, carries over to the same spot after a page
     load, and is hidden while a screenshot is captured. It stays visible for the whole reply that
     drives the browser and fades out when that reply settles (`ReplyLifecycleChanged`), when the
@@ -128,7 +130,8 @@ panel, from `spine/design`), `KeyValueStore`.
   listing cap (12), `<select>` option preview cap (20, always retaining selected option(s) with
   overflow count), extracted page text cap (12,000 chars), and outer tool output cap (24,000 chars,
   truncated inside `<untrusted_webpage_content>`).
-- Agent cursor: 22 px kite, spring stiffness 170 /s², longest wait for it to land 700 ms in the
+- Agent cursor: 22 px kite (50° tip, widest 60% of the way back), idle drift about 1.5 px and
+  2.5° on 1.9–5.1 s cycles, spring stiffness 170 /s², longest wait for it to land 700 ms in the
   page and 600 ms in the toolbar, address typing at most 450 ms, leaves the page 30 px above its
   top edge, press scale 0.84 for 120 ms, glow alpha 0.08 at rest rising to 0.42 at speed (900 px/s)
   plus up to 0.4 on a press (fading over 450 ms, capped at 0.6).

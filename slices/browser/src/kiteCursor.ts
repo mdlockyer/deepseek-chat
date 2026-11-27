@@ -1,8 +1,9 @@
 /**
  * The agent cursor: a small solid kite in the app's accent blue with a white edge, its tip on the
  * point it acts on. It glides on a critically damped spring, presses (shrinks a little) as it
- * clicks, and carries a faint glow that follows its outline: almost none at rest, more as it moves
- * faster, and a short bloom on each press. Reduced motion makes it jump, with no glow.
+ * clicks, drifts and tilts very slightly while it waits, and carries a faint glow that follows its
+ * outline: almost none at rest, more as it moves faster, and a short bloom on each press. Reduced
+ * motion makes it jump, with no glow and no drift.
  *
  * One implementation draws it in two places: in the app's own window over the browser's toolbar,
  * and inside web pages, where the driver scripts embed this function's source. So the function
@@ -59,8 +60,8 @@ export function createKiteCursor(doc: Document, win: Window & typeof globalThis)
   svg.setAttribute('viewBox', '0 0 ' + SIZE + ' ' + SIZE)
   svg.style.cssText = 'display:block;overflow:visible;'
   const kite = doc.createElementNS(SVG, 'polygon')
-  // A kite with its tip at (HOT, HOT), widest about two thirds of the way back.
-  kite.setAttribute('points', '2,2 16.9,9.1 17.75,17.75 9.1,16.9')
+  // A kite with its tip at (HOT, HOT): a 50° tip, widest about 60% of the way back.
+  kite.setAttribute('points', '2,2 14.65,6.61 16.5,16.5 6.61,14.65')
   kite.setAttribute('stroke', '#ffffff')
   kite.setAttribute('stroke-width', '1.5')
   kite.setAttribute('stroke-linejoin', 'round')
@@ -88,6 +89,10 @@ export function createKiteCursor(doc: Document, win: Window & typeof globalThis)
   let last = 0
   let shown = false
   let captured = false
+  // While it waits, it drifts a pixel or so and tilts a couple of degrees, like a kite holding in
+  // the air, so it reads as alive rather than frozen. `idle` blends that in once it has settled.
+  let idle = 0
+  let clock = 0
 
   const paint = () => {
     if (!Number.isFinite(x) || !Number.isFinite(y)) {
@@ -95,12 +100,20 @@ export function createKiteCursor(doc: Document, win: Window & typeof globalThis)
     }
     const speed = Math.min(1, Math.hypot(vx, vy) / 900)
     const radius = 2.5 + 3 * speed + 3 * pulse
+    const turn = Math.PI * 2
+    const dx =
+      idle * (1.1 * Math.sin((turn * clock) / 3.7) + 0.5 * Math.sin((turn * clock) / 1.9 + 1))
+    const dy =
+      idle * (0.9 * Math.sin((turn * clock) / 4.3 + 2) + 0.4 * Math.sin((turn * clock) / 2.3))
+    const tilt = idle * 2.5 * Math.sin((turn * clock) / 5.1 + 0.5)
     wrap.style.transform =
       'translate(' +
-      (x - HOT).toFixed(2) +
+      (x - HOT + dx).toFixed(2) +
       'px,' +
-      (y - HOT).toFixed(2) +
-      'px) scale(' +
+      (y - HOT + dy).toFixed(2) +
+      'px) rotate(' +
+      tilt.toFixed(2) +
+      'deg) scale(' +
       scale.toFixed(3) +
       ')'
     wrap.style.filter =
@@ -137,20 +150,24 @@ export function createKiteCursor(doc: Document, win: Window & typeof globalThis)
     const glowGoal = reduce ? 0 : Math.min(0.6, 0.08 + 0.34 * speed + 0.4 * pulse)
     glow += (glowGoal - glow) * Math.min(1, dt * 12)
     scale += ((now < pressUntil ? 0.84 : 1) - scale) * Math.min(1, dt * 30)
-    paint()
-    const settled =
+    const resting =
       Math.abs(x - tx) < 0.3 &&
       Math.abs(y - ty) < 0.3 &&
       Math.hypot(vx, vy) < 5 &&
       pulse === 0 &&
-      Math.abs(scale - 1) < 0.002 &&
-      Math.abs(glow - glowGoal) < 0.005
-    if (settled) {
+      Math.abs(scale - 1) < 0.002
+    // Ease into the drift over a second or so; drop it quickly as soon as it moves or presses.
+    const idleGoal = resting && shown && !reduce ? 1 : 0
+    idle += (idleGoal - idle) * Math.min(1, dt * (idleGoal ? 1.2 : 10))
+    clock += dt
+    paint()
+    if (resting && idleGoal === 0 && idle < 0.002 && Math.abs(glow - glowGoal) < 0.005) {
       x = tx
       y = ty
       vx = 0
       vy = 0
       scale = 1
+      idle = 0
       paint()
       last = 0
       return
@@ -159,7 +176,7 @@ export function createKiteCursor(doc: Document, win: Window & typeof globalThis)
   }
 
   const wake = () => {
-    if (!frame) {
+    if (!frame && Number.isFinite(x) && Number.isFinite(y)) {
       frame = win.requestAnimationFrame(tick)
     }
   }
@@ -173,6 +190,7 @@ export function createKiteCursor(doc: Document, win: Window & typeof globalThis)
   const hide = () => {
     shown = false
     wrap.style.opacity = '0'
+    wake()
   }
   const place = (px: number, py: number) => {
     x = px
