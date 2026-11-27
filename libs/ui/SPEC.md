@@ -108,17 +108,17 @@ every slice's UI and pass the full gate with zero slice edits.
     more, so the window keeps one height at any length; the lens holds still while the reader moves
     within half a viewport of it, follows larger moves on a critically damped spring, and holds
     still while the window is dragged. The map always fills the rail exactly. The section being
-    read (`current`), the one hovered and the one focused are highlighted, easing over about 120 ms.
-    Hovering names the section under the pointer beside the rail. A click outside the window asks
+    read (`current`), the one under the pointer and the one focused are highlighted, easing over about 120 ms.
+    A click outside the window asks
     the consumer to glide there (`onSeek(top, 'glide')`); dragging the window asks for each new
     position (`onSeek(top, 'drag')`) and reports where it started (`onDragEnd`). Keyboard and
     assistive technology reach the sections through a `<nav aria-label>` holding an ordered list of
     native buttons, named by `accessibleLabel`, with `aria-current="location"` and the only
     `tabindex="0"` on the current section (roving: `ArrowUp`/`ArrowDown`/`Home`/`End`; `Enter`
-    calls `onNavigate`); the focused section gets a focus ring on the canvas and its label. The
+    calls `onNavigate`); the focused section gets a focus ring on the canvas. The
     canvas is `aria-hidden`. `side: 'right'` puts the rail
     beside the content's right edge, clear of the scroller's scrollbar (the space it reserves, or
-    12 px for an overlay scrollbar), with the label opening to its left; only the rail's column takes
+    12 px for an overlay scrollbar); only the rail's column takes
     the pointer, so the scrollbar beside it keeps working. `onShownChange` reports when the rail
     appears or hides (its box narrower than 48 px), and `false` when it unmounts. Colours follow the
     theme. Under

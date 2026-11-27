@@ -26,50 +26,6 @@
     touch-action: none;
   }
 
-  /* The section under the pointer (or focused), named beside the rail. */
-  .peek {
-    position: absolute;
-    z-index: var(--ui-z-hovercard);
-    display: flex;
-    gap: var(--ui-space-2);
-    align-items: center;
-    max-width: 320px;
-    padding: var(--ui-space-1) var(--ui-space-2);
-    border: 1px solid var(--ui-border-subtle);
-    border-radius: var(--ui-radius-md);
-    background: var(--ui-surface-overlay);
-    box-shadow: var(--ui-elevation-2);
-    color: var(--ui-text-primary);
-    font: var(--ui-type-caption);
-    white-space: nowrap;
-    opacity: 0;
-    transform: translateY(-50%) translateX(calc(var(--ui-space-1) * -1));
-    pointer-events: none;
-    transition:
-      opacity var(--ui-duration-fast) var(--ui-ease-fade),
-      transform var(--ui-duration-fast) var(--ui-ease-standard);
-
-    &[data-open] {
-      opacity: 1;
-      transform: translateY(-50%);
-    }
-  }
-
-  /* Beside a right-hand rail the label opens to its left, sliding in from the rail. */
-  .root[data-side='right'] .peek:not([data-open]) {
-    transform: translateY(-50%) translateX(var(--ui-space-1));
-  }
-
-  .peekNumber {
-    color: var(--ui-text-muted);
-    font-variant-numeric: tabular-nums;
-  }
-
-  .peekLabel {
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
   /* The sections' buttons: reachable by keyboard and assistive technology, drawn on the canvas. */
   .list {
     position: absolute;

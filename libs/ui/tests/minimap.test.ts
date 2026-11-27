@@ -274,9 +274,9 @@ describe('Minimap section shapes', () => {
 
 describe('Minimap markup', () => {
   const sections = [
-    { key: 'a', label: 'First', accessibleLabel: 'Turn 1: First' },
-    { key: 'b', label: 'Second', accessibleLabel: 'Turn 2: Second' },
-    { key: 'c', label: 'Third', accessibleLabel: 'Turn 3: Third', dividerBefore: true },
+    { key: 'a', accessibleLabel: 'Turn 1: First' },
+    { key: 'b', accessibleLabel: 'Turn 2: Second' },
+    { key: 'c', accessibleLabel: 'Turn 3: Third', dividerBefore: true },
   ]
   const props = {
     sections,

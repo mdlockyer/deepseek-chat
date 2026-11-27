@@ -421,7 +421,6 @@ export const TranscriptChapters = ({
         const label = turn.label || t('chapterContinued')
         return {
           key: turn.messageId,
-          label,
           accessibleLabel: t('chapterLabel', { number: index + 1, prompt: label }),
           ...(turn.afterCheckpoint ? { dividerBefore: true } : {}),
         }

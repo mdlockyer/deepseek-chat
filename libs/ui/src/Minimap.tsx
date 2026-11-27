@@ -15,8 +15,6 @@ import styles from './Minimap.module.css'
 
 export type MinimapSection = {
   readonly key: string
-  /** Shown beside the rail while the pointer is over the section, or it has keyboard focus. */
-  readonly label: string
   /** Accessible name of the section's button, e.g. "Chapter 3: Sizing". */
   readonly accessibleLabel: string
   /** Marks a break before this section (drawn as a dashed line across the rail). */
@@ -46,7 +44,7 @@ export type MinimapProps = {
   readonly onNavigate: (index: number) => void
   /**
    * Which edge of the content the rail sits beside. On the right it keeps clear of the scroller's
-   * scrollbar, and the section label opens toward the content, to its left.
+   * scrollbar.
    */
   readonly side?: 'left' | 'right'
   /**
@@ -132,7 +130,6 @@ export const Minimap = ({
   const rootRef = useRef<HTMLElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const hitRef = useRef<HTMLDivElement>(null)
-  const peekRef = useRef<HTMLDivElement>(null)
   const buttonRefs = useRef<(HTMLButtonElement | null)[]>([])
   const repaintRef = useRef<() => void>(() => undefined)
   const [focusIndex, setFocusIndex] = useState<number | null>(null)
@@ -162,12 +159,11 @@ export const Minimap = ({
   useEffect(() => {
     const root = rootRef.current
     const canvas = canvasRef.current
-    const peek = peekRef.current
     const hit = hitRef.current
     const scroll = scrollRef.current
     const content = contentRef.current
     const ctx = canvas?.getContext('2d')
-    if (!root || !canvas || !peek || !hit || !scroll || !content || !ctx) {
+    if (!root || !canvas || !hit || !scroll || !content || !ctx) {
       return
     }
 
@@ -342,34 +338,12 @@ export const Minimap = ({
       const y = map.toContent(railY)
       return y < 0 || y > doc.height ? -1 : sectionAt(doc.tops, y)
     }
-    const showPeek = (index: number, railY: number) => {
-      const section = live.current.sections[index]
-      if (index < 0 || !section) {
-        peek.removeAttribute('data-open')
-        return
-      }
-      const number = peek.firstElementChild
-      const label = peek.lastElementChild
-      if (number && label) {
-        number.textContent = String(index + 1)
-        label.textContent = section.label
-      }
-      if (side === 'right') {
-        peek.style.left = ''
-        peek.style.right = `${size.width - size.x + 14}px`
-      } else {
-        peek.style.right = ''
-        peek.style.left = `${size.x + size.w + 14}px`
-      }
-      peek.style.top = `${railY}px`
-      peek.setAttribute('data-open', '')
-    }
-    const setHover = (index: number, railY: number) => {
+    // The section under the pointer is highlighted on the rail.
+    const setHover = (index: number) => {
       if (index !== hovered) {
         hovered = index
         schedule()
       }
-      showPeek(index, railY)
     }
 
     let drag: { offset: number; fromTop: number; y: number; moved: boolean } | null = null
@@ -380,7 +354,7 @@ export const Minimap = ({
       event.preventDefault()
       const railY = localY(event)
       const y = map.toContent(railY)
-      setHover(sectionAtRail(railY), railY)
+      setHover(sectionAtRail(railY))
       const { scrollTop, clientHeight } = scroll
       const windowTop = map.top(scrollTop)
       const windowBottom = map.top(scrollTop + clientHeight)
@@ -411,10 +385,10 @@ export const Minimap = ({
         }
         // The lens holds still while dragging, so the map under the pointer doesn't move.
         live.current.onSeek(Math.max(0, map.toContent(railY - drag.offset)), 'drag')
-        setHover(sectionAtRail(railY), railY)
+        setHover(sectionAtRail(railY))
         return
       }
-      setHover(sectionAtRail(railY), railY)
+      setHover(sectionAtRail(railY))
     }
     const onPointerUp = () => {
       if (drag?.moved) {
@@ -426,7 +400,7 @@ export const Minimap = ({
     }
     const onPointerLeave = () => {
       if (!drag) {
-        setHover(-1, 0)
+        setHover(-1)
       }
     }
     hit.addEventListener('pointerdown', onPointerDown)
@@ -434,20 +408,6 @@ export const Minimap = ({
     hit.addEventListener('pointerup', onPointerUp)
     hit.addEventListener('pointercancel', onPointerUp)
     hit.addEventListener('pointerleave', onPointerLeave)
-
-    // Keyboard focus on a section's button shows its label beside it.
-    const showFocused = () => {
-      const index = live.current.focused
-      if (index !== null && map) {
-        showPeek(index, map.top(doc.tops[index] ?? 0) + 6)
-      } else if (hovered < 0) {
-        peek.removeAttribute('data-open')
-      }
-    }
-    repaintRef.current = () => {
-      showFocused()
-      schedule()
-    }
 
     return () => {
       cancelAnimationFrame(frame)
@@ -501,10 +461,6 @@ export const Minimap = ({
     >
       <canvas ref={canvasRef} className={styles.canvas} aria-hidden="true" />
       <div ref={hitRef} className={styles.hit} aria-hidden="true" />
-      <div ref={peekRef} className={styles.peek} aria-hidden="true">
-        <span className={styles.peekNumber} />
-        <span className={styles.peekLabel} />
-      </div>
       <ol className={styles.list}>
         {sections.map((section, index) => (
           <li key={section.key}>
