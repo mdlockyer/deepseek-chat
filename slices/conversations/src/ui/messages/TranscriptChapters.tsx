@@ -410,6 +410,12 @@ export const TranscriptChapters = ({
     [scrollRef]
   )
 
+  // While the minimap is on screen it shows where the reader is, so the scrollbar hides.
+  const markScroller = useCallback(
+    (shown: boolean) => scrollRef.current?.toggleAttribute('data-minimap', shown),
+    [scrollRef]
+  )
+
   const sections = useMemo(
     (): MinimapSection[] =>
       turns.map((turn, index) => {
@@ -436,6 +442,7 @@ export const TranscriptChapters = ({
         sectionSelector="[data-turn-anchor]"
         markerSelector="[data-turn-bubble]"
         side="right"
+        onShownChange={markScroller}
         onSeek={seek}
         onDragEnd={dragEnded}
         onNavigate={(index) => navigate(index)}

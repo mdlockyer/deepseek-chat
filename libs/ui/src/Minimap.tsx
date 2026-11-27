@@ -58,6 +58,11 @@ export type MinimapProps = {
    * scrollbar, and the section label opens toward the content, to its left.
    */
   readonly side?: 'left' | 'right'
+  /**
+   * Called when the rail appears or hides (its box too narrow), and with `false` when it unmounts,
+   * so the consumer can, say, hide a scrollbar the rail stands in for.
+   */
+  readonly onShownChange?: (shown: boolean) => void
   readonly className?: string
 }
 
@@ -104,6 +109,7 @@ type Live = {
   returnIndex: number | null
   onSeek: MinimapProps['onSeek']
   onDragEnd: MinimapProps['onDragEnd']
+  onShownChange: MinimapProps['onShownChange']
 }
 
 /**
@@ -131,6 +137,7 @@ export const Minimap = ({
   onNavigate,
   returnTo = null,
   side = 'left',
+  onShownChange,
   className,
 }: MinimapProps) => {
   const rootRef = useRef<HTMLElement>(null)
@@ -150,6 +157,7 @@ export const Minimap = ({
     returnIndex: null,
     onSeek,
     onDragEnd,
+    onShownChange,
   })
   live.current = {
     sections,
@@ -158,6 +166,7 @@ export const Minimap = ({
     returnIndex: returnTo?.index ?? null,
     onSeek,
     onDragEnd,
+    onShownChange,
   }
 
   useBrowserLayoutEffect(() => {
@@ -187,6 +196,7 @@ export const Minimap = ({
     let frame = 0
     let lastTick = 0
     let readPending = true
+    let shown: boolean | null = null
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)')
 
     const currentMap = () =>
@@ -320,7 +330,12 @@ export const Minimap = ({
       if (back) {
         back.style.left = `${Math.max(0, x - 4)}px`
       }
-      root.toggleAttribute('data-hidden', width < MIN_GUTTER || w < 24)
+      const hidden = width < MIN_GUTTER || w < 24
+      if (hidden !== root.hasAttribute('data-hidden') || shown === null) {
+        root.toggleAttribute('data-hidden', hidden)
+        shown = !hidden
+        live.current.onShownChange?.(shown)
+      }
       const dpr = window.devicePixelRatio || 1
       canvas.width = Math.round(width * dpr)
       canvas.height = Math.round(height * dpr)
@@ -460,6 +475,9 @@ export const Minimap = ({
     return () => {
       cancelAnimationFrame(frame)
       repaintRef.current = () => undefined
+      if (shown) {
+        live.current.onShownChange?.(false)
+      }
       reader.dispose()
       rootObserver.disconnect()
       theme.disconnect()

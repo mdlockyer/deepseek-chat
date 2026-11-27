@@ -120,7 +120,9 @@ every slice's UI and pass the full gate with zero slice edits.
     number, named by `label`) at that section's place on the rail. `side: 'right'` puts the rail
     beside the content's right edge, clear of the scroller's scrollbar (the space it reserves, or
     12 px for an overlay scrollbar), with the label opening to its left; only the rail's column takes
-    the pointer, so the scrollbar beside it keeps working. Colours follow the theme. Under
+    the pointer, so the scrollbar beside it keeps working. `onShownChange` reports when the rail
+    appears or hides (its box narrower than 48 px), and `false` when it unmounts. Colours follow the
+    theme. Under
     reduced motion the lens and highlights change in place.
 12. **Scroll glide (`createScrollGlide`).** Drives `scrollTop` with a critically damped spring that
     never overshoots, clamps targets to the scroll range, retargets in flight without resetting

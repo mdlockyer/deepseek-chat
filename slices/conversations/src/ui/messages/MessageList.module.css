@@ -33,6 +33,16 @@
     }
   }
 
+  /* The minimap beside the transcript shows the reading position, so the scrollbar hides while
+     it's on screen (TranscriptChapters sets the attribute). */
+  .scroll[data-minimap] {
+    scrollbar-width: none;
+
+    &::-webkit-scrollbar {
+      display: none;
+    }
+  }
+
   .column {
     width: calc(var(--message-list-max-width) - 2 * var(--message-list-padding-horizontal));
     max-width: calc(100% - var(--ui-space-10));
