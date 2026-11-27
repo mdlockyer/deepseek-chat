@@ -138,6 +138,28 @@ const TOKENS = [
 type Rgba = readonly [number, number, number, number]
 type Palette = Record<(typeof TOKENS)[number], Rgba>
 
+const pixel = typeof document === 'undefined' ? null : document.createElement('canvas')
+const pixelCtx = pixel?.getContext('2d', { willReadFrequently: true }) ?? null
+const rgbaCache = new Map<string, Rgba>()
+/** Any CSS colour (the transcript's computed colours come as lab()) as sRGB, for blending. */
+const toRgba = (color: string): Rgba => {
+  const cached = rgbaCache.get(color)
+  if (cached) {
+    return cached
+  }
+  let value: Rgba = [128, 128, 128, 1]
+  if (pixelCtx) {
+    pixelCtx.clearRect(0, 0, 1, 1)
+    pixelCtx.fillStyle = '#808080'
+    pixelCtx.fillStyle = color
+    pixelCtx.fillRect(0, 0, 1, 1)
+    const [r = 0, g = 0, b = 0, a = 255] = pixelCtx.getImageData(0, 0, 1, 1).data
+    value = [r, g, b, a / 255]
+  }
+  rgbaCache.set(color, value)
+  return value
+}
+
 /** Resolves each token to sRGB so colours can be blended frame by frame. */
 const resolvePalette = (host: HTMLElement): Palette => {
   const probe = document.createElement('span')
@@ -205,16 +227,32 @@ type LineShape = {
 }
 type BlockShape = {
   readonly block: Block
+  /** Its lines' colours, averaged by length: what the bar is drawn in. */
+  readonly color: Rgba
   readonly lines: readonly LineShape[]
   readonly slabTop: number
   readonly slabBottom: number
 }
 type TurnShape = {
+  /** Its paragraphs' colours, averaged by size: what the slab is drawn in. */
+  readonly color: Rgba
   readonly blocks: readonly BlockShape[]
   readonly answerStart: number
   readonly answerEnd: number
   readonly bubble: Box | undefined
   readonly bubbleLines: readonly Seg[]
+}
+
+const average = (parts: readonly { color: Rgba; weight: number }[]): Rgba => {
+  const sum = [0, 0, 0, 0]
+  let total = 0
+  for (const { color, weight } of parts) {
+    color.forEach((v, i) => (sum[i] = (sum[i] ?? 0) + v * weight))
+    total += weight
+  }
+  return total > 0
+    ? [(sum[0] ?? 0) / total, (sum[1] ?? 0) / total, (sum[2] ?? 0) / total, (sum[3] ?? 0) / total]
+    : [128, 128, 128, 1]
 }
 
 const shapeTurns = (m: Measure): TurnShape[] => {
@@ -270,9 +308,18 @@ const shapeTurns = (m: Measure): TurnShape[] => {
           })
         )
       })
-      return { block, lines, slabTop, slabBottom }
+      const color = average(segs.map((seg) => ({ color: toRgba(seg.color), weight: seg.w })))
+      return { block, color, lines, slabTop, slabBottom }
     })
-    return { blocks, answerStart, answerEnd, bubble, bubbleLines: bubbleLines[turn] ?? [] }
+    const color = average(blocks.map((b) => ({ color: b.color, weight: b.block.w * b.block.h })))
+    return {
+      color,
+      blocks,
+      answerStart,
+      answerEnd,
+      bubble,
+      bubbleLines: bubbleLines[turn] ?? [],
+    }
   })
 }
 
@@ -369,13 +416,38 @@ export const mountAdaptiveMinimap = (
     })
     const SLAB_X = 0
     const SLAB_W = 0.86
-    // Rest and highlighted colours for each level; a turn's highlight eases between them.
-    const blockRest = tint(p['text-disabled'], 0.3)
-    const blockLit = tint(p['text-muted'], 0.55)
+    // Everything is drawn in the transcript's own colours. Lines, bars and slabs get lighter as
+    // they get bigger, so the rail keeps about the same weight at every level of detail; the
+    // highlighted turn comes up to near full strength.
+    const lineInk = (color: string, e: number) => tint(toRgba(color), lerp(0.4, 0.85, e))
+    const barInk = (color: Rgba, e: number) => tint(color, lerp(0.24, 0.5, e))
+    const slabInk = (color: Rgba, e: number) => tint(color, lerp(0.16, 0.38, e))
+
+    // Code block backgrounds, table row rules and quote bars, in their own colours; they belong
+    // to full detail and fade with it. Drawn first, so the text sits on top.
+    for (const b of m.boxes) {
+      if (b.kind === 'bubble' || b.kind === 'table') {
+        continue
+      }
+      const alpha = lineAlpha(L.scaleAt(b.y + b.h / 2))
+      if (alpha < 0.01) {
+        continue
+      }
+      const colour = toRgba(b.color)
+      const r = span(b.x, b.w, b.y, b.y + b.h)
+      if (b.kind === 'code') {
+        fill(r, tint(colour, alpha), 1.5)
+      } else if (b.kind === 'rule') {
+        // Rules are hairlines in the app; at this size they need a little more ink to show.
+        fill({ ...r, y1: r.y0 + 0.75 }, tint(colour, Math.min(1 / colour[3], 2.5) * alpha))
+      } else {
+        fill({ ...r, w: 1.5 }, tint(colour, alpha), 0.75)
+      }
+    }
 
     shapes.forEach((turn, t) => {
       const e = emphasis[t] ?? 0
-      const blockColour = blend(blockRest, blockLit, e)
+      const slabColour = slabInk(turn.color, e)
       const mid = (turn.answerStart + turn.answerEnd) / 2
       const merged =
         turn.blocks.length === 0
@@ -383,7 +455,7 @@ export const mountAdaptiveMinimap = (
           : turn.blocks.every((b) => blockAlpha(L.scaleAt(b.block.y + b.block.h / 2)) <= 0)
       if (merged) {
         // The whole answer is one slab.
-        fill(span(SLAB_X, SLAB_W, turn.answerStart, turn.answerEnd), blockColour)
+        fill(span(SLAB_X, SLAB_W, turn.answerStart, turn.answerEnd), slabColour)
         return
       }
       for (const shape of turn.blocks) {
@@ -392,20 +464,19 @@ export const mountAdaptiveMinimap = (
         const toBar = 1 - lineAlpha(scale)
         const toSlab = 1 - blockAlpha(scale)
         const slabTile = span(SLAB_X, SLAB_W, shape.slabTop, shape.slabBottom)
+        const barColour = barInk(shape.color, e)
         if (toBar >= 1) {
           // The paragraph is one bar, stretching toward its share of the slab.
           fill(
             mixRect(span(block.x, block.w, block.y, block.y + block.h), slabTile, toSlab),
-            blockColour
+            blend(barColour, slabColour, toSlab)
           )
           continue
         }
         for (const line of shape.lines) {
           const { seg } = line
           const heading = seg.kind === 'heading'
-          const lineColour = heading
-            ? blend(tint(p['text-muted'], 0.75), tint(p['text-primary'], 0.75), e)
-            : blend(tint(p['text-disabled'], 0.55), tint(p['text-secondary'], 0.75), e)
+          const colour = lineInk(seg.color, e)
           const stroke = clamp(seg.h * scale * 0.6, 0.8, heading ? 2.4 : 1.6)
           const centre = (L.top(seg.y) + L.top(seg.y + seg.h)) / 2
           const own: Rect = {
@@ -415,42 +486,23 @@ export const mountAdaptiveMinimap = (
             y1: centre + stroke / 2,
           }
           if (!line.leads) {
-            // Extra cells on a table row fade out as the row's first cell grows into the tile.
-            fill(own, tint(lineColour, 1 - toBar), stroke / 2)
+            // Other runs on the row (code tokens, table cells) fade as the first grows into the tile.
+            fill(own, tint(colour, 1 - toBar), stroke / 2)
             continue
           }
           const tile = mixRect(own, span(block.x, block.w, seg.y, line.tileBottom), toBar)
           const rect = mixRect(tile, span(SLAB_X, SLAB_W, line.slabTop, line.slabBottom), toSlab)
-          fill(rect, blend(lineColour, blockColour, toBar), (stroke / 2) * (1 - toBar))
+          fill(
+            rect,
+            blend(blend(colour, barColour, toBar), slabColour, toSlab),
+            (stroke / 2) * (1 - toBar)
+          )
         }
       }
     })
 
-    // Code backgrounds, table outlines and quote bars belong to full detail and fade with it.
-    for (const b of m.boxes) {
-      if (b.kind === 'bubble') {
-        continue
-      }
-      const alpha = lineAlpha(L.scaleAt(b.y + b.h / 2))
-      if (alpha < 0.01) {
-        continue
-      }
-      const r = span(b.x, b.w, b.y, b.y + b.h)
-      if (b.kind === 'table') {
-        ctx.strokeStyle = css(p['border-default'], alpha)
-        ctx.lineWidth = 0.75
-        ctx.beginPath()
-        ctx.roundRect(r.x, r.y0, r.w, r.y1 - r.y0, 1.5)
-        ctx.stroke()
-      } else if (b.kind === 'code') {
-        fill(r, tint(p['border-subtle'], alpha), 1.5)
-      } else {
-        fill({ ...r, w: 1.5 }, tint(p['border-strong'], alpha), 0.75)
-      }
-    }
-
-    // Prompts, at every level of detail: one pill whose colour follows its size, dark enough to
-    // find when it's a sliver, light with its text line showing when there's room.
+    // Prompts, at every level of detail. With room, the pill is the bubble's own fill with its
+    // text showing; as it shrinks to a sliver it takes the text's colour so it can still be found.
     shapes.forEach((turn, t) => {
       const b = turn.bubble
       if (!b) {
@@ -463,15 +515,25 @@ export const mountAdaptiveMinimap = (
       const pitch = L.top(m?.anchors[t + 1] ?? m?.height ?? 0) - L.top(m?.anchors[t] ?? b.y)
       // Where turns are only a few px apart, markers fade so they don't stripe the rail.
       const presence = lerp(smooth(2.5, 7, pitch), 1, e)
-      const rest = blend(p['text-disabled'], p['border-default'], roomy)
-      const lit = blend(p['text-primary'], p['border-strong'], roomy)
+      const background = toRgba(b.color)
+      const firstLine = turn.bubbleLines[0]
+      const ink = firstLine ? toRgba(firstLine.color) : p['text-primary']
+      const sliver = tint(ink, lerp(0.4, 0.85, e))
+      const pill = blend(background, ink, lerp(0, 0.1, e))
       const width = Math.max(4, b.w * W) + 2
-      fill({ x: X + b.x * W - 1, w: width, y0, y1: y0 + h }, tint(blend(rest, lit, e), presence), 3)
+      fill(
+        { x: X + b.x * W - 1, w: width, y0, y1: y0 + h },
+        tint(blend(sliver, pill, roomy), presence),
+        3
+      )
       if (roomy > 0.01) {
-        const ink = tint(blend(tint(p['text-muted'], 0.8), p['text-primary'], e), roomy * presence)
         for (const seg of turn.bubbleLines) {
           const centre = (L.top(seg.y) + L.top(seg.y + seg.h)) / 2
-          fill({ x: X + seg.x * W, w: seg.w * W, y0: centre - 0.7, y1: centre + 0.7 }, ink, 0.7)
+          fill(
+            { x: X + seg.x * W, w: seg.w * W, y0: centre - 0.7, y1: centre + 0.7 },
+            tint(toRgba(seg.color), lerp(0.55, 0.9, e) * roomy * presence),
+            0.7
+          )
         }
       }
     })

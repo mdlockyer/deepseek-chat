@@ -22,6 +22,8 @@ export type Seg = {
   readonly kind: 'text' | 'heading' | 'bubble' | 'code'
   /** Index into `blocks` of the paragraph, table, code block or quote this line belongs to; -1 in a prompt. */
   readonly block: number
+  /** The text's computed colour in the transcript. */
+  readonly color: string
   readonly x: number
   readonly w: number
   readonly y: number
@@ -30,7 +32,10 @@ export type Seg = {
 
 export type Box = {
   readonly turn: number
-  readonly kind: 'bubble' | 'code' | 'table' | 'quote'
+  readonly kind: 'bubble' | 'code' | 'table' | 'quote' | 'rule'
+  /** The element's computed colour in the transcript: background for prompts and code blocks, the
+   * border for quotes and table rules. */
+  readonly color: string
   readonly x: number
   readonly w: number
   readonly y: number
@@ -97,8 +102,26 @@ export const measure = (scroll: HTMLElement, column: HTMLElement): Measure => {
 
   const lines = new Map<
     string,
-    { block: Element; kind: Seg['kind']; x0: number; x1: number; top: number; h: number }
+    {
+      block: Element
+      kind: Seg['kind']
+      color: string
+      x0: number
+      x1: number
+      top: number
+      h: number
+    }
   >()
+  const colors = new Map<Element, string>()
+  const colorOf = (el: Element) => {
+    let color = colors.get(el)
+    if (!color) {
+      color = getComputedStyle(el).color
+      colors.set(el, color)
+    }
+    return color
+  }
+  let run = 0
   const ids = new Map<Element, number>()
   const walker = document.createTreeWalker(column, NodeFilter.SHOW_TEXT)
   const range = document.createRange()
@@ -118,12 +141,18 @@ export const measure = (scroll: HTMLElement, column: HTMLElement): Measure => {
     if (!ids.has(block)) {
       ids.set(block, ids.size)
     }
+    const color = colorOf(parent)
+    run += 1
     range.selectNodeContents(node)
     for (const rect of range.getClientRects()) {
       if (rect.width < 0.5 || rect.height < 0.5) {
         continue
       }
-      const key = `${ids.get(block)}:${Math.round(rect.top / 4)}`
+      // A line merges into one stroke per colour; code keeps each token, so syntax colours show.
+      const key =
+        kind === 'code'
+          ? `${ids.get(block)}:${Math.round(rect.top / 4)}:${run}`
+          : `${ids.get(block)}:${Math.round(rect.top / 4)}:${color}`
       const line = lines.get(key)
       if (line) {
         line.x0 = Math.min(line.x0, rect.left)
@@ -133,6 +162,7 @@ export const measure = (scroll: HTMLElement, column: HTMLElement): Measure => {
         lines.set(key, {
           block,
           kind,
+          color,
           x0: rect.left,
           x1: rect.right,
           top: rect.top,
@@ -142,26 +172,47 @@ export const measure = (scroll: HTMLElement, column: HTMLElement): Measure => {
     }
   }
   const boxes: Box[] = []
-  const addBoxes = (selector: string, kind: Box['kind']) => {
-    for (const node of column.querySelectorAll(selector)) {
+  const addBoxes = (
+    selector: string,
+    kind: Box['kind'],
+    colorOfBox: (el: Element) => string,
+    target: (el: Element) => Element = (el) => el,
+    edge: 'box' | 'bottom' = 'box'
+  ) => {
+    for (const found of column.querySelectorAll(selector)) {
+      const node = target(found)
       const rect = node.getBoundingClientRect()
       if (rect.height > 0) {
-        const y = toY(rect.top)
+        const y = toY(edge === 'bottom' ? rect.bottom - 1 : rect.top)
         boxes.push({
           turn: turnOf(y),
           kind,
+          color: colorOfBox(node),
           x: toX(rect.left),
           w: rect.width / colRect.width,
           y,
-          h: rect.height,
+          h: edge === 'bottom' ? 1 : rect.height,
         })
       }
     }
   }
-  addBoxes('[data-turn-bubble]', 'bubble')
-  addBoxes('pre', 'code')
-  addBoxes('table', 'table')
-  addBoxes('blockquote', 'quote')
+  const style = (el: Element) => getComputedStyle(el)
+  addBoxes('[data-turn-bubble]', 'bubble', (el) => style(el).backgroundColor)
+  addBoxes(
+    'pre',
+    'code',
+    (el) => style(el).backgroundColor,
+    (pre) => pre.closest('[class*="code-block"]') ?? pre
+  )
+  addBoxes('table', 'table', (el) => style(el.querySelector('td') ?? el).borderBottomColor)
+  addBoxes(
+    'tr',
+    'rule',
+    (el) => style(el.querySelector('td,th') ?? el).borderBottomColor,
+    undefined,
+    'bottom'
+  )
+  addBoxes('blockquote', 'quote', (el) => style(el).borderLeftColor)
 
   const grouped = new Map<
     Element,
@@ -206,6 +257,7 @@ export const measure = (scroll: HTMLElement, column: HTMLElement): Measure => {
     return {
       turn: turnOf(y),
       kind: line.kind,
+      color: line.color,
       block:
         line.kind === 'bubble'
           ? -1
@@ -293,6 +345,9 @@ export const mountMinimapRail = (
     groups = m.anchors.map((_, i) => el('g', { 'data-turn': i, class: styles.turn }, svg))
     if (style === 'text') {
       for (const box of m.boxes) {
+        if (box.kind === 'rule') {
+          continue
+        }
         const by = toMap(box.y)
         const bh = Math.max(2, box.h * sy)
         const bw = Math.max(2, box.w * w)
