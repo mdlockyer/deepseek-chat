@@ -24,6 +24,7 @@ use crate::browser::{
 pub const PREVIEW_WEBVIEW_LABEL: &str = "file-preview";
 const PREVIEW_SCHEME: &str = "ds-preview";
 /// Separate isolated data store ID so file previews never share cookies/storage with BrowserPanel.
+#[cfg(target_os = "macos")]
 const PREVIEW_DATA_STORE_ID: [u8; 16] = *b"ds-preview-v0001";
 
 const HTML_SANDBOX_CSP: &str = "default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' https: data: blob:; style-src 'unsafe-inline' https: data: blob:; img-src * data: blob:; font-src https: data:; media-src * data: blob:; connect-src https: data: blob:; worker-src blob:; frame-src 'none'; object-src 'none';";

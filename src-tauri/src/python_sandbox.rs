@@ -1108,15 +1108,14 @@ mod linux {
 
     fn build_seccomp_filter() -> Result<Vec<SockFilter>, String> {
         let deny_eperm = SECCOMP_RET_ERRNO | (libc::EPERM as u32 & 0xffff);
-        let mut f = Vec::new();
-
-        // 1. Validate syscall architecture (blocks 32-bit compat bypass).
-        f.push(stmt(BPF_LD | BPF_W | BPF_ABS, OFFSET_ARCH));
-        f.push(jump(BPF_JMP | BPF_JEQ | BPF_K, EXPECTED_AUDIT_ARCH, 1, 0));
-        f.push(stmt(BPF_RET | BPF_K, SECCOMP_RET_KILL_PROCESS));
-
-        // 2. Load syscall number.
-        f.push(stmt(BPF_LD | BPF_W | BPF_ABS, OFFSET_NR));
+        let mut f = vec![
+            // 1. Validate syscall architecture (blocks 32-bit compat bypass).
+            stmt(BPF_LD | BPF_W | BPF_ABS, OFFSET_ARCH),
+            jump(BPF_JMP | BPF_JEQ | BPF_K, EXPECTED_AUDIT_ARCH, 1, 0),
+            stmt(BPF_RET | BPF_K, SECCOMP_RET_KILL_PROCESS),
+            // 2. Load syscall number.
+            stmt(BPF_LD | BPF_W | BPF_ABS, OFFSET_NR),
+        ];
 
         // 3. Deny dangerous syscalls unconditionally with EPERM.
         let denied_syscalls: &[libc::c_long] = &[

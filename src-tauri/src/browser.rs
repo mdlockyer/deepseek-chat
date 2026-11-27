@@ -26,6 +26,7 @@ const MAX_EVAL_TIMEOUT_MS: u64 = 60_000;
 const MIN_VIEWPORT_ZOOM: f64 = 0.25;
 const MAX_VIEWPORT_ZOOM: f64 = 4.0;
 /// Persistent isolated data store ID for the built-in browser (`WKWebsiteDataStore` on macOS 14+).
+#[cfg(target_os = "macos")]
 const BROWSER_DATA_STORE_ID: [u8; 16] = *b"ds-browser-v0001";
 
 /// Default desktop browser User-Agent so sites serve full modern pages instead of
@@ -740,6 +741,7 @@ pub(crate) async fn platform_eval_js(
 /// Computes the logical `snapshotWidth` (in macOS points) needed so the captured bitmap stays
 /// within `max_pixel_width` physical pixels on HiDPI displays. Returns `None` when the current
 /// frame is already within budget.
+#[cfg(any(target_os = "macos", test))]
 pub(crate) fn compute_snapshot_logical_width(
     frame_width: f64,
     max_pixel_width: f64,
