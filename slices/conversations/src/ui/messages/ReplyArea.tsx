@@ -59,9 +59,9 @@ const useTicker = (active: boolean, interval: number) => {
  * - Tier 0: bounded live ticker while working, folding to a quiet summary row once settled.
  * - Tier 1: clicking the row / chevron expands a compact inline step trace (or thinking prose
  *   on thinking-only turns) in place without displacing the right-hand workspace panel.
- * - Tier 2: an explicit "Open in Activity" control inside the expanded trace publishes
- *   `TurnInspectionRequested` to inspect heavy artifacts (code, screenshots, sources, reasoning)
- *   side by side in the Activity panel.
+ * - Tier 2: an explicit "Open in Activity" control inside the expanded trace opens the built-in
+ *   Activity inspector cell to inspect heavy artifacts (code, screenshots, sources, reasoning)
+ *   side by side.
  */
 export const ReplyArea = memo(function ReplyArea({
   sessionId,
@@ -82,8 +82,8 @@ export const ReplyArea = memo(function ReplyArea({
 }) {
   const locale = useLocale()
   const t = useTranslate()
-  const { deps, requestTurnInspection } = useConversations()
-  const useActiveInspection = deps.ui.useActiveInspectionTarget ?? useNoInspection
+  const { activity, requestTurnInspection } = useConversations()
+  const useActiveInspection = activity?.useActiveTarget ?? useNoInspection
   const target = useActiveInspection()
   const isInspecting =
     target !== null &&

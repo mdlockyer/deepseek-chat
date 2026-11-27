@@ -13,10 +13,6 @@ import {
 } from '@deepseek-chat/lib-tools'
 import { copyText, createNoticeBus, createOverlayCoordinator } from '@deepseek-chat/lib-ui'
 import { createAccountSlice, type AccountSlice } from '@deepseek-chat/slice-account'
-import {
-  createActivityInspectorSlice,
-  type ActivityInspectorSlice,
-} from '@deepseek-chat/slice-activity-inspector'
 import { createAskUserSlice, type AskUserSlice } from '@deepseek-chat/slice-ask-user'
 import {
   createBrowserSlice,
@@ -56,7 +52,7 @@ import {
 import { createLocaleStore, type LocaleStore } from '@deepseek-chat/spine/i18n'
 import type { BlobStore, HttpFetch, KeyValueStore, SecretSlot } from '@deepseek-chat/spine/ports'
 import { EventLog } from '@deepseek-chat/spine/runtime'
-import { createElement, type ComponentType } from 'react'
+import type { ComponentType } from 'react'
 import { create } from 'zustand'
 import { createSiderLayoutController, type SiderLayoutController } from './layout.js'
 import { createRightPanelController, type RightPanelController } from './rightPanel/state.js'
@@ -74,7 +70,6 @@ export type EnabledSlices = {
   readonly browser?: boolean
   readonly askUser?: boolean
   readonly subagents?: boolean
-  readonly activityInspector?: boolean
   readonly historyBackup?: boolean
 }
 
@@ -163,7 +158,6 @@ export const createAppRuntime = (config: AppRuntimeConfig) => {
     browser: config.enabledSlices?.browser ?? true,
     askUser: config.enabledSlices?.askUser ?? true,
     subagents: config.enabledSlices?.subagents ?? true,
-    activityInspector: config.enabledSlices?.activityInspector ?? true,
     historyBackup: config.enabledSlices?.historyBackup ?? true,
   }
 
@@ -322,14 +316,9 @@ export const createAppRuntime = (config: AppRuntimeConfig) => {
   ]
   toolRegistry = createToolRegistry(capabilities, COMPOSITION_PROMPT_NOTES)
 
-  let activityInspector: ActivityInspectorSlice | null = null
-  const ActivityHeaderToggle: ComponentType<{ readonly sessionId: string }> = ({ sessionId }) =>
-    activityInspector ? createElement(activityInspector.HeaderToggle, { sessionId }) : null
-
   const headerActions: ComponentType<{ readonly sessionId: string }>[] = [
     ...(workspaceFiles ? [workspaceFiles.HeaderToggle] : []),
     ...(browser ? [browser.HeaderToggle] : []),
-    ...(enabled.activityInspector ? [ActivityHeaderToggle] : []),
   ]
 
   const conversations: ConversationsSlice = createConversationsSlice({
@@ -340,6 +329,7 @@ export const createAppRuntime = (config: AppRuntimeConfig) => {
     blobs,
     sessions,
     tools: toolRegistry,
+    activityPanel: rightPanel.createSlot('activity'),
     platform,
     getLocationLabel: (locale) => preferences?.getLocationLabel(locale) ?? '',
     onStreamTrace: config.onStreamTrace,
@@ -373,9 +363,6 @@ export const createAppRuntime = (config: AppRuntimeConfig) => {
               ? workspaceFiles.useIsDeliveredFileShown(sessionId, file.file)
               : workspaceFiles.useIsUploadFileShown(sessionId, file.fileId)
         : undefined,
-      useActiveInspectionTarget: enabled.activityInspector
-        ? () => activityInspector?.useActiveTarget() ?? null
-        : undefined,
       useNeedsApiKey: () => {
         if (config.provider) {
           return !config.provider.isConfigured()
@@ -395,30 +382,6 @@ export const createAppRuntime = (config: AppRuntimeConfig) => {
   })
 
   layout.bindSessions(conversations)
-
-  activityInspector = enabled.activityInspector
-    ? createActivityInspectorSlice({
-        log,
-        panel: rightPanel.createSlot('activity'),
-        turnSource: {
-          getTurn: conversations.getTurnSnapshot,
-          listTurns: conversations.listSessionTurns,
-          subscribe: conversations.subscribeToTurns,
-        },
-        transcript: {
-          getReadingPosition: conversations.getReadingPosition,
-          subscribeToReading: conversations.subscribeToReading,
-          revealTurn: conversations.revealTurn,
-        },
-        getPresenter: toolRegistry.presenterFor,
-        openInApp: browser?.available
-          ? (url: string) => {
-              void browser.openUrl(url, { initiator: 'user' })
-            }
-          : null,
-        openFile: workspaceFiles?.openDeliveredFile,
-      })
-    : null
 
   const historyBackup: HistoryBackupSlice | null = enabled.historyBackup
     ? createHistoryBackupSlice({
@@ -454,7 +417,6 @@ export const createAppRuntime = (config: AppRuntimeConfig) => {
     releaseUiOverlay = null
     layout.dispose()
     historyBackup?.dispose()
-    activityInspector?.dispose()
     conversations.dispose()
     subagents?.dispose()
     askUser?.dispose()
@@ -510,7 +472,6 @@ export const createAppRuntime = (config: AppRuntimeConfig) => {
       askUser,
       subagents,
       conversations,
-      activityInspector,
       historyBackup,
     },
     hydrate,

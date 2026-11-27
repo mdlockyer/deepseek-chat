@@ -30,7 +30,6 @@ const OPTIONAL_SLICES: readonly {
   readonly role: string
 }[] = [
   { key: 'workspaceFiles', label: 'workspace-files', role: 'Preview panel & file tools' },
-  { key: 'activityInspector', label: 'activity-inspector', role: 'Activity & Sources rail' },
   { key: 'askUser', label: 'ask-user', role: 'Interactive composer dock' },
   { key: 'webResearch', label: 'web-research', role: 'Search, scrape & research profile' },
   { key: 'python', label: 'python', role: 'Python sandbox toggle & runner' },
@@ -50,7 +49,6 @@ const FULL_SLICES: Required<EnabledSlices> = {
   browser: true,
   askUser: true,
   subagents: true,
-  activityInspector: true,
   historyBackup: true,
 }
 
@@ -63,7 +61,6 @@ const BARE_SLICES: Required<EnabledSlices> = {
   browser: false,
   askUser: false,
   subagents: false,
-  activityInspector: false,
   historyBackup: false,
 }
 
@@ -335,7 +332,6 @@ const INSPECTED_FACT_TYPES = [
   'ReplyLifecycleChanged',
   'SessionFilesChanged',
   'ToolFileDelivered',
-  'TurnInspectionRequested',
   'SessionDeleted',
   'SessionHistoryReplaced',
   'BrowserControlTakenOver',
@@ -515,7 +511,7 @@ const DualIsolatedInstances = () => {
       <div className={styles.dualColumn}>
         <div className={styles.dualHeader}>
           <div>
-            <strong>Instance A · Full 12 Slices + Drop-in Calc</strong>
+            <strong>Instance A · Full 11 Slices + Drop-in Calc</strong>
             <div className={styles.panelNote}>
               EventLog events: {instanceA.envelopes.length} · Capabilities:{' '}
               {instanceA.runtime.tools.capabilities.length}

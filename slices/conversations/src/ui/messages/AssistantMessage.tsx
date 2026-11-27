@@ -63,10 +63,11 @@ export const AssistantMessage = memo(function AssistantMessage({
 }) {
   const locale = useLocale()
   const t = useTranslate()
-  const { deps, requestTurnInspection, regenerateReply, continueReply } = useConversations()
+  const { deps, activity, requestTurnInspection, regenerateReply, continueReply } =
+    useConversations()
   const ReadAloudButton = deps.ui.voice?.ReadAloudButton ?? null
   const view = useReplyView(message, streaming)
-  const useActiveInspection = deps.ui.useActiveInspectionTarget ?? useNoInspection
+  const useActiveInspection = activity?.useActiveTarget ?? useNoInspection
   const panelTarget = useActiveInspection()
   const notice = streaming ? null : describeReply(message, locale)
   const refused = message.stopReason === 'refusal'

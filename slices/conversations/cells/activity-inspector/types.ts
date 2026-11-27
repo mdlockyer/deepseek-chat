@@ -1,12 +1,8 @@
-import type {
-  CitedSourceMeta,
-  DeliveredFileRef,
-  ToolCallRecord,
-  ToolResultRecord,
-  ToolStepPresenter,
-} from '@deepseek-chat/lib-tools'
+import type { DeliveredFileRef, ToolStepPresenter } from '@deepseek-chat/lib-tools'
 import type { PanelSlot } from '@deepseek-chat/spine/ports'
 import type { EventLog } from '@deepseek-chat/spine/runtime'
+import type { ReadingPosition } from '../../src/reading.js'
+import type { AssistantMessage, ReplyBlock } from '../../src/types.js'
 
 export type ActivityTab = 'activity' | 'sources'
 
@@ -44,35 +40,12 @@ export type SessionTurnSummary = {
   readonly hasActivity: boolean
 }
 
-export type TurnThinkingBlock = {
-  readonly type: 'thinking'
-  readonly thinking: string
-  readonly startedAt?: number
-  readonly endedAt?: number
-  readonly elapsedSeconds?: number
-}
-
-export type TurnTextBlock = {
-  readonly type: 'text'
-  readonly text: string
-  readonly isTemplate?: boolean
-}
-
-export type TurnToolUseBlock = ToolCallRecord & { readonly type: 'tool_use' }
-export type TurnToolResultBlock = ToolResultRecord & {
-  readonly type: 'tool_result'
-  readonly searchResults?: readonly CitedSourceMeta[]
-  readonly scrapedPage?: { readonly url: string; readonly title: string | null }
-}
-
-export type TurnBlock = TurnThinkingBlock | TurnTextBlock | TurnToolUseBlock | TurnToolResultBlock
-
 export type TurnSnapshot = {
   readonly sessionId: string
   readonly messageId: string
-  readonly status: 'pending' | 'streaming' | 'done' | 'stopped' | 'error'
+  readonly status: AssistantMessage['status']
   readonly streaming: boolean
-  readonly blocks: readonly TurnBlock[]
+  readonly blocks: readonly ReplyBlock[]
   readonly capabilityState?: Readonly<Record<string, unknown>>
 }
 
@@ -93,24 +66,17 @@ export type ActivitySource = {
   readonly index: number
 }
 
-/** The turn a chat's transcript is on, and who moved it there (see `TranscriptPort`). */
-export type TranscriptReadingPosition = {
-  readonly messageId: string
-  /** `'reader'` for the reader's own navigation; `'reveal'` when a view (this panel) asked for it. */
-  readonly cause: 'reader' | 'reveal'
-}
-
 /**
- * The chat transcript, as this panel sees it: where the reader is, and a way to bring a turn into
+ * The chat transcript, as this cell sees it: where the reader is, and a way to bring a turn into
  * view there when the reader picks one in the panel.
  */
 export type TranscriptPort = {
-  getReadingPosition(sessionId: string): TranscriptReadingPosition | null
+  getReadingPosition(sessionId: string): ReadingPosition | null
   subscribeToReading(listener: () => void): () => void
   revealTurn(sessionId: string, messageId: string): void
 }
 
-export type ActivityInspectorDeps = {
+export type ActivityInspectorCellDeps = {
   readonly log: EventLog
   readonly panel: PanelSlot
   readonly turnSource: TurnSnapshotSource

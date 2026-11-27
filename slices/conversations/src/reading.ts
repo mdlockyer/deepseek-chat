@@ -35,7 +35,8 @@ export const createReadingPositions = () => {
     useReadingStore.getState().positions[sessionId] ?? null
 
   const setReadingPosition = (sessionId: string, messageId: string, cause: ReadingCause) => {
-    if (getReadingPosition(sessionId)?.messageId === messageId) {
+    const prev = getReadingPosition(sessionId)
+    if (prev?.messageId === messageId && prev.cause === cause) {
       return
     }
     useReadingStore.setState((state) => ({

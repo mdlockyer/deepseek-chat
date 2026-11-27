@@ -34,7 +34,7 @@ import { GenericStepDetail } from './GenericStepView.js'
 import { activityInspectorMessages } from './messages.js'
 import { SourceCard } from './SourceCard.js'
 import type { ActivityPanelState } from './state.js'
-import './thinking.markdown.css'
+import './activityMarkdown.css'
 import {
   buildActivityTimeline,
   type ActivityLanePhase,
@@ -44,7 +44,7 @@ import {
   type ActivityVisualItem,
 } from './timeline.js'
 import type {
-  ActivityInspectorDeps,
+  ActivityInspectorCellDeps,
   ActivitySelection,
   ActivitySource,
   SessionTurnSummary,
@@ -213,7 +213,7 @@ const ActivityStepRow = ({
   selected: boolean
   onToggle: () => void
   openLink: (event: MouseEvent, url: string) => void
-  openFile?: ActivityInspectorDeps['openFile']
+  openFile?: ActivityInspectorCellDeps['openFile']
   openVisual: (visual: ToolStepVisualArtifact) => void
   renderMarkdown: (props: { readonly content: string; readonly cacheKey: string }) => ReactNode
 }) => {
@@ -426,7 +426,7 @@ const sameTurn = (a: TurnSnapshot | null, b: TurnSnapshot | null) =>
 
 export const createActivityPanel = (
   state: ActivityPanelState,
-  deps: ActivityInspectorDeps,
+  deps: ActivityInspectorCellDeps,
   resolveMessageId: (selection: ActivitySelection) => string | null
 ) => {
   const timelinesByLocale = new Map<Locale, WeakMap<TurnSnapshot, ActivityTimeline>>()
@@ -784,7 +784,6 @@ export const createActivityPanel = (
     const locale = useLocale()
     const t = activityInspectorMessages.useTranslate()
     const selection = state.useStore((s) => s.selection)
-    const panelOpen = state.useStore((s) => s.panelOpen)
     const layoutSessionId = deps.panel.useLayout((layout) => layout.activeSessionId)
     const lastSelectionRef = useRef<ActivitySelection | null>(selection)
     if (selection) {
@@ -792,6 +791,7 @@ export const createActivityPanel = (
     }
     const activeSelection = selection ?? lastSelectionRef.current
     const sessionId = activeSelection?.sessionId ?? layoutSessionId
+    const panelOpen = deps.panel.useLayout(() => (sessionId ? deps.panel.isOpen(sessionId) : false))
     const pinned = activeSelection?.kind === 'pinned' ? activeSelection : null
     const pinnedId = pinned?.messageId ?? null
 
@@ -958,7 +958,7 @@ export const createActivityPanel = (
     }
 
     return (
-      <div className={styles.root}>
+      <div className={clsx(styles.root, 'ds-activity-panel')}>
         <header className={styles.header} data-tauri-drag-region="">
           <div className={styles.headerLeading} data-tauri-drag-region="">
             <h2 className={styles.srOnly}>{t('panelTitle')}</h2>

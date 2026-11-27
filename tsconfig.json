@@ -56,12 +56,6 @@
       "path": "./slices/account/tsconfig.test.json"
     },
     {
-      "path": "./slices/activity-inspector"
-    },
-    {
-      "path": "./slices/activity-inspector/tsconfig.test.json"
-    },
-    {
       "path": "./slices/ask-user"
     },
     {

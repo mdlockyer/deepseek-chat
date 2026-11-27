@@ -5,6 +5,28 @@
  * Domain-blind to every sibling capability slice: all tool execution, toggles, work-strip
  * summaries, and lifecycle hooks flow through the open `ToolRegistry` contract.
  */
+import type { ReactNode } from 'react'
+import {
+  SiteLogo,
+  SourceCard,
+  buildActivityTimeline,
+  extractTurnSources,
+  type ActivityFailedStep,
+  type ActivityFileItem,
+  type ActivityLanePhase,
+  type ActivitySelection,
+  type ActivitySource,
+  type ActivityStepRecord,
+  type ActivityTab,
+  type ActivityTarget,
+  type ActivityThinkingRound,
+  type ActivityTimeline,
+  type ActivityTimelinePhase,
+  type ActivityVisualItem,
+  type ExtractedTurnSources,
+  type SessionTurnSummary,
+  type TurnSnapshot,
+} from '../cells/activity-inspector/index.js'
 import { bindView } from './context.js'
 import { describeReply } from './describe.js'
 import { createConversationsRuntime, type ConversationsDeps } from './runtime.js'
@@ -16,16 +38,31 @@ export {
   DEFAULT_CONVERSATIONS_PARAMS,
   type ConversationsDeps,
   type ConversationsParams,
-  type SessionTurnSummary,
-  type TurnSnapshot,
 } from './runtime.js'
+export { SiteLogo, SourceCard, buildActivityTimeline, extractTurnSources }
+export type {
+  ActivityFailedStep,
+  ActivityFileItem,
+  ActivityLanePhase,
+  ActivitySelection,
+  ActivitySource,
+  ActivityStepRecord,
+  ActivityTab,
+  ActivityTarget,
+  ActivityThinkingRound,
+  ActivityTimeline,
+  ActivityTimelinePhase,
+  ActivityVisualItem,
+  ExtractedTurnSources,
+  SessionTurnSummary,
+  TurnSnapshot,
+}
 export { createIndexedDbSessionStore, type SessionStore } from './sessionStore.js'
-export type { ReadingCause, ReadingPosition } from './reading.js'
+export type { ReadingCause, ReadingPosition, RevealRequest } from './reading.js'
 export type { StreamTrace, StreamTraceBlock } from './streamTrace.js'
 export type {
   ChatFile,
   ConversationsViewDeps,
-  InspectionTarget,
   SettingsSection,
   SiderMode,
   VoiceViews,
@@ -60,6 +97,8 @@ export const createConversationsSlice = (deps: ConversationsDeps) => {
   const BoundSiderToolbar = bindView(runtime, SiderToolbar)
   const BoundChatMain = bindView(runtime, ChatMain)
   const BoundChatSaveBanner = bindView(runtime, ChatSaveBanner)
+  const ActivityPanel: (props?: { topActions?: ReactNode }) => ReactNode =
+    runtime.activity?.ActivityPanel ?? (() => null)
 
   return {
     /** Stops the chat's reply in progress, if any. */
@@ -117,19 +156,23 @@ export const createConversationsSlice = (deps: ConversationsDeps) => {
     getChatCheckpoints: runtime.getChatCheckpoints,
     useChatMessages: runtime.useChatMessages,
 
-    /** Narrow read-only turn snapshot source consumed by `slices/activity-inspector`. */
+    /** Referentially stable read-only live turn snapshot for a loaded assistant reply. */
     getTurnSnapshot: runtime.getTurnSnapshot,
-    listSessionTurns: runtime.listSessionTurns,
-    subscribeToTurns: runtime.subscribeToTurns,
 
-    /**
-     * The turn each chat's transcript is on (changes once per turn crossed) and requests to bring
-     * a turn, or the latest output, into view. Consumed by `slices/activity-inspector`, so the
-     * Activity panel follows the reader and the transcript follows the panel.
-     */
-    getReadingPosition: runtime.reading.getReadingPosition,
-    subscribeToReading: runtime.reading.subscribeToReading,
-    revealTurn: runtime.reading.revealTurn,
+    /** Built-in Activity & Sources inspector cell (non-null when `activityPanel` is provided). */
+    activity: runtime.activity
+      ? {
+          togglePanel: runtime.activity.togglePanel,
+          inspectTurn: runtime.requestTurnInspection,
+          selectTurn: runtime.activity.selectTurn,
+          useActiveTarget: runtime.activity.useActiveTarget,
+          getSelection: runtime.activity.getSelection,
+          getTarget: runtime.activity.getTarget,
+          close: runtime.activity.close,
+          setReadingPosition: runtime.reading.setReadingPosition,
+          getRevealRequest: () => runtime.reading.useReadingStore.getState().reveal,
+        }
+      : null,
 
     // Storage ports consumed by `slices/history-backup` via app composition.
     snapshotForExport: runtime.snapshotForExport,
@@ -147,6 +190,7 @@ export const createConversationsSlice = (deps: ConversationsDeps) => {
     SiderToolbar: BoundSiderToolbar,
     ChatMain: BoundChatMain,
     ChatSaveBanner: BoundChatSaveBanner,
+    ActivityPanel,
 
     /** Tears down streams, timers, EventLog listeners, and owned DB handles. */
     dispose: runtime.dispose,

@@ -2,16 +2,15 @@ import type {
   ActiveSessionChanged,
   SessionDeleted,
   SessionHistoryReplaced,
-  TurnInspectionRequested,
 } from '@deepseek-chat/spine/facts/session'
 import type { PanelSlot } from '@deepseek-chat/spine/ports'
 import type { EventLog } from '@deepseek-chat/spine/runtime'
 import { create } from 'zustand'
-import type { ActivitySelection, ActivityTab, ActivityTarget, TranscriptPort } from './types.js'
+import type { ActivitySelection, ActivityTab, TranscriptPort } from './types.js'
 
+/** Single-owner selection state; open/closed visibility is owned solely by `PanelSlot`. */
 type ActivityPanelStoreState = {
-  selection: ActivitySelection | null
-  panelOpen: boolean
+  readonly selection: ActivitySelection | null
 }
 
 export const createActivityPanelState = (
@@ -45,7 +44,6 @@ export const createActivityPanelState = (
 
   const useStore = create<ActivityPanelStoreState>(() => ({
     selection: null,
-    panelOpen: panel.isOpen(activeSessionId()),
   }))
 
   const currentTab = () => useStore.getState().selection?.tab ?? 'activity'
@@ -59,13 +57,13 @@ export const createActivityPanelState = (
         : cleanPrev
       : following(sessionId, tab ?? 'activity')
     panel.open(sessionId)
-    useStore.setState({ selection: next, panelOpen: panel.isOpen(sessionId) })
+    useStore.setState({ selection: next })
   }
 
   const togglePanel = (sessionId: string) => {
     if (panel.isOpen(sessionId)) {
       panel.close(sessionId)
-      useStore.setState({ selection: null, panelOpen: false })
+      useStore.setState({ selection: null })
       return
     }
     openForSession(sessionId)
@@ -86,7 +84,7 @@ export const createActivityPanelState = (
       panel.isOpen(sessionId)
     ) {
       panel.close(sessionId)
-      useStore.setState({ selection: null, panelOpen: false })
+      useStore.setState({ selection: null })
       return
     }
     const next: ActivitySelection = callId
@@ -100,7 +98,7 @@ export const createActivityPanelState = (
         }
       : { kind: 'pinned', sessionId, messageId, tab }
     panel.open(sessionId)
-    useStore.setState({ selection: next, panelOpen: panel.isOpen(sessionId) })
+    useStore.setState({ selection: next })
   }
 
   /** Pins a turn in the open panel, leaving the transcript where it is. */
@@ -130,21 +128,19 @@ export const createActivityPanelState = (
     if (sessionId) {
       panel.close(sessionId)
     }
-    useStore.setState({ selection: null, panelOpen: false })
+    useStore.setState({ selection: null })
   }
 
   const unsubPanel = panel.subscribe(() => {
     const sessionId = activeSessionId()
-    const open = panel.isOpen(sessionId)
-    useStore.setState((curr) => {
-      if (open && sessionId && curr.selection?.sessionId !== sessionId) {
-        return { selection: following(sessionId, 'activity'), panelOpen: true }
-      }
-      if (curr.panelOpen !== open) {
-        return { panelOpen: open }
-      }
-      return curr
-    })
+    if (!sessionId || !panel.isOpen(sessionId)) {
+      return
+    }
+    useStore.setState((curr) =>
+      curr.selection?.sessionId === sessionId
+        ? curr
+        : { selection: following(sessionId, 'activity') }
+    )
   })
 
   // The reader moving to another turn releases a pin; reveals this panel asked for do not.
@@ -165,45 +161,22 @@ export const createActivityPanelState = (
       const open = panel.isOpen(fact.sessionId)
       useStore.setState((curr) => {
         if (fact.sessionId && open) {
-          return {
-            selection:
-              curr.selection?.sessionId === fact.sessionId
-                ? curr.selection
-                : following(fact.sessionId, 'activity'),
-            panelOpen: true,
-          }
+          return curr.selection?.sessionId === fact.sessionId
+            ? curr
+            : { selection: following(fact.sessionId, 'activity') }
         }
-        return {
-          selection: curr.selection?.sessionId === fact.sessionId ? curr.selection : null,
-          panelOpen: open,
-        }
+        return curr.selection?.sessionId === fact.sessionId ? curr : { selection: null }
       })
     }),
     log.subscribe<SessionDeleted>('SessionDeleted', ({ fact }) => {
-      useStore.setState((curr) => ({
-        selection: curr.selection?.sessionId === fact.sessionId ? null : curr.selection,
-        panelOpen: panel.isOpen(activeSessionId()),
-      }))
+      useStore.setState((curr) =>
+        curr.selection?.sessionId === fact.sessionId ? { selection: null } : curr
+      )
     }),
     log.subscribe<SessionHistoryReplaced>('SessionHistoryReplaced', () => {
-      useStore.setState({ selection: null, panelOpen: false })
-    }),
-    log.subscribe<TurnInspectionRequested>('TurnInspectionRequested', ({ fact }) => {
-      toggleTurn(fact.sessionId, fact.messageId, fact.tab, fact.callId)
+      useStore.setState({ selection: null })
     }),
   ]
-
-  const getActiveTarget = (): ActivityTarget | null => {
-    const { selection, panelOpen } = useStore.getState()
-    if (!panelOpen || selection?.kind !== 'pinned') {
-      return null
-    }
-    return {
-      sessionId: selection.sessionId,
-      messageId: selection.messageId,
-      tab: selection.tab,
-    }
-  }
 
   return {
     useStore,
@@ -213,7 +186,6 @@ export const createActivityPanelState = (
     selectTurn,
     setTab,
     close,
-    getActiveTarget,
     dispose: () => {
       unsubPanel()
       unsubReading()

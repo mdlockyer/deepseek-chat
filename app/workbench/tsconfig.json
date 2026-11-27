@@ -35,9 +35,6 @@
       "path": "../../slices/account"
     },
     {
-      "path": "../../slices/activity-inspector"
-    },
-    {
       "path": "../../slices/ask-user"
     },
     {

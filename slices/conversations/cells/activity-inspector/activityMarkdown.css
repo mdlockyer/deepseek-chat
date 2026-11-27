@@ -1,5 +1,5 @@
 @layer slice {
-  .ds-think-content .ds-markdown {
+  .ds-activity-panel .ds-think-content .ds-markdown {
     font: var(--ui-type-label);
     color: var(--ui-text-secondary);
     max-width: 62ch;
@@ -107,7 +107,7 @@
     }
   }
 
-  .ds-activity-note .ds-markdown {
+  .ds-activity-panel .ds-activity-note .ds-markdown {
     font: var(--ui-type-caption);
     color: var(--ui-text-secondary);
     max-width: 62ch;

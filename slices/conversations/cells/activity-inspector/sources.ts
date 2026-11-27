@@ -1,4 +1,9 @@
-import type { ActivitySource, TurnBlock, TurnToolResultBlock } from './types.js'
+import type { ReplyBlock, ToolResultPart } from '../../src/types.js'
+import type { ActivitySource } from './types.js'
+
+type LegacyScrapedResult = ToolResultPart & {
+  readonly scrapedPage?: { readonly url: string; readonly title: string | null }
+}
 
 const getSiteName = (url: string) => {
   try {
@@ -18,8 +23,8 @@ export type ExtractedTurnSources = {
  * Extracts all deduplicated numbered sources from a turn's client `tool_result.sources`, then
  * separates cited vs. uncited sources.
  */
-export const extractTurnSources = (blocks: readonly TurnBlock[]): ExtractedTurnSources => {
-  const clientResults = new Map<string, TurnToolResultBlock>()
+export const extractTurnSources = (blocks: readonly ReplyBlock[]): ExtractedTurnSources => {
+  const clientResults = new Map<string, LegacyScrapedResult>()
   for (const block of blocks) {
     if (block.type === 'tool_result') {
       clientResults.set(block.tool_use_id, block)

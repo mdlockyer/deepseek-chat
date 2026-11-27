@@ -26,12 +26,6 @@ export type ChatFile =
   | { readonly kind: 'delivered'; readonly file: DeliveredFileRef }
   | { readonly kind: 'upload'; readonly fileId: string }
 
-export type InspectionTarget = {
-  readonly sessionId: string
-  readonly messageId: string
-  readonly tab: 'activity' | 'sources'
-}
-
 export type SettingsSection = 'general' | 'apiKey' | 'data'
 
 /**
@@ -54,8 +48,6 @@ export type ConversationsViewDeps = {
   /** Optional preview opener for delivered/uploaded files; falls back to `saveFile` when absent. */
   readonly openFile?: (sessionId: string, file: ChatFile) => void
   readonly useIsFileShown?: (sessionId: string, file: ChatFile) => boolean
-  /** Optional reactive readout of the active inspector target so triggers can show pressed state. */
-  readonly useActiveInspectionTarget?: () => InspectionTarget | null
   /** Optional reactive readout of whether an API key still needs to be configured (false while hydrating). */
   readonly useNeedsApiKey?: () => boolean
   readonly openSettings: (section: SettingsSection) => void

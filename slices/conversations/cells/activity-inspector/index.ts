@@ -19,28 +19,22 @@ import {
   type ActivityVisualItem,
 } from './timeline.js'
 import type {
-  ActivityInspectorDeps,
+  ActivityInspectorCellDeps,
   ActivitySelection,
   ActivitySource,
   ActivityTab,
   ActivityTarget,
   SessionTurnSummary,
-  TurnBlock,
-  TurnSnapshot,
   TranscriptPort,
-  TranscriptReadingPosition,
+  TurnSnapshot,
   TurnSnapshotSource,
-  TurnTextBlock,
-  TurnThinkingBlock,
-  TurnToolResultBlock,
-  TurnToolUseBlock,
 } from './types.js'
 
 export { SiteLogo, SourceCard, buildActivityTimeline, extractTurnSources }
 export type {
   ActivityFailedStep,
   ActivityFileItem,
-  ActivityInspectorDeps,
+  ActivityInspectorCellDeps,
   ActivityLanePhase,
   ActivitySelection,
   ActivitySource,
@@ -53,15 +47,9 @@ export type {
   ActivityVisualItem,
   ExtractedTurnSources,
   SessionTurnSummary,
-  TurnBlock,
-  TurnSnapshot,
   TranscriptPort,
-  TranscriptReadingPosition,
+  TurnSnapshot,
   TurnSnapshotSource,
-  TurnTextBlock,
-  TurnThinkingBlock,
-  TurnToolResultBlock,
-  TurnToolUseBlock,
 }
 
 /** The turn a selection shows: the pinned turn, or the reader's turn (falling back to the latest). */
@@ -84,23 +72,22 @@ const resolveSelectionMessageId = (
   return ([...turns].reverse().find((turn) => turn.streaming) ?? turns.at(-1))?.messageId ?? null
 }
 
-export const createActivityInspectorSlice = (deps: ActivityInspectorDeps) => {
+export const createActivityInspectorCell = (deps: ActivityInspectorCellDeps) => {
   const resolveMessageId = (selection: ActivitySelection) =>
     resolveSelectionMessageId(selection, deps.turnSource, deps.transcript)
-  const resolveDisplayedTarget = (
-    selection: ActivitySelection | null,
-    panelOpen: boolean
-  ): ActivityTarget | null => {
-    if (!panelOpen || !selection) {
+  const resolveDisplayedTarget = (selection: ActivitySelection | null): ActivityTarget | null => {
+    if (!selection || !deps.panel.isOpen(selection.sessionId)) {
       return null
     }
     const messageId = resolveMessageId(selection)
     return messageId ? { sessionId: selection.sessionId, messageId, tab: selection.tab } : null
   }
   const subscribeSources = (listener: () => void) => {
+    const unsubPanel = deps.panel.subscribe(listener)
     const unsubTurns = deps.turnSource.subscribe(listener)
     const unsubReading = deps.transcript?.subscribeToReading(listener)
     return () => {
+      unsubPanel()
       unsubTurns()
       unsubReading?.()
     }
@@ -126,18 +113,15 @@ export const createActivityInspectorSlice = (deps: ActivityInspectorDeps) => {
     })
   }
 
-  const getTarget = (): ActivityTarget | null => {
-    const { selection, panelOpen } = state.useStore.getState()
-    return resolveDisplayedTarget(selection, panelOpen)
-  }
+  const getTarget = (): ActivityTarget | null =>
+    resolveDisplayedTarget(state.useStore.getState().selection)
 
   const useActiveTarget = (): ActivityTarget | null => {
     const selection = state.useStore((s) => s.selection)
-    const panelOpen = state.useStore((s) => s.panelOpen)
     const cachedRef = useRef<ActivityTarget | null>(null)
 
     const getSnapshot = useCallback((): ActivityTarget | null => {
-      const next = resolveDisplayedTarget(selection, panelOpen)
+      const next = resolveDisplayedTarget(selection)
       const prev = cachedRef.current
       if (
         prev &&
@@ -150,7 +134,7 @@ export const createActivityInspectorSlice = (deps: ActivityInspectorDeps) => {
       }
       cachedRef.current = next
       return next
-    }, [panelOpen, selection])
+    }, [selection])
 
     return useSyncExternalStore(subscribeSources, getSnapshot, getSnapshot)
   }
@@ -159,6 +143,7 @@ export const createActivityInspectorSlice = (deps: ActivityInspectorDeps) => {
     ActivityPanel,
     HeaderToggle,
     togglePanel: state.togglePanel,
+    toggleTurn: state.toggleTurn,
     selectTurn: state.selectTurn,
     useActiveTarget,
     getSelection: (): ActivitySelection | null => state.useStore.getState().selection,
@@ -168,4 +153,4 @@ export const createActivityInspectorSlice = (deps: ActivityInspectorDeps) => {
   }
 }
 
-export type ActivityInspectorSlice = ReturnType<typeof createActivityInspectorSlice>
+export type ActivityInspectorCell = ReturnType<typeof createActivityInspectorCell>

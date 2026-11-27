@@ -28,8 +28,9 @@ export const SessionView = ({
 }) => {
   const t = useTranslate()
   const isMobile = useIsMobile()
-  const { deps } = useConversations()
+  const { deps, activity } = useConversations()
   const { headerActions = [] } = deps.ui
+  const ActivityHeaderToggle = activity?.HeaderToggle ?? null
   const title = sessionTitle(session, t('untitledChat'))
   return (
     <div className={styles.view}>
@@ -48,7 +49,7 @@ export const SessionView = ({
             </SwapLabel>
           </div>
           <div className={styles.headerActions}>
-            {headerActions.length > 0 ? (
+            {headerActions.length > 0 || ActivityHeaderToggle ? (
               <div
                 className={styles.sessionActions}
                 data-stage-exit="actions"
@@ -57,6 +58,7 @@ export const SessionView = ({
                 {headerActions.map((Action, index) => (
                   <Action key={index} sessionId={session.id} />
                 ))}
+                {ActivityHeaderToggle ? <ActivityHeaderToggle sessionId={session.id} /> : null}
               </div>
             ) : null}
             <SettingsHeaderButton />

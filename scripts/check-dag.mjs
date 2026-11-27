@@ -354,19 +354,77 @@ const checkManifest = (kind, name, dir, expectedPkg) => {
   return prodDeps.filter((dep) => dep.startsWith(SCOPE))
 }
 
-/** Verifies relative imports stay inside `dir` and `tests/` never reaches into `src/`. */
+/** Verifies relative imports stay inside `dir` and `tests/` never reaches into package internals. */
 const checkRelativeBoundaries = (kind, name, dir, expectedPkg, file, imports) => {
   const testsDir = path.join(dir, 'tests')
-  const srcDir = path.join(dir, 'src')
   for (const spec of imports) {
     if (spec.startsWith('.')) {
       const resolved = path.resolve(path.dirname(file), spec)
       if (!isInside(dir, resolved)) {
         fail('DAG', `${kind} "${name}" file ${rel(file)} crosses its boundary via "${spec}"`)
-      } else if (isInside(testsDir, file) && isInside(srcDir, resolved)) {
+      } else if (isInside(testsDir, file) && !isInside(testsDir, resolved)) {
         fail(
           'TESTS',
-          `${kind} "${name}" test ${rel(file)} reaches into src/ via "${spec}"; import ${expectedPkg}`
+          `${kind} "${name}" test ${rel(file)} reaches into package internals via "${spec}"; import ${expectedPkg}`
+        )
+      }
+    }
+  }
+}
+
+/**
+ * Enforces CSA Depth-2 cell isolation inside slices that contain `cells/<name>/`:
+ * - cells never cross-import sibling cells;
+ * - code outside `cells/` imports a cell only through `cells/<name>/index.js`;
+ * - cells may depend on `kernel/` or narrow shared type modules (`src/types`, `src/reading`),
+ *   never reaching into `src/runtime` or `src/ui/*`.
+ */
+const ALLOWED_CELL_SRC_IMPORTS = new Set(['types', 'reading'])
+
+const checkCellIsolation = (sliceName, sliceDir, file, imports) => {
+  const cellsDir = path.join(sliceDir, 'cells')
+  const testsDir = path.join(sliceDir, 'tests')
+  const srcDir = path.join(sliceDir, 'src')
+  if (!fs.existsSync(cellsDir) || isInside(testsDir, file)) {
+    return
+  }
+  const cellOf = (targetPath) => {
+    if (!isInside(cellsDir, targetPath) || targetPath === cellsDir) {
+      return null
+    }
+    const relPath = path.relative(cellsDir, targetPath)
+    return relPath.split(path.sep)[0] ?? null
+  }
+  const sourceCell = cellOf(file)
+  for (const spec of imports) {
+    if (!spec.startsWith('.')) {
+      continue
+    }
+    const resolved = path.resolve(path.dirname(file), spec)
+    const targetCell = cellOf(resolved)
+    if (sourceCell) {
+      if (targetCell && targetCell !== sourceCell) {
+        fail(
+          'CELL-ISOLATION',
+          `slice "${sliceName}" cell "${sourceCell}" file ${rel(file)} imports sibling cell "${targetCell}" via "${spec}"`
+        )
+      } else if (!targetCell && isInside(srcDir, resolved)) {
+        const stem = path.relative(srcDir, resolved).replace(/\.(?:[cm]?[jt]sx?)$/, '')
+        if (!ALLOWED_CELL_SRC_IMPORTS.has(stem)) {
+          fail(
+            'CELL-ISOLATION',
+            `slice "${sliceName}" cell "${sourceCell}" file ${rel(file)} reaches into src/${stem} via "${spec}"; cells may depend only on kernel/ or shared types`
+          )
+        }
+      }
+    } else if (targetCell) {
+      const cellEntry = path
+        .relative(path.join(cellsDir, targetCell), resolved)
+        .replace(/\.(?:[cm]?[jt]sx?)$/, '')
+      if (cellEntry !== 'index') {
+        fail(
+          'CELL-ISOLATION',
+          `slice "${sliceName}" file ${rel(file)} bypasses cell "${targetCell}" entrypoint via "${spec}"; import cells/${targetCell}/index.js`
         )
       }
     }
@@ -453,12 +511,13 @@ for (const [name, dir] of sliceDirs) {
   const wsProdDeps = checkManifest('slice', name, dir, expectedPkg)
   checkPackageTsconfigs('slice', name, dir, wsProdDeps)
 
-  const srcDir = path.join(dir, 'src')
+  const testsDir = path.join(dir, 'tests')
   for (const file of listSourceFiles(dir)) {
     const imports = extractImports(file)
     checkRelativeBoundaries('slice', name, dir, expectedPkg, file, imports)
+    checkCellIsolation(name, dir, file, imports)
 
-    if (isInside(srcDir, file) && CODE_EXT.test(file)) {
+    if (!isInside(testsDir, file) && CODE_EXT.test(file)) {
       const source = fs.readFileSync(file, 'utf8')
       const topLevel = extractTopLevelCode(source)
 
@@ -586,10 +645,16 @@ for (const factFile of listSourceFiles(FACTS_DIR)) {
 }
 
 const prodUnits = [
-  ...sliceNames.map((name) => ({
-    unit: `slice:${name}`,
-    files: listSourceFiles(path.join(slicesDir, name, 'src')).filter((f) => CODE_EXT.test(f)),
-  })),
+  ...sliceNames.map((name) => {
+    const sliceDir = path.join(slicesDir, name)
+    const sliceTestsDir = path.join(sliceDir, 'tests')
+    return {
+      unit: `slice:${name}`,
+      files: listSourceFiles(sliceDir).filter(
+        (f) => CODE_EXT.test(f) && !isInside(sliceTestsDir, f)
+      ),
+    }
+  }),
   ...libNames.map((name) => ({
     unit: `lib:${name}`,
     files: listSourceFiles(path.join(libsDir, name, 'src')).filter((f) => CODE_EXT.test(f)),

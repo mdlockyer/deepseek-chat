@@ -1,11 +1,11 @@
 {
   "extends": "../../tsconfig.prod.json",
   "compilerOptions": {
-    "rootDir": "src",
-    "outDir": ".tsbuild/src",
-    "tsBuildInfoFile": ".tsbuild/src.tsbuildinfo"
+    "rootDir": ".",
+    "outDir": ".tsbuild/pkg",
+    "tsBuildInfoFile": ".tsbuild/pkg.tsbuildinfo"
   },
-  "include": ["src"],
+  "include": ["src", "cells"],
   "references": [
     {
       "path": "../../libs/agent"

@@ -23,7 +23,7 @@ export const RightPanel = () => {
   const isMobile = useIsMobile()
   const runtime = useAppRuntime()
   const { rightPanel, slices, platform } = runtime
-  const { browser, workspaceFiles, activityInspector } = slices
+  const { browser, workspaceFiles, conversations } = slices
 
   const activeSessionId = rightPanel.useStore((state) => state.activeSessionId)
   const activePanels = rightPanel.useStore((state) => state.activePanels)
@@ -37,7 +37,7 @@ export const RightPanel = () => {
       return workspaceFiles !== null
     }
     if (kind === 'activity') {
-      return activityInspector !== null
+      return conversations.activity !== null
     }
     return false
   }
@@ -118,8 +118,8 @@ export const RightPanel = () => {
         <browser.BrowserPanel />
       ) : shownKind === 'preview' && workspaceFiles ? (
         <workspaceFiles.PreviewPanel />
-      ) : shownKind === 'activity' && activityInspector ? (
-        <activityInspector.ActivityPanel topActions={activityWidthToggle} />
+      ) : shownKind === 'activity' && conversations.activity ? (
+        <conversations.ActivityPanel topActions={activityWidthToggle} />
       ) : null}
     </SidePanel>
   )

@@ -10,8 +10,11 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import type { ToolCapability } from '@deepseek-chat/lib-tools'
-import { buildActivityTimeline } from '@deepseek-chat/slice-activity-inspector'
-import { buildReplyView, buildTurnWorkStrip } from '@deepseek-chat/slice-conversations'
+import {
+  buildActivityTimeline,
+  buildReplyView,
+  buildTurnWorkStrip,
+} from '@deepseek-chat/slice-conversations'
 import { readArchive, readEntry } from '@deepseek-chat/slice-history-backup'
 import type { BrowserControlTakenOver } from '@deepseek-chat/spine/facts/browser'
 import type {
@@ -287,11 +290,10 @@ describe('SSA Proof 2: Minimal boot & N-1 optional slice omission matrix', () =>
     'browser',
     'askUser',
     'subagents',
-    'activityInspector',
     'historyBackup',
   ]
 
-  it('boots and completes a chat turn with ALL 10 optional slices disabled (bare 2-slice app)', async () => {
+  it('boots and completes a chat turn with ALL 9 optional slices disabled (bare 2-slice app)', async () => {
     const allOff = Object.fromEntries(OPTIONAL_SLICE_KEYS.map((k) => [k, false])) as EnabledSlices
     const api = makeSseFetch(() => ({ text: 'Bare chat works!' }))
     const runtime = createAppRuntime({

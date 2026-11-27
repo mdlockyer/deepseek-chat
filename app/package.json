@@ -10,7 +10,6 @@
     "@deepseek-chat/lib-tools": "workspace:*",
     "@deepseek-chat/lib-ui": "workspace:*",
     "@deepseek-chat/slice-account": "workspace:*",
-    "@deepseek-chat/slice-activity-inspector": "workspace:*",
     "@deepseek-chat/slice-ask-user": "workspace:*",
     "@deepseek-chat/slice-browser": "workspace:*",
     "@deepseek-chat/slice-conversations": "workspace:*",

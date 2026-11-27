@@ -7,7 +7,6 @@ import type {
   SessionFileDescriptor,
   SessionFilesChanged,
   SessionHistoryReplaced,
-  TurnInspectionRequested,
 } from '@deepseek-chat/spine/facts/session'
 import { createLocaleStore, type Locale, type LocaleStore } from '@deepseek-chat/spine/i18n'
 import {
@@ -16,10 +15,17 @@ import {
   type BlobStore,
   type KeyValueStore,
   type NoticePort,
+  type PanelSlot,
 } from '@deepseek-chat/spine/ports'
 import type { EventLog } from '@deepseek-chat/spine/runtime'
 import { useMemo } from 'react'
 import { create } from 'zustand'
+import {
+  createActivityInspectorCell,
+  type ActivityInspectorCell,
+  type SessionTurnSummary,
+  type TurnSnapshot,
+} from '../cells/activity-inspector/index.js'
 import { localizeProvider } from './apiClient.js'
 import { createUploadsController } from './attachments.js'
 import { createAutoTitleRunner } from './autoTitleRunner.js'
@@ -84,6 +90,8 @@ export type ConversationsDeps = {
   readonly sessions?: SessionStore
   /** Aggregated capability registry (defaults to an empty registry for bare chat). */
   readonly tools?: ToolRegistry
+  /** Optional right-hand panel slot hosting the built-in Activity & Sources inspector cell. */
+  readonly activityPanel?: PanelSlot
   readonly platform?: 'desktop' | 'web'
   readonly getLocationLabel: (locale: Locale) => string
   readonly onStreamTrace?: (trace: StreamTrace) => void
@@ -92,23 +100,6 @@ export type ConversationsDeps = {
   readonly notify?: NoticePort
   readonly newId?: () => string
   readonly ui: ConversationsViewDeps
-}
-
-export type TurnSnapshot = {
-  readonly sessionId: string
-  readonly messageId: string
-  readonly status: AssistantMessage['status']
-  readonly blocks: AssistantMessage['blocks']
-  readonly streaming: boolean
-  readonly capabilityState?: Readonly<Record<string, unknown>>
-}
-
-export type SessionTurnSummary = {
-  readonly messageId: string
-  readonly turnNumber: number
-  readonly promptExcerpt: string
-  readonly streaming: boolean
-  readonly hasActivity: boolean
 }
 
 type ChatState = {
@@ -1210,21 +1201,6 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
     void replyRunner.streamReply(sessionId, reply, { history: path.slice(0, index - 1), question })
   }
 
-  const requestTurnInspection = (
-    sessionId: string,
-    messageId: string,
-    tab: 'activity' | 'sources',
-    callId?: string
-  ) => {
-    deps.log.publish<TurnInspectionRequested>({
-      type: 'TurnInspectionRequested',
-      sessionId,
-      messageId,
-      tab,
-      ...(callId ? { callId } : {}),
-    })
-  }
-
   const getChatMessages = (sessionId: string): readonly Message[] => {
     const session = getSession(sessionId)
     return session ? getVisibleMessages(session) : NO_MESSAGES
@@ -1331,6 +1307,36 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
     }
   }
 
+  const activity: ActivityInspectorCell | null = deps.activityPanel
+    ? createActivityInspectorCell({
+        log: deps.log,
+        panel: deps.activityPanel,
+        turnSource: {
+          getTurn: getTurnSnapshot,
+          listTurns: listSessionTurns,
+          subscribe: subscribeToTurns,
+        },
+        transcript: reading,
+        getPresenter: tools.presenterFor,
+        openInApp: deps.ui.openInApp,
+        ...(deps.ui.openFile
+          ? {
+              openFile: (sessionId, file) =>
+                deps.ui.openFile?.(sessionId, { kind: 'delivered', file }),
+            }
+          : {}),
+      })
+    : null
+
+  const requestTurnInspection = (
+    sessionId: string,
+    messageId: string,
+    tab: 'activity' | 'sources',
+    callId?: string
+  ) => {
+    activity?.toggleTurn(sessionId, messageId, tab, callId)
+  }
+
   const unsubscribers = [
     deps.log.subscribe<BrowserControlTakenOver>('BrowserControlTakenOver', ({ fact }) => {
       stopReply(fact.sessionId)
@@ -1338,6 +1344,7 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
   ]
 
   const dispose = () => {
+    activity?.dispose()
     autoTitleRunner.cancel()
     for (const controller of Object.values(get().streaming)) {
       controller.abort()
@@ -1396,9 +1403,8 @@ export const createConversationsRuntime = (deps: ConversationsDeps) => {
     useChatMessages,
     useHistoryState,
     getTurnSnapshot,
-    listSessionTurns,
-    subscribeToTurns,
     requestTurnInspection,
+    activity,
     reading,
     dispose,
   }

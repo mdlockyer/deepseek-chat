@@ -6,9 +6,10 @@ import type {
   ToolStepVisualArtifact,
 } from '@deepseek-chat/lib-tools'
 import type { Locale } from '@deepseek-chat/spine/i18n'
+import type { ThinkingPart, ToolResultPart } from '../../src/types.js'
 import { activityInspectorMessages } from './messages.js'
 import { extractTurnSources, type ExtractedTurnSources } from './sources.js'
-import type { TurnSnapshot, TurnThinkingBlock, TurnToolResultBlock } from './types.js'
+import type { TurnSnapshot } from './types.js'
 
 export type ActivityThinkingRound = {
   readonly key: string
@@ -67,7 +68,7 @@ export type ActivityFileItem = {
 
 export type ActivityTimeline = {
   readonly phases: ActivityTimelinePhase[]
-  readonly thinkingBlocks: TurnThinkingBlock[]
+  readonly thinkingBlocks: ThinkingPart[]
   readonly thinkingRounds: readonly ActivityThinkingRound[]
   readonly thinkingSeconds: number | null
   readonly completedThinkingMs: number
@@ -144,7 +145,7 @@ const firstErrorLine = (content: string | undefined): string | null => {
   return line.length > 140 ? `${line.slice(0, 139)}…` : line
 }
 
-const blockDurationSeconds = (block: TurnThinkingBlock, now: number): number | null => {
+const blockDurationSeconds = (block: ThinkingPart, now: number): number | null => {
   if (block.startedAt !== undefined) {
     const end = block.endedAt ?? now
     return Math.max(1, Math.round(Math.max(0, end - block.startedAt) / 1000))
@@ -155,7 +156,7 @@ const blockDurationSeconds = (block: TurnThinkingBlock, now: number): number | n
   return null
 }
 
-const computeThinkingTiming = (blocks: readonly TurnThinkingBlock[], now: number) => {
+const computeThinkingTiming = (blocks: readonly ThinkingPart[], now: number) => {
   let completedMs = 0
   let totalMs = 0
   let hasDuration = false
@@ -208,7 +209,7 @@ const formatTallies = (
 const collectStepVisuals = (
   label: string,
   summary: ToolStepSummary | null,
-  result: TurnToolResultBlock | undefined
+  result: ToolResultPart | undefined
 ): readonly ToolStepVisualArtifact[] => {
   if (summary?.visuals && summary.visuals.length > 0) {
     return summary.visuals
@@ -231,7 +232,7 @@ export const buildActivityTimeline = (
   now = Date.now(),
   locale?: Locale
 ): ActivityTimeline => {
-  const toolResults = new Map<string, TurnToolResultBlock>()
+  const toolResults = new Map<string, ToolResultPart>()
   for (const block of turn.blocks) {
     if (block.type === 'tool_result') {
       toolResults.set(block.tool_use_id, block)
@@ -239,7 +240,7 @@ export const buildActivityTimeline = (
   }
 
   const phases: ActivityTimelinePhase[] = []
-  const thinkingBlocks: TurnThinkingBlock[] = []
+  const thinkingBlocks: ThinkingPart[] = []
   const thinkingRounds: MutableThinkingRound[] = []
   const pendingThinkingRounds: MutableThinkingRound[] = []
   const tallies = new Map<string, TallyEntry>()

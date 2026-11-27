@@ -63,13 +63,3 @@ export type ToolFileDelivered = {
   readonly file: SessionFileDescriptor
   readonly isActiveSession: boolean
 }
-
-/** The user requested inspecting a reply's activity or sources in the inspector panel. Discrete. */
-export type TurnInspectionRequested = {
-  readonly type: 'TurnInspectionRequested'
-  readonly sessionId: string
-  readonly messageId: string
-  readonly tab: 'activity' | 'sources'
-  /** Optional tool call ID to expand and scroll into view inside the Activity panel. */
-  readonly callId?: string
-}

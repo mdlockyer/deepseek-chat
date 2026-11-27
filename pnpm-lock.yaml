@@ -71,9 +71,6 @@ importers:
       '@deepseek-chat/slice-account':
         specifier: workspace:*
         version: link:../slices/account
-      '@deepseek-chat/slice-activity-inspector':
-        specifier: workspace:*
-        version: link:../slices/activity-inspector
       '@deepseek-chat/slice-ask-user':
         specifier: workspace:*
         version: link:../slices/ask-user
@@ -271,33 +268,6 @@ importers:
       '@deepseek-chat/test-support':
         specifier: workspace:*
         version: link:../../test-support
-
-  slices/activity-inspector:
-    dependencies:
-      '@deepseek-chat/lib-agent':
-        specifier: workspace:*
-        version: link:../../libs/agent
-      '@deepseek-chat/lib-markdown':
-        specifier: workspace:*
-        version: link:../../libs/markdown
-      '@deepseek-chat/lib-tools':
-        specifier: workspace:*
-        version: link:../../libs/tools
-      '@deepseek-chat/lib-ui':
-        specifier: workspace:*
-        version: link:../../libs/ui
-      '@deepseek-chat/spine':
-        specifier: workspace:*
-        version: link:../../spine
-      clsx:
-        specifier: 2.1.1
-        version: 2.1.1
-      react:
-        specifier: 18.3.1
-        version: 18.3.1
-      zustand:
-        specifier: 4.4.7
-        version: 4.4.7(@types/react@18.3.31)(react@18.3.1)
 
   slices/ask-user:
     dependencies:
