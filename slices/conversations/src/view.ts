@@ -372,6 +372,33 @@ export const getAreaTitle = (
 }
 
 /** 生成中的回复停顿时，是否需要显示「仍在处理」 */
+/** How long text after a tool call streams before it counts as the answer. */
+export const NARRATION_HOLD_MS = 1200
+/** Text this long, or with a paragraph break, is the answer at once. */
+export const NARRATION_MAX_CHARS = 280
+
+/**
+ * Whether a reply's trailing text should still be held back as likely narration. In a reply that
+ * has used tools, text after the latest tool call is usually a line like "That didn't work. Let me
+ * check…" that folds into the steps as soon as the next call starts; shown as the answer, it
+ * flashes in and out. While the reply streams, such text is held until it reaches
+ * `NARRATION_MAX_CHARS`, has a paragraph break, or has streamed for `NARRATION_HOLD_MS`.
+ */
+export const holdsNarration = (
+  view: ReplyView,
+  streaming: boolean,
+  streamedMs: number
+): boolean => {
+  const text = view.answer?.text.trim() ?? ''
+  if (!streaming || !text || !view.steps.some((step) => step.type === 'tool')) {
+    return false
+  }
+  if (text.length >= NARRATION_MAX_CHARS || /\n\s*\n/.test(text)) {
+    return false
+  }
+  return streamedMs < NARRATION_HOLD_MS
+}
+
 export const needsWorkingIndicator = (view: ReplyView): boolean => {
   const last = view.steps.at(-1)
   if (!last) {

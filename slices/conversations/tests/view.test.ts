@@ -11,6 +11,7 @@ import {
   buildTurnWorkStrip,
   getAreaTitle,
   getFrontStageNotes,
+  holdsNarration,
   needsWorkingIndicator,
   selectInlineTracePreview,
   type AssistantMessage,
@@ -559,5 +560,43 @@ describe('buildTurnWorkStrip & getFrontStageNotes', () => {
         }
       }
     }
+  })
+})
+
+describe('holdsNarration (text between tool calls)', () => {
+  const afterTool = (text: string) =>
+    buildReplyView(
+      replyWith([
+        { type: 'tool_use', id: 't1', name: 'lookup', input: { summary: 'Checking docs' } },
+        {
+          type: 'tool_result',
+          tool_use_id: 't1',
+          capability: 'search-cap',
+          content: 'ok',
+          status: 'ok',
+        },
+        { type: 'text', text },
+      ]),
+      true,
+      testRegistry
+    )
+  const note = "That didn't work. Let me check the other field."
+
+  it('holds a short line after a tool call while the reply streams, for up to 1.2 s', () => {
+    assert.equal(holdsNarration(afterTool(note), true, 0), true)
+    assert.equal(holdsNarration(afterTool(note), true, 1199), true)
+    assert.equal(holdsNarration(afterTool(note), true, 1200), false)
+  })
+
+  it('shows it at once when it is long, has a paragraph break, or the reply has finished', () => {
+    assert.equal(holdsNarration(afterTool('x'.repeat(279)), true, 0), true)
+    assert.equal(holdsNarration(afterTool('x'.repeat(280)), true, 0), false)
+    assert.equal(holdsNarration(afterTool('Done.\n\nHere is what I found.'), true, 0), false)
+    assert.equal(holdsNarration(afterTool(note), false, 0), false)
+  })
+
+  it('never holds a reply that has not used tools', () => {
+    const plain = buildReplyView(replyWith([{ type: 'text', text: note }]), true, testRegistry)
+    assert.equal(holdsNarration(plain, true, 0), false)
   })
 })
